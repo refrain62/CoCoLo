@@ -156,14 +156,15 @@ npx prisma migrate dev
 
   * 「小1」「中2」という文字列で保持すると毎年4月の繰り上がり処理で複雑な文字列操作が必要になるため、数値 (gradeLevel: 1~16) で保持し、UI 表示時にロジックでフォーマットする設計としました。
 
-### 4.3 既存6モデルの設計ベースライン（Phase 2以降で制約を追加）
+### 4.3 付録A：原案6モデルの参考資料（非権威・実装でコピー禁止）
 
-以下は原案の業務モデルを確認するためのベースラインです。認証・テナント・Phase 1 の確定 Schema は 8.12 の契約を優先し、実装時に `prisma/schema.prisma` と migration へ統合します。
+以下は原案の業務モデルと検討経緯を保存するための参考資料です。Phase 1 の実装、migration、DTO、テストはこのブロックをコピーせず、8.12 と 8.13 の確定契約だけを参照します。旧ID型、旧 `guardianUserId`、公開URL設計は採用しません。
 
 ```
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -339,11 +340,13 @@ Stripe等のオンライン決済（見送り）: 決済手数料（3.6%等）�
 
 ### 5.5 画像添付機能（Cloudflare R2）
 
-* アップロード仕様: Hono バックエンドに POST /api/upload エンドポイントを準備。受け取ったファイルを Cloudflare R2 に保存し、公開 URL を返却して DB の imageUrl に格納。
+* アップロード仕様（Phase 4）: Hono バックエンドに `POST /api/v1/uploads` エンドポイントを準備。private R2 に保存し、DB の Attachment にテナント・所有者・object key・MIME・サイズを記録します。公開 URL は返却せず、認可済みユーザーへ短期署名 URL を発行します。
 
 ## 6. CI/CD パイプライン仕様（GitHub Actions）
 
 GitHub にコードが Push された際、prisma/migrations/ 配下に新しい SQL ファイルが存在する場合のみ、Flyway 同様の手順で本番 DB に差分を自動適用します。
+
+PR の `quality.yml` と本番 migration の `db-migrate.yml` は分離します。本番 migration は GitHub Environment の protected secret、手動承認、`concurrency: production-migration` を必須とし、branch protection で `quality` チェックを必須化します。
 
 ```
 # .github/workflows/db-migrate.yml
@@ -369,8 +372,13 @@ jobs:
           node-version: 20
           cache: 'pnpm'
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma Client
         run: npx prisma generate
@@ -378,6 +386,7 @@ jobs:
       - name: Execute Migration Deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npx prisma migrate deploy
 ```
 
@@ -461,7 +470,8 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * `GET/POST/PATCH/DELETE /api/v1/orders`、`/orders/:id/items`、`/orders/:id/user-items`
 * `PATCH /api/v1/user-order-items/:id/payment`、`GET /api/v1/orders/:id/summary.csv`
 * `GET/POST/PATCH/DELETE /api/v1/events`、`PUT /api/v1/events/:id/attendance`
-* `POST /api/v1/uploads`（multipart、許可 MIME・サイズ・拡張子を検証）
+* `POST /api/v1/uploads`（Phase 4、multipart、magic bytes・実体サイズ・許可 MIME を検証し、Attachment の resource ID を返却）
+* `GET /api/v1/attachments/:id/download`（Phase 4、テナント認可後に短期署名 URL を発行）
 
 ### 8.5 画面・操作仕様
 
@@ -483,7 +493,7 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * **API テスト:** 認証なし、別テナント、role 別、正常系、入力不正、競合、transaction 失敗を Hono の `app.request` で検証。
 * **UI テスト:** 部員検索・登録、出欠入力、支払いトグル、権限による表示差分、loading / error / empty 状態を Vitest + Testing Library で検証。
 * **E2E テスト:** Playwright でログイン後の主要導線を検証します。外部 LINE / Maps / R2 は実サービスではなくテスト用アダプターを使用します。
-* **CI ゲート:** `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build`、対象 E2E、Prisma schema 検証を必須にします。失敗時はマージ・本番マイグレーションを許可しません。
+* **CI ゲート:** `pnpm prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:e2e`、`pnpm build` を必須にします。失敗時はマージ・本番マイグレーションを許可しません。
 
 ### 8.7 環境・運用・監視
 
@@ -520,44 +530,111 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 
 ### 8.10 未解決事項の扱い
 
-LINE の通知先（グループか公式アカウントか）、Google Maps の契約・API キー、Supabase の本番プロジェクト、R2 の公開方式、チームの正式な権限運用は外部条件です。これらは仮定で本番仕様を固定せず、環境変数・アダプター・設定画面に分離し、導入前に決定事項として記録します。
+LINE の通知先（グループか公式アカウントか）、Google Maps の契約・API キー、Supabase の本番プロジェクトは外部条件です。R2 は private bucket + 短期署名 URL を確定仕様とし、チームの正式な権限運用は認可マトリクスを初期値として導入前に責任者が承認します。未確定の外部条件は環境変数・アダプター・設定画面に分離します。
 
 ### 8.11 敵対的レビュー指摘への決定事項
 
 実装前レビューで指摘された事項を、次の方針で解消してから実装を開始します。
 
 * **実行環境:** Phase 0〜3 は Node.js 20 + `@hono/node-server` に固定します。Prisma の通常クライアントを使用し、Cloudflare Workers 対応は別タスクで接続方式を検証してから行います。
-* **DBレベルのテナント境界:** `Tenant`、`TenantMembership`、すべてのテナント所属モデルに `tenantId` を持たせ、親子参照には `tenantId + id` の複合外部キーを使います。Production のアプリ接続は RLS を迂回できない専用 DB ロールとし、リクエストのトランザクション内で `app.tenant_id` を設定します。migration は別の owner / direct 接続で実行します。
-* **RLSの検証:** tenant A / tenant B の管理者を用いた実 PostgreSQL 統合テストで、一覧・登録・更新・親子参照の越境ができないことを確認します。アプリ側の `tenantId` 条件だけを安全性の根拠にしません。
+* **JWT検証:** issuer は `${SUPABASE_URL}/auth/v1`、audience は `authenticated`、署名アルゴリズムは Supabase の JWKS に従う RS256 とし、`exp`・`nbf`・issuer・audience を必ず検証します。JWKS は短時間キャッシュし、鍵ローテーション時に再取得します。失効・期限切れ・署名不正は 401、test-only Auth adapter は本番ビルドで有効化しません。
+* **DBレベルのテナント境界:** `Tenant`、`TenantMembership`、すべてのテナント所属モデルに `tenantId` を持たせ、親子参照には `tenantId + id` の複合外部キーを使います。Production のアプリ接続は `BYPASSRLS` 属性を持たない `cocolo_app` ロールとし、migration は別の owner / `DIRECT_URL` 接続で実行します。
+* **RLSの実行契約:** API は JWT subject と許可されたテナント識別子から membership を検証し、リクエスト入力の role を信頼せず、DBから取得した role / status を使って Prisma の interactive `$transaction` を開始します。同一の transaction client で `SELECT set_config('app.tenant_id', $1, true)`、`SELECT set_config('app.user_id', $2, true)`、`SELECT set_config('app.role', $3, true)` を実行してから全クエリを行います。transaction client 外の Prisma query を禁止する repository API を用意し、context 未設定時は RLS が 0 件 / 拒否となるようにします。
+* **RLS policy:** 各テナント表で `ENABLE ROW LEVEL SECURITY` と `FORCE ROW LEVEL SECURITY` を有効化し、`USING (tenant_id = current_setting('app.tenant_id', true)::uuid)` と同等の `WITH CHECK` を定義します。`TenantMembership` は `tenant_id` と `current_setting('app.user_id', true)` の組み合わせで本人所属だけを許可します。`cocolo_app` に policy を迂回する権限を与えません。
+* **RLSの検証:** tenant A / tenant B の owner・admin・guardian を用いた実 PostgreSQL 統合テストで、一覧・登録・更新・親子参照・context 未設定・guardian 担当外の越境ができないことを確認します。アプリ側の `tenantId` 条件だけを安全性の根拠にしません。
 * **Phase 1 確定モデル:** `Tenant`、`TenantMembership`、`Member`、`GuardianMember`、`AuditLog` を初回 migration の対象にします。出欠は `Event` に `attendanceDeadline`、`meetingAt`、`opponent`、`transportRequired` を追加し、`EventAttendance` を次の migration で追加します。これらを「完全な Schema」と「予定」に混在させません。
 * **保護者と部員の関係:** 単一の `guardianUserId` を認可に使わず、`GuardianMember(tenantId, userId, memberId, relationship, consentedAt)` の所属を根拠にします。guardian は自分が担当する部員の必要最小限の情報を閲覧し、出欠だけを登録・変更できます。
 * **認可マトリクス:** `owner/admin` はチーム設定・全機能の管理、`staff` は部員・予定・出欠の運用、`guardian` は担当部員の閲覧・出欠登録に限定します。電話番号、特記事項、CSV、支払い確認、削除は owner/admin のみとし、staff / guardian の可否を API テストで固定します。
 
 | 操作 | owner / admin | staff | guardian |
 | --- | --- | --- | --- |
-| テナント設定・所属管理 | owner は可、admin は参照・運用 | 不可 | 不可 |
-| 部員一覧 | テナント内全件 | テナント内全件 | `GuardianMember` で担当する部員のみ必要最小限 |
-| 部員の登録・編集・削除 | 可 | Phase 1 は不可 | 不可 |
+| テナント設定・所属管理 | owner は招待・役割変更・削除、admin は参照・運用 | 不可 | 不可 |
+| `GET /api/v1/members` | `id,name,kana,category,gradeLevel,ageGroup,status` の全件 | 同じ一覧。ただし PII は除外 | `GuardianMember` で担当する部員の `id,name,kana,category,gradeLevel,status` のみ |
+| `POST /api/v1/members` | 可（`note` は入力不可） | Phase 1 は不可 | 不可 |
+| 部員の編集・削除 | 可 | Phase 1 は不可 | 不可 |
 | 予定・出欠の運用 | 可 | 可 | 担当部員の出欠登録のみ |
 | 電話番号・特記事項・CSV・支払い確認 | 可 | 不可 | 不可 |
 
-* **個人情報:** `note` へアレルギー等を自由記述させる範囲と閲覧を Phase 1 では管理者だけに制限し、閲覧・変更・CSV 出力を `AuditLog` に記録します。退部後は 30 日で匿名化または削除する運用を初期値とし、チームの法務要件が確定したら設定値へ移します。
+* **個人情報:** Phase 1 の `Member` 登録 DTO では `note` を受け付けず、一覧 DTO にも含めません。管理者専用の明示的な操作だけが特記事項を扱い、閲覧・変更・CSV 出力を `AuditLog` に記録します。本番の退部後保持期間と AuditLog 保持期間は必須の環境別設定（未設定なら本番起動を拒否）とし、法務責任者の承認記録なしに自動削除を有効化しません。AuditLog は owner のみ閲覧でき、アプリ API から変更・削除できない append-only とします。
 * **アップロード:** R2 は private bucket を初期値とし、DB にテナント・所有者・MIME・サイズ・object key を記録します。短期署名 URL でのみ配信し、SVG は拒否、magic bytes と実体サイズを検証し、ファイル名を object key に使用しません。
 * **年度繰り上げ:** `promotion_runs(tenantId, fiscalYear)` 相当の実行記録を保存し、同一年度の再実行は no-op とします。実行前件数プレビュー、対象条件、17以上の扱い、実行者監査ログを仕様化します。
 * **注文整合性:** `OrderItem` の `tenantId + orderId` と `UserOrderItem` の `tenantId + orderId + itemId` を複合参照で整合させます。選択肢は JSON 文字列のまま信頼せず、Zod で許可値を検証し、`isPaid` と `paidAt` を状態遷移として更新します。
-* **CIとテストDB:** PR 用の `quality.yml` と本番 migration 用の `db-migrate.yml` を分離します。PRでは PostgreSQL を起動して migration と seed を実行し、`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build` を必須にします。Playwright は test-only Supabase/Auth アダプターを使用します。
+* **CIとテストDB:** PR 用の `quality.yml` と本番 migration 用の `db-migrate.yml` を分離します。PRでは PostgreSQL を起動して migration、RLS用テストロール、seed を実行し、`pnpm prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:e2e`、`pnpm build` を必須にします。Playwright は test-only Supabase/Auth アダプターを使用します。
 
 ### 8.12 Phase 1 スキーマ契約
 
-Phase 1 の実装開始前に、次の契約を `prisma/schema.prisma` と migration に一致させます。ここにないモデルを Phase 1 の API から参照しません。
+Phase 1 の実装開始前に、次の契約を選択肢なしで `prisma/schema.prisma` と migration に一致させます。ここにないモデルを Phase 1 の API から参照しません。
 
-* `Tenant`: `id UUID`、`name`、`createdAt`。
-* `TenantMembership`: `id UUID`、`tenantId`、外部 `userId`、`role`、`createdAt`、`UNIQUE(tenantId, userId)`。
-* `Member`: `id UUID`、`tenantId`、`name`、`kana`、`category`、`gradeLevel`、`ageGroup`、`status`、`note`、`createdAt`。`tenantId + id` を複合主キーまたは一意キーとして親子参照に使用します。
-* `GuardianMember`: `id UUID`、`tenantId`、`userId`、`memberId`、`relationship`、`consentedAt`、`UNIQUE(tenantId, userId, memberId)`。
-* `AuditLog`: `id UUID`、`tenantId`、actor の外部 `userId`、`action`、`resourceType`、`resourceId`、安全な最小限の `metadata`、`createdAt`。
+* **共通:** すべての主キーは `String @id @default(uuid())`、`tenantId` は `String`、日時は `DateTime @default(now())` とします。`Tenant` 以外のテナント所属モデルには `@@unique([tenantId, id])` を必ず定義し、複合外部キーの参照先にします。
+* **Tenant:** `id`、`name`（必須、1〜100文字）、`createdAt`。削除は物理削除せず、所属モデルを先に停止します。
+* **TenantMembership:** `id`、`tenantId`、外部 `userId`（Supabase JWT subject）、`role`（`owner` / `admin` / `staff` / `guardian`）、`status`（`invited` / `active` / `suspended`）、`createdAt`、`updatedAt`、`UNIQUE(tenantId, userId)`、`INDEX(userId, status)`。最後の active owner は削除・降格できません。
+* **Member:** `id`、`tenantId`、`name`（必須）、`kana`、`category`（`student` / `adult`）、`gradeLevel`、`ageGroup`、`status`（`active` / `retired` / `suspended`）、`note`、`createdAt`。Phase 1 の POST DTO は `note` を受け付けず、管理者専用の別操作でのみ扱います。
+* **GuardianMember:** `id`、`tenantId`、外部 `userId`、`memberId`、`relationship`、`consentedAt`、`UNIQUE(tenantId, userId, memberId)`。`FOREIGN KEY(tenantId, memberId) REFERENCES members(tenantId, id)` とし、テナントの異なる部員を参照できないようにします。
+* **AuditLog:** `id`、`tenantId`、actor の外部 `userId`、`action`、`resourceType`、nullable の `resourceId`（UUID文字列）、安全な最小限の `metadata`、`createdAt`、`INDEX(tenantId, createdAt)`。アプリの更新 API から delete を公開せず append-only とします。
 
-各 enum は API 入力の Zod スキーマと PostgreSQL の CHECK または Prisma enum の両方で制限します。`Member` の登録・一覧だけでなく、RLS policy、複合制約、テスト fixture を同じ Phase 1 の完了条件に含めます。
+`Member` の `tenantId + id`、`GuardianMember` の `tenantId + memberId`、`AuditLog` の resource ID 型は上記の定義から変更しません。各 enum は API 入力の Zod スキーマと PostgreSQL の CHECK または Prisma enum の両方で制限します。RLS policy、複合制約、tenant A/B と role 別の test fixture を同じ Phase 1 の完了条件に含めます。
+
+Phase 4 の `Attachment` は `id UUID`、`tenantId`、`ownerUserId`、`objectKey`、`mediaType`、`byteSize`、`sha256`、`deletedAt`、`createdAt` を持ち、`tenantId + objectKey` を一意にします。R2 の公開 URL は保存せず、download API が毎回認可して短期署名 URL を発行します。
+
+### 8.13 CI・TDD・レビュー成果物の実行契約
+
+PR 用 `quality.yml` は次の順序とコマンドを固定します。Workflow が未作成の段階では、同じコマンドをローカルで実行した結果をタスク完了の証拠にします。
+
+```yaml
+name: Quality Gate
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+      DIRECT_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: cocolo_test
+          POSTGRES_PASSWORD: cocolo_test
+          POSTGRES_DB: cocolo_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U cocolo_test -d cocolo_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma validate
+      - run: pnpm prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://cocolo_test:cocolo_test@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://cocolo_test:cocolo_test@localhost:5432/cocolo_test
+      - run: pnpm db:prepare:test
+        env:
+          DATABASE_URL: postgresql://cocolo_test:cocolo_test@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://cocolo_test:cocolo_test@localhost:5432/cocolo_test
+      - run: pnpm db:seed:test
+        env:
+          DATABASE_URL: postgresql://cocolo_test:cocolo_test@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://cocolo_test:cocolo_test@localhost:5432/cocolo_test
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test:unit
+      - run: pnpm test:integration
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - run: pnpm build
+```
+
+`db:prepare:test` は migration owner 接続で `cocolo_app` ロール（`BYPASSRLS` なし）と必要な table grant を作成します。`package.json` の scripts と上記コマンドを一致させ、migration / seed だけを owner 接続、`test:integration` は `cocolo_app` 接続で実行します。`test:integration` は実 PostgreSQL の RLS policy・transaction context・tenant A/B・owner/admin/guardian fixture を検証します。`test:e2e` は test-only Auth adapter でログイン状態を作り、外部 Supabase の実アカウントに依存しません。レビュー成果物は `docs/reviews/` に日付付き Markdown で保存し、対象 SHA、指摘、重大度、修正コミット、再レビュー判定を必須項目にします。
 
 ## 9. 実装タスク一覧と中断後の再開手順
 
@@ -567,19 +644,21 @@ Phase 1 の実装開始前に、次の契約を `prisma/schema.prisma` と migra
 
 * [x] **T-001 プラン補充:** 認証、テナント、API、TDD、CI、受け入れ条件を文書化する。コミット: `e0ed27f`
 * [x] **T-002 実装前敵対的レビュー:** Critical / High / Medium の指摘を取得する。レビュー結果を T-003 の修正対象にする。
-* [x] **T-003 レビュー指摘の解消:** Node.js 固定、Phase 1 Schema 契約、RLS 方針、権限表、private upload、PR CI、MVP プロンプトを確定する。
-* [ ] **T-004 実装前敵対的レビュー再実施:** T-003 の差分に対して Critical / High がゼロであることを確認する。
+* [~] **T-003 レビュー指摘の解消:** Node.js 固定、Phase 1 Schema 契約、RLS 方針、権限表、private upload、PR CI、MVP プロンプトを確定する。再レビューで未解消が判明したため継続中。
+* [!] **T-004 実装前敵対的レビュー再実施:** 2026-08-22 に実施したが Critical 1件 / High 9件が残り、不合格。
 * [ ] **T-005 開発基盤:** package.json、pnpm lockfile、TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build を追加する。
 * [ ] **T-006 Red:** 部員 API の未認証、別テナント、権限不足、入力不正、一覧・登録の失敗テストを先に追加する。
-* [ ] **T-007 Green:** Tenant / TenantMembership / Member の migration、JWT検証、RLS、テナント解決、部員 API を最小実装する。
+* [ ] **T-007 Green:** Tenant / TenantMembership / Member / GuardianMember / AuditLog の migration、JWT検証、RLS policy、transaction context、テナント解決、部員 API を最小実装する。
 * [ ] **T-008 Red/Green:** 部員一覧・登録 UI のテストを先に追加して画面を実装する。
 * [ ] **T-009 E2E:** test-only Auth を使った管理者のログインから部員登録までを Playwright で検証する。
 * [ ] **T-010 実装後敵対的レビュー:** T-005〜T-009 の成果物に対して越境、PII、認可、入力、テスト不足をレビューする。
 * [ ] **T-011 指摘修正とリリース判定:** Critical / High をゼロにし、受け入れ条件と CI 全件を再確認する。
+* [ ] **T-012 Phase 1追加機能:** 年度繰り上げを別の Red → Green → Refactor 縦切りとして実装し、冪等性・プレビュー・監査ログを検証する。
 
 ### 9.2 タスク完了記録
 
 * **T-002レビュー記録（2026-08-22）:** 実装開始不可。Critical 2件、High 9件、Medium 4件。主な指摘は DB レベルの tenant 境界、実行環境の未確定、Phase 1 モデル不足、認可マトリクス不足、公開 R2 URL、CI と TDD 手順の不一致。T-003 で解消方針を追加した。
+* **T-004再レビュー記録（2026-08-22）:** 実装開始不可。方針だけでは RLS policy・transaction context・確定スキーマ・CI 定義の証拠として不十分だったため、T-003 に具体的な契約と実行手順を追加する。レビュー成果物は `docs/reviews/plan-adversarial-review-2026-08-22.md` に保存する。
 
 ### 9.3 中断後の再開手順
 
@@ -589,4 +668,4 @@ Phase 1 の実装開始前に、次の契約を `prisma/schema.prisma` と migra
 4. TDD タスクでは、まず対象テストを単独実行して Red / Green の状態を確認してからコードを変更します。
 5. 1タスク完了ごとに日本語コミット、テストコマンド、レビュー要否を記録し、次タスクへ移る前に `git status` を確認します。
 
-再開時の最優先は T-003 の残作業であり、T-004 の再レビューが完了するまでアプリ実装（T-005以降）を開始しません。
+再開時の最優先は T-003 の残作業です。T-003 が完了し、T-004 の再レビューで Critical / High がゼロになるまでアプリ実装（T-005以降）を開始しません。
