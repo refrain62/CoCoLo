@@ -192,7 +192,7 @@ guardian は対象部員、自分の注文者情報、商品、選択肢、数�
 
 ### FS-FIL-002 添付アップロードの手順
 
-利用者が添付を開始すると、API は所属・権限・許可 MIME・最大サイズを確認し、短期・一回限りの upload session と署名URLを発行します。Web は署名URLで private storage へ直接 PUT し、API の `complete` 操作を呼び出します。API は session の所有者、チーム、object key、期限、未使用、上書き不可、実体サイズ、magic bytes、sha256 を再検証します。検証成功時だけ `uploaded → available` とし、期限切れ、再利用、別チーム、改ざん、形式不正は拒否して `rejected` とします。
+利用者が添付を開始すると、API は所属・権限・許可 MIME・最大20 MiBを確認し、TTL 900秒の一回限り upload session と署名URLを発行します。Web は署名URLで private storage へ直接 PUT し、API の `complete` 操作を呼び出します。API は session の所有者、チーム、object key、期限、未使用、上書き不可、実体サイズ、magic bytes、sha256 を再検証します。complete の再試行は同一 session で3回までです。検証成功時だけ `uploaded → available` とし、期限切れ、再利用、別チーム、改ざん、形式不正は `rejected` として24時間以内に保存本体を削除します。
 
 ### FS-ANN-001 回覧板
 

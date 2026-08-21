@@ -94,6 +94,7 @@ pnpm workspace を採用し、Web と API を同一リポジトリで管理し�
 * `packages/contracts` は Zod schema と API の入出力型を持ち、DB model をそのまま再公開しません。Zod schema を HTTP 契約の生成元とし、OpenAPI 3.1 は生成・lint・差分検証します。
 * `packages/db` だけが Prisma schema、migration、repositoryを所有します。migration SQLは `packages/db/prisma/migrations` に置きます。
 * package 間の循環依存、workspace外の相対import、`apps/*` から別アプリへの直接importを禁止します。公開する依存は各packageの `package.json` に明記します。
+* `verify:workspace-boundaries` は dependency-cruiser の固定設定で、循環依存、`apps/web → packages/db|packages/auth|apps/api`、`packages/domain → Hono|React|Prisma|process.env`、`packages/contracts → packages/db|packages/domain`、production code → `packages/test-fixtures` をエラーにします。テスト専用依存は `devDependencies` に限定します。
 
 root の `package.json` は `private: true` とし、`pnpm-workspace.yaml` の対象を `apps/*` と `packages/*` に固定します。root script は `pnpm --filter @cocolo/web ...`、`pnpm --filter @cocolo/api ...`、`pnpm --filter @cocolo/db ...` のように対象 package を明示し、全体検査だけ `pnpm -r` で実行します。各 package は単独で build・test できる構成を目標にします。
 
@@ -164,6 +165,7 @@ pnpm --filter @cocolo/db exec prisma migrate dev
 * migration SQL には、作成・変更したすべてのテーブルとカラムへ `COMMENT ON TABLE` / `COMMENT ON COLUMN` を記載します。コメントは日本語の表示名と用途を含め、例として `COMMENT ON COLUMN members.id IS '部員を一意に識別するUUIDv7';` のように意味が分かる内容にします。
 * SQL、Prisma schema、seed、コメントを含むドキュメントは UTF-8（BOMなし）、改行は LF で保存します。CI で migration SQL の UTF-8 decode と日本語コメントの存在を検査し、文字化けしたコメントや日本語識別子を不合格にします。
 * `prisma migrate dev` が生成した SQL はレビュー対象とし、コメント、RLS、権限、複合外部キーを手動確認してから commit します。コメントを省略した自動生成 SQL をそのまま本番へ適用しません。
+* `verify:migration-sql` は全 `packages/db/prisma/migrations/**/migration.sql` を対象に、UTF-8 decode成功・BOMなし・LFのみ・物理識別子が英語 `snake_case`・日本語を含む `COMMENT ON TABLE/COLUMN` が各作成/変更対象に存在することを検査します。さらに、テナント所属テーブルの `ENABLE/FORCE ROW LEVEL SECURITY`、`cocolo_app` への最小 grant、tenant 境界を含む複合外部キーを検出できない場合は失敗させます。
 
 ## 4. データベース設計 & 命名規則（Prisma Schema）
 
@@ -373,7 +375,7 @@ Stripe等のオンライン決済（見送り）: 決済手数料（3.6%等）�
 
 ### 5.5 画像添付機能（Cloudflare R2）
 
-* アップロード仕様（Phase 4）: Hono バックエンドの `POST /api/v1/uploads` は JSON の upload session 作成専用とします。API がテナント・所有者・object key・許可 MIME・最大サイズ・短い有効期限を束ねた署名URLを発行し、Web は private R2 へ直接 PUT します。`POST /api/v1/uploads/:id/complete` は所有者、object key の完全一致、有効期限、未使用、上書き不可、実体サイズ、magic bytes、sha256を検証し、成功時だけ `uploaded` から `available` へ遷移させます。公開 URL は返却しません。
+* アップロード仕様（Phase 4）: Hono バックエンドの `POST /api/v1/uploads` は JSON の upload session 作成専用とします。API がテナント・所有者・object key・許可 MIME・最大20 MiB・TTL 900秒を束ねた署名URLを発行し、Web は private R2 へ直接 PUT します。`POST /api/v1/uploads/:id/complete` は所有者、object key の完全一致、有効期限、未使用、上書き不可、実体サイズ、magic bytes、sha256を検証し、成功時だけ `uploaded` から `available` へ遷移させます。complete の再試行は同一 session で3回までとし、期限切れ・検証失敗は `rejected` にして R2 object を24時間以内に削除します。公開 URL は返却しません。
 
 ## 6. CI/CD パイプライン仕様（GitHub Actions）
 
@@ -390,6 +392,8 @@ name: ステージングへデプロイ
 permissions:
   contents: read
   actions: write
+  id-token: write
+  attestations: write
 
 on:
   push:
@@ -443,13 +447,24 @@ jobs:
       - name: release artifactのchecksumを確認
         run: pnpm verify:release --release-dir .release --artifact-sha "${{ github.sha }}"
 
+      - name: release artifactのprovenanceを生成
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: .release/release.tar.gz
+
       - name: 検証済みrelease artifactを保存
         env:
           GH_TOKEN: ${{ github.token }}
         run: pnpm publish:release --release-dir .release --artifact-name "release-${{ github.sha }}"
 
+      - name: staging PostgreSQLのメジャーバージョンを検証
+        run: pnpm verify:database-version --expected-major 17
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: 検証済みreleaseのstaging migrationを適用
         env:
+          APP_ENV: staging
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: pnpm migrate:release --release-dir .release
@@ -504,11 +519,21 @@ jobs:
       - name: staging証跡とartifactを検証前に取得
         env:
           GH_TOKEN: ${{ github.token }}
+          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+          ARTIFACT_SHA: ${{ inputs.artifact_sha }}
         run: |
-          gh run view "${{ inputs.staging_run_id }}" --json conclusion,headSha --jq '.conclusion + " " + .headSha' | grep -Fx "success ${{ inputs.artifact_sha }}"
-          gh run download "${{ inputs.staging_run_id }}" --name "release-${{ inputs.artifact_sha }}" --dir .release
+          [[ "$STAGING_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'staging_run_id must be numeric' >&2; exit 1; }
+          [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'artifact_sha must be a lowercase 40-digit SHA-1' >&2; exit 1; }
+          gh run view "$STAGING_RUN_ID" --json conclusion,headSha --jq '.conclusion + " " + .headSha' | grep -Fx "success $ARTIFACT_SHA"
+          gh run download "$STAGING_RUN_ID" --name "release-$ARTIFACT_SHA" --dir .release
       - name: artifactのchecksumとprovenanceを検証
-        run: sha256sum --check .release/SHA256SUMS && release-tool verify --release-dir .release --artifact-sha "${{ inputs.artifact_sha }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_SHA: ${{ inputs.artifact_sha }}
+        run: |
+          sha256sum --check .release/SHA256SUMS
+          gh attestation verify .release/release.tar.gz --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/staging-deploy.yml"
+          test "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)" = "$(cat .release/artifact.sha256)"
       - name: 検証済みSHAのリポジトリを取得
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -525,6 +550,10 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: 本番環境境界を検証
         run: pnpm verify:environment --expected production
+      - name: production PostgreSQLのメジャーバージョンを検証
+        run: pnpm verify:database-version --expected-major 17
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: 検証済みreleaseのmigrationを適用
         run: pnpm migrate:release --release-dir .release
         env:
@@ -532,21 +561,23 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: 検証済みartifactを本番へ配置
-        run: pnpm deploy:production --artifact-sha "${{ inputs.artifact_sha }}"
+        env:
+          ARTIFACT_SHA: ${{ inputs.artifact_sha }}
+        run: pnpm deploy:production --artifact-sha "$ARTIFACT_SHA"
       - name: 本番のsmoke testを実行
         run: pnpm smoke:production --base-url "${{ vars.PRODUCTION_APP_URL }}"
         env:
           APP_ENV: production
 ```
 
-`package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、migration checksum manifest を同一の immutable release artifact に含めます。staging の `publish:release` は GitHub Actions artifact `release-${{ github.sha }}` として保存し、production は `actions: read` で同名 artifact だけを取得します。`release-tool verify` はリポジトリから install する script ではなく、runner image に digest 固定で提供する検証専用ツールとします。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・migration checksum・artifact SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリの migration を参照せず、検証済み `.release` 内の migration だけを `prisma migrate deploy` へ渡します。staging / production の workflow は `APP_ENV`、Supabase URL/JWKS、R2 endpoint/bucket、公開URLの allowlist を `verify:environment` で検証し、production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
+`package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、migration checksum manifest を同一の immutable release artifact に含め、`.release/release.tar.gz` と `artifact.sha256` を生成します。staging の `publish:release` は GitHub Actions artifact `release-${{ github.sha }}` として保存し、production は `actions: read` で同名 artifact だけを取得します。staging は GitHub 公式 provenance action をSHA固定で実行し、production は checkout・pnpm install・リポジトリ内 script より前に標準 GitHub CLI の `gh attestation verify` で署名者リポジトリ、workflow、SHA-256を検証します。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・migration checksum・artifact SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリの migration を参照せず、検証済み `.release` 内の migration だけを `prisma migrate deploy` へ渡します。staging / production の workflow は `APP_ENV`、Supabase URL/JWKS、R2 endpoint/bucket、公開URLの allowlist を `verify:environment` で検証し、production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
 
 ### 6.1 サプライチェーン攻撃対策
 
 次の対策を必須とします。例外は理由、対象パッケージまたは action、期限、承認者を記録した一時的な変更として扱い、自動マージしません。
 
 * **依存パッケージの公開直後待機:** pnpm 10.26.0 以上を使用し、リポジトリ直下の `pnpm-workspace.yaml` に `minimumReleaseAge: 2880`（48時間）、`minimumReleaseAgeExclude: []` を設定します。CI は `pnpm install --frozen-lockfile` を使い、ロックファイルの変更を同じPRでレビューします。pnpm 10.26.0 が解釈できない設定を起動時検査で拒否し、存在しない設定名を追加しません。
-* **依存関係の実行制限:** `blockExoticSubdeps: true` で git・http tarball 等の依存を禁止し、`strictDepBuilds: true` と `onlyBuiltDependencies` の allowlist で install script を明示許可します。allowlist 外の postinstall はインストールを失敗させます。
+* **依存関係の実行制限:** `blockExoticSubdeps: true` で git・http tarball 等の依存を禁止し、`strictDepBuilds: true` と `onlyBuiltDependencies` の allowlist で install script を明示許可します。allowlist 外の postinstall はインストールを失敗させます。`verify:pnpm-config` は実 lockfile の install script 実行パッケージ集合と allowlist の一致、`pnpm ignored-builds` が空であること、`pnpm config get` の必須値をCIで検査します。
 * **信頼情報の低下防止:** pnpm 10.21 以降では `trustPolicy: no-downgrade` を有効にし、公開者の provenance / trust 情報が以前より弱くなる更新を自動採用しません。pnpm の実バージョンは `packageManager` に完全固定します。
 * **GitHub Actions の SHA 固定:** `uses` は GitHub 公式 action を含めて40桁の commit SHA に固定し、タグ・ブランチ参照を禁止します。リリースタグ、署名、リポジトリ所有者を確認した更新PRだけを取り込みます。GitHub リポジトリ設定でも SHA pinning required と許可 action の allowlist を有効にします。
 * **権限の最小化:** workflow と job ごとに `permissions` を明示し、通常は `contents: read` のみとします。`id-token: write`、artifact 書き込み、production secret は必要な job と protected Environment に限定します。fork のPRでは秘密情報を渡さず、`pull_request_target` と untrusted な式を使いません。
@@ -850,7 +881,7 @@ jobs:
       - name: migration SQLの静的検査
         run: pnpm verify:migration-sql
       - name: OpenAPI契約を検査
-        run: pnpm lint:openapi && pnpm test:contract
+        run: pnpm generate:openapi && git diff --exit-code -- packages/contracts/openapi.yaml && pnpm lint:openapi && pnpm test:contract
       - name: workspace依存境界を検査
         run: pnpm verify:workspace-boundaries
       - name: Prisma schemaを検証
@@ -909,7 +940,7 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 * [~] **T-003 レビュー指摘の解消:** Node.js 固定、Phase 1 Schema 契約、RLS 方針、権限表、private upload、PR CI、local / staging / production 環境、機能仕様書、UUIDv7、migration SQL の命名・文字コード、依存パッケージ待機、Actions SHA 固定、Monorepo 境界、Web/APIプロトコルを確定する。再レビューで未解消が判明したため継続中。
 * [~] **T-003a 機能仕様書の分離:** `docs/functional-specification.md` に機能ID、業務ルール、権限、状態遷移、資源ID、受け入れ条件、変更依頼テンプレートを定義する。計画と仕様の整合レビュー待ち。
 * [!] **T-004 実装前敵対的レビュー再実施:** 第3レビューは Critical 1件 / High 5件、第4レビュー（`46023fc`）は Critical 0件 / High 3件、第5レビュー（`9f49cb4`）は Critical 0件 / High 2件、第6レビュー（`30ebace`）は Critical 0件 / High 5件が残り、いずれも不合格。機能仕様書とサプライチェーン対策を含む現行文書で再レビューする。
-* [ ] **T-005 開発基盤:** pnpm workspace の `apps/web`、`apps/api`、`packages/db`、`packages/auth`、`packages/contracts`、`packages/domain`、`packages/ui`、`packages/test-fixtures`、root package scripts、package間依存境界、OpenAPI 3.1、package単位の TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build、`dev:test`、`db:prepare:test`、`db:seed:test`、`test:unit`、`test:integration`、`test:e2e:local`、`test:e2e:staging`、`verify:production-bundle`、staging smoke / deploy / evidence scripts を追加する。local / staging / production の `.env` 契約、起動時環境ガード、`playwright.config.ts` の `webServer`、quality / staging / production promote Workflow の実行結果を完了条件に含める。
+* [ ] **T-005 開発基盤:** pnpm workspace の `apps/web`、`apps/api`、`packages/db`、`packages/auth`、`packages/contracts`、`packages/domain`、`packages/ui`、`packages/test-fixtures`、root package scripts、dependency-cruiserによるpackage間依存境界、Zodからの`generate:openapi`、OpenAPI 3.1、package単位の TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build、`dev:test`、`db:prepare:test`、`db:seed:test`、`verify:pnpm-config`、`verify:migration-sql`、`verify:database-version`、`verify:environment`、`test:unit`、`test:integration`、`test:e2e:local`、`test:e2e:staging`、`verify:production-bundle`、staging smoke / deploy / evidence scripts を追加する。local / staging / production の `.env` 契約、起動時環境ガード、`playwright.config.ts` の `webServer`、quality / staging / production promote Workflow の実行結果を完了条件に含める。
 * [ ] **T-006 Red:** 部員 API の未認証、別テナント、権限不足、入力不正、一覧・登録の失敗テストを先に追加する。
 * [ ] **T-007 Green:** Tenant / TenantMembership / Member / GuardianMember / AuditLog の migration、JWT検証、RLS policy、transaction context、テナント解決、部員 API を最小実装する。
 * [ ] **T-008 Red/Green:** 部員一覧・登録 UI のテストを先に追加して画面を実装する。
