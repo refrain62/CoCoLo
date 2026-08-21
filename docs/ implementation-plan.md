@@ -132,9 +132,9 @@ Web と API の分離後も、主プロトコルは **HTTPS 上の JSON REST API
 ### 3.1 決定された運用方針
 本プロジェクトでは、Supabase / PostgreSQL に対して **Flyway と同等の「バージョン管理された差分 SQL ファイル順次適用」** を行います。
 
-* **開発時（ローカル）:** `prisma db push` は使用せず、**`pnpm exec prisma migrate dev`** で差分 SQL (`migration.sql`) を生成・適用します。
+* **開発時（ローカル）:** `prisma db push` は使用せず、**`pnpm --filter @cocolo/db exec prisma migrate dev`** で差分 SQL (`migration.sql`) を生成・適用します。
 * **履歴管理:** DB 内の `_prisma_migrations` テーブルにて適用済みマイグレーションのハッシュと順序を管理します。
-* **本番/CI:** **`pnpm exec prisma migrate deploy`** を使用し、未適用の差分 SQL のみを順次適用します。
+* **本番/CI:** **`pnpm --filter @cocolo/db exec prisma migrate deploy`** を使用し、未適用の差分 SQL のみを順次適用します。
 
 ### 3.2 開発ワークフロー & コマンド
 
@@ -425,7 +425,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Prisma Clientを生成
-        run: pnpm exec prisma generate
+        run: pnpm --filter @cocolo/db exec prisma generate
 
       - name: アプリとmigrationのimmutable artifactを作成
         run: pnpm build && pnpm package:release --artifact-sha "${{ github.sha }}" --include packages/db/prisma/migrations --output .release
@@ -496,7 +496,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-      - name: immutable artifactをproductionへ配置
+      - name: 検証済みartifactを本番へ配置
         run: pnpm deploy:production --artifact-sha "${{ inputs.artifact_sha }}"
       - name: 本番のsmoke testを実行
         run: pnpm smoke:production --base-url "${{ vars.PRODUCTION_APP_URL }}"
@@ -637,7 +637,7 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * **API テスト:** 認証なし、別テナント、role 別、正常系、入力不正、競合、transaction 失敗を Hono の `app.request` で検証。
 * **UI テスト:** 部員検索・登録、出欠入力、支払いトグル、権限による表示差分、loading / error / empty 状態を Vitest + Testing Library で検証。
 * **E2E テスト:** Playwright でログイン後の主要導線を検証します。外部 LINE / Maps / R2 は実サービスではなくテスト用アダプターを使用します。
-* **CI ゲート:** `pnpm exec prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:e2e:local`、`pnpm build` を必須にします。staging は `pnpm test:e2e:staging` を追加し、失敗時はマージ・本番マイグレーションを許可しません。
+* **CI ゲート:** `pnpm --filter @cocolo/db exec prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:e2e:local`、`pnpm build` を必須にします。staging は `pnpm test:e2e:staging` を追加し、失敗時はマージ・本番マイグレーションを許可しません。
 
 ### 8.7 環境・運用・監視
 
@@ -745,7 +745,7 @@ API DTO は role ごとに別 schema を持ち、staff / guardian のレスポ�
 * **アップロード:** R2 は private bucket を初期値とし、DB にテナント・所有者・MIME・サイズ・object key・`status`（`uploaded` / `available` / `deleted` / `rejected`）を記録します。短期署名 URL でのみ配信し、SVG は拒否、magic bytes と実体サイズを検証し、ファイル名を object key に使用しません。`deletedAt` は `deleted` のときだけ設定します。
 * **年度繰り上げ:** `promotion_runs(tenantId, fiscalYear)` 相当の実行記録を保存し、同一年度の再実行は no-op とします。実行前件数プレビュー、対象条件、17以上の扱い、実行者監査ログを仕様化します。
 * **注文整合性:** `OrderItem` の `tenantId + orderId` と `UserOrderItem` の `tenantId + orderId + itemId` を複合参照で整合させます。選択肢は JSON 文字列のまま信頼せず、Zod で許可値を検証し、`isPaid` と `paidAt` を状態遷移として更新します。
-* **CIとテストDB:** PR 用の `quality.yml`、staging 用の `staging-deploy.yml`、production 用の `production-promote.yml` を分離します。PRでは PostgreSQL を起動して migration、RLS用テストロール、seed を実行し、`pnpm exec prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:e2e:local`、`pnpm build` を必須にします。staging では staging Auth ユーザーによる `test:e2e:staging` を実行し、production は承認済み staging evidence と同一 artifact SHA だけを promote します。
+* **CIとテストDB:** PR 用の `quality.yml`、staging 用の `staging-deploy.yml`、production 用の `production-promote.yml` を分離します。PRでは PostgreSQL を起動して migration、RLS用テストロール、seed を実行し、`pnpm --filter @cocolo/db exec prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:e2e:local`、`pnpm build` を必須にします。staging では staging Auth ユーザーによる `test:e2e:staging` を実行し、production は承認済み staging evidence と同一 artifact SHA だけを promote します。
 
 ### 8.13 Phase 1 スキーマ契約
 
@@ -805,9 +805,9 @@ jobs:
       - name: 依存関係の脆弱性を検査
         run: pnpm audit --prod --audit-level high
       - name: Prisma schemaを検証
-        run: pnpm exec prisma validate
+        run: pnpm --filter @cocolo/db exec prisma validate
       - name: テストDBへmigrationを適用
-        run: pnpm exec prisma migrate deploy
+        run: pnpm --filter @cocolo/db exec prisma migrate deploy
         env:
           DATABASE_URL: postgresql://cocolo_test:cocolo_test@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://cocolo_test:cocolo_test@localhost:5432/cocolo_test
