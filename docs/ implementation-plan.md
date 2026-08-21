@@ -91,7 +91,7 @@ pnpm workspace を採用し、Web と API を同一リポジトリで管理し�
 * `apps/web` は `packages/contracts` と `packages/ui` だけを通じて API と通信します。`packages/db`、Prisma Client、Service Role Key、DB URLを直接参照しません。
 * `apps/api` は `packages/auth`、`packages/contracts`、`packages/domain`、`packages/db` を利用します。認証、テナント解決、RLS context 設定は API 境界で完結させます。
 * `packages/domain` は Hono、React、Prisma Client、環境変数に依存しない純粋な業務ルールとします。
-* `packages/contracts` は Zod schema と API の入出力型を持ち、DB model をそのまま再公開しません。
+* `packages/contracts` は Zod schema と API の入出力型を持ち、DB model をそのまま再公開しません。Zod schema を HTTP 契約の生成元とし、OpenAPI 3.1 は生成・lint・差分検証します。
 * `packages/db` だけが Prisma schema、migration、repositoryを所有します。migration SQLは `packages/db/prisma/migrations` に置きます。
 * package 間の循環依存、workspace外の相対import、`apps/*` から別アプリへの直接importを禁止します。公開する依存は各packageの `package.json` に明記します。
 
@@ -101,19 +101,19 @@ root の `package.json` は `private: true` とし、`pnpm-workspace.yaml` の�
 
 Web と API の分離後も、主プロトコルは **HTTPS 上の JSON REST API** とします。HTTP/2・HTTP/3 の利用は CDN / ingress の最適化として許可しますが、アプリケーション契約は HTTP semantics に依存し、WebSocket や同一プロセス内の関数呼び出しを前提にしません。
 
-* API の公開パスは `/api/v1`、文字コードは UTF-8 JSON、契約は `packages/contracts/openapi.yaml` の OpenAPI 3.1 と `packages/contracts` の Zod schema で管理します。機能・業務ルールは `docs/functional-specification.md`、HTTP の入出力は OpenAPI を正本とし、差異があれば実装前に両方を更新します。
+* API の公開パスは `/api/v1`、文字コードは UTF-8 JSON とします。HTTP 契約は `packages/contracts` の Zod schema を生成元とし、`packages/contracts/openapi.yaml` は生成物として lint・差分検証します。機能・業務ルールは `docs/functional-specification.md` を正本とし、仕様変更時は機能仕様を先に更新します。
 * Web は `Authorization: Bearer <Supabase access token>` で API を呼び出します。API は JWT の issuer、audience、署名、`exp`、`nbf` を検証し、Service Role Key を Web へ渡しません。Supabase Auth は API へ Bearer JWT を送る方式をサポートしています。
-* Web と API が別 origin の間は、環境ごとの明示的な origin allowlist で CORS を設定します。`Access-Control-Allow-Origin: *`、任意 origin の反射、不要な credentials は禁止し、動的 allowlist の場合は `Vary: Origin` を返します。cookie認証を追加する場合は SameSite、CSRF token、origin検証を別途必須化します。
+* Web と API が別 origin の間は、環境ごとの明示的な origin allowlist で CORS を設定します。許可メソッドは `GET, POST, PATCH, PUT, DELETE, OPTIONS`、許可ヘッダーは `Authorization, Content-Type, Idempotency-Key, If-Match` に限定し、`Access-Control-Allow-Origin: *`、任意 origin の反射、Bearer 認証での credentials は禁止します。動的 allowlist の場合は `Vary: Origin` を返し、preflight は origin・method・header を検査してから応答します。TLS は managed ingress で終端し、staging / production は HTTP を HTTPS へリダイレクトし、production では HSTS を有効にします。cookie認証を追加する場合は SameSite、CSRF token、origin検証を別途必須化します。
 * 成功・エラー形式、`requestId`、`ETag`、ページング、`Idempotency-Key` を OpenAPI に定義します。部員登録・注文・支払い・年度繰り上げなど再送で二重登録が起きる操作は `Idempotency-Key` を必須または推奨とし、API側で重複実行を抑止します。
 * ファイル本体は Web から API へ中継せず、API が認可済みの短期署名URLを発行し、Web が private R2 へ直接 PUT します。完了通知を API の `POST /api/v1/uploads/:id/complete` で受け、API が実体サイズ・magic bytes・sha256を検証してから `available` に遷移させます。
 * Phase 1 は REST の request/response のみとし、常時接続のリアルタイム通信は導入しません。将来の更新通知は一方向なら SSE、双方向の同時編集が必要になった場合だけ WebSocket を別契約として追加し、既存 REST API の認可・RLSを迂回させません。
-* API の認証、CORS、rate limit、監査、RLS は API 側で強制します。Web の表示制御だけを認可根拠にせず、別クライアント・curl・モバイルからの直接呼び出しも同じ契約で扱います。
+* API の認証、CORS、rate limit、監査、RLS は API 側で強制します。初期の rate limit は認証済み利用者あたり API 60 req/min、upload session 発行 10 req/min とし、超過は `429` と `Retry-After` を返します。Web の表示制御だけを認可根拠にせず、別クライアント・curl・モバイルからの直接呼び出しも同じ契約で扱います。
 ---
 
 ## 2. ORM選定・技術移行の全経緯（Drizzle vs Prisma）
 
 ### 2.1 決定事項
-当初検討していた **Drizzle ORM から Prisma ORM へ全面変更** します。
+当初検討していた **Drizzle ORM から Prisma ORM へ全面変更** します。UUIDv7 の `uuid(7)` 既定値を利用するため Prisma ORM は 5.18.0 以上を必須とし、実装時は `package.json` と lockfile で同一バージョンへ固定します。
 
 ### 2.2 Prisma を採用した理由（メリット）
 1. **AI Agent の実装精度・成功率が圧倒的最高水準:**
@@ -373,7 +373,7 @@ Stripe等のオンライン決済（見送り）: 決済手数料（3.6%等）�
 
 ### 5.5 画像添付機能（Cloudflare R2）
 
-* アップロード仕様（Phase 4）: Hono バックエンドに `POST /api/v1/uploads` エンドポイントを準備。private R2 に保存し、DB の Attachment にテナント・所有者・object key・MIME・サイズを記録します。公開 URL は返却せず、認可済みユーザーへ短期署名 URL を発行します。
+* アップロード仕様（Phase 4）: Hono バックエンドの `POST /api/v1/uploads` は JSON の upload session 作成専用とします。API がテナント・所有者・object key・許可 MIME・最大サイズ・短い有効期限を束ねた署名URLを発行し、Web は private R2 へ直接 PUT します。`POST /api/v1/uploads/:id/complete` は所有者、object key の完全一致、有効期限、未使用、上書き不可、実体サイズ、magic bytes、sha256を検証し、成功時だけ `uploaded` から `available` へ遷移させます。公開 URL は返却しません。
 
 ## 6. CI/CD パイプライン仕様（GitHub Actions）
 
@@ -389,6 +389,7 @@ name: ステージングへデプロイ
 # SHA はリリースタグと署名を確認したうえで Dependabot / Renovate から更新する。
 permissions:
   contents: read
+  actions: write
 
 on:
   push:
@@ -400,7 +401,6 @@ on:
       - 'package.json'
       - 'pnpm-workspace.yaml'
       - 'pnpm-lock.yaml'
-      - 'pnpm-lock.yaml'
       - '.github/workflows/staging-deploy.yml'
 
 jobs:
@@ -408,12 +408,20 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     concurrency: staging-deploy
+    env:
+      APP_ENV: staging
+      PUBLIC_APP_URL: ${{ vars.STAGING_APP_URL }}
+      SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      SUPABASE_JWKS_URL: ${{ vars.STAGING_SUPABASE_JWKS_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+      R2_ENDPOINT: ${{ vars.STAGING_R2_ENDPOINT }}
+      R2_BUCKET: ${{ vars.STAGING_R2_BUCKET }}
     steps:
       - name: リポジトリを取得
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: pnpmを準備
-        run: corepack enable && corepack prepare pnpm@10.24.0 --activate
+        run: corepack enable && corepack prepare pnpm@10.26.0 --activate
 
       - name: Node.js環境を準備
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -426,12 +434,19 @@ jobs:
 
       - name: Prisma Clientを生成
         run: pnpm --filter @cocolo/db exec prisma generate
+      - name: ステージング環境境界を検証
+        run: pnpm verify:environment --expected staging
 
       - name: アプリとmigrationのimmutable artifactを作成
         run: pnpm build && pnpm package:release --artifact-sha "${{ github.sha }}" --include packages/db/prisma/migrations --output .release
 
       - name: release artifactのchecksumを確認
         run: pnpm verify:release --release-dir .release --artifact-sha "${{ github.sha }}"
+
+      - name: 検証済みrelease artifactを保存
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm publish:release --release-dir .release --artifact-name "release-${{ github.sha }}"
 
       - name: 検証済みreleaseのstaging migrationを適用
         env:
@@ -447,12 +462,15 @@ jobs:
 
       - name: ステージングの認証ユーザーでE2Eを実行
         run: pnpm test:e2e:staging --base-url "${{ vars.STAGING_APP_URL }}"
+        env:
+          STAGING_E2E_USER_EMAIL: ${{ secrets.STAGING_E2E_USER_EMAIL }}
+          STAGING_E2E_USER_PASSWORD: ${{ secrets.STAGING_E2E_USER_PASSWORD }}
 
       - name: ステージング検証証跡を保存
         run: pnpm publish:staging-evidence --artifact-sha "${{ github.sha }}"
 ```
 
-`production-promote.yml` は `workflow_dispatch` と protected `production` Environment からのみ起動し、入力された artifact SHA が staging evidence の成功 SHA と一致することを確認します。確認後に同じ artifact を production へ配置し、production migration、health check、smoke test を実行します。migration は expand → application deploy → contract cleanup の後方互換順序を守り、失敗時は直前の application artifact へ戻します。既に適用済みの migration を逆向きに戻す rollback は行わず、修正 migration とデータ復旧手順を別途レビューします。
+`production-promote.yml` は `workflow_dispatch` と protected `production` Environment からのみ起動し、入力された artifact SHA が staging evidence の成功 SHA と一致することを確認します。production job の最初の処理は、リポジトリ checkout、pnpm install、リポジトリ内 script 実行より前に、固定版の release 取得ツールで証跡・artifact名・SHA-256 manifest・provenance を検証して immutable artifact を取得することです。検証前に untrusted な repository code、migration、production secret を実行しません。検証後に入力 SHA を `ref` として checkout し、同じ artifact を production へ配置し、production migration、health check、smoke test を実行します。migration は expand → application deploy → contract cleanup の後方互換順序を守り、失敗時は直前の application artifact へ戻します。既に適用済みの migration を逆向きに戻す rollback は行わず、修正 migration とデータ復旧手順を別途レビューします。
 
 ```yaml
 # .github/workflows/production-promote.yml
@@ -471,44 +489,63 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     concurrency: production-migration
+    env:
+      APP_ENV: production
+      PUBLIC_APP_URL: ${{ vars.PRODUCTION_APP_URL }}
+      SUPABASE_URL: ${{ vars.PRODUCTION_SUPABASE_URL }}
+      SUPABASE_JWKS_URL: ${{ vars.PRODUCTION_SUPABASE_JWKS_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.PRODUCTION_SUPABASE_ANON_KEY }}
+      R2_ENDPOINT: ${{ vars.PRODUCTION_R2_ENDPOINT }}
+      R2_BUCKET: ${{ vars.PRODUCTION_R2_BUCKET }}
     permissions:
       contents: read
+      actions: read
     steps:
-      - name: リポジトリを取得
+      - name: staging証跡とartifactを検証前に取得
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run view "${{ inputs.staging_run_id }}" --json conclusion,headSha --jq '.conclusion + " " + .headSha' | grep -Fx "success ${{ inputs.artifact_sha }}"
+          gh run download "${{ inputs.staging_run_id }}" --name "release-${{ inputs.artifact_sha }}" --dir .release
+      - name: artifactのchecksumとprovenanceを検証
+        run: sha256sum --check .release/SHA256SUMS && release-tool verify --release-dir .release --artifact-sha "${{ inputs.artifact_sha }}"
+      - name: 検証済みSHAのリポジトリを取得
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.artifact_sha }}
+          persist-credentials: false
       - name: pnpmを準備
-        run: corepack enable && corepack prepare pnpm@10.24.0 --activate
+        run: corepack enable && corepack prepare pnpm@10.26.0 --activate
       - name: Node.js環境を準備
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
           cache: pnpm
-      - name: 依存関係を固定インストール
+      - name: 検証後に依存関係を固定インストール
         run: pnpm install --frozen-lockfile
-      - name: ステージング検証証跡を確認
-        run: pnpm verify:staging-evidence --run-id "${{ inputs.staging_run_id }}" --artifact-sha "${{ inputs.artifact_sha }}"
-      - name: 検証済みrelease artifactを取得
-        run: pnpm download:release --artifact-sha "${{ inputs.artifact_sha }}" --output .release
-      - name: release artifactのchecksumを確認
-        run: pnpm verify:release --release-dir .release --artifact-sha "${{ inputs.artifact_sha }}"
+      - name: 本番環境境界を検証
+        run: pnpm verify:environment --expected production
       - name: 検証済みreleaseのmigrationを適用
         run: pnpm migrate:release --release-dir .release
         env:
+          APP_ENV: production
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: 検証済みartifactを本番へ配置
         run: pnpm deploy:production --artifact-sha "${{ inputs.artifact_sha }}"
       - name: 本番のsmoke testを実行
         run: pnpm smoke:production --base-url "${{ vars.PRODUCTION_APP_URL }}"
+        env:
+          APP_ENV: production
 ```
 
-`package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、migration checksum manifest を同一の immutable release artifact に含めます。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・migration checksum・artifact SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリの migration を参照せず、検証済み `.release` 内の migration だけを `prisma migrate deploy` へ渡します。production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
+`package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、migration checksum manifest を同一の immutable release artifact に含めます。staging の `publish:release` は GitHub Actions artifact `release-${{ github.sha }}` として保存し、production は `actions: read` で同名 artifact だけを取得します。`release-tool verify` はリポジトリから install する script ではなく、runner image に digest 固定で提供する検証専用ツールとします。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・migration checksum・artifact SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリの migration を参照せず、検証済み `.release` 内の migration だけを `prisma migrate deploy` へ渡します。staging / production の workflow は `APP_ENV`、Supabase URL/JWKS、R2 endpoint/bucket、公開URLの allowlist を `verify:environment` で検証し、production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
 
 ### 6.1 サプライチェーン攻撃対策
 
 次の対策を必須とします。例外は理由、対象パッケージまたは action、期限、承認者を記録した一時的な変更として扱い、自動マージしません。
 
-* **依存パッケージの公開直後待機:** pnpm 10.16 以降を使用し、リポジトリ直下の `pnpm-workspace.yaml` に `minimumReleaseAge: 2880`（48時間）、`minimumReleaseAgeStrict: true`、`minimumReleaseAgeExclude: []` を設定します。CI は `pnpm install --frozen-lockfile` を使い、ロックファイルの変更を同じPRでレビューします。
+* **依存パッケージの公開直後待機:** pnpm 10.26.0 以上を使用し、リポジトリ直下の `pnpm-workspace.yaml` に `minimumReleaseAge: 2880`（48時間）、`minimumReleaseAgeExclude: []` を設定します。CI は `pnpm install --frozen-lockfile` を使い、ロックファイルの変更を同じPRでレビューします。pnpm 10.26.0 が解釈できない設定を起動時検査で拒否し、存在しない設定名を追加しません。
 * **依存関係の実行制限:** `blockExoticSubdeps: true` で git・http tarball 等の依存を禁止し、`strictDepBuilds: true` と `onlyBuiltDependencies` の allowlist で install script を明示許可します。allowlist 外の postinstall はインストールを失敗させます。
 * **信頼情報の低下防止:** pnpm 10.21 以降では `trustPolicy: no-downgrade` を有効にし、公開者の provenance / trust 情報が以前より弱くなる更新を自動採用しません。pnpm の実バージョンは `packageManager` に完全固定します。
 * **GitHub Actions の SHA 固定:** `uses` は GitHub 公式 action を含めて40桁の commit SHA に固定し、タグ・ブランチ参照を禁止します。リリースタグ、署名、リポジトリ所有者を確認した更新PRだけを取り込みます。GitHub リポジトリ設定でも SHA pinning required と許可 action の allowlist を有効にします。
@@ -522,7 +559,6 @@ jobs:
 ```yaml
 # pnpm-workspace.yaml
 minimumReleaseAge: 2880
-minimumReleaseAgeStrict: true
 minimumReleaseAgeExclude: []
 blockExoticSubdeps: true
 strictDepBuilds: true
@@ -532,7 +568,7 @@ onlyBuiltDependencies:
   - esbuild
 ```
 
-`package.json` の `packageManager` は `pnpm@10.24.0` のように完全固定し、上記設定を無視する古い pnpm での install を CI とローカルの開始時チェックで拒否します。`minimumReleaseAge` の緊急例外は `minimumReleaseAgeExclude` に常設せず、期限付きの承認済み変更として一時的に扱います。
+`package.json` の `packageManager` は `pnpm@10.26.0` のように完全固定し、上記設定を無視する古い pnpm での install を CI とローカルの開始時チェックで拒否します。`minimumReleaseAge` の緊急例外は `minimumReleaseAgeExclude` に常設せず、期限付きの承認済み変更として一時的に扱います。
 
 ## 7. フェーズ別 AI Agent 実行用指示
 
@@ -614,7 +650,9 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * `GET/POST/PATCH/DELETE /api/v1/orders`、`/orders/:id/items`、`/orders/:id/user-items`
 * `PATCH /api/v1/user-order-items/:id/payment`、`GET /api/v1/orders/:id/summary.csv`
 * `GET/POST/PATCH/DELETE /api/v1/events`、`PUT /api/v1/events/:id/attendance`
-* `POST /api/v1/uploads`（Phase 4、multipart、magic bytes・実体サイズ・許可 MIME を検証し、Attachment の resource ID を返却）
+* `POST /api/v1/uploads`（Phase 4、JSONでupload sessionを作成し、短期署名URLとAttachmentのresource IDを返却。ファイル本体は受け取らない）
+* `PUT <signed upload URL>`（Phase 4、Webからprivate R2へ直接PUT。署名のobject key・MIME・サイズ制限に一致しない要求を拒否）
+* `POST /api/v1/uploads/:id/complete`（Phase 4、所有者・期限・未使用・object key・実体サイズ・magic bytes・sha256を検証し、成功時だけavailableへ遷移）
 * `GET /api/v1/attachments/:id/download`（Phase 4、テナント認可後に短期署名 URL を発行）
 
 ### 8.5 画面・操作仕様
@@ -777,11 +815,12 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     env:
+      APP_ENV: local
       DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
       DIRECT_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_USER: cocolo_test
           POSTGRES_PASSWORD: cocolo_test
@@ -794,7 +833,7 @@ jobs:
       - name: リポジトリを取得
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: pnpmを準備
-        run: corepack enable && corepack prepare pnpm@10.24.0 --activate
+        run: corepack enable && corepack prepare pnpm@10.26.0 --activate
       - name: Node.js環境を準備
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -804,6 +843,16 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: 依存関係の脆弱性を検査
         run: pnpm audit --prod --audit-level high
+      - name: pnpm設定を検証
+        run: pnpm verify:pnpm-config
+      - name: Workflowの静的検査
+        run: pnpm lint:workflows
+      - name: migration SQLの静的検査
+        run: pnpm verify:migration-sql
+      - name: OpenAPI契約を検査
+        run: pnpm lint:openapi && pnpm test:contract
+      - name: workspace依存境界を検査
+        run: pnpm verify:workspace-boundaries
       - name: Prisma schemaを検証
         run: pnpm --filter @cocolo/db exec prisma validate
       - name: テストDBへmigrationを適用
@@ -811,6 +860,10 @@ jobs:
         env:
           DATABASE_URL: postgresql://cocolo_test:cocolo_test@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://cocolo_test:cocolo_test@localhost:5432/cocolo_test
+      - name: PostgreSQLのメジャーバージョンを検証
+        run: pnpm verify:database-version --expected-major 17
+        env:
+          DATABASE_URL: postgresql://cocolo_test:cocolo_test@localhost:5432/cocolo_test
       - name: RLS用のテストroleを準備
         run: pnpm db:prepare:test
         env:
