@@ -16,7 +16,7 @@
 * **基本技術スタック:**
   * フロントエンド: Vite + React (TypeScript) + Tailwind CSS
   * UIコンポーネント: Shadcn UI (Radix UI / Lucide React)
-  * バックエンド: Hono (Node.js / Cloudflare Workers 想定)
+  * バックエンド: Hono（Phase 0〜3 は Node.js 20 に固定。Cloudflare Workers 版は Prisma 接続方式を検証した後に別フェーズで対応）
   * データベース: Supabase (PostgreSQL)
   * ORM・マイグレーション: Prisma ORM (`prisma migrate`)
   * 認証 (Auth)：Supabase Auth
@@ -24,7 +24,7 @@
   * ユニットテスト：Vitest（PlaywrightによるE2Eテストも含む）
   * CI/CD: GitHub Actions
 
-Supabase CLI ＋ Service Role Key（推奨・最も安全）
+Supabase CLI はローカルの migration / seed / テスト環境操作に使用します。Supabase Service Role Key は Hono のサーバー専用環境変数としてのみ使用し、ブラウザへ渡しません。
 
 
 主要機能の設計案
@@ -144,7 +144,7 @@ npx prisma migrate dev
 
 * **DB カラム名 (snake_case):** @map("tenant_id"), @map("grade_level") 等で明示的にスネークケース化します。
 
-* **ID・主キー:** 全テーブルにおいて自動インクリメント整数型 Int @id @default(autoincrement()) を統一採用します。
+* **ID・主キー:** 内部処理で整数型を使う場合でも、API で公開する資源 ID は推測不能な UUID とし、外部から自動採番整数を直接参照できないようにします。Phase 1 の新規モデルは UUID を主キーとして採用します。
 
 ### 4.2 見送った命名・設計案（ボツ案・検討経緯）
 
@@ -156,7 +156,9 @@ npx prisma migrate dev
 
   * 「小1」「中2」という文字列で保持すると毎年4月の繰り上がり処理で複雑な文字列操作が必要になるため、数値 (gradeLevel: 1~16) で保持し、UI 表示時にロジックでフォーマットする設計としました。
 
-### 4.3 完全な Schema 定義 (prisma/schema.prisma)
+### 4.3 既存6モデルの設計ベースライン（Phase 2以降で制約を追加）
+
+以下は原案の業務モデルを確認するためのベースラインです。認証・テナント・Phase 1 の確定 Schema は 8.12 の契約を優先し、実装時に `prisma/schema.prisma` と migration へ統合します。
 
 ```
 datasource db {
@@ -379,20 +381,21 @@ jobs:
         run: npx prisma migrate deploy
 ```
 
-## 7. AI Agent 実行用 指示プロンプト
+## 7. フェーズ別 AI Agent 実行用指示
 
-以下をコピーして Cursor Agent や Claude Code 等に投入することで、上記の全設計を踏まえた実装が一括で開始されます。
+一括実装は禁止し、必ず「実装タスク一覧」の1タスクだけを対象にします。各タスクでは、先に失敗するテストを追加して実行し、その後に最小実装、リファクタリング、全体テストの順に進めます。サブエージェントのレビュー指摘が未解消の場合は実装を開始しません。
 
-**【AI Agent 実行プロンプト】**
+**【Phase 1 最初の縦切り用プロンプト】**
 
-本プロジェクトの完全版設計書（Googleドキュメント / implementation-plan.md）に従い、アプリ「CoCoLo」の機能実装を行ってください。
+`docs/ implementation-plan.md` の Phase 1 仕様に従い、Supabase Auth で認証された管理者が、自分の所属チームの部員一覧を閲覧し、部員を1件登録できる縦切りを実装してください。
 
-**【手順】**
-1. `prisma/schema.prisma` に記載されている 6 つのモデル（Member, BoardMember, Order, OrderItem, UserOrderItem, Event）を定義してください。
-2. `npx prisma migrate dev --name init_cocolo_schema` を実行し、Flyway風の差分SQLマイグレーションファイルを生成・ローカルDBへ適用してください。
-3. `npx prisma generate` を実行して Prisma Client を最新化してください。
-4. Hono バックエンド (`src/server/routes/`) に、各モデルの CRUD API、学年繰り上がり API、集金トグル更新 API、CSV出力 API、および Cloudflare R2 用の `/api/upload` エンドポイントを実装してください。
-5. Shadcn UI コンポーネントを用い、レスポンシブ（モバイル最適化）に対応したフロントエンド画面（部員名簿、役員管理、共同購買・集金チェック、イベント一覧）を作成してください。
+対象範囲は `Tenant`、`TenantMembership`、`Member`、JWT 検証、テナント解決、`admin` 権限チェック、入力検証、`GET/POST /api/v1/members`、React の一覧・登録画面です。別テナントへの読み書き拒否を API 統合テストで検証してください。
+
+最初に API の認証・テナント境界・入力不正の失敗テストを追加し、失敗を確認してから実装してください。完了時は `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build` を実行し、変更内容を日本語のコミットメッセージとレビューコメントで説明してください。対象外の出欠、購買、LINE、Maps、R2、送迎機能は実装しないでください。
+
+**【レビュー指示】**
+
+実装後は、別サブエージェントに対してテナント越境、認可抜け、個人情報露出、入力検証欠落、テスト不足、既存要件との不整合を敵対的にレビューさせます。Critical / High の指摘が残る場合は修正してから次タスクへ進みます。
 
 ---
 
@@ -518,3 +521,72 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 ### 8.10 未解決事項の扱い
 
 LINE の通知先（グループか公式アカウントか）、Google Maps の契約・API キー、Supabase の本番プロジェクト、R2 の公開方式、チームの正式な権限運用は外部条件です。これらは仮定で本番仕様を固定せず、環境変数・アダプター・設定画面に分離し、導入前に決定事項として記録します。
+
+### 8.11 敵対的レビュー指摘への決定事項
+
+実装前レビューで指摘された事項を、次の方針で解消してから実装を開始します。
+
+* **実行環境:** Phase 0〜3 は Node.js 20 + `@hono/node-server` に固定します。Prisma の通常クライアントを使用し、Cloudflare Workers 対応は別タスクで接続方式を検証してから行います。
+* **DBレベルのテナント境界:** `Tenant`、`TenantMembership`、すべてのテナント所属モデルに `tenantId` を持たせ、親子参照には `tenantId + id` の複合外部キーを使います。Production のアプリ接続は RLS を迂回できない専用 DB ロールとし、リクエストのトランザクション内で `app.tenant_id` を設定します。migration は別の owner / direct 接続で実行します。
+* **RLSの検証:** tenant A / tenant B の管理者を用いた実 PostgreSQL 統合テストで、一覧・登録・更新・親子参照の越境ができないことを確認します。アプリ側の `tenantId` 条件だけを安全性の根拠にしません。
+* **Phase 1 確定モデル:** `Tenant`、`TenantMembership`、`Member`、`GuardianMember`、`AuditLog` を初回 migration の対象にします。出欠は `Event` に `attendanceDeadline`、`meetingAt`、`opponent`、`transportRequired` を追加し、`EventAttendance` を次の migration で追加します。これらを「完全な Schema」と「予定」に混在させません。
+* **保護者と部員の関係:** 単一の `guardianUserId` を認可に使わず、`GuardianMember(tenantId, userId, memberId, relationship, consentedAt)` の所属を根拠にします。guardian は自分が担当する部員の必要最小限の情報を閲覧し、出欠だけを登録・変更できます。
+* **認可マトリクス:** `owner/admin` はチーム設定・全機能の管理、`staff` は部員・予定・出欠の運用、`guardian` は担当部員の閲覧・出欠登録に限定します。電話番号、特記事項、CSV、支払い確認、削除は owner/admin のみとし、staff / guardian の可否を API テストで固定します。
+
+| 操作 | owner / admin | staff | guardian |
+| --- | --- | --- | --- |
+| テナント設定・所属管理 | owner は可、admin は参照・運用 | 不可 | 不可 |
+| 部員一覧 | テナント内全件 | テナント内全件 | `GuardianMember` で担当する部員のみ必要最小限 |
+| 部員の登録・編集・削除 | 可 | Phase 1 は不可 | 不可 |
+| 予定・出欠の運用 | 可 | 可 | 担当部員の出欠登録のみ |
+| 電話番号・特記事項・CSV・支払い確認 | 可 | 不可 | 不可 |
+
+* **個人情報:** `note` へアレルギー等を自由記述させる範囲と閲覧を Phase 1 では管理者だけに制限し、閲覧・変更・CSV 出力を `AuditLog` に記録します。退部後は 30 日で匿名化または削除する運用を初期値とし、チームの法務要件が確定したら設定値へ移します。
+* **アップロード:** R2 は private bucket を初期値とし、DB にテナント・所有者・MIME・サイズ・object key を記録します。短期署名 URL でのみ配信し、SVG は拒否、magic bytes と実体サイズを検証し、ファイル名を object key に使用しません。
+* **年度繰り上げ:** `promotion_runs(tenantId, fiscalYear)` 相当の実行記録を保存し、同一年度の再実行は no-op とします。実行前件数プレビュー、対象条件、17以上の扱い、実行者監査ログを仕様化します。
+* **注文整合性:** `OrderItem` の `tenantId + orderId` と `UserOrderItem` の `tenantId + orderId + itemId` を複合参照で整合させます。選択肢は JSON 文字列のまま信頼せず、Zod で許可値を検証し、`isPaid` と `paidAt` を状態遷移として更新します。
+* **CIとテストDB:** PR 用の `quality.yml` と本番 migration 用の `db-migrate.yml` を分離します。PRでは PostgreSQL を起動して migration と seed を実行し、`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build` を必須にします。Playwright は test-only Supabase/Auth アダプターを使用します。
+
+### 8.12 Phase 1 スキーマ契約
+
+Phase 1 の実装開始前に、次の契約を `prisma/schema.prisma` と migration に一致させます。ここにないモデルを Phase 1 の API から参照しません。
+
+* `Tenant`: `id UUID`、`name`、`createdAt`。
+* `TenantMembership`: `id UUID`、`tenantId`、外部 `userId`、`role`、`createdAt`、`UNIQUE(tenantId, userId)`。
+* `Member`: `id UUID`、`tenantId`、`name`、`kana`、`category`、`gradeLevel`、`ageGroup`、`status`、`note`、`createdAt`。`tenantId + id` を複合主キーまたは一意キーとして親子参照に使用します。
+* `GuardianMember`: `id UUID`、`tenantId`、`userId`、`memberId`、`relationship`、`consentedAt`、`UNIQUE(tenantId, userId, memberId)`。
+* `AuditLog`: `id UUID`、`tenantId`、actor の外部 `userId`、`action`、`resourceType`、`resourceId`、安全な最小限の `metadata`、`createdAt`。
+
+各 enum は API 入力の Zod スキーマと PostgreSQL の CHECK または Prisma enum の両方で制限します。`Member` の登録・一覧だけでなく、RLS policy、複合制約、テスト fixture を同じ Phase 1 の完了条件に含めます。
+
+## 9. 実装タスク一覧と中断後の再開手順
+
+### 9.1 タスク一覧
+
+状態は `[ ]` 未着手、`[~]` 作業中、`[x]` 完了、`[!]` ブロック中を表します。各タスクを完了したら、コミット SHA、テスト結果、レビュー結果をこの表の直下へ追記します。
+
+* [x] **T-001 プラン補充:** 認証、テナント、API、TDD、CI、受け入れ条件を文書化する。コミット: `e0ed27f`
+* [x] **T-002 実装前敵対的レビュー:** Critical / High / Medium の指摘を取得する。レビュー結果を T-003 の修正対象にする。
+* [x] **T-003 レビュー指摘の解消:** Node.js 固定、Phase 1 Schema 契約、RLS 方針、権限表、private upload、PR CI、MVP プロンプトを確定する。
+* [ ] **T-004 実装前敵対的レビュー再実施:** T-003 の差分に対して Critical / High がゼロであることを確認する。
+* [ ] **T-005 開発基盤:** package.json、pnpm lockfile、TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build を追加する。
+* [ ] **T-006 Red:** 部員 API の未認証、別テナント、権限不足、入力不正、一覧・登録の失敗テストを先に追加する。
+* [ ] **T-007 Green:** Tenant / TenantMembership / Member の migration、JWT検証、RLS、テナント解決、部員 API を最小実装する。
+* [ ] **T-008 Red/Green:** 部員一覧・登録 UI のテストを先に追加して画面を実装する。
+* [ ] **T-009 E2E:** test-only Auth を使った管理者のログインから部員登録までを Playwright で検証する。
+* [ ] **T-010 実装後敵対的レビュー:** T-005〜T-009 の成果物に対して越境、PII、認可、入力、テスト不足をレビューする。
+* [ ] **T-011 指摘修正とリリース判定:** Critical / High をゼロにし、受け入れ条件と CI 全件を再確認する。
+
+### 9.2 タスク完了記録
+
+* **T-002レビュー記録（2026-08-22）:** 実装開始不可。Critical 2件、High 9件、Medium 4件。主な指摘は DB レベルの tenant 境界、実行環境の未確定、Phase 1 モデル不足、認可マトリクス不足、公開 R2 URL、CI と TDD 手順の不一致。T-003 で解消方針を追加した。
+
+### 9.3 中断後の再開手順
+
+1. `git status --short --branch` と `git log --oneline -10` で作業ツリーと直近コミットを確認します。
+2. この章の最初の未完了タスクと、直下の完了記録にある「次に必要な証拠」を確認します。
+3. 変更中のファイル、テスト結果、未コミット差分を破棄せず、同じタスクの続きから作業します。
+4. TDD タスクでは、まず対象テストを単独実行して Red / Green の状態を確認してからコードを変更します。
+5. 1タスク完了ごとに日本語コミット、テストコマンド、レビュー要否を記録し、次タスクへ移る前に `git status` を確認します。
+
+再開時の最優先は T-003 の残作業であり、T-004 の再レビューが完了するまでアプリ実装（T-005以降）を開始しません。
