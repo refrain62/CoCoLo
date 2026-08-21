@@ -61,34 +61,53 @@ cocolo/
 │       ├── quality.yml            # PR の lint / typecheck / test / build
 │       ├── staging-deploy.yml     # staging migration / deploy / smoke / E2E
 │       └── production-promote.yml # 承認済み staging artifact の本番昇格
+├── apps/
+│   ├── web/                     # Webアプリ (Vite + React)
+│   │   └── src/
+│   └── api/                     # APIアプリ (Hono + Node.js)
+│       └── src/
+├── packages/
+│   ├── db/                      # Prisma schema / migration / repository
+│   │   └── prisma/
+│   │       ├── schema.prisma
+│   │       └── migrations/      # 英語物理名・日本語COMMENTのSQL差分
+│   ├── auth/                    # JWT検証・認証境界（秘密情報は保持しない）
+│   ├── contracts/               # Zod DTO・API契約・公開型
+│   ├── domain/                  # Web/APIから独立した業務ルール
+│   ├── ui/                      # Web専用の共有UI（APIから参照しない）
+│   └── test-fixtures/           # local / integration / E2Eの共通fixture
 ├── docs/
 │   ├── implementation-plan.md   # 技術実装計画
 │   └── functional-specification.md # 機能・業務仕様の正本
-├── prisma/
-│   ├── schema.prisma            # Prisma スキーマ定義
-│   └── migrations/              # Flyway風にバージョン管理されるSQL差分ファイル群
-├── src/
-│   ├── client/                  # フロントエンド (React + Shadcn UI)
-│   │   ├── components/
-│   │   │   ├── ui/              # Shadcn コンポーネント群
-│   │   │   ├── members/         # 部員一覧・詳細・登録フォーム
-│   │   │   ├── orders/          # 共同購買・集金・背番号指定フォーム
-│   │   │   ├── events/          # スケジュール・懇親会・出欠フォーム
-│   │   │   └── board/           # 役員管理・連絡先表示コンポーネント
-│   │   └── lib/                 # ユーティリティ (formatGrade, R2 Client等)
-│   ├── db/                      # Prisma Client 初期化インスタンス
-│   │   └── client.ts
-│   └── server/                  # バックエンド (Hono API Routes)
-│       ├── routes/
-│       │   ├── members.ts
-│       │   ├── orders.ts
-│       │   ├── events.ts
-│       │   ├── board.ts
-│       │   └── upload.ts        # R2 画像アップロード API
-│       └── index.ts
-├── package.json
-└── tsconfig.json
+├── package.json                # private workspace root
+├── pnpm-workspace.yaml
+└── tsconfig.base.json
 ```
+
+### 1.3 Monorepo のパッケージ境界
+
+pnpm workspace を採用し、Web と API を同一リポジトリで管理します。将来別リポジトリ・別デプロイへ分割できるよう、依存方向を次で固定します。
+
+* `apps/web` は `packages/contracts` と `packages/ui` だけを通じて API と通信します。`packages/db`、Prisma Client、Service Role Key、DB URLを直接参照しません。
+* `apps/api` は `packages/auth`、`packages/contracts`、`packages/domain`、`packages/db` を利用します。認証、テナント解決、RLS context 設定は API 境界で完結させます。
+* `packages/domain` は Hono、React、Prisma Client、環境変数に依存しない純粋な業務ルールとします。
+* `packages/contracts` は Zod schema と API の入出力型を持ち、DB model をそのまま再公開しません。
+* `packages/db` だけが Prisma schema、migration、repositoryを所有します。migration SQLは `packages/db/prisma/migrations` に置きます。
+* package 間の循環依存、workspace外の相対import、`apps/*` から別アプリへの直接importを禁止します。公開する依存は各packageの `package.json` に明記します。
+
+root の `package.json` は `private: true` とし、`pnpm-workspace.yaml` の対象を `apps/*` と `packages/*` に固定します。root script は `pnpm --filter @cocolo/web ...`、`pnpm --filter @cocolo/api ...`、`pnpm --filter @cocolo/db ...` のように対象 package を明示し、全体検査だけ `pnpm -r` で実行します。各 package は単独で build・test できる構成を目標にします。
+
+### 1.4 Web / API 間の通信プロトコル
+
+Web と API の分離後も、主プロトコルは **HTTPS 上の JSON REST API** とします。HTTP/2・HTTP/3 の利用は CDN / ingress の最適化として許可しますが、アプリケーション契約は HTTP semantics に依存し、WebSocket や同一プロセス内の関数呼び出しを前提にしません。
+
+* API の公開パスは `/api/v1`、文字コードは UTF-8 JSON、契約は `packages/contracts/openapi.yaml` の OpenAPI 3.1 と `packages/contracts` の Zod schema で管理します。機能・業務ルールは `docs/functional-specification.md`、HTTP の入出力は OpenAPI を正本とし、差異があれば実装前に両方を更新します。
+* Web は `Authorization: Bearer <Supabase access token>` で API を呼び出します。API は JWT の issuer、audience、署名、`exp`、`nbf` を検証し、Service Role Key を Web へ渡しません。Supabase Auth は API へ Bearer JWT を送る方式をサポートしています。
+* Web と API が別 origin の間は、環境ごとの明示的な origin allowlist で CORS を設定します。`Access-Control-Allow-Origin: *`、任意 origin の反射、不要な credentials は禁止し、動的 allowlist の場合は `Vary: Origin` を返します。cookie認証を追加する場合は SameSite、CSRF token、origin検証を別途必須化します。
+* 成功・エラー形式、`requestId`、`ETag`、ページング、`Idempotency-Key` を OpenAPI に定義します。部員登録・注文・支払い・年度繰り上げなど再送で二重登録が起きる操作は `Idempotency-Key` を必須または推奨とし、API側で重複実行を抑止します。
+* ファイル本体は Web から API へ中継せず、API が認可済みの短期署名URLを発行し、Web が private R2 へ直接 PUT します。完了通知を API の `POST /api/v1/uploads/:id/complete` で受け、API が実体サイズ・magic bytes・sha256を検証してから `available` に遷移させます。
+* Phase 1 は REST の request/response のみとし、常時接続のリアルタイム通信は導入しません。将来の更新通知は一方向なら SSE、双方向の同時編集が必要になった場合だけ WebSocket を別契約として追加し、既存 REST API の認可・RLSを迂回させません。
+* API の認証、CORS、rate limit、監査、RLS は API 側で強制します。Web の表示制御だけを認可根拠にせず、別クライアント・curl・モバイルからの直接呼び出しも同じ契約で扱います。
 ---
 
 ## 2. ORM選定・技術移行の全経緯（Drizzle vs Prisma）
@@ -120,9 +139,9 @@ cocolo/
 ### 3.2 開発ワークフロー & コマンド
 
 1. **通常のモデル追加・変更時:**
-   `prisma/schema.prisma` を編集後、以下を実行。
+   `packages/db/prisma/schema.prisma` を編集後、以下を実行。
    ```bash
-   pnpm exec prisma migrate dev --name <マイグレーション識別名>
+   pnpm --filter @cocolo/db exec prisma migrate dev --name <マイグレーション識別名>
    ```
 
 手動 SQL 調整（インデックス追加、既存データ変換、ALTER TABLE の手修正）が必要な場合:
@@ -131,12 +150,12 @@ cocolo/
 Bash
 ```bash
 # 1. SQLファイルのみを生成（DBにはまだ適用しない）
-pnpm exec prisma migrate dev --create-only --name <マイグレーション名>
+pnpm --filter @cocolo/db exec prisma migrate dev --create-only --name <マイグレーション名>
 
-# 2. 生成された prisma/migrations/XXXX_name/migration.sql を手動編集
+# 2. 生成された packages/db/prisma/migrations/XXXX_name/migration.sql を手動編集
 
 # 3. 編集後、適用を実行
-pnpm exec prisma migrate dev
+pnpm --filter @cocolo/db exec prisma migrate dev
 ```
 
 ### 3.3 migration SQL の命名・コメント・文字コード
@@ -376,9 +395,11 @@ on:
     branches:
       - main
     paths:
-      - 'prisma/**'
-      - 'src/**'
+      - 'apps/**'
+      - 'packages/**'
       - 'package.json'
+      - 'pnpm-workspace.yaml'
+      - 'pnpm-lock.yaml'
       - 'pnpm-lock.yaml'
       - '.github/workflows/staging-deploy.yml'
 
@@ -407,7 +428,7 @@ jobs:
         run: pnpm exec prisma generate
 
       - name: アプリとmigrationのimmutable artifactを作成
-        run: pnpm build && pnpm package:release --artifact-sha "${{ github.sha }}" --include prisma/migrations --output .release
+        run: pnpm build && pnpm package:release --artifact-sha "${{ github.sha }}" --include packages/db/prisma/migrations --output .release
 
       - name: release artifactのchecksumを確認
         run: pnpm verify:release --release-dir .release --artifact-sha "${{ github.sha }}"
@@ -481,7 +502,7 @@ jobs:
         run: pnpm smoke:production --base-url "${{ vars.PRODUCTION_APP_URL }}"
 ```
 
-`package:release` はアプリ成果物、`prisma/schema.prisma`、`prisma/migrations`、migration checksum manifest を同一の immutable release artifact に含めます。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・migration checksum・artifact SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリの migration を参照せず、検証済み `.release` 内の migration だけを `prisma migrate deploy` へ渡します。production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
+`package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、migration checksum manifest を同一の immutable release artifact に含めます。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・migration checksum・artifact SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリの migration を参照せず、検証済み `.release` 内の migration だけを `prisma migrate deploy` へ渡します。production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
 
 ### 6.1 サプライチェーン攻撃対策
 
@@ -728,7 +749,7 @@ API DTO は role ごとに別 schema を持ち、staff / guardian のレスポ�
 
 ### 8.13 Phase 1 スキーマ契約
 
-Phase 1 の実装開始前に、次の契約を選択肢なしで `prisma/schema.prisma` と migration に一致させます。ここにないモデルを Phase 1 の API から参照しません。
+Phase 1 の実装開始前に、次の契約を選択肢なしで `packages/db/prisma/schema.prisma` と `packages/db/prisma/migrations` に一致させます。ここにないモデルを Phase 1 の API から参照しません。
 
 * **共通:** すべての内部 ID は `String @db.Uuid`、主キーは `@id @default(uuid(7))` で生成する UUIDv7、`tenantId` は `String @db.Uuid`、外部 Supabase `userId` だけは `String @db.VarChar(128)`、日時は `DateTime @default(now())` とします。`Tenant` 以外のテナント所属モデルには `@@unique([tenantId, id])` を必ず定義し、複合外部キーの参照先にします。DB側の `uuidv7()` は全環境の PostgreSQL 18 固定が別途承認されるまで使用しません。
 * **Tenant:** `id String @db.Uuid`、`name`（必須、1〜100文字）、`createdAt`。削除は物理削除せず、所属モデルを先に停止します。TenantMembership から `onDelete: Restrict` で参照します。
@@ -832,10 +853,10 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 
 * [x] **T-001 プラン補充:** 認証、テナント、API、TDD、CI、受け入れ条件を文書化する。コミット: `e0ed27f`
 * [x] **T-002 実装前敵対的レビュー:** Critical / High / Medium の指摘を取得する。レビュー結果を T-003 の修正対象にする。
-* [~] **T-003 レビュー指摘の解消:** Node.js 固定、Phase 1 Schema 契約、RLS 方針、権限表、private upload、PR CI、local / staging / production 環境、機能仕様書、UUIDv7、migration SQL の命名・文字コード、依存パッケージ待機、Actions SHA 固定を確定する。再レビューで未解消が判明したため継続中。
+* [~] **T-003 レビュー指摘の解消:** Node.js 固定、Phase 1 Schema 契約、RLS 方針、権限表、private upload、PR CI、local / staging / production 環境、機能仕様書、UUIDv7、migration SQL の命名・文字コード、依存パッケージ待機、Actions SHA 固定、Monorepo 境界、Web/APIプロトコルを確定する。再レビューで未解消が判明したため継続中。
 * [~] **T-003a 機能仕様書の分離:** `docs/functional-specification.md` に機能ID、業務ルール、権限、状態遷移、資源ID、受け入れ条件、変更依頼テンプレートを定義する。計画と仕様の整合レビュー待ち。
 * [!] **T-004 実装前敵対的レビュー再実施:** 第3レビューは Critical 1件 / High 5件、第4レビュー（`46023fc`）は Critical 0件 / High 3件、第5レビュー（`9f49cb4`）は Critical 0件 / High 2件、第6レビュー（`30ebace`）は Critical 0件 / High 5件が残り、いずれも不合格。機能仕様書とサプライチェーン対策を含む現行文書で再レビューする。
-* [ ] **T-005 開発基盤:** package.json、pnpm lockfile、TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build、`dev:test`、`db:prepare:test`、`db:seed:test`、`test:unit`、`test:integration`、`test:e2e:local`、`test:e2e:staging`、`verify:production-bundle`、staging smoke / deploy / evidence scripts を追加する。local / staging / production の `.env` 契約、起動時環境ガード、`playwright.config.ts` の `webServer`、quality / staging / production promote Workflow の実行結果を完了条件に含める。
+* [ ] **T-005 開発基盤:** pnpm workspace の `apps/web`、`apps/api`、`packages/db`、`packages/auth`、`packages/contracts`、`packages/domain`、`packages/ui`、`packages/test-fixtures`、root package scripts、package間依存境界、OpenAPI 3.1、package単位の TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build、`dev:test`、`db:prepare:test`、`db:seed:test`、`test:unit`、`test:integration`、`test:e2e:local`、`test:e2e:staging`、`verify:production-bundle`、staging smoke / deploy / evidence scripts を追加する。local / staging / production の `.env` 契約、起動時環境ガード、`playwright.config.ts` の `webServer`、quality / staging / production promote Workflow の実行結果を完了条件に含める。
 * [ ] **T-006 Red:** 部員 API の未認証、別テナント、権限不足、入力不正、一覧・登録の失敗テストを先に追加する。
 * [ ] **T-007 Green:** Tenant / TenantMembership / Member / GuardianMember / AuditLog の migration、JWT検証、RLS policy、transaction context、テナント解決、部員 API を最小実装する。
 * [ ] **T-008 Red/Green:** 部員一覧・登録 UI のテストを先に追加して画面を実装する。
