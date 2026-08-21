@@ -64,3 +64,15 @@
 ## 第3レビュー後の修正
 
 第3レビュー結果を受け、T-003を継続中、T-004を不合格のまま維持する。RLSを table / role 別 policy として固定し、Phase 1 の UUID 型・relation・制約、API DTO表、Playwright起動契約、実DBロールassertionをプランへ追加してから第4レビューを実施する。
+
+## 第4レビュー結果（対象 `46023fc`）
+
+Critical 0件、High 3件、Medium 3件。**実装開始不可**。
+
+- membership検証、`FOR UPDATE`、role/status確認、`SET LOCAL`、業務クエリを同一 transaction に原子化する必要がある
+- `GuardianMember` の Tenant relation と削除動作が不足している
+- PATCH / DELETE / owner-admin の出力 DTO、状態遷移、監査 metadata が未確定
+
+## 第4レビュー後の修正
+
+第4レビューを受け、T-003を継続中、T-004を不合格のまま維持する。次の修正では、同一 transaction 内の membership lock と context 設定、`@db.Uuid` を含む Tenant relation、完全な部員 CRUD DTO、ローカル・ステージング・本番の環境分離を確定する。

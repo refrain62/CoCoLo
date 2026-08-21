@@ -158,7 +158,7 @@ npx prisma migrate dev
 
 ### 4.3 付録A：原案6モデルの参考資料（非権威・実装でコピー禁止）
 
-以下は原案の業務モデルと検討経緯を保存するための参考資料です。Phase 1 の実装、migration、DTO、テストはこのブロックをコピーせず、8.12 と 8.13 の確定契約だけを参照します。旧ID型、旧 `guardianUserId`、公開URL設計は採用しません。
+以下は原案の業務モデルと検討経緯を保存するための参考資料です。Phase 1 の実装、migration、DTO、テストはこのブロックをコピーせず、8.13 と 8.14 の確定契約だけを参照します。旧ID型、旧 `guardianUserId`、公開URL設計は採用しません。
 
 ```
 datasource db {
@@ -396,9 +396,9 @@ jobs:
 
 **【Phase 1 最初の縦切り用プロンプト】**
 
-`docs/ implementation-plan.md` の Phase 1 仕様に従い、Supabase Auth で認証された管理者が、自分の所属チームの部員一覧を閲覧し、部員を1件登録できる縦切りを実装してください。
+`docs/ implementation-plan.md` の Phase 1 仕様に従い、Supabase Auth で認証された owner または admin が、自分の所属チームの部員一覧を閲覧し、部員を1件登録できる縦切りを実装してください。
 
-対象範囲は `Tenant`、`TenantMembership`、`Member`、JWT 検証、テナント解決、`admin` 権限チェック、入力検証、`GET/POST /api/v1/members`、React の一覧・登録画面です。別テナントへの読み書き拒否を API 統合テストで検証してください。
+対象範囲は `Tenant`、`TenantMembership`、`Member`、`GuardianMember`、`AuditLog`、JWT 検証、同一 transaction 内のテナント解決、`owner/admin` 権限チェック、入力検証、`GET/POST /api/v1/members`、React の一覧・登録画面です。別テナントへの読み書き拒否を API 統合テストで検証してください。
 
 最初に API の認証・テナント境界・入力不正の失敗テストを追加し、失敗を確認してから実装してください。完了時は `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build` を実行し、変更内容を日本語のコミットメッセージとレビューコメントで説明してください。対象外の出欠、購買、LINE、Maps、R2、送迎機能は実装しないでください。
 
@@ -503,7 +503,21 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 
 各リクエストに requestId を付与し、認証失敗、権限拒否、migration 失敗、外部通知失敗を構造化ログへ記録します。個人情報、JWT、秘密鍵、アップロード内容はログへ出しません。
 
-### 8.8 実装単位・レビュー・コミット規約
+### 8.8 環境分離（ローカル・ステージング・本番）
+
+ローカル開発環境、ステージング（テスト）環境、本番環境を別の DB・認証プロジェクト・R2 bucket・秘密情報・公開 URL として構成します。データ、Service Role Key、JWT issuer、R2 object key を環境間で共有しません。
+
+| 環境 | 用途 | DB / Auth | R2 | デプロイ・保護 |
+| --- | --- | --- | --- | --- |
+| **local** | 開発・TDD・手動確認 | Docker 上の PostgreSQL と Supabase CLI のローカル Auth。`cocolo_app` / migration owner を再現 | Phase 4 以降は MinIO または local adapter | `pnpm dev`、test-only Auth は local のみ。実データ持込禁止 |
+| **staging** | 結合・E2E・受け入れ確認 | 本番と分離した Supabase project / PostgreSQL。テスト専用ユーザーと seed のみ | staging専用 private bucket | `main` から承認付き deploy。migration、smoke、E2E 成功後に本番候補とする |
+| **production** | 利用者向け本番 | production専用 Supabase project / PostgreSQL。実ユーザー・実データ | production専用 private bucket | protected Environment、手動承認、バックアップ、監査、concurrency lock。test-only Auth 禁止 |
+
+共通の `APP_ENV` は `local` / `staging` / `production` のいずれかを必須とし、環境ごとに `DATABASE_URL`、`DIRECT_URL`、`SUPABASE_URL`、`SUPABASE_JWKS_URL`、`R2_BUCKET`、公開 URL を設定します。production では退部後データと AuditLog の保持期間、staging ではテスト用保持期間を必須設定にし、未設定なら起動を拒否します。
+
+環境昇格は **local → PR quality gate → staging deploy → staging migration / smoke / E2E → 本番承認 → production migration / deploy** の順に固定します。staging への実データコピーは禁止し、必要な再現データは匿名化 seed で作成します。staging と production の migration は同じ migration artifact を使い、staging で適用・検証済みであることを本番承認条件にします。
+
+### 8.9 実装単位・レビュー・コミット規約
 
 レビューしやすさを優先し、1コミットで複数の機能境界を跨がないようにします。各コミットは日本語の命令形で、変更対象を明示します。
 
@@ -516,7 +530,7 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 
 各単位の完了条件は、対象テストが先に存在すること、全チェックが通ること、変更意図を日本語コメントまたはコミットメッセージで説明できることです。サブエージェントによる敵対的レビューは、プラン確定後と実装完了後の2回実施し、重大・高優先度の指摘が残っている間は次フェーズへ進みません。
 
-### 8.9 受け入れ条件
+### 8.10 受け入れ条件
 
 次の条件をすべて満たした時点を、初回リリース可能とします。
 
@@ -528,19 +542,19 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * 不正な入力、CSV、ファイル、外部通知失敗が安全に扱われ、利用者へ復旧可能なメッセージが表示される。
 * CI の lint、型、単体、API、UI、E2E、build が再現可能なコマンドで成功する。
 
-### 8.10 未解決事項の扱い
+### 8.11 未解決事項の扱い
 
 LINE の通知先（グループか公式アカウントか）、Google Maps の契約・API キー、Supabase の本番プロジェクトは外部条件です。R2 は private bucket + 短期署名 URL を確定仕様とし、チームの正式な権限運用は認可マトリクスを初期値として導入前に責任者が承認します。未確定の外部条件は環境変数・アダプター・設定画面に分離します。
 
-### 8.11 敵対的レビュー指摘への決定事項
+### 8.12 敵対的レビュー指摘への決定事項
 
 実装前レビューで指摘された事項を、次の方針で解消してから実装を開始します。
 
 * **実行環境:** Phase 0〜3 は Node.js 20 + `@hono/node-server` に固定します。Prisma の通常クライアントを使用し、Cloudflare Workers 対応は別タスクで接続方式を検証してから行います。
 * **JWT検証:** issuer は `${SUPABASE_URL}/auth/v1`、audience は `authenticated`、署名アルゴリズムは Supabase の JWKS に従う RS256 とし、`exp`・`nbf`・issuer・audience を必ず検証します。JWKS は短時間キャッシュし、鍵ローテーション時に再取得します。失効・期限切れ・署名不正は 401、test-only Auth adapter は本番ビルドで有効化しません。
 * **DBレベルのテナント境界:** `Tenant`、`TenantMembership`、すべてのテナント所属モデルに `tenantId` を持たせ、親子参照には `tenantId + id` の複合外部キーを使います。Production のアプリ接続は `BYPASSRLS` 属性を持たない `cocolo_app` ロールとし、migration は別の owner / `DIRECT_URL` 接続で実行します。
-* **RLSの実行契約:** API は JWT subject と許可されたテナント識別子から membership を検証し、リクエスト入力の role を信頼せず、DBから取得した role / status を使って Prisma の interactive `$transaction` を開始します。同一の transaction client で `SELECT set_config('app.tenant_id', $1, true)`、`SELECT set_config('app.user_id', $2, true)`、`SELECT set_config('app.role', $3, true)` を実行してから全クエリを行います。transaction client 外の Prisma query を禁止する repository API を用意し、context 未設定時は RLS が 0 件 / 拒否となるようにします。
-* **RLS policy:** 各表で `ENABLE ROW LEVEL SECURITY` と `FORCE ROW LEVEL SECURITY` を有効化し、次の table / role 別 policy を migration SQL に固定します。`app_is_active_member(tenant_id, user_id)` と `app_is_manager(tenant_id, user_id)` は migration owner が作る `SECURITY DEFINER` 関数とし、`search_path` を固定して membership の再帰評価を避けます。
+* **RLSの実行契約:** API は Prisma の interactive `$transaction` を先に開始し、同一の transaction client で JWT subject と許可されたテナント識別子に対する membership を `FOR UPDATE` 付きで取得します。そこで `status=active` を確認し、DBから取得した role / status を使って `SELECT set_config('app.tenant_id', $1, true)`、`SELECT set_config('app.user_id', $2, true)`、`SELECT set_config('app.role', $3, true)` を同じ transaction 内で実行してから全業務クエリを行います。transaction client 外の Prisma query を禁止する repository API を用意し、context 未設定時は RLS が 0 件 / 拒否となるようにします。membership の停止・role変更と同時に実行された transaction の扱いを統合テストで固定します。
+* **RLS policy:** 各表で `ENABLE ROW LEVEL SECURITY` と `FORCE ROW LEVEL SECURITY` を有効化し、次の table / role 別 policy を migration SQL に固定します。`app_is_active_member(tenant_id, user_id)` と `app_is_manager(tenant_id, user_id)` は `cocolo_security` owner が作る `SECURITY DEFINER` の boolean-only 関数とし、`SET search_path = pg_catalog, public`、`REVOKE ALL FROM PUBLIC`、`GRANT EXECUTE TO cocolo_app` を明記します。関数は行データを返さず、固定SQLで membership の存在と role だけを判定して RLS 再帰を避けます。
   * `Tenant`: active membership が存在する user だけが対象 tenant を `SELECT` できます。
   * `TenantMembership`: `owner/admin` は同一 tenant の招待・停止・role変更を管理でき、本人は自分の active / invited membership だけを `SELECT` できます。最後の active owner の削除・降格は policy だけでなく transaction 内の `FOR UPDATE` 検査で拒否します。
   * `Member`: `owner/admin/staff` は同一 tenant の全件を `SELECT` でき、`owner/admin` だけが `INSERT/UPDATE` できます。`guardian` は `GuardianMember(tenant_id, member_id, user_id)` が存在する担当部員だけを `SELECT` できます。
@@ -555,7 +569,7 @@ LINE の通知先（グループか公式アカウントか）、Google Maps の
 | 操作 | owner / admin | staff | guardian |
 | --- | --- | --- | --- |
 | テナント設定・所属管理 | owner は招待・役割変更・削除、admin は参照・運用 | 不可 | 不可 |
-| `GET /api/v1/members` | `id,name,kana,category,gradeLevel,ageGroup,status` の全件 | 同じ一覧。ただし PII は除外 | `GuardianMember` で担当する部員の `id,name,kana,category,gradeLevel,status` のみ |
+| `GET /api/v1/members` | `id,name,kana,category,gradeLevel,ageGroup,status,createdAt` の全件 | `id,name,kana,category,gradeLevel,ageGroup,status` | `GuardianMember` で担当する部員の `id,name,kana,category,gradeLevel,status` のみ |
 | `POST /api/v1/members` | 可（`note` は入力不可） | Phase 1 は不可 | 不可 |
 | 部員の編集・削除 | 可 | Phase 1 は不可 | 不可 |
 | 予定・出欠の運用 | 可 | 可 | 担当部員の出欠登録のみ |
@@ -565,10 +579,10 @@ Phase 1 の部員 API の入出力・監査契約は次で固定します。
 
 | API | 許可ロール | 入力フィールド | 出力フィールド | 監査 action / 拒否 |
 | --- | --- | --- | --- | --- |
-| `GET /api/v1/members` | owner/admin/staff、guardian は担当分 | `q,status,category,page,pageSize` のみ | owner/admin: 基本項目、staff: `id,name,kana,category,gradeLevel,ageGroup,status`、guardian: `id,name,kana,category,gradeLevel,status` | `member.list` / tenant外・担当外は404相当 |
+| `GET /api/v1/members` | owner/admin/staff、guardian は担当分 | `q,status,category,page,pageSize` のみ | owner/admin: `id,name,kana,category,gradeLevel,ageGroup,status,createdAt`、staff: `id,name,kana,category,gradeLevel,ageGroup,status`、guardian: `id,name,kana,category,gradeLevel,status` | `member.list` / tenant外・担当外は404相当 |
 | `POST /api/v1/members` | owner/admin | `name,kana,category,gradeLevel,ageGroup,status`。`tenantId,id,note` は不可 | 作成した基本項目。`note` は返却不可 | `member.create` / staff・guardianは403 |
-| `PATCH /api/v1/members/:id` | owner/admin | POST項目のうち変更許可項目。`tenantId,id,createdAt` は不可 | 更新後の基本項目 | `member.update` / tenant外は404相当 |
-| `DELETE /api/v1/members/:id` | owner/admin | URLの公開 UUID のみ。物理削除はしない | `204` | `member.retire` / staff・guardianは403 |
+| `PATCH /api/v1/members/:id` | owner/admin | `name,kana,category,gradeLevel,ageGroup` と `status`（`active` ↔ `suspended` のみ）。`tenantId,id,createdAt,note` は不可 | `id,name,kana,category,gradeLevel,ageGroup,status,createdAt` | `member.update` / tenant外は404相当 |
+| `DELETE /api/v1/members/:id` | owner/admin | URLの公開 UUID のみ。`status=retired` への状態遷移 | `204`。既に retired でも同じ結果 | `member.retire` と `previousStatus,nextStatus,requestId` / staff・guardianは403 |
 | `GET /api/v1/members/:id/private-note` | Phase 1 は未提供 | なし | なし | Phase 2でowner/admin専用として再設計 |
 
 API DTO は role ごとに別 schema を持ち、staff / guardian のレスポンスに電話番号、note、保護者識別子、監査 metadata を混入させません。別テナント・担当外資源は存在判定を推測できない外部結果に統一します。
@@ -579,7 +593,7 @@ API DTO は role ごとに別 schema を持ち、staff / guardian のレスポ�
 * **注文整合性:** `OrderItem` の `tenantId + orderId` と `UserOrderItem` の `tenantId + orderId + itemId` を複合参照で整合させます。選択肢は JSON 文字列のまま信頼せず、Zod で許可値を検証し、`isPaid` と `paidAt` を状態遷移として更新します。
 * **CIとテストDB:** PR 用の `quality.yml` と本番 migration 用の `db-migrate.yml` を分離します。PRでは PostgreSQL を起動して migration、RLS用テストロール、seed を実行し、`pnpm prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:e2e`、`pnpm build` を必須にします。Playwright は test-only Supabase/Auth アダプターを使用します。
 
-### 8.12 Phase 1 スキーマ契約
+### 8.13 Phase 1 スキーマ契約
 
 Phase 1 の実装開始前に、次の契約を選択肢なしで `prisma/schema.prisma` と migration に一致させます。ここにないモデルを Phase 1 の API から参照しません。
 
@@ -587,7 +601,7 @@ Phase 1 の実装開始前に、次の契約を選択肢なしで `prisma/schema
 * **Tenant:** `id String @db.Uuid`、`name`（必須、1〜100文字）、`createdAt`。削除は物理削除せず、所属モデルを先に停止します。TenantMembership から `onDelete: Restrict` で参照します。
 * **TenantMembership:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、外部 `userId String @db.VarChar(128)`（Supabase JWT subject）、`role Role`（`owner` / `admin` / `staff` / `guardian`）、`status MembershipStatus`（`invited` / `active` / `suspended`）、`createdAt`、`updatedAt`、`@@unique([tenantId, userId])`、`@@index([userId, status])`。最後の active owner は transaction 内の `SELECT ... FOR UPDATE` で削除・降格できません。
 * **Member:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、`name`（必須）、`kana`、`category MemberCategory`（`student` / `adult`）、`gradeLevel`、`ageGroup`、`status MemberStatus`（`active` / `retired` / `suspended`）、`note`、`createdAt`。Phase 1 の POST DTO は `note` を受け付けず、管理者専用の別操作でのみ扱います。
-* **GuardianMember:** `id String @db.Uuid`、`tenantId String @db.Uuid`、外部 `userId String @db.VarChar(128)`、`memberId String @db.Uuid`、`relationship`、`consentedAt`、`@@unique([tenantId, userId, memberId])`、Member への複合 relation は `onDelete: Cascade`。`FOREIGN KEY(tenantId, memberId) REFERENCES members(tenantId, id)` とし、テナントの異なる部員を参照できないようにします。
+* **GuardianMember:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、外部 `userId String @db.VarChar(128)`、`memberId String @db.Uuid`、`relationship`、`consentedAt`、`@@unique([tenantId, userId, memberId])`、Member への複合 relation は `onDelete: Restrict`。`FOREIGN KEY(tenantId, memberId) REFERENCES members(tenantId, id)` とし、テナントの異なる部員を参照できないようにします。Phase 1 は Member を物理削除せず retired 化し、将来の消去処理では GuardianMember を先に削除してから Member を削除します。
 * **AuditLog:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、actor の外部 `userId String @db.VarChar(128)`、`action`、`resourceType`、nullable の `resourceId String @db.Uuid`、`metadata Json`（許可キーと最大8KBを入力スキーマで制限）、`createdAt`、`@@index([tenantId, createdAt])`。アプリの更新 API から delete を公開せず append-only とします。
 
 `Role`、`MembershipStatus`、`MemberCategory`、`MemberStatus` は Prisma enum として上記の値だけを定義します。Phase 1 の Prisma relation、`onDelete`、nullability、default、index、unique、CHECK はこの契約から省略しません。
@@ -596,7 +610,7 @@ Phase 1 の実装開始前に、次の契約を選択肢なしで `prisma/schema
 
 Phase 4 の `Attachment` は `id UUID`、`tenantId`、`ownerUserId`、`objectKey`、`mediaType`、`byteSize`、`sha256`、`deletedAt`、`createdAt` を持ち、`tenantId + objectKey` を一意にします。R2 の公開 URL は保存せず、download API が毎回認可して短期署名 URL を発行します。
 
-### 8.13 CI・TDD・レビュー成果物の実行契約
+### 8.14 CI・TDD・レビュー成果物の実行契約
 
 PR 用 `quality.yml` は次の順序とコマンドを固定します。Workflow が未作成の段階では、同じコマンドをローカルで実行した結果をタスク完了の証拠にします。
 
@@ -668,14 +682,14 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 
 * [x] **T-001 プラン補充:** 認証、テナント、API、TDD、CI、受け入れ条件を文書化する。コミット: `e0ed27f`
 * [x] **T-002 実装前敵対的レビュー:** Critical / High / Medium の指摘を取得する。レビュー結果を T-003 の修正対象にする。
-* [~] **T-003 レビュー指摘の解消:** Node.js 固定、Phase 1 Schema 契約、RLS 方針、権限表、private upload、PR CI、MVP プロンプトを確定する。再レビューで未解消が判明したため継続中。
-* [!] **T-004 実装前敵対的レビュー再実施:** 2026-08-22 に実施したが Critical 1件 / High 9件が残り、不合格。
-* [ ] **T-005 開発基盤:** package.json、pnpm lockfile、TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build を追加する。
+* [~] **T-003 レビュー指摘の解消:** Node.js 固定、Phase 1 Schema 契約、RLS 方針、権限表、private upload、PR CI、local / staging / production 環境、MVP プロンプトを確定する。再レビューで未解消が判明したため継続中。
+* [!] **T-004 実装前敵対的レビュー再実施:** 第3レビューは Critical 1件 / High 5件、第4レビュー（`46023fc`）は Critical 0件 / High 3件が残り、いずれも不合格。
+* [ ] **T-005 開発基盤:** package.json、pnpm lockfile、TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build、`dev:test`、`db:prepare:test`、`db:seed:test`、`test:unit`、`test:integration`、`test:e2e`、`verify:production-bundle` を追加する。local / staging / production の `.env` 契約、`playwright.config.ts` の `webServer`、quality Workflow の実行結果を完了条件に含める。
 * [ ] **T-006 Red:** 部員 API の未認証、別テナント、権限不足、入力不正、一覧・登録の失敗テストを先に追加する。
 * [ ] **T-007 Green:** Tenant / TenantMembership / Member / GuardianMember / AuditLog の migration、JWT検証、RLS policy、transaction context、テナント解決、部員 API を最小実装する。
 * [ ] **T-008 Red/Green:** 部員一覧・登録 UI のテストを先に追加して画面を実装する。
 * [ ] **T-009 E2E:** test-only Auth を使った管理者のログインから部員登録までを Playwright で検証する。
-* [ ] **T-010 実装後敵対的レビュー:** T-005〜T-009 の成果物に対して越境、PII、認可、入力、テスト不足をレビューする。
+* [ ] **T-010 実装後敵対的レビュー:** T-005〜T-009 の成果物に対して越境、PII、認可、入力、環境混同、test-only Auth混入、テスト不足をレビューする。
 * [ ] **T-011 指摘修正とリリース判定:** Critical / High をゼロにし、受け入れ条件と CI 全件を再確認する。
 * [ ] **T-012 Phase 1追加機能:** 年度繰り上げを別の Red → Green → Refactor 縦切りとして実装し、冪等性・プレビュー・監査ログを検証する。
 
@@ -683,6 +697,7 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 
 * **T-002レビュー記録（2026-08-22）:** 実装開始不可。Critical 2件、High 9件、Medium 4件。主な指摘は DB レベルの tenant 境界、実行環境の未確定、Phase 1 モデル不足、認可マトリクス不足、公開 R2 URL、CI と TDD 手順の不一致。T-003 で解消方針を追加した。
 * **T-004再レビュー記録（2026-08-22）:** 実装開始不可。方針だけでは RLS policy・transaction context・確定スキーマ・CI 定義の証拠として不十分だったため、T-003 に具体的な契約と実行手順を追加する。レビュー成果物は `docs/reviews/plan-adversarial-review-2026-08-22.md` に保存する。
+* **T-004第4レビュー記録（2026-08-22、`46023fc`）:** Critical 0件、High 3件。membership 検証から RLS context 設定までの原子性、GuardianMember の Tenant relation、PATCH / DELETE / owner-admin DTO の完全定義が不足しているため不合格。次の再開先は T-003。
 
 ### 9.3 中断後の再開手順
 
