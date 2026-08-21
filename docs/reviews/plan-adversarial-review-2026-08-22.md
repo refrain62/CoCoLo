@@ -87,3 +87,17 @@ Critical 0件、High 2件。**実装開始不可**。
 ## 第5レビュー後の修正
 
 第5レビュー結果を受け、T-003を継続中、T-004を不合格のまま維持する。staging deploy、production promote、environment guard、環境別 secret、R2 bucket allowlist、E2E script 分離をプランへ追加してから第6レビューを実施する。
+
+## 第6レビュー結果（対象 `30ebace`）
+
+Critical 0件、High 5件。**実装開始不可**。
+
+- production promote がアプリ artifact だけを取得し、checkout 側の migration を `prisma migrate deploy` するため、staging検証済み migration の不変性が不足
+- 実装計画の Phase 2〜5 と機能仕様書の Phase 対応が不一致
+- 機能仕様書が部員本人の出欠回答を許可する一方、MemberUser の認証モデルがない
+- guardian の注文確認、締切後の staff 出欠修正、Phase 1 API 権限が文書間で不一致
+- Attachment の `status` と `deletedAt` の整合条件が不足
+
+## 第6レビュー後の修正
+
+第6レビュー結果を受け、T-003を継続中、T-004を不合格のまま維持する。機能仕様書のフェーズ・権限・状態遷移を正本として更新し、release artifact に migration と checksum を同梱して production では検証済み release だけを適用する。UUIDv7、migration SQL の英語物理名・日本語コメント・UTF-8、pnpm の `minimumReleaseAge`、Actions の SHA 固定と追加のサプライチェーン対策も実装前契約へ追加してから再レビューする。
