@@ -4,6 +4,8 @@
 
 実装としてはテスト駆動（TDD）で開発を行ってください。
 
+利用者向けの機能・業務仕様は `docs/functional-specification.md` に分離しています。機能改修は同仕様書の ID を先に変更し、その後に本書の実装タスク・テスト・migration を更新します。
+
 ---
 
 ## 1. アプリコンセプト & 命名の由来
@@ -56,9 +58,12 @@ Supabase CLI はローカルの migration / seed / テスト環境操作に使�
 cocolo/
 ├── .github/
 │   └── workflows/
-│       └── db-migrate.yml        # GitHub Actions マイグレーション定義 (prisma migrate deploy)
+│       ├── quality.yml            # PR の lint / typecheck / test / build
+│       ├── staging-deploy.yml     # staging migration / deploy / smoke / E2E
+│       └── production-promote.yml # 承認済み staging artifact の本番昇格
 ├── docs/
-│   └── implementation-plan.md   # 本指示書
+│   ├── implementation-plan.md   # 技術実装計画
+│   └── functional-specification.md # 機能・業務仕様の正本
 ├── prisma/
 │   ├── schema.prisma            # Prisma スキーマ定義
 │   └── migrations/              # Flyway風にバージョン管理されるSQL差分ファイル群
@@ -344,24 +349,30 @@ Stripe等のオンライン決済（見送り）: 決済手数料（3.6%等）�
 
 ## 6. CI/CD パイプライン仕様（GitHub Actions）
 
-GitHub にコードが Push された際、prisma/migrations/ 配下に新しい SQL ファイルが存在する場合のみ、Flyway 同様の手順で本番 DB に差分を自動適用します。
+GitHub にコードが Push された際は、まず staging 環境へ immutable artifact を配置し、staging DB migration・smoke test・E2E が成功した場合だけ、本番承認で同一 artifact を production へ昇格します。production DBへ main push から直接 migration を適用しません。
 
-PR の `quality.yml` と本番 migration の `db-migrate.yml` は分離します。本番 migration は GitHub Environment の protected secret、手動承認、`concurrency: production-migration` を必須とし、branch protection で `quality` チェックを必須化します。
+PR の `quality.yml`、staging 用の `staging-deploy.yml`、production 用の `production-promote.yml` は分離します。production migration は GitHub Environment の protected secret、手動承認、`concurrency: production-migration`、staging 成功 SHA の一致を必須とし、branch protection で `quality` チェックを必須化します。
 
 ```
-# .github/workflows/db-migrate.yml
-name: Run Prisma Migrations (Flyway Style)
+# .github/workflows/staging-deploy.yml
+name: Deploy to Staging
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'prisma/migrations/**'
+      - 'prisma/**'
+      - 'src/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/staging-deploy.yml'
 
 jobs:
-  migrate:
+  deploy-staging:
     runs-on: ubuntu-latest
+    environment: staging
+    concurrency: staging-deploy
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -383,12 +394,68 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
+      - name: Build immutable application artifact
+        run: pnpm build && pnpm package:artifact --artifact-sha "${{ github.sha }}"
+
       - name: Execute Migration Deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npx prisma migrate deploy
+
+      - name: Deploy immutable application artifact
+        run: pnpm deploy:staging --artifact-sha "${{ github.sha }}"
+
+      - name: Smoke test
+        run: pnpm smoke:staging --base-url "${{ vars.STAGING_APP_URL }}"
+
+      - name: End-to-end test with staging Auth users
+        run: pnpm test:e2e:staging --base-url "${{ vars.STAGING_APP_URL }}"
+
+      - name: Publish staging evidence
+        run: pnpm publish:staging-evidence --artifact-sha "${{ github.sha }}"
 ```
+
+`production-promote.yml` は `workflow_dispatch` と protected `production` Environment からのみ起動し、入力された artifact SHA が staging evidence の成功 SHA と一致することを確認します。確認後に同じ artifact を production へ配置し、production migration、health check、smoke test を実行します。migration は expand → application deploy → contract cleanup の後方互換順序を守り、失敗時は直前の application artifact へ戻します。既に適用済みの migration を逆向きに戻す rollback は行わず、修正 migration とデータ復旧手順を別途レビューします。
+
+```yaml
+# .github/workflows/production-promote.yml
+name: Promote to Production
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_sha:
+        required: true
+        type: string
+      staging_run_id:
+        required: true
+        type: string
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency: production-migration
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:staging-evidence --run-id "${{ inputs.staging_run_id }}" --artifact-sha "${{ inputs.artifact_sha }}"
+      - run: pnpm download:artifact --artifact-sha "${{ inputs.artifact_sha }}"
+      - run: pnpm prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      - run: pnpm deploy:production --artifact-sha "${{ inputs.artifact_sha }}"
+      - run: pnpm smoke:production --base-url "${{ vars.PRODUCTION_APP_URL }}"
+```
+
+`verify:staging-evidence` は GitHub Actions の staging run が success であること、commit SHA・migration checksum・artifact SHA が一致することを検証します。production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging未成功の promote は許可しません。
 
 ## 7. フェーズ別 AI Agent 実行用指示
 
@@ -515,7 +582,15 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 
 共通の `APP_ENV` は `local` / `staging` / `production` のいずれかを必須とし、環境ごとに `DATABASE_URL`、`DIRECT_URL`、`SUPABASE_URL`、`SUPABASE_JWKS_URL`、`R2_BUCKET`、公開 URL を設定します。production では退部後データと AuditLog の保持期間、staging ではテスト用保持期間を必須設定にし、未設定なら起動を拒否します。
 
-環境昇格は **local → PR quality gate → staging deploy → staging migration / smoke / E2E → 本番承認 → production migration / deploy** の順に固定します。staging への実データコピーは禁止し、必要な再現データは匿名化 seed で作成します。staging と production の migration は同じ migration artifact を使い、staging で適用・検証済みであることを本番承認条件にします。
+環境ごとの secret 名は次で固定します。local は `.env.local`、staging は GitHub `staging` Environment、production は GitHub `production` Environment の同名 secret / variable を使用します。
+
+* **共通必須:** `APP_ENV`、`DATABASE_URL`（`cocolo_app`）、`DIRECT_URL`（migration owner）、`SUPABASE_URL`、`SUPABASE_JWKS_URL`、`SUPABASE_ANON_KEY`、`R2_BUCKET`、`PUBLIC_APP_URL`。
+* **サーバー専用:** `SUPABASE_SERVICE_ROLE_KEY`、`R2_ENDPOINT`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`。Service Role Key は Supabase Auth の管理 API 等に限定し、Prisma の `DATABASE_URL` / `DIRECT_URL`、ブラウザ、ログ、bundle には使用しません。
+* **環境固定値:** local は `cocolo-local`、staging は `cocolo-staging-private`、production は `cocolo-production-private` の R2 bucket だけを許可します。Supabase URL、R2 endpoint、`PUBLIC_APP_URL` は `APP_ENV` ごとの allowlist と完全一致しなければ起動を拒否します。
+
+各 DB の migration は `environment_guard(id=1, environment)` を owner 接続で作成し、app role は変更不可とします。起動時に `APP_ENV` と `environment_guard.environment` が一致すること、`current_user = cocolo_app`、`rolbypassrls = false`、test-only Auth が production で無効であることを検証します。local / staging から production の Supabase URL、DB、R2 bucket が設定されていた場合は health check 前に fail-fast します。
+
+環境昇格は **local → PR quality gate → staging deploy → staging migration / smoke / E2E → 本番承認 → production migration / deploy** の順に固定します。staging への実データコピーは禁止し、必要な再現データは匿名化 seed で作成します。staging の E2E は staging Supabase のテスト専用ユーザーを使い、local の test-only Auth adapter は使いません。staging と production の migration は同じ migration artifact を使い、staging で適用・検証済みであることを本番承認条件にします。
 
 ### 8.9 実装単位・レビュー・コミット規約
 
@@ -591,7 +666,7 @@ API DTO は role ごとに別 schema を持ち、staff / guardian のレスポ�
 * **アップロード:** R2 は private bucket を初期値とし、DB にテナント・所有者・MIME・サイズ・object key を記録します。短期署名 URL でのみ配信し、SVG は拒否、magic bytes と実体サイズを検証し、ファイル名を object key に使用しません。
 * **年度繰り上げ:** `promotion_runs(tenantId, fiscalYear)` 相当の実行記録を保存し、同一年度の再実行は no-op とします。実行前件数プレビュー、対象条件、17以上の扱い、実行者監査ログを仕様化します。
 * **注文整合性:** `OrderItem` の `tenantId + orderId` と `UserOrderItem` の `tenantId + orderId + itemId` を複合参照で整合させます。選択肢は JSON 文字列のまま信頼せず、Zod で許可値を検証し、`isPaid` と `paidAt` を状態遷移として更新します。
-* **CIとテストDB:** PR 用の `quality.yml` と本番 migration 用の `db-migrate.yml` を分離します。PRでは PostgreSQL を起動して migration、RLS用テストロール、seed を実行し、`pnpm prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:e2e`、`pnpm build` を必須にします。Playwright は test-only Supabase/Auth アダプターを使用します。
+* **CIとテストDB:** PR 用の `quality.yml`、staging 用の `staging-deploy.yml`、production 用の `production-promote.yml` を分離します。PRでは PostgreSQL を起動して migration、RLS用テストロール、seed を実行し、`pnpm prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:e2e:local`、`pnpm build` を必須にします。staging では staging Auth ユーザーによる `test:e2e:staging` を実行し、production は承認済み staging evidence と同一 artifact SHA だけを promote します。
 
 ### 8.13 Phase 1 スキーマ契約
 
@@ -672,7 +747,7 @@ jobs:
 
 Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:test"`、`url: "http://127.0.0.1:4173/health"`、`reuseExistingServer: false`、起動 timeout 120 秒を固定します。`dev:test` は test-only Auth adapter を有効化した Node/Hono + Vite preview を起動し、production build では adapter import が含まれないことを `pnpm build` 後の静的検査で確認します。
 
-`db:prepare:test` と integration test の開始時には `SELECT current_user`、`SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user`、`has_table_privilege` を検証します。`current_user != 'cocolo_app'`、`rolbypassrls = true`、owner 接続へのフォールバック、RLS未設定、context未設定時の全件取得があればテストを失敗させます。レビュー成果物は `docs/reviews/` に日付付き Markdown で保存し、対象 SHA、指摘、重大度、修正コミット、再レビュー判定を必須項目にします。
+`db:prepare:test` と integration test の開始時には `SELECT current_user`、`SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user`、`has_table_privilege` を検証します。`current_user != 'cocolo_app'`、`rolbypassrls = true`、owner 接続へのフォールバック、RLS未設定、context未設定時の全件取得があればテストを失敗させます。`test:e2e:local` は local test-only Auth + `dev:test`、`test:e2e:staging` は staging Supabase のテスト専用ユーザー + staging URL として scripts を分離し、production からはどちらも起動できないようにします。`verify:production-bundle` は production build の成果物に test-only Auth adapter と Service Role Key の文字列が含まれないことを検査します。レビュー成果物は `docs/reviews/` に日付付き Markdown で保存し、対象 SHA、指摘、重大度、修正コミット、再レビュー判定を必須項目にします。
 
 ## 9. 実装タスク一覧と中断後の再開手順
 
@@ -682,9 +757,10 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 
 * [x] **T-001 プラン補充:** 認証、テナント、API、TDD、CI、受け入れ条件を文書化する。コミット: `e0ed27f`
 * [x] **T-002 実装前敵対的レビュー:** Critical / High / Medium の指摘を取得する。レビュー結果を T-003 の修正対象にする。
-* [~] **T-003 レビュー指摘の解消:** Node.js 固定、Phase 1 Schema 契約、RLS 方針、権限表、private upload、PR CI、local / staging / production 環境、MVP プロンプトを確定する。再レビューで未解消が判明したため継続中。
-* [!] **T-004 実装前敵対的レビュー再実施:** 第3レビューは Critical 1件 / High 5件、第4レビュー（`46023fc`）は Critical 0件 / High 3件が残り、いずれも不合格。
-* [ ] **T-005 開発基盤:** package.json、pnpm lockfile、TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build、`dev:test`、`db:prepare:test`、`db:seed:test`、`test:unit`、`test:integration`、`test:e2e`、`verify:production-bundle` を追加する。local / staging / production の `.env` 契約、`playwright.config.ts` の `webServer`、quality Workflow の実行結果を完了条件に含める。
+* [~] **T-003 レビュー指摘の解消:** Node.js 固定、Phase 1 Schema 契約、RLS 方針、権限表、private upload、PR CI、local / staging / production 環境、機能仕様書、MVP プロンプトを確定する。再レビューで未解消が判明したため継続中。
+* [~] **T-003a 機能仕様書の分離:** `docs/functional-specification.md` に機能ID、業務ルール、権限、状態遷移、受け入れ条件、変更依頼テンプレートを定義する。計画と仕様の整合レビュー待ち。
+* [!] **T-004 実装前敵対的レビュー再実施:** 第3レビューは Critical 1件 / High 5件、第4レビュー（`46023fc`）は Critical 0件 / High 3件、第5レビュー（`9f49cb4`）は Critical 0件 / High 2件が残り、いずれも不合格。機能仕様書を含む現行文書で再レビューする。
+* [ ] **T-005 開発基盤:** package.json、pnpm lockfile、TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build、`dev:test`、`db:prepare:test`、`db:seed:test`、`test:unit`、`test:integration`、`test:e2e:local`、`test:e2e:staging`、`verify:production-bundle`、staging smoke / deploy / evidence scripts を追加する。local / staging / production の `.env` 契約、起動時環境ガード、`playwright.config.ts` の `webServer`、quality / staging / production promote Workflow の実行結果を完了条件に含める。
 * [ ] **T-006 Red:** 部員 API の未認証、別テナント、権限不足、入力不正、一覧・登録の失敗テストを先に追加する。
 * [ ] **T-007 Green:** Tenant / TenantMembership / Member / GuardianMember / AuditLog の migration、JWT検証、RLS policy、transaction context、テナント解決、部員 API を最小実装する。
 * [ ] **T-008 Red/Green:** 部員一覧・登録 UI のテストを先に追加して画面を実装する。
@@ -698,6 +774,7 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 * **T-002レビュー記録（2026-08-22）:** 実装開始不可。Critical 2件、High 9件、Medium 4件。主な指摘は DB レベルの tenant 境界、実行環境の未確定、Phase 1 モデル不足、認可マトリクス不足、公開 R2 URL、CI と TDD 手順の不一致。T-003 で解消方針を追加した。
 * **T-004再レビュー記録（2026-08-22）:** 実装開始不可。方針だけでは RLS policy・transaction context・確定スキーマ・CI 定義の証拠として不十分だったため、T-003 に具体的な契約と実行手順を追加する。レビュー成果物は `docs/reviews/plan-adversarial-review-2026-08-22.md` に保存する。
 * **T-004第4レビュー記録（2026-08-22、`46023fc`）:** Critical 0件、High 3件。membership 検証から RLS context 設定までの原子性、GuardianMember の Tenant relation、PATCH / DELETE / owner-admin DTO の完全定義が不足しているため不合格。次の再開先は T-003。
+* **T-004第5レビュー記録（2026-08-22、`9f49cb4`）:** Critical 0件、High 2件。staging 検証を必須化した production promote Workflow と、環境誤接続・Service Role Key・R2・E2E 認証の fail-closed 検証が不足しているため不合格。次の再開先は T-003。
 
 ### 9.3 中断後の再開手順
 

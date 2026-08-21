@@ -76,3 +76,14 @@ Critical 0件、High 3件、Medium 3件。**実装開始不可**。
 ## 第4レビュー後の修正
 
 第4レビューを受け、T-003を継続中、T-004を不合格のまま維持する。次の修正では、同一 transaction 内の membership lock と context 設定、`@db.Uuid` を含む Tenant relation、完全な部員 CRUD DTO、ローカル・ステージング・本番の環境分離を確定する。
+
+## 第5レビュー結果（対象 `9f49cb4`）
+
+Critical 0件、High 2件。**実装開始不可**。
+
+- main push から直接 production migration できる記述が残り、staging migration・smoke・E2E・承認済み artifact SHA の昇格Workflowが不足
+- DB/Auth/R2/secret の環境分離に、環境誤接続時の起動拒否、Service Role Keyの用途制限、local/staging E2E認証の分離が不足
+
+## 第5レビュー後の修正
+
+第5レビュー結果を受け、T-003を継続中、T-004を不合格のまま維持する。staging deploy、production promote、environment guard、環境別 secret、R2 bucket allowlist、E2E script 分離をプランへ追加してから第6レビューを実施する。
