@@ -50,3 +50,17 @@
 - private R2、Attachment、短期署名URLの契約が一貫している
 - `quality.yml` の実行手順と package scripts、実PostgreSQL/RLS fixture が一致している
 - タスク状態、コミットSHA、テスト結果、再開先が一貫している
+
+## 第3レビュー結果（対象 `687827f`）
+
+実装開始不可。Critical 1件、High 5件、Medium 4件。
+
+- RLSの tenant 条件は追加されたが、Member / GuardianMember / AuditLog / TenantMembership の role・担当範囲 policy が十分に具体化されていない
+- Prisma UUID の `@db.Uuid`、relation、onDelete、enum、metadata 制約が未確定
+- POST / PATCH / DELETE と role 別 DTO・監査 action の表が不足
+- Playwright の webServer / health check と test-only adapter の本番除外が未定義
+- `cocolo_app` の `BYPASSRLS`、実接続ユーザー、権限、context未設定時の失敗をCIで自動検証する契約が不足
+
+## 第3レビュー後の修正
+
+第3レビュー結果を受け、T-003を継続中、T-004を不合格のまま維持する。RLSを table / role 別 policy として固定し、Phase 1 の UUID 型・relation・制約、API DTO表、Playwright起動契約、実DBロールassertionをプランへ追加してから第4レビューを実施する。

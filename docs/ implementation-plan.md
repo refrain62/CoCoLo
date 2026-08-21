@@ -366,16 +366,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js Environment
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -540,7 +540,13 @@ LINE の通知先（グループか公式アカウントか）、Google Maps の
 * **JWT検証:** issuer は `${SUPABASE_URL}/auth/v1`、audience は `authenticated`、署名アルゴリズムは Supabase の JWKS に従う RS256 とし、`exp`・`nbf`・issuer・audience を必ず検証します。JWKS は短時間キャッシュし、鍵ローテーション時に再取得します。失効・期限切れ・署名不正は 401、test-only Auth adapter は本番ビルドで有効化しません。
 * **DBレベルのテナント境界:** `Tenant`、`TenantMembership`、すべてのテナント所属モデルに `tenantId` を持たせ、親子参照には `tenantId + id` の複合外部キーを使います。Production のアプリ接続は `BYPASSRLS` 属性を持たない `cocolo_app` ロールとし、migration は別の owner / `DIRECT_URL` 接続で実行します。
 * **RLSの実行契約:** API は JWT subject と許可されたテナント識別子から membership を検証し、リクエスト入力の role を信頼せず、DBから取得した role / status を使って Prisma の interactive `$transaction` を開始します。同一の transaction client で `SELECT set_config('app.tenant_id', $1, true)`、`SELECT set_config('app.user_id', $2, true)`、`SELECT set_config('app.role', $3, true)` を実行してから全クエリを行います。transaction client 外の Prisma query を禁止する repository API を用意し、context 未設定時は RLS が 0 件 / 拒否となるようにします。
-* **RLS policy:** 各テナント表で `ENABLE ROW LEVEL SECURITY` と `FORCE ROW LEVEL SECURITY` を有効化し、`USING (tenant_id = current_setting('app.tenant_id', true)::uuid)` と同等の `WITH CHECK` を定義します。`TenantMembership` は `tenant_id` と `current_setting('app.user_id', true)` の組み合わせで本人所属だけを許可します。`cocolo_app` に policy を迂回する権限を与えません。
+* **RLS policy:** 各表で `ENABLE ROW LEVEL SECURITY` と `FORCE ROW LEVEL SECURITY` を有効化し、次の table / role 別 policy を migration SQL に固定します。`app_is_active_member(tenant_id, user_id)` と `app_is_manager(tenant_id, user_id)` は migration owner が作る `SECURITY DEFINER` 関数とし、`search_path` を固定して membership の再帰評価を避けます。
+  * `Tenant`: active membership が存在する user だけが対象 tenant を `SELECT` できます。
+  * `TenantMembership`: `owner/admin` は同一 tenant の招待・停止・role変更を管理でき、本人は自分の active / invited membership だけを `SELECT` できます。最後の active owner の削除・降格は policy だけでなく transaction 内の `FOR UPDATE` 検査で拒否します。
+  * `Member`: `owner/admin/staff` は同一 tenant の全件を `SELECT` でき、`owner/admin` だけが `INSERT/UPDATE` できます。`guardian` は `GuardianMember(tenant_id, member_id, user_id)` が存在する担当部員だけを `SELECT` できます。
+  * `GuardianMember`: `owner/admin` は同一 tenant の管理、guardian は自分の `user_id` に一致する紐付けの `SELECT` だけを許可します。staff と guardian の登録・削除は拒否します。
+  * `AuditLog`: 全 role に tenant内の append-only `INSERT` だけを許可し、`SELECT` は `owner` のみ、`UPDATE/DELETE` は table grant と policy の両方で拒否します。
+  * すべての policy の `USING/WITH CHECK` は tenant、user、role、担当部員条件を明示し、`app.tenant_id`、`app.user_id`、`app.role` のいずれかが未設定なら false になる fail-closed 条件にします。`cocolo_app` に policy を迂回する権限を与えません。
 * **RLSの検証:** tenant A / tenant B の owner・admin・guardian を用いた実 PostgreSQL 統合テストで、一覧・登録・更新・親子参照・context 未設定・guardian 担当外の越境ができないことを確認します。アプリ側の `tenantId` 条件だけを安全性の根拠にしません。
 * **Phase 1 確定モデル:** `Tenant`、`TenantMembership`、`Member`、`GuardianMember`、`AuditLog` を初回 migration の対象にします。出欠は `Event` に `attendanceDeadline`、`meetingAt`、`opponent`、`transportRequired` を追加し、`EventAttendance` を次の migration で追加します。これらを「完全な Schema」と「予定」に混在させません。
 * **保護者と部員の関係:** 単一の `guardianUserId` を認可に使わず、`GuardianMember(tenantId, userId, memberId, relationship, consentedAt)` の所属を根拠にします。guardian は自分が担当する部員の必要最小限の情報を閲覧し、出欠だけを登録・変更できます。
@@ -555,6 +561,18 @@ LINE の通知先（グループか公式アカウントか）、Google Maps の
 | 予定・出欠の運用 | 可 | 可 | 担当部員の出欠登録のみ |
 | 電話番号・特記事項・CSV・支払い確認 | 可 | 不可 | 不可 |
 
+Phase 1 の部員 API の入出力・監査契約は次で固定します。
+
+| API | 許可ロール | 入力フィールド | 出力フィールド | 監査 action / 拒否 |
+| --- | --- | --- | --- | --- |
+| `GET /api/v1/members` | owner/admin/staff、guardian は担当分 | `q,status,category,page,pageSize` のみ | owner/admin: 基本項目、staff: `id,name,kana,category,gradeLevel,ageGroup,status`、guardian: `id,name,kana,category,gradeLevel,status` | `member.list` / tenant外・担当外は404相当 |
+| `POST /api/v1/members` | owner/admin | `name,kana,category,gradeLevel,ageGroup,status`。`tenantId,id,note` は不可 | 作成した基本項目。`note` は返却不可 | `member.create` / staff・guardianは403 |
+| `PATCH /api/v1/members/:id` | owner/admin | POST項目のうち変更許可項目。`tenantId,id,createdAt` は不可 | 更新後の基本項目 | `member.update` / tenant外は404相当 |
+| `DELETE /api/v1/members/:id` | owner/admin | URLの公開 UUID のみ。物理削除はしない | `204` | `member.retire` / staff・guardianは403 |
+| `GET /api/v1/members/:id/private-note` | Phase 1 は未提供 | なし | なし | Phase 2でowner/admin専用として再設計 |
+
+API DTO は role ごとに別 schema を持ち、staff / guardian のレスポンスに電話番号、note、保護者識別子、監査 metadata を混入させません。別テナント・担当外資源は存在判定を推測できない外部結果に統一します。
+
 * **個人情報:** Phase 1 の `Member` 登録 DTO では `note` を受け付けず、一覧 DTO にも含めません。管理者専用の明示的な操作だけが特記事項を扱い、閲覧・変更・CSV 出力を `AuditLog` に記録します。本番の退部後保持期間と AuditLog 保持期間は必須の環境別設定（未設定なら本番起動を拒否）とし、法務責任者の承認記録なしに自動削除を有効化しません。AuditLog は owner のみ閲覧でき、アプリ API から変更・削除できない append-only とします。
 * **アップロード:** R2 は private bucket を初期値とし、DB にテナント・所有者・MIME・サイズ・object key を記録します。短期署名 URL でのみ配信し、SVG は拒否、magic bytes と実体サイズを検証し、ファイル名を object key に使用しません。
 * **年度繰り上げ:** `promotion_runs(tenantId, fiscalYear)` 相当の実行記録を保存し、同一年度の再実行は no-op とします。実行前件数プレビュー、対象条件、17以上の扱い、実行者監査ログを仕様化します。
@@ -565,12 +583,14 @@ LINE の通知先（グループか公式アカウントか）、Google Maps の
 
 Phase 1 の実装開始前に、次の契約を選択肢なしで `prisma/schema.prisma` と migration に一致させます。ここにないモデルを Phase 1 の API から参照しません。
 
-* **共通:** すべての主キーは `String @id @default(uuid())`、`tenantId` は `String`、日時は `DateTime @default(now())` とします。`Tenant` 以外のテナント所属モデルには `@@unique([tenantId, id])` を必ず定義し、複合外部キーの参照先にします。
-* **Tenant:** `id`、`name`（必須、1〜100文字）、`createdAt`。削除は物理削除せず、所属モデルを先に停止します。
-* **TenantMembership:** `id`、`tenantId`、外部 `userId`（Supabase JWT subject）、`role`（`owner` / `admin` / `staff` / `guardian`）、`status`（`invited` / `active` / `suspended`）、`createdAt`、`updatedAt`、`UNIQUE(tenantId, userId)`、`INDEX(userId, status)`。最後の active owner は削除・降格できません。
-* **Member:** `id`、`tenantId`、`name`（必須）、`kana`、`category`（`student` / `adult`）、`gradeLevel`、`ageGroup`、`status`（`active` / `retired` / `suspended`）、`note`、`createdAt`。Phase 1 の POST DTO は `note` を受け付けず、管理者専用の別操作でのみ扱います。
-* **GuardianMember:** `id`、`tenantId`、外部 `userId`、`memberId`、`relationship`、`consentedAt`、`UNIQUE(tenantId, userId, memberId)`。`FOREIGN KEY(tenantId, memberId) REFERENCES members(tenantId, id)` とし、テナントの異なる部員を参照できないようにします。
-* **AuditLog:** `id`、`tenantId`、actor の外部 `userId`、`action`、`resourceType`、nullable の `resourceId`（UUID文字列）、安全な最小限の `metadata`、`createdAt`、`INDEX(tenantId, createdAt)`。アプリの更新 API から delete を公開せず append-only とします。
+* **共通:** すべての内部 UUID は `String @db.Uuid`、主キーは `@id @default(uuid())`、`tenantId` は `String @db.Uuid`、外部 Supabase `userId` だけは `String @db.VarChar(128)`、日時は `DateTime @default(now())` とします。`Tenant` 以外のテナント所属モデルには `@@unique([tenantId, id])` を必ず定義し、複合外部キーの参照先にします。
+* **Tenant:** `id String @db.Uuid`、`name`（必須、1〜100文字）、`createdAt`。削除は物理削除せず、所属モデルを先に停止します。TenantMembership から `onDelete: Restrict` で参照します。
+* **TenantMembership:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、外部 `userId String @db.VarChar(128)`（Supabase JWT subject）、`role Role`（`owner` / `admin` / `staff` / `guardian`）、`status MembershipStatus`（`invited` / `active` / `suspended`）、`createdAt`、`updatedAt`、`@@unique([tenantId, userId])`、`@@index([userId, status])`。最後の active owner は transaction 内の `SELECT ... FOR UPDATE` で削除・降格できません。
+* **Member:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、`name`（必須）、`kana`、`category MemberCategory`（`student` / `adult`）、`gradeLevel`、`ageGroup`、`status MemberStatus`（`active` / `retired` / `suspended`）、`note`、`createdAt`。Phase 1 の POST DTO は `note` を受け付けず、管理者専用の別操作でのみ扱います。
+* **GuardianMember:** `id String @db.Uuid`、`tenantId String @db.Uuid`、外部 `userId String @db.VarChar(128)`、`memberId String @db.Uuid`、`relationship`、`consentedAt`、`@@unique([tenantId, userId, memberId])`、Member への複合 relation は `onDelete: Cascade`。`FOREIGN KEY(tenantId, memberId) REFERENCES members(tenantId, id)` とし、テナントの異なる部員を参照できないようにします。
+* **AuditLog:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、actor の外部 `userId String @db.VarChar(128)`、`action`、`resourceType`、nullable の `resourceId String @db.Uuid`、`metadata Json`（許可キーと最大8KBを入力スキーマで制限）、`createdAt`、`@@index([tenantId, createdAt])`。アプリの更新 API から delete を公開せず append-only とします。
+
+`Role`、`MembershipStatus`、`MemberCategory`、`MemberStatus` は Prisma enum として上記の値だけを定義します。Phase 1 の Prisma relation、`onDelete`、nullability、default、index、unique、CHECK はこの契約から省略しません。
 
 `Member` の `tenantId + id`、`GuardianMember` の `tenantId + memberId`、`AuditLog` の resource ID 型は上記の定義から変更しません。各 enum は API 入力の Zod スキーマと PostgreSQL の CHECK または Prisma enum の両方で制限します。RLS policy、複合制約、tenant A/B と role 別の test fixture を同じ Phase 1 の完了条件に含めます。
 
@@ -634,7 +654,11 @@ jobs:
       - run: pnpm build
 ```
 
-`db:prepare:test` は migration owner 接続で `cocolo_app` ロール（`BYPASSRLS` なし）と必要な table grant を作成します。`package.json` の scripts と上記コマンドを一致させ、migration / seed だけを owner 接続、`test:integration` は `cocolo_app` 接続で実行します。`test:integration` は実 PostgreSQL の RLS policy・transaction context・tenant A/B・owner/admin/guardian fixture を検証します。`test:e2e` は test-only Auth adapter でログイン状態を作り、外部 Supabase の実アカウントに依存しません。レビュー成果物は `docs/reviews/` に日付付き Markdown で保存し、対象 SHA、指摘、重大度、修正コミット、再レビュー判定を必須項目にします。
+`db:prepare:test` は migration owner 接続で `cocolo_app` ロール（`BYPASSRLS` なし）と必要な table grant を作成します。`package.json` の scripts と上記コマンドを一致させ、migration / seed だけを owner 接続、`test:integration` は `cocolo_app` 接続で実行します。`test:integration` は実 PostgreSQL の RLS policy・transaction context・tenant A/B・owner/admin/guardian fixture を検証します。`test:e2e` は test-only Auth adapter でログイン状態を作り、外部 Supabase の実アカウントに依存しません。
+
+Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:test"`、`url: "http://127.0.0.1:4173/health"`、`reuseExistingServer: false`、起動 timeout 120 秒を固定します。`dev:test` は test-only Auth adapter を有効化した Node/Hono + Vite preview を起動し、production build では adapter import が含まれないことを `pnpm build` 後の静的検査で確認します。
+
+`db:prepare:test` と integration test の開始時には `SELECT current_user`、`SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user`、`has_table_privilege` を検証します。`current_user != 'cocolo_app'`、`rolbypassrls = true`、owner 接続へのフォールバック、RLS未設定、context未設定時の全件取得があればテストを失敗させます。レビュー成果物は `docs/reviews/` に日付付き Markdown で保存し、対象 SHA、指摘、重大度、修正コミット、再レビュー判定を必須項目にします。
 
 ## 9. 実装タスク一覧と中断後の再開手順
 
