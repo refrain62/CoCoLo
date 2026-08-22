@@ -6,6 +6,7 @@
     ".": "./dist/index.js",
     "./client": "./dist/index.js",
     "./bulletin-board": "./dist/bulletin-board-repository.js",
+    "./attachment": "./dist/attachment-repository.js",
     "./events": "./dist/event-repository.js"
   },
   "scripts": {

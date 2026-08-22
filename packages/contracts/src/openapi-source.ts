@@ -36,6 +36,8 @@ export const openapiDocument = {
           },
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
         },
       },
     },
@@ -64,6 +66,66 @@ export const openapiDocument = {
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
           409: { description: 'セッションの再利用またはリクエストの競合' },
+          422: { description: '添付本体の検証失敗' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/uploads/{id}/download': {
+      get: {
+        operationId: 'createAttachmentDownloadUrl',
+        summary: '認可済み添付の短期ダウンロードURLを作成',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          200: {
+            description: '短期ダウンロードURL',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/DownloadResponse' },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          404: { description: '添付が見つかりません。' },
+        },
+      },
+    },
+    '/uploads/{id}/cleanup': {
+      post: {
+        operationId: 'cleanupRejectedAttachment',
+        summary: '検証失敗した添付本体の削除を再試行',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          200: { description: '削除完了' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          404: { description: 'cleanup対象が見つかりません。' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/uploads/cleanup-expired': {
+      post: {
+        operationId: 'cleanupExpiredAttachments',
+        summary: '期限切れアップロードセッションのcleanupを実行',
+        responses: {
+          200: { description: '期限切れcleanupの結果' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
         },
       },
     },
@@ -115,7 +177,7 @@ export const openapiDocument = {
     schemas: {
       UploadSessionInput: {
         type: 'object',
-        required: ['mediaType', 'byteSize', 'ownerUserId'],
+        required: ['mediaType', 'byteSize'],
         additionalProperties: false,
         properties: {
           mediaType: {
@@ -123,7 +185,6 @@ export const openapiDocument = {
             enum: ['image/jpeg', 'image/png', 'application/pdf'],
           },
           byteSize: { type: 'integer', minimum: 1, maximum: MAX_UPLOAD_BYTES },
-          ownerUserId: { type: 'string', minLength: 1, maxLength: 128 },
         },
       },
       UploadSessionResponse: {
@@ -154,6 +215,21 @@ export const openapiDocument = {
         properties: {
           sha256: { type: 'string', pattern: '^[0-9a-f]{64}$' },
           byteSize: { type: 'integer', minimum: 1, maximum: MAX_UPLOAD_BYTES },
+        },
+      },
+      DownloadResponse: {
+        type: 'object',
+        required: ['data'],
+        properties: {
+          data: {
+            type: 'object',
+            required: ['attachmentId', 'downloadUrl', 'expiresAt'],
+            properties: {
+              attachmentId: { type: 'string', format: 'uuid' },
+              downloadUrl: { type: 'string', format: 'uri' },
+              expiresAt: { type: 'string', format: 'date-time' },
+            },
+          },
         },
       },
       PromotionRequest: {
@@ -220,6 +296,14 @@ export const openapiDocument = {
       },
       Forbidden: {
         description: 'この操作を実行する権限がありません。',
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/Error' },
+          },
+        },
+      },
+      ServiceUnavailable: {
+        description: '外部サービスまたは依存サービスが利用できません。',
         content: {
           'application/json': {
             schema: { $ref: '#/components/schemas/Error' },
