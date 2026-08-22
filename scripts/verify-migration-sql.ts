@@ -313,6 +313,10 @@ function parseDroppedObject(statement: string) {
   );
 }
 
+function policyName(statement: string) {
+  return /^CREATE\s+POLICY\s+"?([a-z_][a-z0-9_]*)"?/i.exec(statement)?.[1]?.toLowerCase();
+}
+
 function findPolicyExpression(
   statement: string,
   firstKeyword: string,
@@ -401,10 +405,35 @@ function assertPolicyTenantBoundary(file: MigrationSqlFile, statement: string) {
   }
 }
 
+function assertEffectivePolicyFailClosed(
+  file: MigrationSqlFile,
+  statement: string,
+) {
+  const tableName = policyTableName(statement);
+  const name = policyName(statement);
+  assert.ok(tableName && name, `${file.path}: policyの正本を解釈できません。`);
+  const command =
+    /\bFOR\s+(SELECT|INSERT|UPDATE|DELETE|ALL)\b/i.exec(statement)?.[1]?.toUpperCase() ??
+    'ALL';
+  const expressions = [findPolicyExpression(statement, 'USING') ?? '', findPolicyExpression(statement, 'WITH', 'CHECK') ?? ''];
+  for (const expression of expressions)
+    assert.doesNotMatch(
+      compactSql(expression).toLowerCase(),
+      /\bis\s+null\s+or\b|\bor\s+true\b|\btrue\s+or\b|\b1\s*=\s*1\b/i,
+      `${file.path}: ${tableName}.${name}のpolicyはfail-closedでなければなりません。`,
+    );
+  if (command !== 'SELECT' && tableName !== 'tenant_memberships')
+    assert.match(
+      statement,
+      /current_setting\s*\(\s*'app\.role'/i,
+      `${file.path}: ${tableName}.${name}の書込みpolicyにはrole条件が必要です。`,
+    );
+}
+
 function assertGrantTarget(file: MigrationSqlFile, statement: string) {
   assert.doesNotMatch(
     statement,
-    /\bWITH\s+GRANT\s+OPTION\b/i,
+    /\bWITH\s+GRANT\s+OPTION\b|^GRANT\s+ALL\b/i,
     `${file.path}: GRANT OPTIONは禁止です。`,
   );
   const toMatch = /\bTO\s+(.+)$/i.exec(statement);
@@ -596,6 +625,22 @@ export function validateMigrationSql(files: readonly MigrationSqlFile[]) {
     assertCreatedTablesAreProtected(file, statements);
     assertDroppedObjectsAreRecreated(file, statements);
   }
+
+  const effectivePolicies = new Map<string, { file: MigrationSqlFile; statement: string }>();
+  for (const statement of allStatements) {
+    const text = compactSql(statement.text);
+    const dropped = parseDroppedObject(text);
+    if (dropped?.[1] === 'POLICY') {
+      effectivePolicies.delete(`${dropped[3]?.toLowerCase()}.${dropped[2]?.toLowerCase()}`);
+      continue;
+    }
+    if (!/^CREATE\s+POLICY\b/i.test(text)) continue;
+    const tableName = policyTableName(text);
+    const name = policyName(text);
+    if (tableName && name) effectivePolicies.set(`${tableName}.${name}`, { file: files[0]!, statement: text });
+  }
+  for (const policy of effectivePolicies.values())
+    assertEffectivePolicyFailClosed(policy.file, policy.statement);
 
   assert.ok(
     allStatements.some((statement) =>

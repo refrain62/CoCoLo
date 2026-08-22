@@ -15,7 +15,6 @@ BEGIN
 END
 $$;
 GRANT USAGE ON SCHEMA public TO cocolo_app;
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO cocolo_app;
 `;
 const dockerContainer = process.env.PSQL_DOCKER_CONTAINER;
 const dockerDatabase = process.env.PSQL_DOCKER_DATABASE ?? 'postgres';

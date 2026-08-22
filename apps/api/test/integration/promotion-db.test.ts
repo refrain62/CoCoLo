@@ -174,6 +174,29 @@ test('completed 状態の年度繰り上げをプレビューへ戻す遷移は 
   );
 });
 
+test('completed 状態の年度繰り上げpayload変更は DB トリガーで拒否する', async () => {
+  await assert.rejects(
+    prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT
+          set_config('app.tenant_id', ${TENANT_A}, true),
+          set_config('app.user_id', 'owner-a', true),
+          set_config('app.role', 'owner', true)
+      `;
+      await tx.promotionRun.update({
+        where: {
+          tenantId_fiscalYear: {
+            tenantId: TENANT_A,
+            fiscalYear: FISCAL_YEAR,
+          },
+        },
+        data: { result: { tampered: true } },
+      });
+    }),
+    /completed状態の年度繰り上げpayloadは変更できません/,
+  );
+});
+
 test('学年上限超過はfailedに記録し、修正後の同一key再試行でcompletedにできる', async () => {
   await setMemberGrade(TENANT_A, 'owner-a', MEMBER_A2, 99);
   try {

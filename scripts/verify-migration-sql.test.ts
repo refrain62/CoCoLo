@@ -90,6 +90,7 @@ test('cocolo_app以外への権限付与とGRANT OPTIONを拒否する', () => {
     'GRANT SELECT ON tenants TO PUBLIC;',
     'GRANT SELECT ON tenants TO another_role;',
     'GRANT SELECT ON tenants TO cocolo_app WITH GRANT OPTION;',
+    'GRANT ALL ON tenants TO cocolo_app;',
   ]) {
     assert.throws(() =>
       validateMigrationSql([
@@ -229,6 +230,23 @@ test('RLS policyのUSINGとWITH CHECKにtenant境界を要求する', () => {
         safeMigration,
         {
           path: '20260822110000_unsafe-policy/migration.sql',
+          content,
+        },
+      ]),
+    );
+  }
+});
+
+test('tenant context未設定を許可するORとrole欠落をfail-closedで拒否する', () => {
+  for (const content of [
+    "CREATE POLICY tenant_memberships_select ON tenant_memberships FOR SELECT USING (user_id = current_setting('app.user_id', true) AND (NULLIF(current_setting('app.tenant_id', true), '') IS NULL OR tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid));",
+    "CREATE POLICY audit_logs_insert ON audit_logs FOR INSERT WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);",
+  ]) {
+    assert.throws(() =>
+      validateMigrationSql([
+        safeMigration,
+        {
+          path: '20260823110000_malicious-policy/migration.sql',
           content,
         },
       ]),
