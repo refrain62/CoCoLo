@@ -19,6 +19,11 @@ assert.ok(
 const manifest = JSON.parse(
   await readFile(path.join(output, 'release-manifest.json'), 'utf8'),
 );
+assert.ok(
+  Array.isArray(manifest.files) &&
+    manifest.files.includes('packages/db/prisma/migrations.sha256'),
+  '成果物へmigration checksum manifestを同梱してください。',
+);
 assert.equal(
   manifest.artifactSha,
   expectedSha,

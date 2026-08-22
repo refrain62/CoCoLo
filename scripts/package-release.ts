@@ -23,6 +23,7 @@ const manifest = {
     'apps/web/dist',
     'packages/db/prisma/schema.prisma',
     'packages/db/prisma/migrations',
+    'packages/db/prisma/migrations.sha256',
     'package.json',
     'pnpm-lock.yaml',
   ],
