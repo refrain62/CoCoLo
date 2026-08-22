@@ -47,6 +47,8 @@ jobs:
           node-version: 24
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
+      - name: owner bootstrap済みのtrust rootを検証
+        run: pnpm verify:trust-root
       - name: migrationの正本とSQLを検証
         run: pnpm verify:migration-baseline && pnpm verify:migration-checksum && pnpm verify:migration-sql && pnpm test:database-integrity
         env:
