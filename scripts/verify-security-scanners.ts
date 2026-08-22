@@ -41,6 +41,18 @@ assert.equal(
   packageJson.scripts?.['security:scan'],
   'node scripts/run-security-scanners.ts',
 );
+assert.equal(
+  packageJson.scripts?.['test:security'],
+  'node --test scripts/security-scanner.test.ts',
+);
+assert.equal(
+  packageJson.scripts?.['lint:workflows'],
+  'node scripts/verify-workflows.ts',
+);
+assert.equal(
+  packageJson.scripts?.['test:workflows'],
+  'node --test scripts/verify-workflows.test.ts',
+);
 
 assert.match(workflow, /^name:\s*セキュリティ検査\s*$/m);
 assert.match(workflow, /^\s*pull_request:\s*$/m);

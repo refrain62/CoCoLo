@@ -33,6 +33,7 @@
     "test:workflows": "node --test scripts/verify-workflows.test.ts",
     "security:verify": "node scripts/verify-security-scanners.ts",
     "security:scan": "node scripts/run-security-scanners.ts",
+    "test:security": "node --test scripts/security-scanner.test.ts",
     "db:prepare:test": "node scripts/db-prepare-test.ts",
     "db:seed:test": "node scripts/db-seed-test.ts",
     "deploy:staging": "node scripts/deploy-artifact.ts staging",
