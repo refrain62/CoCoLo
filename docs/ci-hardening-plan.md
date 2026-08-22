@@ -139,6 +139,10 @@ Workflowは`actionlint`と単体テストを持つ独自validatorで検査しま
 - timeoutとconcurrencyがないPR Workflowを拒否する。
 - 上流ジョブの失敗、取消、skip時に集約`gate`を失敗させる。
 
+WorkflowとvalidatorはPRの変更対象になり得るため、検査結果だけを信頼境界にしません。
+`.github/CODEOWNERS`でWorkflowとvalidatorのownerレビューを要求し、GitHub側でbranch protectionを利用できる環境では当該レビューと品質ゲートを必須条件にします。
+GitHub Freeの非公開リポジトリで必須レビューを技術的に強制できない期間は、ownerが差分を確認してからDraft PRを更新し、品質ゲートには秘密情報を渡しません。
+
 ## 9. 定期検査
 
 日次WorkflowはE2Eスモークに加え、全履歴の秘密情報検査、SAST、依存関係検査、migration driftを実行します。
