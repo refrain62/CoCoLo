@@ -55,6 +55,7 @@ export class BulletinBoardApiError extends Error {
 type BulletinBoardApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  fetcher?: typeof fetch;
 };
 
 type ErrorBody = {
@@ -82,6 +83,7 @@ async function readError(response: Response) {
 export function createBulletinBoardApi({
   baseUrl = '',
   getAccessToken = getStoredAccessToken,
+  fetcher = fetch,
 }: BulletinBoardApiOptions = {}) {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
@@ -91,7 +93,7 @@ export function createBulletinBoardApi({
         'UNAUTHENTICATED',
         'ログインが必要です。',
       );
-    const response = await fetch(`${baseUrl}/api/v1/announcements${path}`, {
+    const response = await fetcher(`${baseUrl}/api/v1/announcements${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',

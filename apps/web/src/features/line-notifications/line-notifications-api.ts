@@ -56,6 +56,7 @@ export type LineNotificationApi = {
 type LineNotificationApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  fetcher?: typeof fetch;
 };
 
 function getStoredAccessToken() {
@@ -76,12 +77,13 @@ async function readError(response: Response): Promise<LineApiError> {
 export function createLineNotificationApi({
   baseUrl = '',
   getAccessToken = getStoredAccessToken,
+  fetcher = fetch,
 }: LineNotificationApiOptions = {}): LineNotificationApi {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
     if (!accessToken)
       throw new LineApiError(401, 'UNAUTHENTICATED', 'ログインが必要です。');
-    const response = await fetch(`${baseUrl}/api/v1/line${path}`, {
+    const response = await fetcher(`${baseUrl}/api/v1/line${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',

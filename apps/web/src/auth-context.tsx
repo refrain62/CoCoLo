@@ -14,6 +14,11 @@ import {
   createAuthClient,
 } from './auth-client.js';
 
+export type AuthenticatedFetch = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>;
+
 type AuthContextValue = {
   session: AuthSession | null;
   isSigningIn: boolean;
@@ -24,10 +29,7 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<void>;
   refreshSession: () => Promise<AuthSession | null>;
   logout: () => Promise<void>;
-  authenticatedFetch: (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ) => Promise<Response>;
+  authenticatedFetch: AuthenticatedFetch;
 };
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
