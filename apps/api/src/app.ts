@@ -13,7 +13,10 @@ import {
   memberUpdateSchema,
   promotionRequestSchema,
 } from '@cocolo/contracts/member';
+import { type Context, Hono, type MiddlewareHandler } from 'hono';
 import {
+  type CentralApiEnv,
+  type CentralAppOptions,
   createCentralAuthMiddleware,
   createCentralCorsMiddleware,
   createCentralPathValidationMiddleware,
@@ -22,10 +25,7 @@ import {
   createCentralRequestLoggerMiddleware,
   createCentralResponseValidationMiddleware,
   mountCentralFeatureRoutes,
-  type CentralApiEnv,
-  type CentralAppOptions,
 } from './central-dependencies.js';
-import { type Context, Hono, type MiddlewareHandler } from 'hono';
 
 export type MembershipContext = {
   tenantId: string;
@@ -177,8 +177,7 @@ export function createApp(options: AppOptions = {}) {
     createCentralAuthMiddleware(
       options.verifyToken,
       options.membershipRepository,
-      (context) =>
-        new URL(context.req.url).pathname === '/api/v1/line/webhook',
+      (context) => new URL(context.req.url).pathname === '/api/v1/line/webhook',
     ),
   );
   app.use('/api/v1/*', createCentralPathValidationMiddleware());
@@ -208,6 +207,17 @@ export function createApp(options: AppOptions = {}) {
   );
 
   app.get('/health', (c) => c.json({ status: 'ok', service: 'api' }));
+
+  // 現在のactive membershipだけを返し、tenantやroleをリクエスト入力から受け取らない。
+  app.get('/api/v1/session', (c) => {
+    const auth = c.get('auth');
+    return c.json({
+      data: {
+        tenantId: auth.membership.tenantId,
+        role: auth.membership.role,
+      },
+    });
+  });
 
   // JWTの有効期限とactive membershipを確認してから後続handlerへ認証コンテキストを渡す。失敗はfail-closedとする。
   const authenticate: MiddlewareHandler<ApiEnv> = async (c, next) => {
@@ -379,11 +389,7 @@ export function createApp(options: AppOptions = {}) {
         return errorResponse(c, 404, 'NOT_FOUND', '部員が見つかりません。');
       return c.json({ data: projectMember(member, auth.membership.role) });
     } catch (error) {
-      if (
-        error instanceof Error &&
-        'status' in error &&
-        error.status === 409
-      )
+      if (error instanceof Error && 'status' in error && error.status === 409)
         return errorResponse(
           c,
           409,
@@ -424,11 +430,7 @@ export function createApp(options: AppOptions = {}) {
         return errorResponse(c, 404, 'NOT_FOUND', '部員が見つかりません。');
       return c.json({ data: projectMember(member, auth.membership.role) });
     } catch (error) {
-      if (
-        error instanceof Error &&
-        'status' in error &&
-        error.status === 409
-      )
+      if (error instanceof Error && 'status' in error && error.status === 409)
         return errorResponse(
           c,
           409,
