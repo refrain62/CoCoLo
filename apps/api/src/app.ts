@@ -66,6 +66,7 @@ export type ApiEnv = {
 
 const managerRoles = new Set<MemberRole>(['owner', 'admin']);
 
+// エラー形式とrequestIdを全エンドポイントで統一し、内部例外の詳細は外部へ返さない。
 function errorResponse(
   c: Context<ApiEnv>,
   status: 400 | 401 | 403 | 404 | 500 | 503,
@@ -86,6 +87,7 @@ function errorResponse(
   );
 }
 
+// 役割ごとの公開項目をここで固定し、guardian/staffへ不要な個人情報を返さない。
 function projectMember(member: MemberRecord, role: MemberRole) {
   const common = {
     id: member.id,
@@ -107,6 +109,7 @@ function projectMember(member: MemberRecord, role: MemberRole) {
   };
 }
 
+// APIの依存性と認証middlewareを組み立て、tenant/roleは認証後の所属解決結果だけを利用する。
 export function createApp(options: AppOptions = {}) {
   const app = new Hono<ApiEnv>();
 
@@ -117,6 +120,7 @@ export function createApp(options: AppOptions = {}) {
     await next();
   });
 
+  // 予期せぬ例外は詳細を隠し、クライアントにはrequestId付きの共通500だけを返す。
   app.onError((error, c) => {
     void error;
     return errorResponse(
@@ -129,6 +133,7 @@ export function createApp(options: AppOptions = {}) {
 
   app.get('/health', (c) => c.json({ status: 'ok', service: 'api' }));
 
+  // JWTの有効期限とactive membershipを確認してから後続handlerへ認証コンテキストを渡す。失敗はfail-closedとする。
   const authenticate: MiddlewareHandler<ApiEnv> = async (c, next) => {
     const token = extractBearerToken(c.req.header('authorization') ?? null);
     if (!options.verifyToken || !options.membershipRepository)
@@ -175,6 +180,7 @@ export function createApp(options: AppOptions = {}) {
   app.use('/api/v1/members', authenticate);
   app.use('/api/v1/members/*', authenticate);
 
+  // tenantIdはリクエストから受け取らず、authenticateが設定した所属をrepositoryへ渡す。
   app.get('/api/v1/members', async (c) => {
     if (!options.memberRepository)
       return errorResponse(
@@ -208,6 +214,7 @@ export function createApp(options: AppOptions = {}) {
     });
   });
 
+  // 部員登録はowner/adminだけに許可し、作成者とtenantは認証コンテキストから決定する。
   app.post('/api/v1/members', async (c) => {
     if (!options.memberRepository)
       return errorResponse(
