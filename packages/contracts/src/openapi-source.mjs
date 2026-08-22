@@ -3,6 +3,7 @@ import {
   UPLOAD_SESSION_TTL_SECONDS,
 } from './upload-contract.mjs';
 
+// Zod契約と同じ制約を公開API仕様へ投影する生成元。openapi.yamlを直接編集しない。
 export const openapiDocument = {
   openapi: '3.1.0',
   info: {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
+// migration owner接続でRLS用のcocolo_app roleを準備し、アプリroleへbypass権限を与えない。
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URL が必要です');
 assert.ok(process.env.DIRECT_URL, 'DIRECT_URL が必要です');
 const sql = `

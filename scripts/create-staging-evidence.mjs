@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { assertDeploymentRecord } from './deployment-contract.mjs';
 
+// stagingで実行済みのmigration・smoke・E2Eと、配置したartifact SHAをproduction昇格用証跡へ束ねる。
 if (!/^[0-9a-f]{40}$/.test(process.env.ARTIFACT_SHA ?? ''))
   throw new Error('ARTIFACT_SHAは40桁の小文字SHA-1で指定してください');
 const artifactSha = process.env.ARTIFACT_SHA;

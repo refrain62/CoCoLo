@@ -59,6 +59,7 @@ function formatMemberStatus(status: MemberStatus) {
   return statusLabels[status];
 }
 
+// UI入力をAPI契約と同じ区分排他・範囲条件へ正規化し、送信前に利用者へ即時通知する。
 function validateForm(form: MemberFormState): MemberCreateInput {
   const name = form.name.trim();
   if (!name) throw new Error('氏名を入力してください');
@@ -139,6 +140,7 @@ function MemberForm({
   api: MemberApi;
   onCreated: (member: MemberSummary) => void;
 }) {
+  // 入力中の状態はフォーム内に閉じ込め、API成功時だけ親の一覧へ新しい部員を反映する。
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -378,6 +380,7 @@ function PromotionPanel({ api }: { api: MemberApi }) {
   );
 }
 
+// 部員一覧・検索・登録の画面状態を管理し、データ取得の認可はMemberApi/APIへ委譲する。
 export function MemberManagementPage({
   api = defaultMemberApi,
 }: {
@@ -389,6 +392,7 @@ export function MemberManagementPage({
   const [listError, setListError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
 
+  // 初回表示と検索を同じ経路にし、loading/error状態を必ずリクエスト単位で更新する。
   const loadMembers = useCallback(
     async (nextFilters: MemberListFilters) => {
       setIsLoading(true);

@@ -4,6 +4,7 @@ import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
 import { readRuntimeEnvironment } from './runtime-environment.js';
 
+// 起動時に環境境界を検証してから、JWT検証とRLS付きrepositoryを組み立てる。
 const runtime = readRuntimeEnvironment(process.env);
 const port = Number(process.env.PORT ?? 8787);
 const prisma = createPrismaClient();

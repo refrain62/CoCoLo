@@ -1,8 +1,10 @@
 import { z } from 'zod';
 
+// 任意文字列もtrim後に空文字を許可しないことで、nullと未指定を明確に分ける。
 const optionalTrimmedString = (max) =>
   z.string().trim().min(1).max(max).nullable().optional();
 
+// 一覧条件はAPI境界で正規化し、ページサイズと検索語の上限を固定する。
 export const memberListQuerySchema = z
   .object({
     q: z.string().trim().max(200).optional(),
@@ -13,6 +15,7 @@ export const memberListQuerySchema = z
   })
   .strict();
 
+// 部員区分ごとの学年・年代の排他条件を契約層で保証し、APIとDBの不整合を防ぐ。
 export const memberCreateSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
