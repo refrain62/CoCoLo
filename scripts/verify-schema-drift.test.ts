@@ -304,6 +304,15 @@ test('終了コード0でも差分SQLの出力を成功扱いにしない', () =
   );
 });
 
+test('Prismaの既知の空migrationコメントを成功扱いにする', () => {
+  assert.doesNotThrow(() =>
+    assertPrismaDiffClean({
+      ...cleanResult,
+      stdout: '-- This is an empty migration.\n',
+    }),
+  );
+});
+
 test('終了コード0でもPrisma CLIの標準エラーを成功扱いにしない', () => {
   assert.throws(
     () =>
