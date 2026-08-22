@@ -57,3 +57,42 @@
     columns: 1;
   }
 }
+
+.central-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.central-navigation a[aria-current='page'] {
+  font-weight: 700;
+}
+
+.central-identity,
+.central-integration-notice {
+  margin: 12px 0;
+  padding: 8px 12px;
+  border-left: 4px solid #2563eb;
+  background: #eff6ff;
+}
+
+.central-integration-notice {
+  border-left-color: #b45309;
+  background: #fffbeb;
+}
+
+.central-feature-frame {
+  min-width: 0;
+}
+
+.central-state {
+  margin: 24px 0;
+  padding: 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+}

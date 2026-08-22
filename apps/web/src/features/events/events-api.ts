@@ -80,6 +80,7 @@ export type EventsApi = {
 type EventsApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  fetcher?: typeof fetch;
 };
 
 type ErrorBody = { error?: { code?: string; message?: string } };
@@ -102,12 +103,13 @@ async function readError(response: Response) {
 export function createEventsApi({
   baseUrl = '',
   getAccessToken = storedAccessToken,
+  fetcher = fetch,
 }: EventsApiOptions = {}): EventsApi {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
     if (!accessToken)
       throw new EventsApiError(401, 'UNAUTHENTICATED', 'ログインが必要です。');
-    const response = await fetch(`${baseUrl}/api/v1/events${path}`, {
+    const response = await fetcher(`${baseUrl}/api/v1/events${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',

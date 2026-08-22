@@ -93,6 +93,7 @@ export type RideMetrics = {
 type RideApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  fetcher?: typeof fetch;
 };
 
 type RideErrorBody = {
@@ -151,12 +152,13 @@ async function readError(response: Response) {
 export function createRideOperationsApi({
   baseUrl = '',
   getAccessToken = getStoredAccessToken,
+  fetcher = fetch,
 }: RideApiOptions = {}): RideOperationsApi {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
     if (!accessToken)
       throw new RideApiError(401, 'UNAUTHENTICATED', 'ログインが必要です。');
-    const response = await fetch(`${baseUrl}/api/v1/ride-plans${path}`, {
+    const response = await fetcher(`${baseUrl}/api/v1/ride-plans${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',
