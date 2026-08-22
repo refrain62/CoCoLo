@@ -1,4 +1,11 @@
 import assert from 'node:assert/strict';
+import {
+  bundledRateLimitAdapterPackages,
+  readPnpmLockfilePackageNames,
+  validateRateLimitAdapterModule,
+} from '../apps/api/src/security/rate-limit-adapter-policy.ts';
+
+const lockfilePackages = readPnpmLockfilePackageNames();
 
 type AppEnvironment = 'local' | 'staging' | 'production';
 
@@ -31,14 +38,6 @@ if (expectedIndex !== -1)
     'APP_ENV が期待値と一致しません。',
   );
 
-function hasUnsafeControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    if (code <= 31 || code === 127) return true;
-  }
-  return false;
-}
-
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URL が必要です');
 assert.ok(process.env.DIRECT_URL, 'DIRECT_URL が必要です');
 assert.ok(process.env.SUPABASE_URL, 'SUPABASE_URL が必要です');
@@ -65,15 +64,12 @@ if (appEnv === 'local')
     'local環境ではRATE_LIMIT_ADAPTER_MODULEを設定できません。',
   );
 else {
-  assert.ok(
-    rateLimitAdapterModule,
-    `${appEnv}環境ではRATE_LIMIT_ADAPTER_MODULEが必要です。`,
-  );
-  assert.equal(
-    hasUnsafeControlCharacter(rateLimitAdapterModule ?? ''),
-    false,
-    'RATE_LIMIT_ADAPTER_MODULEに制御文字を指定できません。',
-  );
+  if (!rateLimitAdapterModule)
+    throw new Error(`${appEnv}環境ではRATE_LIMIT_ADAPTER_MODULEが必要です。`);
+  validateRateLimitAdapterModule(rateLimitAdapterModule, {
+    allowedPackages: bundledRateLimitAdapterPackages,
+    lockfilePackages,
+  });
 }
 if (allowed[appEnv].R2_BUCKET)
   assert.equal(process.env.R2_BUCKET, allowed[appEnv].R2_BUCKET);

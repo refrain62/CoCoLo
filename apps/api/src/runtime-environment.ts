@@ -1,4 +1,8 @@
 import type { RateLimitStoreMode } from './security/rate-limit-adapter.js';
+import {
+  type RateLimitAdapterModulePolicy,
+  validateRateLimitAdapterModule,
+} from './security/rate-limit-adapter-policy.js';
 
 export type AppEnvironment = 'local' | 'staging' | 'production';
 
@@ -11,6 +15,7 @@ export type RuntimeEnvironment = {
   supabaseUrl: string;
   supabaseJwksUrl: string;
   supabaseIssuer: string;
+  rateLimitNamespace: AppEnvironment;
   rateLimitStoreMode: RateLimitStoreMode;
   rateLimitFailClosed: true;
   rateLimitAdapterModule?: string;
@@ -38,17 +43,14 @@ function assertUrl(name: string, value: string) {
     );
 }
 
-function hasUnsafeControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    if (code <= 31 || code === 127) return true;
-  }
-  return false;
-}
-
 // 環境、Supabase接続先、R2 bucket、公開URLを相互検証し、環境混同をfail-closedで防ぐ。
+export type RuntimeEnvironmentOptions = {
+  rateLimitAdapterPolicy?: RateLimitAdapterModulePolicy;
+};
+
 export function readRuntimeEnvironment(
   environment: RuntimeEnvironmentInput,
+  options: RuntimeEnvironmentOptions = {},
 ): RuntimeEnvironment {
   const appEnv = environment.APP_ENV?.trim();
   if (appEnv !== 'local' && appEnv !== 'staging' && appEnv !== 'production')
@@ -97,8 +99,10 @@ export function readRuntimeEnvironment(
       );
     if (!rateLimitAdapterModule)
       throw new Error(`${appEnv}環境ではRATE_LIMIT_ADAPTER_MODULEが必要です。`);
-    if (hasUnsafeControlCharacter(rateLimitAdapterModule))
-      throw new Error('RATE_LIMIT_ADAPTER_MODULEに制御文字を指定できません。');
+    validateRateLimitAdapterModule(
+      rateLimitAdapterModule,
+      options.rateLimitAdapterPolicy,
+    );
   }
 
   const allowedUrl = environment.SUPABASE_ALLOWED_URL?.trim();
@@ -139,6 +143,7 @@ export function readRuntimeEnvironment(
     supabaseUrl,
     supabaseJwksUrl,
     supabaseIssuer,
+    rateLimitNamespace: appEnv,
     rateLimitStoreMode,
     rateLimitFailClosed: true,
     ...(rateLimitAdapterModule ? { rateLimitAdapterModule } : {}),
