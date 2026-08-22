@@ -1,0 +1,22 @@
+{
+  "files": {
+    ".github/CODEOWNERS": "86cdd6726087aeb8b5f7add68392b423604a4aef7667385e25ba2d92953561bb",
+    ".github/workflows/pr-trust-gate.yml": "b3d93125021cb086b57442c768aac6cafa1c1f83043d5d30791bfc0cdfefb598",
+    ".github/workflows/production-promote.yml": "169d8ee7c00d0d74a296ce9f75f7c72aaa707e61cd69154354e5fd03577a7e1e",
+    ".github/workflows/quality.yml": "764a05785889ba0c1c8eb4c09e3a6c200da4075a98aab74ee0c76e63158058e5",
+    ".github/workflows/staging-deploy.yml": "04e97efd5e0a4e3209ff1ed1317d4a87542df1458c6c709487316259d1503fa5",
+    "package.json": "101de0801970ffd964bfb1b4f28fa2666cff5ec9c19d4b925d0818495a079a40",
+    "packages/db/prisma/migrations/20260822090000_phase1_foundation/migration.sql": "f2d8156b3e4c4580ce7cf7e546b44f601fb884a61b0166da11749b9e61f528db",
+    "packages/db/prisma/migrations/20260822100000_phase1_member_rls_hardening/migration.sql": "6e03ae514ba0663b6be71bd1f1911eb35c6708cc53fb56ecaeab58de99ed2d3f",
+    "packages/db/prisma/migrations/20260822120000_promotion_state_guard/migration.sql": "e6654c0139834193ec6d334c598bac2be6472f8df26d69d47f55483d1a9b1121",
+    "pnpm-lock.yaml": "ef48e2752c4eb45d52203ab285fe672106a7d35118b000862a7787e3e0ac399f",
+    "scripts/db-prepare-test.ts": "24fe86fec96bc405bc77dbdc32293b4e0344c3ba51690d642a7bc1be45117c0d",
+    "scripts/db-seed-test.ts": "a087522c2196ed2dc1afef01fa971bb87c6c7d286cfc2c1ae35b43462ff44e95",
+    "scripts/package-release.ts": "be8512acb5774527fe1b4b05567ca5fc01e96ade46a85c0342c9977bf64fa599",
+    "scripts/prisma-validate.ts": "d6873d328345f8cf888ae74f99678796c18f6d583d149b02d6b92914182dcc20",
+    "scripts/verify-migration-sql.ts": "f5b1f9804d44ecbdb41749ecfdb12e283e3dedf8c014e5d526634ba1d50acda0",
+    "scripts/verify-trusted-pr.ts": "6d9fa57d37c56aed880c5310815bf276d0458e6ddc789dc3775dc22451debbfe",
+    "scripts/verify-workflows.test.ts": "c84bf75297d1a494d496b45f37cb7c0eb41a3a8f22a440f5adc3273b1dca530a",
+    "scripts/verify-workflows.ts": "fdde4c3b9928dfa3a63432695e60f36fff7e62c22e58439dafbfa6845939aea3"
+  }
+}

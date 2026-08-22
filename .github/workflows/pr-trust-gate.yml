@@ -11,6 +11,8 @@ jobs:
       - name: baseブランチの正本を取得
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 1
           persist-credentials: false
       - name: Node.js環境を準備
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -20,3 +22,4 @@ jobs:
         run: node scripts/verify-trusted-pr.ts
         env:
           GH_TOKEN: ${{ github.token }}
+          TRUSTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
