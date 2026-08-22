@@ -173,6 +173,13 @@ CREATE POLICY announcement_reads_insert ON announcement_reads
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     AND user_id = current_setting('app.user_id', true)
     AND app_is_active_announcement_member(tenant_id, user_id)
+    AND EXISTS (
+      SELECT 1
+      FROM announcements
+      WHERE announcements.tenant_id = announcement_reads.tenant_id
+        AND announcements.id = announcement_reads.announcement_id
+        AND announcements.status = 'published'::announcement_status
+    )
   );
 
 -- 既存のmembership policyは本人の所属だけを返す。未読一覧ではtransaction-localな回覧IDと掲載者判定を追加条件にする。
@@ -211,7 +218,8 @@ BEGIN
     RAISE EXCEPTION 'archived状態の回覧は再公開できません';
   END IF;
   IF OLD.status = 'published'::announcement_status
-    AND NEW.status NOT IN ('published', 'archived')::announcement_status[] THEN
+    AND NEW.status <> 'published'::announcement_status
+    AND NEW.status <> 'archived'::announcement_status THEN
     RAISE EXCEPTION '回覧の状態遷移が不正です';
   END IF;
   RETURN NEW;

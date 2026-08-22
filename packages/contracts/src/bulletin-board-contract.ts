@@ -34,9 +34,5 @@ export const announcementListQuerySchema = z
 
 export const announcementIdSchema = z.string().uuid();
 
-export type AnnouncementCreateInput = z.infer<
-  typeof announcementCreateSchema
->;
-export type AnnouncementListQuery = z.infer<
-  typeof announcementListQuerySchema
->;
+export type AnnouncementCreateInput = z.infer<typeof announcementCreateSchema>;
+export type AnnouncementListQuery = z.infer<typeof announcementListQuerySchema>;

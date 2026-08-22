@@ -47,7 +47,7 @@ export type BulletinBoardAttachmentLookup = (
 export type BulletinBoardRepository = {
   publish: (
     input: BulletinBoardPublishInput,
-  ) => Promise<AnnouncementRecord>;
+  ) => Promise<AnnouncementRecord & { isAuthor: boolean }>;
   list: (
     input: BulletinBoardListInput,
   ) => Promise<{ data: AnnouncementSummary[]; hasNext: boolean }>;
@@ -56,10 +56,8 @@ export type BulletinBoardRepository = {
     userId: string;
     role: BulletinBoardRole;
     announcementId: string;
-  }) => Promise<AnnouncementRecord & { isAuthor: boolean } | null>;
-  markRead: (
-    input: BulletinBoardReadInput,
-  ) => Promise<{ readAt: Date } | null>;
+  }) => Promise<(AnnouncementRecord & { isAuthor: boolean }) | null>;
+  markRead: (input: BulletinBoardReadInput) => Promise<{ readAt: Date } | null>;
   listUnread: (input: BulletinBoardReadInput) => Promise<UnreadMember[] | null>;
 };
 
@@ -427,6 +425,7 @@ export function createBulletinBoardRepositories(
 
     markRead: (input) =>
       client.$transaction(async (tx) => {
+        // 公開済み回覧はこのfeatureではappend-onlyにし、既読の複合PKとON CONFLICTで同時既読を直列化する。
         await setRlsContext(tx, {
           tenantId: input.tenantId,
           userId: input.actorUserId,
@@ -441,7 +440,6 @@ export function createBulletinBoardRepositories(
           WHERE tenant_id = ${input.tenantId}::uuid
             AND id = ${input.announcementId}::uuid
             AND status = 'published'::announcement_status
-          FOR SHARE
         `;
         if (!announcement[0]) return null;
         const readAt = input.now ?? now();
@@ -494,7 +492,6 @@ export function createBulletinBoardRepositories(
           WHERE tenant_id = ${input.tenantId}::uuid
             AND id = ${input.announcementId}::uuid
             AND status = 'published'::announcement_status
-          FOR SHARE
         `;
         if (
           !announcement[0] ||
