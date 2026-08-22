@@ -1,30 +1,19 @@
 import { AppShell } from '@cocolo/ui';
-import { StrictMode, useMemo } from 'react';
+import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AuthProvider, LoginPage, useAuth } from './auth-context.js';
-import { createMemberApi } from './member-api.js';
-import { MemberManagementPage } from './member-management-page.js';
+import { CentralNavigation } from './central-navigation.js';
 import { UserManualPage } from './user-manual-page.js';
 import './styles.css';
 
 function AuthenticatedApp() {
-  // 認証状態が確定するまでLoginPageを表示し、部員APIへ到達できる画面をsession保有者に限定する。
+  // 認証状態が確定するまでLoginPageを表示し、中央ナビゲーションへtokenを渡す。
   const { session } = useAuth();
-  const memberApi = useMemo(
-    () =>
-      createMemberApi({
-        getAccessToken: () => session?.accessToken ?? null,
-      }),
-    [session?.accessToken],
-  );
   if (!session) return <LoginPage />;
 
   return (
     <AppShell>
-      <nav aria-label="ヘルプ">
-        <a href="/manual">操作マニュアル</a>
-      </nav>
-      <MemberManagementPage api={memberApi} />
+      <CentralNavigation session={session} />
     </AppShell>
   );
 }
