@@ -20,15 +20,55 @@ export function formatGrade(
   return 'OB / 院生';
 }
 
-// 年度繰り上げの対象条件（student・active・学年あり）だけを判定する。
-export function isPromotionCandidate(input: {
+export type PromotionMember = {
+  id: string;
   category: MemberCategory;
   gradeLevel: number | null;
   status: 'active' | 'suspended' | 'retired';
-}): boolean {
+};
+
+export class PromotionPlanningError extends Error {
+  readonly code = 'PROMOTION_GRADE_LIMIT';
+
+  constructor() {
+    super('学年の上限を超える部員が含まれています');
+    this.name = 'PromotionPlanningError';
+  }
+}
+
+export type PromotionCandidate = PromotionMember & {
+  category: 'student';
+  gradeLevel: number;
+  status: 'active';
+};
+
+// 年度繰り上げの対象条件（student・active・学年あり）だけを判定する。
+export function isPromotionCandidate(
+  input: PromotionMember,
+): input is PromotionCandidate {
   return (
     input.category === 'student' &&
     input.status === 'active' &&
     input.gradeLevel !== null
   );
+}
+
+export type PromotionChange = {
+  id: string;
+  fromGradeLevel: number;
+  toGradeLevel: number;
+};
+
+export function planPromotion(members: PromotionMember[]) {
+  const candidates = members.filter(isPromotionCandidate);
+  if (candidates.some((member) => member.gradeLevel >= 99))
+    throw new PromotionPlanningError();
+  return {
+    previewCount: candidates.length,
+    changes: candidates.map((member) => ({
+      id: member.id,
+      fromGradeLevel: member.gradeLevel,
+      toGradeLevel: member.gradeLevel + 1,
+    })),
+  };
 }

@@ -67,6 +67,43 @@ export const openapiDocument = {
         },
       },
     },
+    '/members/promote': {
+      post: {
+        operationId: 'promoteMembers',
+        summary: '年度繰り上げをプレビューまたは実行',
+        parameters: [
+          {
+            name: 'Idempotency-Key',
+            in: 'header',
+            required: false,
+            schema: { type: 'string', minLength: 1, maxLength: 128 },
+            description: 'executeでは必須。同一requestの再送を安全に処理する。',
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/PromotionRequest' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: '年度繰り上げの計画または実行結果',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/PromotionResponse' },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          409: { description: '同一keyのrequest競合または年度実行競合' },
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {
@@ -116,6 +153,43 @@ export const openapiDocument = {
           byteSize: { type: 'integer', minimum: 1, maximum: MAX_UPLOAD_BYTES },
         },
       },
+      PromotionRequest: {
+        type: 'object',
+        required: ['mode', 'fiscalYear'],
+        additionalProperties: false,
+        properties: {
+          mode: { type: 'string', enum: ['preview', 'execute'] },
+          fiscalYear: { type: 'integer', minimum: 2000, maximum: 2100 },
+        },
+      },
+      PromotionResponse: {
+        type: 'object',
+        required: ['data'],
+        properties: {
+          data: {
+            type: 'object',
+            required: [
+              'mode',
+              'fiscalYear',
+              'status',
+              'previewCount',
+              'promotedCount',
+              'result',
+            ],
+            properties: {
+              mode: { type: 'string', enum: ['preview', 'execute'] },
+              fiscalYear: { type: 'integer', minimum: 2000, maximum: 2100 },
+              status: {
+                type: 'string',
+                enum: ['preview', 'completed', 'failed'],
+              },
+              previewCount: { type: 'integer', minimum: 0 },
+              promotedCount: { type: 'integer', minimum: 0 },
+              result: { type: ['object', 'null'] },
+            },
+          },
+        },
+      },
       Error: {
         type: 'object',
         required: ['error'],
@@ -135,6 +209,14 @@ export const openapiDocument = {
       },
       Unauthorized: {
         description: '未認証',
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/Error' },
+          },
+        },
+      },
+      Forbidden: {
+        description: '権限不足',
         content: {
           'application/json': {
             schema: { $ref: '#/components/schemas/Error' },

@@ -14,9 +14,11 @@
     "migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
+    "@cocolo/domain": "workspace:*",
     "@prisma/client": "6.10.0"
   },
   "devDependencies": {
+    "@types/node": "24.3.0",
     "prisma": "6.10.0",
     "typescript": "5.9.2"
   }

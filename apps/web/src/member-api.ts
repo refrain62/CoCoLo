@@ -27,6 +27,20 @@ export type MemberCreateInput = {
   status: 'active' | 'suspended';
 };
 
+export type PromotionRequest = {
+  mode: 'preview' | 'execute';
+  fiscalYear: number;
+};
+
+export type PromotionSummary = {
+  mode: PromotionRequest['mode'];
+  fiscalYear: number;
+  status: 'preview' | 'completed' | 'failed';
+  previewCount: number;
+  promotedCount: number;
+  result: unknown;
+};
+
 type MemberListResponse = {
   data: MemberSummary[];
   page: number;
@@ -54,6 +68,10 @@ export class MemberApiError extends Error {
 export type MemberApi = {
   list: (filters: MemberListFilters) => Promise<MemberSummary[]>;
   create: (input: MemberCreateInput) => Promise<MemberSummary>;
+  promote: (
+    input: PromotionRequest,
+    idempotencyKey?: string,
+  ) => Promise<PromotionSummary>;
 };
 
 type MemberApiOptions = {
@@ -113,6 +131,16 @@ export function createMemberApi({
       const response = await request<{ data: MemberSummary }>('', {
         method: 'POST',
         body: JSON.stringify(input),
+      });
+      return response.data;
+    },
+    async promote(input, idempotencyKey) {
+      const response = await request<{ data: PromotionSummary }>('/promote', {
+        method: 'POST',
+        body: JSON.stringify(input),
+        headers: idempotencyKey
+          ? { 'Idempotency-Key': idempotencyKey }
+          : undefined,
       });
       return response.data;
     },

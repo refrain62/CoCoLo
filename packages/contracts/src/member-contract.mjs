@@ -52,3 +52,10 @@ export const memberCreateSchema = z
         message: 'adultにはgradeLevelを指定できません',
       });
   });
+
+export const promotionRequestSchema = z
+  .object({
+    mode: z.enum(['preview', 'execute']),
+    fiscalYear: z.number().int().min(2000).max(2100),
+  })
+  .strict();
