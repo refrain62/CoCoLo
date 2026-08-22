@@ -117,6 +117,22 @@ describe('Supabase Auth client', () => {
       'セッションを更新できませんでした。再ログインしてください。',
     );
   });
+
+  it('Auth providerへの通信例外を固定メッセージへ変換する', async () => {
+    const client = createAuthClient({
+      baseUrl: 'https://example.supabase.co',
+      anonKey: 'public-anon-key',
+      fetcher: async () => {
+        throw new Error('network detail contains access-secret');
+      },
+    });
+
+    const error = await client.signOut('access-secret').catch((value) => value);
+
+    expect(error).toBeInstanceOf(AuthApiError);
+    expect(error.message).toBe('ログアウトに失敗しました。');
+    expect(error.message).not.toContain('access-secret');
+  });
 });
 
 function createStorage(initial: Record<string, string> = {}) {

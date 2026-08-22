@@ -94,14 +94,19 @@ export function createAuthClient({
         503,
         'Supabase Auth の公開鍵が設定されていません。',
       );
-    const response = await fetcher(endpointUrl, {
-      ...init,
-      headers: {
-        Accept: 'application/json',
-        ...(anonKey ? { apikey: anonKey } : {}),
-        ...init.headers,
-      },
-    });
+    let response: Response;
+    try {
+      response = await fetcher(endpointUrl, {
+        ...init,
+        headers: {
+          Accept: 'application/json',
+          ...(anonKey ? { apikey: anonKey } : {}),
+          ...init.headers,
+        },
+      });
+    } catch {
+      throw new AuthApiError(0, getErrorMessage(operation, 0));
+    }
     if (!response.ok) throw await readError(response, operation);
     return response;
   }
