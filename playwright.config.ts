@@ -10,12 +10,20 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: isLocal
-    ? {
-        command: 'pnpm dev:test',
-        url: 'http://127.0.0.1:4173/health',
-        reuseExistingServer: false,
-        timeout: 120_000,
-      }
+    ? [
+        {
+          command: 'pnpm --filter @cocolo/api dev:test',
+          url: 'http://127.0.0.1:8787/health',
+          reuseExistingServer: false,
+          timeout: 120_000,
+        },
+        {
+          command: 'pnpm --filter @cocolo/web dev --host 127.0.0.1 --port 4173',
+          url: 'http://127.0.0.1:4173/health',
+          reuseExistingServer: false,
+          timeout: 120_000,
+        },
+      ]
     : undefined,
   projects: [{ name: 'local' }, { name: 'staging' }],
 });
