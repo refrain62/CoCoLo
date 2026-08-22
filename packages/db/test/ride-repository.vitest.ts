@@ -1,9 +1,14 @@
 import type { PrismaClient } from '@prisma/client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createRideRepository,
   RideRepositoryForbiddenError,
 } from '../src/ride-repository.js';
+
+// package build前でもDB repository単体テストを実行できるよう、domain実装を直接参照する。
+vi.mock('@cocolo/domain/ride', async () =>
+  import('../../domain/src/ride-domain.ts'),
+);
 
 const actor = {
   tenantId: '00000000-0000-7000-8000-000000000001',
