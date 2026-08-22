@@ -13,29 +13,39 @@ enum Role {
   admin
   staff
   guardian
+
+  @@map("role")
 }
 
 enum MembershipStatus {
   invited
   active
   suspended
+
+  @@map("membership_status")
 }
 
 enum MemberCategory {
   student
   adult
+
+  @@map("member_category")
 }
 
 enum MemberStatus {
   active
   retired
   suspended
+
+  @@map("member_status")
 }
 
 enum PromotionRunStatus {
   preview
   completed
   failed
+
+  @@map("promotion_run_status")
 }
 
 model Tenant {
