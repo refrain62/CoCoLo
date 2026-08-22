@@ -46,8 +46,12 @@ jobs:
         run: pnpm verify:migration-checksum && pnpm verify:migration-sql
       - name: checksum検証のfixtureを実行
         run: pnpm test:database-integrity
-      - name: PostgreSQLのバージョンとroleを検証
-        run: pnpm verify:database-version && pnpm db:prepare:test
+      - name: PostgreSQLのバージョンを検証
+        run: pnpm verify:database-version
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+      - name: テスト用roleを準備
+        run: pnpm db:prepare:test
         env:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test

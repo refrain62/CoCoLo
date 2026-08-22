@@ -4,8 +4,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
-  parseMigrationManifest,
   type MigrationChecksum,
+  parseMigrationManifest,
 } from './verify-migration-checksum.ts';
 
 export type MigrationHistory = Readonly<{
@@ -61,7 +61,9 @@ async function main() {
     'utf8',
   );
   const expected = parseMigrationManifest(manifestContent);
-  const require = createRequire(path.join(root, 'packages', 'db', 'package.json'));
+  const require = createRequire(
+    path.join(root, 'packages', 'db', 'package.json'),
+  );
   const { PrismaClient } = require('@prisma/client') as {
     PrismaClient: new (options: {
       datasources: { db: { url: string } };

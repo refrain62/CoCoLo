@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
 // migration/RLSの前提であるPostgreSQL major versionを、接続先DBそのものへ問い合わせて確認する。
+const expectedMajorOption = process.argv.indexOf('--expected-major');
 const expectedMajor = Number(
-  process.argv[process.argv.indexOf('--expected-major') + 1] ?? 17,
+  expectedMajorOption === -1 ? 17 : process.argv[expectedMajorOption + 1],
 );
 assert.ok(Number.isInteger(expectedMajor) && expectedMajor > 0);
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URL が必要です');
