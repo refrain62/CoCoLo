@@ -6,6 +6,20 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cocolo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cocolo_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: リポジトリを取得
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -20,7 +34,20 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: 静的品質検査
         run: pnpm verify:pnpm-config && pnpm lint:workflows && pnpm verify:migration-sql && pnpm lint:biome && pnpm verify:workspace-boundaries
+      - name: テストDBのRLS用roleを準備
+        run: pnpm db:prepare:test
+        env:
+          DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+      - name: テストDBへmigrationとfixtureを投入
+        run: pnpm --filter @cocolo/db exec prisma migrate deploy && pnpm db:seed:test
+        env:
+          DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
       - name: 契約とテスト
-        run: pnpm generate:openapi && git diff --exit-code -- packages/contracts/openapi.yaml && pnpm test:unit
+        run: pnpm generate:openapi && git diff --exit-code -- packages/contracts/openapi.yaml && pnpm test:unit && pnpm test:integration
+        env:
+          DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
       - name: 型検査とビルド
         run: pnpm typecheck && pnpm build
