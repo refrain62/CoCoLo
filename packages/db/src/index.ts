@@ -110,6 +110,7 @@ async function assertActiveMembership(
   client: Prisma.TransactionClient,
   input: { tenantId: string; userId: string; role: MemberRole },
 ) {
+  // membershipsはSELECT policyのみのため、更新と競合するFOR SHAREで所属を固定する。
   const memberships = await client.$queryRaw<
     Array<{ role: string; status: string }>
   >`
@@ -117,7 +118,7 @@ async function assertActiveMembership(
     FROM tenant_memberships
     WHERE tenant_id = ${input.tenantId}::uuid
       AND user_id = ${input.userId}
-    FOR UPDATE
+    FOR SHARE
   `;
   const membership = memberships[0];
   if (membership?.status !== 'active' || membership?.role !== input.role)
@@ -189,11 +190,9 @@ async function lockPromotionTenant(
   client: Prisma.TransactionClient,
   tenantId: string,
 ) {
+  // tenantsはアプリroleに更新policyを与えないため、tenant単位の直列化はtransaction lockで行う。
   await client.$queryRaw`
-    SELECT id
-    FROM tenants
-    WHERE id = ${tenantId}::uuid
-    FOR UPDATE
+    SELECT pg_advisory_xact_lock(hashtextextended(${tenantId}, 0))
   `;
 }
 
