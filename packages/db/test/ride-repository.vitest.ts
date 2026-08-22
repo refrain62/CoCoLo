@@ -6,8 +6,9 @@ import {
 } from '../src/ride-repository.js';
 
 // package build前でもDB repository単体テストを実行できるよう、domain実装を直接参照する。
-vi.mock('@cocolo/domain/ride', async () =>
-  import('../../domain/src/ride-domain.ts'),
+vi.mock(
+  '@cocolo/domain/ride',
+  async () => import('../../domain/src/ride-domain.ts'),
 );
 
 const actor = {

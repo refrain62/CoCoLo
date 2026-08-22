@@ -5,7 +5,10 @@
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/index.js",
-    "./ride": "./dist/ride-repository.js"
+    "./ride": {
+      "types": "./dist/ride-repository.d.ts",
+      "import": "./dist/ride-repository.js"
+    }
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",

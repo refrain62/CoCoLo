@@ -4,7 +4,10 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./ride": "./dist/ride-domain.js"
+    "./ride": {
+      "types": "./dist/ride-domain.d.ts",
+      "import": "./dist/ride-domain.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
