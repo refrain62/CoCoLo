@@ -49,7 +49,7 @@ main ── push ──▶ staging deploy
 | Variable | `SUPABASE_URL` | staging Supabase projectのURL。HTTPSを使う。 |
 | Variable | `SUPABASE_JWKS_URL` | staging SupabaseのJWKS URL。`SUPABASE_URL`のprojectと一致させる。 |
 | Variable | `PUBLIC_APP_URL` | staging Webアプリの公開HTTPS URL。 |
-| Variable | `PUBLIC_APP_URL_ALLOWLIST` | `PUBLIC_APP_URL`を含むカンマ区切りの許可リスト。 |
+| Variable | `PUBLIC_APP_URL_ALLOWLIST` | コード側のstaging固定allowlistに含まれるURLだけを指定する。任意のURL追加は拒否する。 |
 | Variable | `RATE_LIMIT_ADAPTER_MODULE` | providerをlockfileとallowlistへ追加した場合だけ設定する。現時点は実provider未同梱のため未設定。 |
 
 Workflow内で次の値は固定されており、Environment variableとして別値を設定しません。
@@ -58,6 +58,7 @@ Workflow内で次の値は固定されており、Environment variableとして�
 - `R2_BUCKET=cocolo-staging-private`
 - `SUPABASE_ALLOWED_URL=SUPABASE_URL`
 - `SUPABASE_ALLOWED_JWKS_URL=SUPABASE_JWKS_URL`
+- `SUPABASE_URL`、`SUPABASE_JWKS_URL`、`PUBLIC_APP_URL` はコード側のstaging固定allowlistにも一致させる。
 - `RATE_LIMIT_STORE=distributed`
 - `RATE_LIMIT_FAIL_CLOSED=true`
 
@@ -76,7 +77,7 @@ Workflow内で次の値は固定されており、Environment variableとして�
 | Variable | `SUPABASE_URL` | production Supabase projectのURL。stagingと異なる場合は後述の昇格前提を満たすこと。 |
 | Variable | `SUPABASE_JWKS_URL` | production SupabaseのJWKS URL。 |
 | Variable | `PUBLIC_APP_URL` | production Webアプリの公開HTTPS URL。 |
-| Variable | `PUBLIC_APP_URL_ALLOWLIST` | `PUBLIC_APP_URL`を含むカンマ区切りの許可リスト。 |
+| Variable | `PUBLIC_APP_URL_ALLOWLIST` | コード側のproduction固定allowlistに含まれるURLだけを指定する。任意のURL追加は拒否する。 |
 | Variable | `RETIRED_DATA_RETENTION_DAYS` | 退部データを保持する日数。運用上の保存期間を整数で設定する。 |
 | Variable | `AUDIT_LOG_RETENTION_DAYS` | 監査ログを保持する日数。運用上の保存期間を整数で設定する。 |
 | Variable | `RATE_LIMIT_ADAPTER_MODULE` | providerをlockfileとallowlistへ追加した場合だけ設定する。stagingと同じmoduleを無条件に共有しない。現時点は未設定。 |
@@ -87,6 +88,7 @@ Workflow内で次の値は固定されており、Environment variableとして�
 - `R2_BUCKET=cocolo-production-private`
 - `SUPABASE_ALLOWED_URL=SUPABASE_URL`
 - `SUPABASE_ALLOWED_JWKS_URL=SUPABASE_JWKS_URL`
+- `SUPABASE_URL`、`SUPABASE_JWKS_URL`、`PUBLIC_APP_URL` はコード側のproduction固定allowlistにも一致させる。
 - `RATE_LIMIT_STORE=distributed`
 - `RATE_LIMIT_FAIL_CLOSED=true`
 

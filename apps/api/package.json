@@ -6,6 +6,7 @@
     "build": "tsc -p tsconfig.json",
     "dev:test": "tsx test/test-server.ts",
     "start": "node dist/server.js",
+    "test": "pnpm test:unit",
     "lint": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/db build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "typecheck": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/db build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test:unit": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/db build && pnpm build && node --test test/*.test.ts",

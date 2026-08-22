@@ -28,6 +28,7 @@
 | DRL-H-003 | High | staging/productionでadapter未設定時に既定のin-memoryへ戻ると、複数instance間で制限を共有できず、障害時に制限を回避できる。 | 非local環境ではdistributed modeとadapterを必須にし、未設定時は構成生成とAPI起動を拒否する。 | 解消 |
 | DRL-H-004 | High | adapter障害やidentity解決失敗を許可扱いにすると、分散store停止中に制限対象の業務処理が通過する。 | middlewareの例外を503へ収束し、後続handlerを実行しないfail-closedテストを追加した。 | 解消 |
 | DRL-H-005 | High | Redisキー、ログ、メトリクスへtenant IDやuser IDをそのまま渡すと、rate-limit用途から個人情報が漏えいする。 | API側でハッシュ済みkeyだけを生成し、adapter wrapperとキー形式テストで生値の外部流出を拒否する。 | 解消 |
+| DRL-H-006 | High | staging/productionのSupabase URL、JWKS URL、公開URLを環境変数の任意allowlistだけで制御すると、loopback/httpや別project・別hostを追加して環境混同を通過できる。 | `environment-url-policy.ts` の環境別固定allowlistをruntime起動時と `verify-environment` から共有し、非localのHTTPS、Supabase project/JWKS path、公開host、allowlist追加をコード側でも検証する。悪性fixtureと回帰テストを追加した。 | 解消 |
 
 Critical 0件、High 0件であり、実装差分に対するブロッカーは残っていない。
 
@@ -56,5 +57,7 @@ productionではstagingとRedis endpoint、Secret、ネットワーク許可を�
 ## 判定
 
 CriticalとHighの攻撃経路は実装、テスト、設定検証で閉じられているため、本ブランチの実装レビューは合格とする。
+
+URLの環境境界はコード側の固定allowlistを正本とし、WorkflowのEnvironment variableはその範囲を狭める用途に限る。実provider未同梱・実Redis接続/Lua実行未検証という配置先の継続条件は変更しない。
 
 実providerのstaging実証だけを配置時の継続条件として残す。

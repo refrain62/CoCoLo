@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readRuntimeEnvironment } from '../dist/runtime-environment.js';
+import { maliciousEnvironmentOverrides } from './fixtures/environment-malicious.mjs';
 
 const testAdapterPolicy = {
   allowedPackages: ['@cocolo/test-rate-limit-adapter'],
@@ -114,5 +115,55 @@ test('stagingのSupabase許可値が実値と異なる場合は拒否する', ()
         { rateLimitAdapterPolicy: testAdapterPolicy },
       ),
     /SUPABASE_URL が許可された環境値と一致しません。/,
+  );
+});
+
+test('stagingのURLへloopback/httpを設定しても起動を許可しない', () => {
+  assert.throws(
+    () =>
+      readRuntimeEnvironment(
+        {
+          ...validStagingEnvironment,
+          ...maliciousEnvironmentOverrides.httpSupabaseUrl,
+        },
+        { rateLimitAdapterPolicy: testAdapterPolicy },
+      ),
+    /SUPABASE_URL はlocal以外では HTTPS が必要です。/,
+  );
+  assert.throws(
+    () =>
+      readRuntimeEnvironment(
+        {
+          ...validStagingEnvironment,
+          ...maliciousEnvironmentOverrides.loopbackPublicAppUrl,
+        },
+        { rateLimitAdapterPolicy: testAdapterPolicy },
+      ),
+    /PUBLIC_APP_URL はlocal以外では HTTPS が必要です。/,
+  );
+});
+
+test('stagingのSupabase projectと公開URL allowlistを環境変数だけで拡張できない', () => {
+  assert.throws(
+    () =>
+      readRuntimeEnvironment(
+        {
+          ...validStagingEnvironment,
+          ...maliciousEnvironmentOverrides.arbitrarySupabaseProject,
+        },
+        { rateLimitAdapterPolicy: testAdapterPolicy },
+      ),
+    /SUPABASE_URL が環境ごとの固定allowlistにありません。/,
+  );
+  assert.throws(
+    () =>
+      readRuntimeEnvironment(
+        {
+          ...validStagingEnvironment,
+          ...maliciousEnvironmentOverrides.arbitraryPublicAllowlistEntry,
+        },
+        { rateLimitAdapterPolicy: testAdapterPolicy },
+      ),
+    /PUBLIC_APP_URL_ALLOWLIST が環境ごとの固定allowlistにありません。/,
   );
 });

@@ -1,10 +1,12 @@
+import {
+  type AppEnvironment,
+  validateEnvironmentUrls,
+} from './environment-url-policy.js';
 import type { RateLimitStoreMode } from './security/rate-limit-adapter.js';
 import {
   type RateLimitAdapterModulePolicy,
   validateRateLimitAdapterModule,
 } from './security/rate-limit-adapter-policy.js';
-
-export type AppEnvironment = 'local' | 'staging' | 'production';
 
 type RuntimeEnvironmentInput = Record<string, string | undefined>;
 
@@ -32,15 +34,6 @@ function required(environment: RuntimeEnvironmentInput, name: string): string {
   const value = environment[name]?.trim();
   if (!value) throw new Error(`${name} が必要です。`);
   return value;
-}
-
-// 本番系はHTTPSだけを許可し、localだけloopback URLを例外として認める。
-function assertUrl(name: string, value: string) {
-  const url = new URL(value);
-  if (url.protocol !== 'https:' && url.hostname !== '127.0.0.1')
-    throw new Error(
-      `${name} には HTTPS またはローカルのループバック URL が必要です。`,
-    );
 }
 
 // 環境、Supabase接続先、R2 bucket、公開URLを相互検証し、環境混同をfail-closedで防ぐ。
@@ -73,13 +66,8 @@ export function readRuntimeEnvironment(
   const rateLimitAdapterModule = environment.RATE_LIMIT_ADAPTER_MODULE?.trim();
   const supabaseIssuer = `${supabaseUrl}/auth/v1`;
 
-  assertUrl('SUPABASE_URL', supabaseUrl);
-  assertUrl('SUPABASE_JWKS_URL', supabaseJwksUrl);
   if (r2Bucket !== allowedBuckets[appEnv])
     throw new Error('R2_BUCKET が環境の許可値と一致しません。');
-
-  if (appEnv === 'local' && publicAppUrl !== 'http://localhost:5173')
-    throw new Error('PUBLIC_APP_URL が local 環境の許可値と一致しません。');
 
   if (rateLimitFailClosed !== 'true')
     throw new Error('RATE_LIMIT_FAIL_CLOSED は true に固定してください。');
@@ -107,9 +95,7 @@ export function readRuntimeEnvironment(
 
   const allowedUrl = environment.SUPABASE_ALLOWED_URL?.trim();
   const allowedJwksUrl = environment.SUPABASE_ALLOWED_JWKS_URL?.trim();
-  const allowlist = environment.PUBLIC_APP_URL_ALLOWLIST?.split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
+  const allowlist = environment.PUBLIC_APP_URL_ALLOWLIST;
   if (appEnv !== 'local') {
     if (!allowedUrl) throw new Error('SUPABASE_ALLOWED_URL が必要です。');
     if (!allowedJwksUrl)
@@ -117,12 +103,14 @@ export function readRuntimeEnvironment(
     if (!allowlist?.length)
       throw new Error('PUBLIC_APP_URL_ALLOWLIST が必要です。');
   }
-  if (allowedUrl && allowedUrl.replace(/\/$/, '') !== supabaseUrl)
-    throw new Error('SUPABASE_URL が許可された環境値と一致しません。');
-  if (allowedJwksUrl && allowedJwksUrl !== supabaseJwksUrl)
-    throw new Error('SUPABASE_JWKS_URL が許可された環境値と一致しません。');
-  if (allowlist && !allowlist.includes(publicAppUrl))
-    throw new Error('PUBLIC_APP_URL が許可リストに含まれていません。');
+  validateEnvironmentUrls(appEnv, {
+    supabaseUrl,
+    supabaseJwksUrl,
+    publicAppUrl,
+    supabaseAllowedUrl: allowedUrl,
+    supabaseAllowedJwksUrl: allowedJwksUrl,
+    publicAppUrlAllowlist: allowlist,
+  });
 
   const configuredIssuer = environment.SUPABASE_ISSUER?.trim();
   if (configuredIssuer && configuredIssuer !== supabaseIssuer)
