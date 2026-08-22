@@ -12,6 +12,8 @@
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
+    "test": "pnpm build && node --test test/*.test.mjs",
+    "test:unit": "pnpm build && node --test test/*.test.mjs",
     "lint": "node ../../scripts/prisma-validate.mjs",
     "typecheck": "node ../../scripts/prisma-validate.mjs",
     "prisma:validate": "prisma validate",
