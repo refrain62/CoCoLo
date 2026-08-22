@@ -17,6 +17,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: cocolo_test
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -50,14 +51,14 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          psql --no-psqlrc --host localhost --port 5432 --username postgres --dbname cocolo_test --command "CREATE ROLE cocolo_shadow LOGIN PASSWORD 'cocolo_shadow' NOSUPERUSER NOBYPASSRLS"
+          psql --no-psqlrc --host localhost --port 5432 --username postgres --dbname cocolo_test --command "CREATE ROLE cocolo_shadow LOGIN NOSUPERUSER NOBYPASSRLS"
           psql --no-psqlrc --host localhost --port 5432 --username postgres --dbname cocolo_test --command "CREATE DATABASE cocolo_shadow OWNER cocolo_shadow"
       - name: テストDBのroleを準備してmigrationを適用
         run: pnpm db:prepare:test && pnpm --filter @cocolo/db exec prisma migrate deploy && pnpm --filter @cocolo/db exec prisma generate
         env:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
-          SHADOW_DATABASE_URL: postgresql://cocolo_shadow:cocolo_shadow@localhost:5432/cocolo_shadow
+          SHADOW_DATABASE_URL: postgresql://cocolo_shadow@localhost:5432/cocolo_shadow
           SHADOW_DATABASE_ROLE: cocolo_shadow
           SHADOW_DATABASE_ALLOWED_HOSTS: localhost
           SHADOW_DATABASE_ALLOWED_DATABASES: cocolo_shadow
@@ -69,7 +70,7 @@ jobs:
           CI: true
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
-          SHADOW_DATABASE_URL: postgresql://cocolo_shadow:cocolo_shadow@localhost:5432/cocolo_shadow
+          SHADOW_DATABASE_URL: postgresql://cocolo_shadow@localhost:5432/cocolo_shadow
           SHADOW_DATABASE_ROLE: cocolo_shadow
           SHADOW_DATABASE_ALLOWED_HOSTS: localhost
           SHADOW_DATABASE_ALLOWED_DATABASES: cocolo_shadow

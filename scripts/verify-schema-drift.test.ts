@@ -16,6 +16,8 @@ import {
 } from './verify-schema-drift.ts';
 
 const shadowDatabaseUrl =
+  'postgresql://cocolo_shadow@localhost:5432/cocolo_shadow';
+const shadowDatabaseUrlWithPassword =
   'postgresql://cocolo_shadow:cocolo_shadow@localhost:5432/cocolo_shadow';
 const shadowDatabaseArg =
   'postgresql://cocolo_shadow@localhost:5432/cocolo_shadow';
@@ -118,6 +120,22 @@ test('shadow database URLの欠落を成功扱いにしない', () => {
   );
 });
 
+test('APP_ENVの欠落をlocal扱いで通過させない', () => {
+  assert.throws(
+    () =>
+      validateShadowDatabaseConfig(
+        shadowDatabaseUrl,
+        undefined,
+        shadowConfig.databaseUrl,
+        shadowConfig.directUrl,
+        shadowConfig.expectedRole,
+        shadowConfig.allowedHosts,
+        shadowConfig.allowedDatabases,
+      ),
+    /APP_ENVが必要です/,
+  );
+});
+
 test('同じhost・port・DBのShadow URLを拒否する', () => {
   assert.throws(
     () =>
@@ -134,15 +152,60 @@ test('同じhost・port・DBのShadow URLを拒否する', () => {
   );
 });
 
+test('DIRECT_URLと同じhost・port・DBのShadow URLを拒否する', () => {
+  assert.throws(
+    () =>
+      validateShadowDatabaseConfig(
+        'postgresql://cocolo_shadow@localhost:5432/cocolo_shadow',
+        'local',
+        'postgresql://cocolo_app@localhost:5432/cocolo_local',
+        'postgresql://cocolo_migration@localhost:5432/cocolo_shadow',
+        'cocolo_shadow',
+        'localhost',
+        'cocolo_shadow',
+      ),
+    /DIRECT_URLと同じhost・port・DB/,
+  );
+});
+
+test('アプリrole・migration owner roleの共有を拒否する', () => {
+  assert.throws(
+    () =>
+      validateShadowDatabaseConfig(
+        'postgresql://cocolo_app@localhost:5432/cocolo_shadow',
+        'local',
+        'postgresql://cocolo_app@localhost:5432/cocolo_local',
+        'postgresql://cocolo_migration@localhost:5432/cocolo_local',
+        'cocolo_app',
+        'localhost',
+        'cocolo_shadow',
+      ),
+    /アプリ接続roleと共有/,
+  );
+  assert.throws(
+    () =>
+      validateShadowDatabaseConfig(
+        'postgresql://cocolo_migration@localhost:5432/cocolo_shadow',
+        'local',
+        'postgresql://cocolo_app@localhost:5432/cocolo_local',
+        'postgresql://cocolo_migration@localhost:5432/cocolo_local',
+        'cocolo_migration',
+        'localhost',
+        'cocolo_shadow',
+      ),
+    /migration ownerと共有/,
+  );
+});
+
 test('Shadow DBのパスワードをargvから除去する', () => {
-  const redacted = redactDatabaseUrl(shadowDatabaseUrl);
+  const redacted = redactDatabaseUrl(shadowDatabaseUrlWithPassword);
   assert.equal(redacted.argvUrl, shadowDatabaseArg);
   assert.equal(redacted.password, 'cocolo_shadow');
   assert.throws(
     () =>
       buildPrismaDiffArgs(
         fixturePaths('C:\\schema-drift-fixture'),
-        shadowDatabaseUrl,
+        shadowDatabaseUrlWithPassword,
       ),
     /パスワードをPrisma CLIのargvへ渡してはいけません/,
   );
@@ -282,9 +345,9 @@ test('差分なしではPrisma CLIをexit-code付きで実行して成功する'
     );
     assert.equal(received.command, process.execPath);
     assert.equal(received.env?.SHADOW_DATABASE_URL, shadowDatabaseUrl);
-    assert.equal(received.env?.PGPASSWORD, 'cocolo_shadow');
+    assert.equal(received.env?.PGPASSWORD, undefined);
     assert.equal(
-      received.args.includes(shadowDatabaseUrl),
+      received.args.includes(shadowDatabaseUrlWithPassword),
       false,
       'Shadow DB URLをPrisma CLIのargvへ渡してはいけません。',
     );
