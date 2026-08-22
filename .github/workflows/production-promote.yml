@@ -49,6 +49,8 @@ jobs:
         run: pnpm verify:trust-root
       - name: リリース成果物を展開
         run: mkdir -p .release/extracted && tar -xzf .release/release.tar.gz -C .release/extracted
+      - name: リリースmanifestをarchive内と照合
+        run: test -f .release/extracted/release-manifest.json && cmp .release/release-manifest.json .release/extracted/release-manifest.json
       - name: production環境の設定を検証
         run: pnpm verify:environment --expected production
         env:
@@ -69,6 +71,11 @@ jobs:
           RATE_LIMIT_STORE: distributed
           RATE_LIMIT_FAIL_CLOSED: 'true'
           RATE_LIMIT_ADAPTER_MODULE: ${{ vars.RATE_LIMIT_ADAPTER_MODULE }}
+      - name: artifactの公開build設定をproduction許可値と照合
+        run: node scripts/release-verify-public-config.ts --release-dir .release
+        env:
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       - name: 検証済みマイグレーションだけを適用
         run: pnpm exec prisma migrate deploy --schema .release/extracted/packages/db/prisma/schema.prisma
         env:

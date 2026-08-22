@@ -91,3 +91,7 @@ bootstrap後に保護対象ファイルを追加するPRでは、ファイル内
 GitHub CLIの差分確認では、`gh pr diff <番号> --patch`のオプションと、`git diff origin/develop...HEAD -- <paths>`のパス指定を混在させて引数エラーを起こしました。統計や特定パスの確認はGitで行い、GitHub上のPR全体確認は`gh pr diff`の対応オプションだけを使います。
 
 検証コマンドを`;`で連結した際、途中の`pnpm verify:trust-root`が失敗しても後続の`git commit`まで実行されました。検証失敗時にコミットへ進まないよう、重要なゲートは単独で実行するか、PowerShellの`$LASTEXITCODE`を確認してから次のGit操作へ進みます。
+
+release artifactの専用テストで、公開Supabase設定を必須化した実装に対してテスト環境変数を渡しておらず、`VITE_SUPABASE_URL が未設定です`で失敗しました。必須環境変数を追加した実装では、テストにも実値ではない検証用ダミー値を明示し、専用テストを再実行してから全体検証へ進みます。
+
+同じ公開設定必須化をCIのrelease artifact検証stepへ反映し忘れ、`pnpm package:release`がCIだけ環境変数不足で失敗しました。ローカル専用テストとworkflowの実行stepを別々に確認し、workflow側にも秘密でない固定ダミー値を設定してからCIを再実行します。

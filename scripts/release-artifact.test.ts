@@ -15,10 +15,16 @@ const runtimePackages = [
   ['packages/domain', 'dist/index.js'],
 ] as const;
 
-function runNodeScript(script: string, args: string[], cwd: string) {
+function runNodeScript(
+  script: string,
+  args: string[],
+  cwd: string,
+  env: Record<string, string> = {},
+) {
   const result = spawnSync(process.execPath, [script, ...args], {
     cwd,
     encoding: 'utf8',
+    env: { ...process.env, ...env },
   });
   assert.equal(
     result.status,
@@ -35,6 +41,10 @@ test('release artifactはAPIのruntime workspace packageとmetadataを含む', a
       path.join(root, 'scripts/package-release.ts'),
       ['--artifact-sha', sha, '--output', output],
       root,
+      {
+        VITE_SUPABASE_URL: 'https://test-ref.supabase.co',
+        VITE_SUPABASE_ANON_KEY: 'test-anon-key.jwt',
+      },
     );
     runNodeScript(
       path.join(root, 'scripts/verify-release.ts'),
