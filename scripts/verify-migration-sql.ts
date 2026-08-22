@@ -271,17 +271,19 @@ function parseCreateTable(statement: string): CreateTable | undefined {
       statement,
     );
   if (!match) return undefined;
+  const tableName = match[1];
+  assert.ok(tableName, 'CREATE TABLEの名前を解釈できません。');
   const prefixLength = match[0].length;
   const rest = statement.slice(prefixLength).trimStart();
   assert.ok(
     rest.startsWith('('),
-    `${match[1]}: CREATE TABLEは列定義形式だけを許可します。AS/LIKEは使用できません。`,
+    `${tableName}: CREATE TABLEは列定義形式だけを許可します。AS/LIKEは使用できません。`,
   );
   const openIndex = statement.indexOf('(', prefixLength);
   assert.notEqual(
     openIndex,
     -1,
-    `${match[1]}: CREATE TABLEの列定義がありません。`,
+    `${tableName}: CREATE TABLEの列定義がありません。`,
   );
   const closeIndex = findMatchingParenthesis(statement, openIndex);
   const body = statement.slice(openIndex + 1, closeIndex);
@@ -289,14 +291,14 @@ function parseCreateTable(statement: string): CreateTable | undefined {
   assert.doesNotMatch(
     tableTail,
     /\b(?:AS|LIKE|INHERITS|PARTITION\s+OF)\b/i,
-    `${match[1]}: CREATE TABLEのAS/LIKE/継承定義は禁止です。`,
+    `${tableName}: CREATE TABLEのAS/LIKE/継承定義は禁止です。`,
   );
   assert.equal(
     findKeywordOutsideQuotes(body, 'LIKE'),
     -1,
-    `${match[1]}: CREATE TABLE内のLIKE定義は禁止です。`,
+    `${tableName}: CREATE TABLE内のLIKE定義は禁止です。`,
   );
-  return { name: match[1].toLowerCase(), body };
+  return { name: tableName.toLowerCase(), body };
 }
 
 function policyTableName(statement: string) {
