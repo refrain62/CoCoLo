@@ -332,7 +332,7 @@ model Event {
 
 年度末一括繰り上がり API:
 
-* POST /api/members/promote を叩くことで、status === 'active' かつ category === 'student' の部員の gradeLevel を一括で +1 昇格。
+* `POST /api/v1/members/promote` は `mode=preview` で対象件数を確認し、`mode=execute` で `status=active` かつ `category=student` の部員の `gradeLevel` を一括で +1 昇格します。execute は `Idempotency-Key` を必須とし、`PromotionRun` に実行結果と監査を保存します。
 
 ### 5.2 役員名簿管理機能（連絡先プライバシー配慮）
 
@@ -526,11 +526,14 @@ jobs:
         run: |
           [[ "$STAGING_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'staging_run_id must be numeric' >&2; exit 1; }
           [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'artifact_sha must be a lowercase 40-digit SHA-1' >&2; exit 1; }
-          gh run view "$STAGING_RUN_ID" --json conclusion,headSha,workflowPath,event,headBranch > .staging-run.json
-          jq -e --arg sha "$ARTIFACT_SHA" '.conclusion == "success" and .headSha == $sha and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main"' .staging-run.json
+          gh run view "$STAGING_RUN_ID" --json conclusion,headSha,workflowName,event,headBranch > .staging-run.json
+          jq -e --arg sha "$ARTIFACT_SHA" '.conclusion == "success" and .headSha == $sha and .workflowName == "ステージングへデプロイ" and .event == "push" and .headBranch == "main"' .staging-run.json
+          gh run view "$STAGING_RUN_ID" --json jobs > .staging-jobs.json
+          jq -e '[.jobs[] | select(.name == "deploy-staging" and .conclusion == "success")] | length == 1' .staging-jobs.json
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID" --jq '.path')" = ".github/workflows/staging-deploy.yml"
           gh run download "$STAGING_RUN_ID" --name "release-$ARTIFACT_SHA" --dir .release
           gh run download "$STAGING_RUN_ID" --name "staging-evidence-$ARTIFACT_SHA" --dir .evidence
-          jq -e --arg sha "$ARTIFACT_SHA" '.workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success"' .evidence/evidence.json
+          jq -e --arg sha "$ARTIFACT_SHA" '.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success"' .evidence/evidence.json
       - name: artifactのchecksumとprovenanceを検証
         env:
           GH_TOKEN: ${{ github.token }}
@@ -576,7 +579,14 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: 検証済みartifactを本番へ配置
         env:
+          APP_ENV: production
           ARTIFACT_SHA: ${{ inputs.artifact_sha }}
+          PUBLIC_APP_URL: ${{ vars.PRODUCTION_APP_URL }}
+          SUPABASE_URL: ${{ vars.PRODUCTION_SUPABASE_URL }}
+          SUPABASE_JWKS_URL: ${{ vars.PRODUCTION_SUPABASE_JWKS_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.PRODUCTION_SUPABASE_ANON_KEY }}
+          R2_ENDPOINT: ${{ vars.PRODUCTION_R2_ENDPOINT }}
+          R2_BUCKET: ${{ vars.PRODUCTION_R2_BUCKET }}
         run: pnpm deploy:production --artifact-sha "$ARTIFACT_SHA"
       - name: 本番のsmoke testを実行
         env:
@@ -586,7 +596,7 @@ jobs:
 ```
 
 `package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、migration checksum manifest を同一の immutable release artifact に含め、`.release/release.tar.gz` と `artifact.sha256` を生成します。staging の `publish:release` は GitHub Actions artifact `release-${{ github.sha }}` として保存し、production は `actions: read` で同名 artifact だけを取得します。staging は GitHub 公式 provenance action をSHA固定で実行し、production は checkout・pnpm install・リポジトリ内 script より前に標準 GitHub CLI の `gh attestation verify` で署名者リポジトリ、workflow、source digest、SHA-256を検証します。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・migration checksum・artifact SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリの migration を参照せず、検証済み `.release` 内の migration だけを `prisma migrate deploy` へ渡します。staging job の強い権限は main push かつ protected staging Environment のこのjobだけに限定し、PRの `quality.yml` は `contents: read` のみとします。将来buildと公開をjob分離する場合も、`actions: write`、`id-token: write`、`attestations: write` は公開・provenance jobにだけ付与します。staging / production の workflow は `APP_ENV`、Supabase URL/JWKS、R2 endpoint/bucket、公開URLの allowlist を `verify:environment` で検証し、production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
-`publish:staging-evidence` は `.evidence/evidence.json`（`workflowPath`、`event`、`headBranch`、`headSha`、`artifactSha`、`migration`、`smoke`、`e2e`）を生成し、`staging-evidence-${{ github.sha }}` という上書き不可のartifact名で保存します。本番はこの証跡とrelease artifactを同じstaging runから取得し、checkout前に固定フィールドを検証します。
+`publish:staging-evidence` は `.evidence/evidence.json`（`workflowName`、`workflowPath`、`event`、`headBranch`、`headSha`、`artifactSha`、`migration`、`smoke`、`e2e`）を生成し、`staging-evidence-${{ github.sha }}` という上書き不可のartifact名で保存します。本番はGitHub runの `conclusion`・`jobs`・REST APIのworkflow pathを直接検証したうえで、この証跡とrelease artifactを同じstaging runから取得し、checkout前に固定フィールドを検証します。
 
 ### 6.1 サプライチェーン攻撃対策
 
@@ -793,13 +803,14 @@ LINE の通知先（グループか公式アカウントか）、Google Maps の
 * **RLSの実行契約:** API は Prisma の interactive `$transaction` を先に開始し、同一の transaction client で JWT subject と許可されたテナント識別子に対する membership を `FOR UPDATE` 付きで取得します。そこで `status=active` を確認し、DBから取得した role / status を使って `SELECT set_config('app.tenant_id', $1, true)`、`SELECT set_config('app.user_id', $2, true)`、`SELECT set_config('app.role', $3, true)` を同じ transaction 内で実行してから全業務クエリを行います。transaction client 外の Prisma query を禁止する repository API を用意し、context 未設定時は RLS が 0 件 / 拒否となるようにします。membership の停止・role変更と同時に実行された transaction の扱いを統合テストで固定します。
 * **RLS policy:** 各表で `ENABLE ROW LEVEL SECURITY` と `FORCE ROW LEVEL SECURITY` を有効化し、次の table / role 別 policy を migration SQL に固定します。`app_is_active_member(tenant_id, user_id)` と `app_is_manager(tenant_id, user_id)` は `cocolo_security` owner が作る `SECURITY DEFINER` の boolean-only 関数とし、`SET search_path = pg_catalog, public`、`REVOKE ALL FROM PUBLIC`、`GRANT EXECUTE TO cocolo_app` を明記します。関数は行データを返さず、固定SQLで membership の存在と role だけを判定して RLS 再帰を避けます。
   * `Tenant`: active membership が存在する user だけが対象 tenant を `SELECT` できます。
-  * `TenantMembership`: `owner/admin` は同一 tenant の招待・停止・role変更を管理でき、本人は自分の active / invited membership だけを `SELECT` できます。最後の active owner の削除・降格は policy だけでなく transaction 内の `FOR UPDATE` 検査で拒否します。
+   * `TenantMembership`: `owner` は同一 tenant の招待・停止・role変更を管理でき、`admin` は owner の role変更・削除を除く運用だけを管理できます。本人は自分の active / invited membership だけを `SELECT` できます。最後の active owner の削除・降格は policy だけでなく transaction 内の `FOR UPDATE` 検査で拒否します。
   * `Member`: `owner/admin/staff` は同一 tenant の全件を `SELECT` でき、`owner/admin` だけが `INSERT/UPDATE` できます。`guardian` は `GuardianMember(tenant_id, member_id, user_id)` が存在する担当部員だけを `SELECT` できます。
   * `GuardianMember`: `owner/admin` は同一 tenant の管理、guardian は自分の `user_id` に一致する紐付けの `SELECT` だけを許可します。staff と guardian の登録・削除は拒否します。
-  * `AuditLog`: 全 role に tenant内の append-only `INSERT` だけを許可し、`SELECT` は `owner` のみ、`UPDATE/DELETE` は table grant と policy の両方で拒否します。
+   * `AuditLog`: 全 role に tenant内の append-only `INSERT` だけを許可し、`SELECT` は `owner` のみ、`UPDATE/DELETE` は table grant と policy の両方で拒否します。
+   * `PromotionRun`: `owner/admin` は同一 tenant の preview / completed / failed を `SELECT` でき、年度繰り上げの `INSERT` は `owner/admin` だけに許可します。`staff/guardian` は `SELECT/INSERT/UPDATE/DELETE` を拒否し、年度・tenant・actor は `WITH CHECK` で固定します。
   * すべての policy の `USING/WITH CHECK` は tenant、user、role、担当部員条件を明示し、`app.tenant_id`、`app.user_id`、`app.role` のいずれかが未設定なら false になる fail-closed 条件にします。`cocolo_app` に policy を迂回する権限を与えません。
 * **RLSの検証:** tenant A / tenant B の owner・admin・guardian を用いた実 PostgreSQL 統合テストで、一覧・登録・更新・親子参照・context 未設定・guardian 担当外の越境ができないことを確認します。アプリ側の `tenantId` 条件だけを安全性の根拠にしません。
-* **Phase 1 確定モデル:** `Tenant`、`TenantMembership`、`Member`、`GuardianMember`、`AuditLog` を初回 migration の対象にします。出欠は `Event` に `attendanceDeadline`、`meetingAt`、`opponent`、`transportRequired` を追加し、`EventAttendance` を次の migration で追加します。これらを「完全な Schema」と「予定」に混在させません。
+ * **Phase 1 確定モデル:** `Tenant`、`TenantMembership`、`Member`、`GuardianMember`、`AuditLog`、`PromotionRun` を初回 migration の対象にします。出欠は `Event` に `attendanceDeadline`、`meetingAt`、`opponent`、`transportRequired` を追加し、`EventAttendance` を次の migration で追加します。これらを「完全な Schema」と「予定」に混在させません。
 * **保護者と部員の関係:** 単一の `guardianUserId` を認可に使わず、`GuardianMember(tenantId, userId, memberId, relationship, consentedAt)` の所属を根拠にします。guardian は自分が担当する部員の必要最小限の情報を閲覧し、出欠と担当部員の注文確認だけを行えます。Member 自身のログイン・直接回答用の `MemberUser` は Phase 1〜5 に追加しません。
 * **認可マトリクス:** `owner/admin` はチーム設定・全機能の管理、`staff` は部員・予定・出欠の運用と締切後の管理修正、`guardian` は担当部員の閲覧・出欠登録・注文確認に限定します。電話番号、特記事項、CSV、支払い確認、削除は owner/admin のみとし、staff / guardian の可否を API テストで固定します。
 
@@ -822,6 +833,7 @@ Phase 1 の部員 API の入出力・監査契約は次で固定します。
 | `POST /api/v1/members` | owner/admin | `name,kana,category,gradeLevel,ageGroup,status`。`tenantId,id,note` は不可 | 作成した基本項目。`note` は返却不可 | `member.create` / staff・guardianは403 |
 | `PATCH /api/v1/members/:id` | owner/admin | `name,kana,category,gradeLevel,ageGroup` と `status`（`active` ↔ `suspended` のみ）。`tenantId,id,createdAt,note` は不可 | `id,name,kana,category,gradeLevel,ageGroup,status,createdAt` | `member.update` / tenant外は404相当 |
 | `DELETE /api/v1/members/:id` | owner/admin | URLの UUIDv7 のみ。`status=retired` への状態遷移 | `204`。既に retired でも同じ結果 | `member.retire` と `previousStatus,nextStatus,requestId` / staff・guardianは403 |
+| `POST /api/v1/members/promote` | owner/admin | `fiscalYear,mode`（`preview` / `execute`）。`execute` は `Idempotency-Key` 必須 | `promotionRunId,mode,targetCount,skippedCount,status`。同一tenant・年度の2回目executeは同じ結果 | `member.promote.preview` / `member.promote.execute`。staff・guardianは403、tenant外は404相当 |
 | `GET /api/v1/members/:id/private-note` | Phase 1 は未提供 | なし | なし | Phase 2でowner/admin専用として再設計 |
 
 API DTO は role ごとに別 schema を持ち、staff / guardian のレスポンスに電話番号、note、保護者識別子、監査 metadata を混入させません。別テナント・担当外資源は存在判定を推測できない外部結果に統一します。
@@ -842,9 +854,9 @@ Phase 1 の実装開始前に、次の契約を選択肢なしで `packages/db/p
 * **Member:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、`name`（必須）、`kana`、`category MemberCategory`（`student` / `adult`）、`gradeLevel`、`ageGroup`、`status MemberStatus`（`active` / `retired` / `suspended`）、`note`、`createdAt`。Phase 1 の POST DTO は `note` を受け付けず、管理者専用の別操作でのみ扱います。
 * **GuardianMember:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、外部 `userId String @db.VarChar(128)`、`memberId String @db.Uuid`、`relationship`、`consentedAt`、`@@unique([tenantId, userId, memberId])`、Member への複合 relation は `onDelete: Restrict`。`FOREIGN KEY(tenantId, memberId) REFERENCES members(tenantId, id)` とし、テナントの異なる部員を参照できないようにします。Phase 1 は Member を物理削除せず retired 化し、将来の消去処理では GuardianMember を先に削除してから Member を削除します。
 * **AuditLog:** `id String @db.Uuid`（UUIDv7）、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、actor の外部 `userId String @db.VarChar(128)`、`action`、`resourceType`、nullable の `resourceId String @db.Uuid`、`metadata Json`（許可キーと最大8KBを入力スキーマで制限）、`createdAt`、`@@index([tenantId, createdAt])`。アプリの更新 API から delete を公開せず append-only とします。
-* **PromotionRun:** `id String @db.Uuid`（UUIDv7）、`tenantId String @db.Uuid`、`fiscalYear`、`status`（`preview` / `completed` / `failed`）、`previewCount`、`executedAt`、外部 `actorUserId String @db.VarChar(128)`、`createdAt`、`@@unique([tenantId, fiscalYear])`。年度繰り上げの冪等性と実行監査を担保し、Phase 1 の完了条件に含めます。
+* **PromotionRun:** `id String @db.Uuid`（UUIDv7）、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、`fiscalYear Int`（`CHECK 2000〜2100`）、`status PromotionRunStatus`（`preview` / `completed` / `failed`）、`previewCount Int`、`executedAt DateTime?`、外部 `actorUserId String @db.VarChar(128)`、`createdAt DateTime`、`@@unique([tenantId, fiscalYear])`。年度繰り上げの冪等性と実行監査を担保し、Phase 1 の完了条件に含めます。
 
-`Role`、`MembershipStatus`、`MemberCategory`、`MemberStatus` は Prisma enum として上記の値だけを定義します。Phase 1 の Prisma relation、`onDelete`、nullability、default、index、unique、CHECK はこの契約から省略しません。
+`Role`、`MembershipStatus`、`MemberCategory`、`MemberStatus`、`PromotionRunStatus` は Prisma enum として上記の値だけを定義します。Phase 1 の Prisma relation、`onDelete`、nullability、default、index、unique、CHECK はこの契約から省略しません。
 
 `Member` の `tenantId + id`、`GuardianMember` の `tenantId + memberId`、`AuditLog` の resource ID 型は上記の定義から変更しません。各 enum は API 入力の Zod スキーマと PostgreSQL の CHECK または Prisma enum の両方で制限します。RLS policy、複合制約、tenant A/B と role 別の test fixture を同じ Phase 1 の完了条件に含めます。
 
@@ -959,7 +971,7 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 * [!] **T-004 実装前敵対的レビュー再実施:** 第3レビューは Critical 1件 / High 5件、第4レビュー（`46023fc`）は Critical 0件 / High 3件、第5レビュー（`9f49cb4`）は Critical 0件 / High 2件、第6レビュー（`30ebace`）は Critical 0件 / High 5件が残り、いずれも不合格。機能仕様書とサプライチェーン対策を含む現行文書で再レビューする。
 * [ ] **T-005 開発基盤:** pnpm workspace の `apps/web`、`apps/api`、`packages/db`、`packages/auth`、`packages/contracts`、`packages/domain`、`packages/ui`、`packages/test-fixtures`、root package scripts、dependency-cruiserによるpackage間依存境界、Zodからの`generate:openapi`、OpenAPI 3.1、package単位の TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build、`dev:test`、`db:prepare:test`、`db:seed:test`、`verify:pnpm-config`、`verify:migration-sql`、`verify:database-version`、`verify:environment`、`test:unit`、`test:integration`、`test:e2e:local`、`test:e2e:staging`、`verify:production-bundle`、staging smoke / deploy / evidence scripts を追加する。local / staging / production の `.env` 契約、起動時環境ガード、`playwright.config.ts` の `webServer`、quality / staging / production promote Workflow の実行結果を完了条件に含める。
 * [ ] **T-006 Red:** 部員 API の未認証、別テナント、権限不足、入力不正、一覧・登録の失敗テストを先に追加する。
-* [ ] **T-007 Green:** Tenant / TenantMembership / Member / GuardianMember / AuditLog の migration、JWT検証、RLS policy、transaction context、テナント解決、部員 API を最小実装する。
+* [ ] **T-007 Green:** Tenant / TenantMembership / Member / GuardianMember / AuditLog / PromotionRun の migration、JWT検証、RLS policy、transaction context、テナント解決、部員 API を最小実装する。
 * [ ] **T-008 Red/Green:** 部員一覧・登録 UI のテストを先に追加して画面を実装する。
 * [ ] **T-009 E2E:** local は test-only Auth、staging は staging Supabase のテスト専用ユーザーを使い、管理者のログインから部員登録までを Playwright で検証する。
 * [ ] **T-010 実装後敵対的レビュー:** T-005〜T-009 の成果物に対して越境、PII、認可、入力、環境混同、test-only Auth混入、テスト不足をレビューする。
