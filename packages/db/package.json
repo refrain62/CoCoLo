@@ -11,7 +11,11 @@
       "import": "./dist/orders-repository.js"
     },
     "./attachment": "./dist/attachment-repository.js",
-    "./line": "./dist/line-repository.js"
+    "./line": "./dist/line-repository.js",
+    "./ride": {
+      "types": "./dist/ride-repository.d.ts",
+      "import": "./dist/ride-repository.js"
+    }
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",

@@ -8,7 +8,8 @@
     "./member": "./src/member-contract.ts",
     "./events": "./src/event-contract.ts",
     "./orders": "./src/orders-contract.ts",
-    "./line": "./src/line-contract.ts"
+    "./line": "./src/line-contract.ts",
+    "./ride": "./src/ride-contract.ts"
   },
   "scripts": {
     "build": "node ../../scripts/generate-openapi.ts",

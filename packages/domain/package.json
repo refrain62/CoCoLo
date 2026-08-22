@@ -10,7 +10,11 @@
       "import": "./dist/orders-domain.js"
     },
     "./attachment": "./dist/attachment-domain.js",
-    "./line": "./dist/line-domain.js"
+    "./line": "./dist/line-domain.js",
+    "./ride": {
+      "types": "./dist/ride-domain.d.ts",
+      "import": "./dist/ride-domain.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
