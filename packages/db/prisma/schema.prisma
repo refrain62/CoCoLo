@@ -51,7 +51,7 @@ enum PromotionRunStatus {
 model Tenant {
   id           String             @id @default(uuid(7)) @db.Uuid
   name         String             @db.VarChar(200)
-  createdAt    DateTime           @default(now()) @map("created_at")
+  createdAt    DateTime           @default(now()) @db.Timestamptz(6) @map("created_at")
   memberships  TenantMembership[]
   members      Member[]
   guardians    GuardianMember[]
@@ -67,11 +67,11 @@ model TenantMembership {
   userId    String           @map("user_id") @db.VarChar(128)
   role      Role
   status    MembershipStatus @default(active)
-  createdAt DateTime         @default(now()) @map("created_at")
-  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt DateTime         @default(now()) @db.Timestamptz(6) @map("created_at")
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, userId])
-  @@index([userId, status])
+  @@index([userId, status], map: "tenant_memberships_user_status_idx")
   @@map("tenant_memberships")
 }
 
@@ -85,13 +85,13 @@ model Member {
   ageGroup      String?          @map("age_group") @db.VarChar(100)
   status        MemberStatus     @default(active)
   note          String?
-  createdAt     DateTime         @default(now()) @map("created_at")
-  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt     DateTime         @default(now()) @db.Timestamptz(6) @map("created_at")
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   guardianLinks GuardianMember[]
 
   @@unique([tenantId, id])
-  @@index([tenantId, status, category])
-  @@index([tenantId, name])
+  @@index([tenantId, status, category], map: "members_tenant_status_category_idx")
+  @@index([tenantId, name], map: "members_tenant_name_idx")
   @@map("members")
 }
 
@@ -101,9 +101,9 @@ model GuardianMember {
   userId       String   @map("user_id") @db.VarChar(128)
   memberId     String   @map("member_id") @db.Uuid
   relationship String   @db.VarChar(100)
-  consentedAt  DateTime? @map("consented_at")
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  member       Member   @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict)
+  consentedAt  DateTime? @db.Timestamptz(6) @map("consented_at")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  member       Member   @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, userId, memberId])
   @@index([tenantId, userId])
@@ -119,7 +119,7 @@ model AuditLog {
   resourceId String?  @map("resource_id") @db.Uuid
   metadata   Json?
   createdAt  DateTime @default(now()) @map("created_at")
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([tenantId, createdAt])
   @@map("audit_logs")
@@ -136,12 +136,12 @@ model PromotionRun {
   idempotencyKey String?           @map("idempotency_key") @db.VarChar(128)
   requestHash    String?           @map("request_hash") @db.Char(64)
   result         Json?
-  createdAt      DateTime          @default(now()) @map("created_at")
-  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt      DateTime          @default(now()) @db.Timestamptz(6) @map("created_at")
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, id])
   @@unique([tenantId, fiscalYear])
   @@unique([tenantId, idempotencyKey])
-  @@index([tenantId, status])
+  @@index([tenantId, status], map: "promotion_runs_tenant_status_idx")
   @@map("promotion_runs")
 }

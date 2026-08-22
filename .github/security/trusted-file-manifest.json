@@ -1,6 +1,6 @@
 {
   "files": {
-    ".github/CODEOWNERS": "86cdd6726087aeb8b5f7add68392b423604a4aef7667385e25ba2d92953561bb",
+    ".github/CODEOWNERS": "860eeb50f5fe7147779e7295e7ca1e16ef6992015959c6282d5c3d880c824251",
     ".github/workflows/database-integrity.yml": "f16f7da766da1718807e90422c74211e551a3b5613d50a9179e2f84bf09a6223",
     ".github/workflows/pr-trust-gate.yml": "b3d93125021cb086b57442c768aac6cafa1c1f83043d5d30791bfc0cdfefb598",
     ".github/workflows/production-promote.yml": "0aff9bbdfee81bc4f7fdb7668913bd8e71f4a078350d1ee56c42487d92c7894f",
@@ -31,8 +31,9 @@
     "scripts/verify-schema-drift.test.ts": "1312b6b82137cd2687b566cdfef6f5943cca16ea5a92b9c7b0e4316d275e5853",
     "scripts/verify-schema-drift.ts": "a35762e23a8c2cab71ff448f6a5acb777863a7f6077e8b481326d385311d01d2",
     "scripts/verify-deploy-migration-history.test.ts": "9cba6ebeb902f6eea5348a16d8312458f2f29d71bed2fc58be502b2ac0796e3a",
-    "scripts/verify-trusted-pr.ts": "6d9fa57d37c56aed880c5310815bf276d0458e6ddc789dc3775dc22451debbfe",
+    "scripts/verify-trusted-pr.ts": "3b3fa662512e1b811d5072d586e1ff7a4c549cb0732b2b916041c88b962c2bb1",
     "scripts/verify-workflows.test.ts": "790324afc6bf4860c35790f7e7a08f0122bec02182671f98680ede33b30260d3",
-    "scripts/verify-workflows.ts": "d508d9ade1dff8db927c6c350fbe88ff40ae806cfb6789e25c0a53895245df8b"
+    "scripts/verify-workflows.ts": "d508d9ade1dff8db927c6c350fbe88ff40ae806cfb6789e25c0a53895245df8b",
+    "packages/db/prisma/schema.prisma": "acfa2b6e48487b684cc7329d3c55dcdb065e4d63e734861cbb3a2221a597bec0"
   }
 }
