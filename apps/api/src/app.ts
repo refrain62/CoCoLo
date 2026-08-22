@@ -42,6 +42,7 @@ export type MemberRepository = {
     input: {
       tenantId: string;
       actorUserId: string;
+      role: MemberRole;
     },
     member: MemberCreateInput,
   ) => Promise<MemberRecord>;
@@ -229,7 +230,11 @@ export function createApp(options: AppOptions = {}) {
         parsed.error.flatten(),
       );
     const member = await options.memberRepository.create(
-      { tenantId: auth.membership.tenantId, actorUserId: auth.userId },
+      {
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+      },
       parsed.data,
     );
     return c.json({ data: projectMember(member, auth.membership.role) }, 201);
