@@ -64,12 +64,18 @@ test('一覧・更新・年度引き継ぎ契約は範囲と必須項目を検�
     { contactPreference: 'phone' },
   );
   assert.deepEqual(
-    copyBoardContactYearSchema.parse({ fromFiscalYear: 2026, toFiscalYear: 2027 }),
+    copyBoardContactYearSchema.parse({
+      fromFiscalYear: 2026,
+      toFiscalYear: 2027,
+    }),
     { fromFiscalYear: 2026, toFiscalYear: 2027 },
   );
   assert.throws(() => boardContactPatchSchema.parse({}));
   assert.throws(() =>
-    copyBoardContactYearSchema.parse({ fromFiscalYear: 2026, toFiscalYear: 2026 }),
+    copyBoardContactYearSchema.parse({
+      fromFiscalYear: 2026,
+      toFiscalYear: 2026,
+    }),
   );
 });
 

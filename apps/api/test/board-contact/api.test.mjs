@@ -23,6 +23,10 @@ const memberships = {
   'owner-a': { tenantId: TENANT_A, role: 'owner' },
   'admin-a': { tenantId: TENANT_A, role: 'admin' },
   'staff-a': { tenantId: TENANT_A, role: 'staff' },
+  'owner-b': {
+    tenantId: '00000000-0000-7000-8000-000000000002',
+    role: 'owner',
+  },
 };
 
 function createTestApp() {
@@ -100,6 +104,42 @@ test('未認証の役員一覧は401で拒否する', async () => {
   assert.equal((await json(response)).error.code, 'UNAUTHENTICATED');
 });
 
+test('期限切れtokenと不正なqueryは処理前に拒否する', async () => {
+  const { app } = createTestApp();
+  const expiredApp = createBoardContactApp({
+    verifyToken: async () => ({
+      userId: 'owner-a',
+      issuer: 'https://example.supabase.co/auth/v1',
+      audience: 'authenticated',
+      expiresAt: Math.floor(Date.now() / 1000) - 1,
+    }),
+    membershipRepository: {
+      findActiveByUserId: async () => memberships['owner-a'],
+    },
+    boardContactRepository: {
+      list: async () => [],
+      create: async () => contacts[0],
+      update: async () => contacts[0],
+      remove: async () => contacts[0],
+      copyYear: async () => [],
+    },
+  });
+  const expired = await expiredApp.request('/api/v1/board-members', {
+    headers: { authorization: 'Bearer expired' },
+  });
+  assert.equal(expired.status, 401);
+  assert.equal((await json(expired)).error.code, 'UNAUTHENTICATED');
+
+  const invalidQuery = await app.request(
+    '/api/v1/board-members?tenantId=other',
+    {
+      headers: { authorization: 'Bearer owner-a' },
+    },
+  );
+  assert.equal(invalidQuery.status, 400);
+  assert.equal((await json(invalidQuery)).error.code, 'VALIDATION_ERROR');
+});
+
 test('ownerの一覧は設定に応じた連絡先だけを返す', async () => {
   const { app } = createTestApp();
   const response = await app.request('/api/v1/board-members?fiscalYear=2026', {
@@ -132,7 +172,11 @@ test('staffの登録は403、tenantId混入は400で拒否する', async () => {
       authorization: 'Bearer staff-a',
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ fiscalYear: 2026, roleName: '会長', roleType: 'admin' }),
+    body: JSON.stringify({
+      fiscalYear: 2026,
+      roleName: '会長',
+      roleType: 'admin',
+    }),
   });
   assert.equal(staffResponse.status, 403);
 
@@ -150,6 +194,30 @@ test('staffの登録は403、tenantId混入は400で拒否する', async () => {
     }),
   });
   assert.equal(tenantResponse.status, 400);
+});
+
+test('別テナントのownerはAテナントの役員を取得できず、更新もstaffには許可しない', async () => {
+  const { app, calls } = createTestApp();
+  const otherTenantResponse = await app.request(
+    '/api/v1/board-members?fiscalYear=2026',
+    { headers: { authorization: 'Bearer owner-b' } },
+  );
+  assert.equal(otherTenantResponse.status, 200);
+  assert.deepEqual((await json(otherTenantResponse)).data, []);
+  assert.equal(calls.at(-1).input.tenantId, memberships['owner-b'].tenantId);
+
+  const staffUpdate = await app.request(
+    '/api/v1/board-members/00000000-0000-7000-8000-000000000301',
+    {
+      method: 'PATCH',
+      headers: {
+        authorization: 'Bearer staff-a',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ roleName: '会計' }),
+    },
+  );
+  assert.equal(staffUpdate.status, 403);
 });
 
 test('ownerの登録と年度引き継ぎはtenantを認証所属から決め、個人情報をコピーしない', async () => {
@@ -172,17 +240,14 @@ test('ownerの登録と年度引き継ぎはtenantを認証所属から決め、
   assert.equal(calls.at(-1).input.tenantId, TENANT_A);
   assert.equal((await json(createResponse)).data.phone, '090-1111-1111');
 
-  const copyResponse = await app.request(
-    '/api/v1/board-members/copy-year',
-    {
-      method: 'POST',
-      headers: {
-        authorization: 'Bearer owner-a',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ fromFiscalYear: 2026, toFiscalYear: 2027 }),
+  const copyResponse = await app.request('/api/v1/board-members/copy-year', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer owner-a',
+      'content-type': 'application/json',
     },
-  );
+    body: JSON.stringify({ fromFiscalYear: 2026, toFiscalYear: 2027 }),
+  });
   const copyPayload = await json(copyResponse);
   assert.equal(copyResponse.status, 201);
   assert.equal(copyPayload.data[0].phone, undefined);

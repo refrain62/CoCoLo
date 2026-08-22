@@ -1,11 +1,11 @@
 import { extractBearerToken, type TokenVerifier } from '@cocolo/auth';
-import { Hono, type Context, type MiddlewareHandler } from 'hono';
+import { type Context, Hono, type MiddlewareHandler } from 'hono';
 import {
   type BoardContactCreateInput,
-  BoardContactValidationError,
   type BoardContactListQuery,
   type BoardContactPatchInput,
   type BoardContactRoleType,
+  BoardContactValidationError,
   type ContactPreference,
   type CopyBoardContactYearInput,
   parseBoardContactCreateInput,
@@ -195,8 +195,12 @@ export function createBoardContactApp(options: BoardContactAppOptions = {}) {
         error.message,
         error.details,
       );
-    if (error instanceof Error && 'status' in error && error.status === 409)
-      return errorResponse(c, 409, 'BOARD_CONTACT_CONFLICT', error.message);
+    if (error instanceof Error && 'status' in error) {
+      if (error.status === 403)
+        return errorResponse(c, 403, 'FORBIDDEN', error.message);
+      if (error.status === 409)
+        return errorResponse(c, 409, 'BOARD_CONTACT_CONFLICT', error.message);
+    }
     return errorResponse(
       c,
       500,
@@ -205,7 +209,10 @@ export function createBoardContactApp(options: BoardContactAppOptions = {}) {
     );
   });
 
-  const authenticate: MiddlewareHandler<BoardContactApiEnv> = async (c, next) => {
+  const authenticate: MiddlewareHandler<BoardContactApiEnv> = async (
+    c,
+    next,
+  ) => {
     const token = extractBearerToken(c.req.header('authorization') ?? null);
     if (!options.verifyToken || !options.membershipRepository)
       return errorResponse(
@@ -229,7 +236,12 @@ export function createBoardContactApp(options: BoardContactAppOptions = {}) {
         claims.userId,
       );
       if (!membership)
-        return errorResponse(c, 403, 'FORBIDDEN', '利用可能な所属がありません。');
+        return errorResponse(
+          c,
+          403,
+          'FORBIDDEN',
+          '利用可能な所属がありません。',
+        );
       c.set('auth', { userId: claims.userId, membership });
       await next();
     } catch {
@@ -267,7 +279,12 @@ export function createBoardContactApp(options: BoardContactAppOptions = {}) {
     if (!options.boardContactRepository) return repositoryUnavailable(c);
     const auth = c.get('auth');
     if (!isManager(auth.membership.role))
-      return errorResponse(c, 403, 'FORBIDDEN', '役員を管理する権限がありません。');
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        '役員を管理する権限がありません。',
+      );
     const input = parseBoardContactCreateInput(await readJson(c));
     const record = await options.boardContactRepository.create({
       tenantId: auth.membership.tenantId,
@@ -285,7 +302,12 @@ export function createBoardContactApp(options: BoardContactAppOptions = {}) {
     if (!options.boardContactRepository) return repositoryUnavailable(c);
     const auth = c.get('auth');
     if (!isManager(auth.membership.role))
-      return errorResponse(c, 403, 'FORBIDDEN', '年度引き継ぎを実行する権限がありません。');
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        '年度引き継ぎを実行する権限がありません。',
+      );
     const input = parseCopyBoardContactYearInput(await readJson(c));
     const records = await options.boardContactRepository.copyYear({
       tenantId: auth.membership.tenantId,
@@ -310,7 +332,12 @@ export function createBoardContactApp(options: BoardContactAppOptions = {}) {
     if (!options.boardContactRepository) return repositoryUnavailable(c);
     const auth = c.get('auth');
     if (!isManager(auth.membership.role))
-      return errorResponse(c, 403, 'FORBIDDEN', '役員を管理する権限がありません。');
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        '役員を管理する権限がありません。',
+      );
     const boardContactId = parseBoardContactId(c.req.param('boardMemberId'));
     const patch = parseBoardContactPatchInput(await readJson(c));
     const record = await options.boardContactRepository.update({
@@ -321,7 +348,12 @@ export function createBoardContactApp(options: BoardContactAppOptions = {}) {
       patch,
     });
     if (!record)
-      return errorResponse(c, 404, 'BOARD_CONTACT_NOT_FOUND', '役員が見つかりません。');
+      return errorResponse(
+        c,
+        404,
+        'BOARD_CONTACT_NOT_FOUND',
+        '役員が見つかりません。',
+      );
     return c.json({ data: projectBoardContact(record, auth.membership.role) });
   });
 
@@ -329,7 +361,12 @@ export function createBoardContactApp(options: BoardContactAppOptions = {}) {
     if (!options.boardContactRepository) return repositoryUnavailable(c);
     const auth = c.get('auth');
     if (!isManager(auth.membership.role))
-      return errorResponse(c, 403, 'FORBIDDEN', '役員を管理する権限がありません。');
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        '役員を管理する権限がありません。',
+      );
     const record = await options.boardContactRepository.remove({
       tenantId: auth.membership.tenantId,
       actorUserId: auth.userId,
@@ -337,11 +374,20 @@ export function createBoardContactApp(options: BoardContactAppOptions = {}) {
       boardContactId: parseBoardContactId(c.req.param('boardMemberId')),
     });
     if (!record)
-      return errorResponse(c, 404, 'BOARD_CONTACT_NOT_FOUND', '役員が見つかりません。');
+      return errorResponse(
+        c,
+        404,
+        'BOARD_CONTACT_NOT_FOUND',
+        '役員が見つかりません。',
+      );
     return c.body(null, 204);
   });
 
   return app;
 }
 
-export type { BoardContactListQuery, BoardContactPatchInput, CopyBoardContactYearInput };
+export type {
+  BoardContactListQuery,
+  BoardContactPatchInput,
+  CopyBoardContactYearInput,
+};

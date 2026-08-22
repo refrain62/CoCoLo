@@ -46,7 +46,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function rejectUnknownKeys(value: Record<string, unknown>, allowed: Set<string>) {
+function rejectUnknownKeys(
+  value: Record<string, unknown>,
+  allowed: Set<string>,
+) {
   const unknownKeys = Object.keys(value).filter((key) => !allowed.has(key));
   if (unknownKeys.length > 0)
     throw new BoardContactValidationError('入力値が不正です。', {
@@ -68,7 +71,11 @@ function readFiscalYear(value: unknown, fieldName: string): number {
   return year;
 }
 
-function readRequiredString(value: unknown, fieldName: string, maxLength: number) {
+function readRequiredString(
+  value: unknown,
+  fieldName: string,
+  maxLength: number,
+) {
   if (typeof value !== 'string')
     throw new BoardContactValidationError('入力値が不正です。', {
       [fieldName]: '文字列を指定してください。',
@@ -135,7 +142,11 @@ export function parseBoardContactCreateInput(
       'assigneeUserId',
       128,
     ),
-    lineContact: readOptionalNullableString(input.lineContact, 'lineContact', 200),
+    lineContact: readOptionalNullableString(
+      input.lineContact,
+      'lineContact',
+      200,
+    ),
     phone: readOptionalNullableString(input.phone, 'phone', 32, phonePattern),
     contactPreference:
       input.contactPreference === undefined
@@ -151,7 +162,9 @@ export function parseBoardContactPatchInput(
     throw new BoardContactValidationError('JSON入力が不正です。');
   rejectUnknownKeys(input, allowedPatchKeys);
   if (Object.keys(input).length === 0)
-    throw new BoardContactValidationError('更新項目を1つ以上指定してください。');
+    throw new BoardContactValidationError(
+      '更新項目を1つ以上指定してください。',
+    );
 
   const output: BoardContactPatchInput = {};
   if ('fiscalYear' in input)
@@ -166,7 +179,11 @@ export function parseBoardContactPatchInput(
       128,
     );
   if ('lineContact' in input)
-    output.lineContact = readNullableString(input.lineContact, 'lineContact', 200);
+    output.lineContact = readNullableString(
+      input.lineContact,
+      'lineContact',
+      200,
+    );
   if ('phone' in input)
     output.phone = readNullableString(input.phone, 'phone', 32, phonePattern);
   if ('contactPreference' in input)
