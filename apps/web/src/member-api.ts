@@ -82,11 +82,7 @@ export function createMemberApi({
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
     if (!accessToken)
-      throw new MemberApiError(
-        401,
-        'UNAUTHENTICATED',
-        'ログインが必要です。',
-      );
+      throw new MemberApiError(401, 'UNAUTHENTICATED', 'ログインが必要です。');
 
     const response = await fetch(`${baseUrl}/api/v1/members${path}`, {
       ...init,
