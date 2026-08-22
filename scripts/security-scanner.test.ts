@@ -6,8 +6,8 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   readScannerConfig,
-  scannerRuleAllowlist,
   scannerImageAllowlist,
+  scannerRuleAllowlist,
   validateScannerConfig,
 } from './security-scanner-config.ts';
 import { summarizeScannerResult } from './security-scanner-summary.ts';

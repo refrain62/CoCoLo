@@ -5,9 +5,9 @@ import { fileURLToPath } from 'node:url';
 
 import {
   readScannerConfig,
-  scannerRuleAllowlist,
   type ScannerName,
   scannerNames,
+  scannerRuleAllowlist,
 } from './security-scanner-config.ts';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
