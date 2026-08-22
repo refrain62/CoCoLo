@@ -41,7 +41,12 @@ export const orderEntryCreateSchema = z
           .object({
             productId: uuid,
             quantity: z.number().int().min(1).max(10_000),
-            selectedOptions: z.record(z.string().trim().min(1).max(100), z.string().trim().min(1).max(100)).default({}),
+            selectedOptions: z
+              .record(
+                z.string().trim().min(1).max(100),
+                z.string().trim().min(1).max(100),
+              )
+              .default({}),
             backNumber: z.string().trim().max(20).nullable().optional(),
             backName: z.string().trim().max(40).nullable().optional(),
           })

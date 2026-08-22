@@ -68,7 +68,9 @@ async function readJson(c: Context<OrdersPaymentsApiEnv>) {
   }
 }
 
-function projectCampaign(campaign: Awaited<ReturnType<OrdersRepository['getCampaign']>>) {
+function projectCampaign(
+  campaign: Awaited<ReturnType<OrdersRepository['getCampaign']>>,
+) {
   return {
     id: campaign.id,
     title: campaign.title,
@@ -87,7 +89,9 @@ function projectCampaign(campaign: Awaited<ReturnType<OrdersRepository['getCampa
   };
 }
 
-function projectEntry(entry: Awaited<ReturnType<OrdersRepository['createEntry']>>) {
+function projectEntry(
+  entry: Awaited<ReturnType<OrdersRepository['createEntry']>>,
+) {
   return {
     id: entry.id,
     campaignId: entry.campaignId,
@@ -107,13 +111,14 @@ function repositoryError(
   c: Context<OrdersPaymentsApiEnv>,
   error: OrdersRepositoryError,
 ) {
-  const status = error.code === 'FORBIDDEN'
-    ? 403
-    : error.code === 'NOT_FOUND'
-      ? 404
-      : error.code === 'CONFLICT'
-        ? 409
-        : 400;
+  const status =
+    error.code === 'FORBIDDEN'
+      ? 403
+      : error.code === 'NOT_FOUND'
+        ? 404
+        : error.code === 'CONFLICT'
+          ? 409
+          : 400;
   return errorResponse(c, status, error.code, error.message);
 }
 
@@ -131,26 +136,59 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   app.onError((error, c) => {
     if (error instanceof InputError)
       return errorResponse(c, 400, 'VALIDATION_ERROR', error.message);
-    if (error instanceof OrdersRepositoryError) return repositoryError(c, error);
+    if (error instanceof OrdersRepositoryError)
+      return repositoryError(c, error);
     if (error instanceof HTTPException) return error.getResponse();
-    return errorResponse(c, 500, 'INTERNAL_SERVER_ERROR', '予期しないエラーが発生しました。');
+    return errorResponse(
+      c,
+      500,
+      'INTERNAL_SERVER_ERROR',
+      '予期しないエラーが発生しました。',
+    );
   });
 
-  const authenticate: MiddlewareHandler<OrdersPaymentsApiEnv> = async (c, next) => {
+  const authenticate: MiddlewareHandler<OrdersPaymentsApiEnv> = async (
+    c,
+    next,
+  ) => {
     const token = extractBearerToken(c.req.header('authorization') ?? null);
     if (!options.verifyToken || !options.membershipRepository)
-      return errorResponse(c, 503, 'AUTH_NOT_CONFIGURED', '認証・所属解決が設定されていません。');
-    if (!token) return errorResponse(c, 401, 'UNAUTHENTICATED', '認証が必要です。');
+      return errorResponse(
+        c,
+        503,
+        'AUTH_NOT_CONFIGURED',
+        '認証・所属解決が設定されていません。',
+      );
+    if (!token)
+      return errorResponse(c, 401, 'UNAUTHENTICATED', '認証が必要です。');
     try {
       const claims = await options.verifyToken(token);
       if (claims.expiresAt <= Math.floor(Date.now() / 1000))
-        return errorResponse(c, 401, 'UNAUTHENTICATED', '認証の有効期限が切れています。');
-      const membership = await options.membershipRepository.findActiveByUserId(claims.userId);
-      if (!membership) return errorResponse(c, 403, 'FORBIDDEN', '利用可能な所属がありません。');
+        return errorResponse(
+          c,
+          401,
+          'UNAUTHENTICATED',
+          '認証の有効期限が切れています。',
+        );
+      const membership = await options.membershipRepository.findActiveByUserId(
+        claims.userId,
+      );
+      if (!membership)
+        return errorResponse(
+          c,
+          403,
+          'FORBIDDEN',
+          '利用可能な所属がありません。',
+        );
       c.set('auth', { userId: claims.userId, membership });
       await next();
     } catch {
-      return errorResponse(c, 401, 'UNAUTHENTICATED', '認証情報を確認できません。');
+      return errorResponse(
+        c,
+        401,
+        'UNAUTHENTICATED',
+        '認証情報を確認できません。',
+      );
     }
   };
 
@@ -170,7 +208,8 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
       });
       return c.json({ data: campaigns.map(projectCampaign) });
     } catch (error) {
-      if (error instanceof OrdersRepositoryError) return repositoryError(c, error);
+      if (error instanceof OrdersRepositoryError)
+        return repositoryError(c, error);
       throw error;
     }
   });
@@ -181,12 +220,18 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
     const auth = c.get('auth');
     try {
       const campaign = await options.ordersRepository.createCampaign(
-        { tenantId: auth.membership.tenantId, actorUserId: auth.userId, role: auth.membership.role, idempotencyKey: idempotencyKey(c) },
+        {
+          tenantId: auth.membership.tenantId,
+          actorUserId: auth.userId,
+          role: auth.membership.role,
+          idempotencyKey: idempotencyKey(c),
+        },
         parsed.data,
       );
       return c.json({ data: projectCampaign(campaign) }, 201);
     } catch (error) {
-      if (error instanceof OrdersRepositoryError) return repositoryError(c, error);
+      if (error instanceof OrdersRepositoryError)
+        return repositoryError(c, error);
       throw error;
     }
   });
@@ -194,10 +239,16 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   app.get('/api/v1/orders/:orderId', async (c) => {
     const auth = c.get('auth');
     try {
-      const campaign = await options.ordersRepository.getCampaign({ tenantId: auth.membership.tenantId, actorUserId: auth.userId, role: auth.membership.role, orderId: c.req.param('orderId') });
+      const campaign = await options.ordersRepository.getCampaign({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        orderId: c.req.param('orderId'),
+      });
       return c.json({ data: projectCampaign(campaign) });
     } catch (error) {
-      if (error instanceof OrdersRepositoryError) return repositoryError(c, error);
+      if (error instanceof OrdersRepositoryError)
+        return repositoryError(c, error);
       throw error;
     }
   });
@@ -207,23 +258,42 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
     if (!parsed.success) throw new InputError('商品の入力値が不正です。');
     const auth = c.get('auth');
     try {
-      const product = await options.ordersRepository.addProduct({ tenantId: auth.membership.tenantId, actorUserId: auth.userId, role: auth.membership.role, orderId: c.req.param('orderId'), idempotencyKey: idempotencyKey(c) }, parsed.data);
+      const product = await options.ordersRepository.addProduct(
+        {
+          tenantId: auth.membership.tenantId,
+          actorUserId: auth.userId,
+          role: auth.membership.role,
+          orderId: c.req.param('orderId'),
+          idempotencyKey: idempotencyKey(c),
+        },
+        parsed.data,
+      );
       return c.json({ data: product }, 201);
     } catch (error) {
-      if (error instanceof OrdersRepositoryError) return repositoryError(c, error);
+      if (error instanceof OrdersRepositoryError)
+        return repositoryError(c, error);
       throw error;
     }
   });
 
   app.patch('/api/v1/orders/:orderId/status', async (c) => {
     const parsed = orderStatusUpdateSchema.safeParse(await readJson(c));
-    if (!parsed.success) throw new InputError('募集案件状態の入力値が不正です。');
+    if (!parsed.success)
+      throw new InputError('募集案件状態の入力値が不正です。');
     const auth = c.get('auth');
     try {
-      const campaign = await options.ordersRepository.updateCampaignStatus({ tenantId: auth.membership.tenantId, actorUserId: auth.userId, role: auth.membership.role, orderId: c.req.param('orderId'), status: parsed.data.status, idempotencyKey: idempotencyKey(c) });
+      const campaign = await options.ordersRepository.updateCampaignStatus({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        orderId: c.req.param('orderId'),
+        status: parsed.data.status,
+        idempotencyKey: idempotencyKey(c),
+      });
       return c.json({ data: projectCampaign(campaign) });
     } catch (error) {
-      if (error instanceof OrdersRepositoryError) return repositoryError(c, error);
+      if (error instanceof OrdersRepositoryError)
+        return repositoryError(c, error);
       throw error;
     }
   });
@@ -233,10 +303,17 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
     if (!parsed.success) throw new InputError('支払状態の絞り込みが不正です。');
     const auth = c.get('auth');
     try {
-      const entries = await options.ordersRepository.listEntries({ tenantId: auth.membership.tenantId, actorUserId: auth.userId, role: auth.membership.role, orderId: c.req.param('orderId'), paymentStatus: parsed.data.paymentStatus });
+      const entries = await options.ordersRepository.listEntries({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        orderId: c.req.param('orderId'),
+        paymentStatus: parsed.data.paymentStatus,
+      });
       return c.json({ data: entries.map(projectEntry) });
     } catch (error) {
-      if (error instanceof OrdersRepositoryError) return repositoryError(c, error);
+      if (error instanceof OrdersRepositoryError)
+        return repositoryError(c, error);
       throw error;
     }
   });
@@ -246,10 +323,18 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
     if (!parsed.success) throw new InputError('注文の入力値が不正です。');
     const auth = c.get('auth');
     try {
-      const entry = await options.ordersRepository.createEntry({ tenantId: auth.membership.tenantId, actorUserId: auth.userId, role: auth.membership.role, orderId: c.req.param('orderId'), idempotencyKey: idempotencyKey(c), entry: parsed.data });
+      const entry = await options.ordersRepository.createEntry({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        orderId: c.req.param('orderId'),
+        idempotencyKey: idempotencyKey(c),
+        entry: parsed.data,
+      });
       return c.json({ data: projectEntry(entry) }, 201);
     } catch (error) {
-      if (error instanceof OrdersRepositoryError) return repositoryError(c, error);
+      if (error instanceof OrdersRepositoryError)
+        return repositoryError(c, error);
       throw error;
     }
   });
@@ -259,10 +344,19 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
     if (!parsed.success) throw new InputError('支払状態の入力値が不正です。');
     const auth = c.get('auth');
     try {
-      const entry = await options.ordersRepository.updatePayment({ tenantId: auth.membership.tenantId, actorUserId: auth.userId, role: auth.membership.role, orderId: c.req.param('orderId'), entryId: c.req.param('entryId'), status: parsed.data.status, idempotencyKey: idempotencyKey(c) });
+      const entry = await options.ordersRepository.updatePayment({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        orderId: c.req.param('orderId'),
+        entryId: c.req.param('entryId'),
+        status: parsed.data.status,
+        idempotencyKey: idempotencyKey(c),
+      });
       return c.json({ data: projectEntry(entry) });
     } catch (error) {
-      if (error instanceof OrdersRepositoryError) return repositoryError(c, error);
+      if (error instanceof OrdersRepositoryError)
+        return repositoryError(c, error);
       throw error;
     }
   });
@@ -270,10 +364,16 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   app.get('/api/v1/orders/:orderId/summary', async (c) => {
     const auth = c.get('auth');
     try {
-      const summary = await options.ordersRepository.summarize({ tenantId: auth.membership.tenantId, actorUserId: auth.userId, role: auth.membership.role, orderId: c.req.param('orderId') });
+      const summary = await options.ordersRepository.summarize({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        orderId: c.req.param('orderId'),
+      });
       return c.json({ data: summary });
     } catch (error) {
-      if (error instanceof OrdersRepositoryError) return repositoryError(c, error);
+      if (error instanceof OrdersRepositoryError)
+        return repositoryError(c, error);
       throw error;
     }
   });
@@ -281,10 +381,17 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   app.get('/api/v1/orders/:orderId/unpaid', async (c) => {
     const auth = c.get('auth');
     try {
-      const entries = await options.ordersRepository.listEntries({ tenantId: auth.membership.tenantId, actorUserId: auth.userId, role: auth.membership.role, orderId: c.req.param('orderId'), paymentStatus: 'unpaid' });
+      const entries = await options.ordersRepository.listEntries({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        orderId: c.req.param('orderId'),
+        paymentStatus: 'unpaid',
+      });
       return c.json({ data: entries.map(projectEntry) });
     } catch (error) {
-      if (error instanceof OrdersRepositoryError) return repositoryError(c, error);
+      if (error instanceof OrdersRepositoryError)
+        return repositoryError(c, error);
       throw error;
     }
   });
@@ -292,12 +399,18 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   app.get('/api/v1/orders/:orderId/export.csv', async (c) => {
     const auth = c.get('auth');
     try {
-      const csv = await options.ordersRepository.exportCsv({ tenantId: auth.membership.tenantId, actorUserId: auth.userId, role: auth.membership.role, orderId: c.req.param('orderId') });
+      const csv = await options.ordersRepository.exportCsv({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        orderId: c.req.param('orderId'),
+      });
       c.header('Content-Type', 'text/csv; charset=utf-8');
       c.header('Content-Disposition', 'attachment; filename="orders.csv"');
       return c.body(csv);
     } catch (error) {
-      if (error instanceof OrdersRepositoryError) return repositoryError(c, error);
+      if (error instanceof OrdersRepositoryError)
+        return repositoryError(c, error);
       throw error;
     }
   });
