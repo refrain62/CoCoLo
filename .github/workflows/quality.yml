@@ -3,7 +3,6 @@ on:
   pull_request:
   push:
     branches: [develop, main]
-  workflow_call:
 permissions:
   contents: read
 concurrency:
@@ -61,28 +60,21 @@ jobs:
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
       - name: 型検査とビルド
         run: pnpm typecheck && pnpm build
-  security:
-    name: セキュリティ検査
-    uses: ./.github/workflows/security-scanners.yml
-    permissions:
-      contents: read
   gate:
     name: quality aggregate gate
     if: ${{ always() }}
     needs:
       - quality
-      - security
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read
     env:
       QUALITY_RESULT: ${{ needs.quality.result }}
-      SECURITY_RESULT: ${{ needs.security.result }}
     steps:
-      - name: qualityとsecurityをfail-closedで集約
+      - name: qualityをfail-closedで集約
         run: |
-          if [ "$QUALITY_RESULT" != "success" ] || [ "$SECURITY_RESULT" != "success" ]; then
+          if [ "$QUALITY_RESULT" != "success" ]; then
             echo "quality aggregate gate: FAIL"
             exit 1
           fi

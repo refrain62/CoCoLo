@@ -24,6 +24,10 @@ const productionWorkflow = await readFile(
   path.join(workflowDirectory, 'production-promote.yml'),
   'utf8',
 );
+const securityWorkflow = await readFile(
+  path.join(workflowDirectory, 'security-scanners.yml'),
+  'utf8',
+);
 
 function githubExpression(body: string): string {
   return ['$', '{', '{ ', body, ' }}'].join('');
@@ -36,6 +40,9 @@ test('全Workflowの許可構成を受け入れる', () => {
   );
   assert.doesNotThrow(() =>
     validateWorkflow('production-promote.yml', productionWorkflow),
+  );
+  assert.doesNotThrow(() =>
+    validateWorkflow('security-scanners.yml', securityWorkflow),
   );
 });
 
@@ -206,19 +213,30 @@ test('secrets: inheritを拒否する', () => {
   assert.throws(() =>
     validateQualityWorkflow(
       qualityWorkflow.replace(
-        '  workflow_call:',
-        '  workflow_call:\n    secrets: inherit',
+        '  pull_request:',
+        '  workflow_call:\n    secrets: inherit\n  pull_request:',
       ),
     ),
   );
 });
 
 test('security scannerのrun block、権限、Action改変を拒否する', () => {
-  const securityWorkflow = readFile(
-    path.join(workflowDirectory, 'security-scanners.yml'),
-    'utf8',
-  );
-  return securityWorkflow.then((content) => {
+  return Promise.resolve(securityWorkflow).then((content) => {
+    assert.throws(() =>
+      validateWorkflow(
+        'security-scanners.yml',
+        content.replace('  pull_request_target:', '  pull_request:'),
+      ),
+    );
+    assert.throws(() =>
+      validateWorkflow(
+        'security-scanners.yml',
+        content.replace(
+          '      - trust\n      - config\n      - scanners',
+          '      - config\n      - scanners',
+        ),
+      ),
+    );
     assert.throws(() =>
       validateWorkflow(
         'security-scanners.yml',

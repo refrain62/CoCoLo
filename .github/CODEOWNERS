@@ -7,6 +7,8 @@
 /scripts/security-scanner-summary.ts @refrain62
 /scripts/security-scanner.test.ts @refrain62
 /scripts/run-security-scanners.ts @refrain62
+/scripts/prepare-security-target.ts @refrain62
+/scripts/security-scan-root.ts @refrain62
 /scripts/verify-security-trust.ts @refrain62
 /.github/security/* @refrain62
 /.github/CODEOWNERS @refrain62

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { securityScanRoot } from './security-scan-root.ts';
 import {
   readScannerConfig,
   scannerImageAllowlist,
@@ -16,7 +17,9 @@ import {
   trustedScannerFiles,
 } from './verify-security-trust.ts';
 
-const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const root = securityScanRoot(
+  path.dirname(path.dirname(fileURLToPath(import.meta.url))),
+);
 
 test('scanner imageは固定allowlistと対応するdigestだけを受理する', async () => {
   const config = await readScannerConfig(root);
@@ -161,8 +164,18 @@ test('固定malicious fixtureのscanner信頼対象改変を拒否する', async
       ),
       'utf8',
     ),
-  ) as { tamperedFile: string; changedFiles: string[] };
+  ) as {
+    tamperedFile: string;
+    changedFiles: string[];
+    disableAttempts: string[];
+  };
   assert.deepEqual(fixture.changedFiles, [...trustedScannerFiles]);
+  assert.ok(
+    fixture.disableAttempts.includes('.github/workflows/security-scanners.yml'),
+  );
+  assert.ok(
+    fixture.disableAttempts.includes('scripts/verify-security-trust.ts'),
+  );
   const baseHashes = Object.fromEntries(
     trustedScannerFiles.map((file) => [file, 'a'.repeat(64)]),
   );
@@ -177,6 +190,23 @@ test('固定malicious fixtureのscanner信頼対象改変を拒否する', async
       ),
     /改変されています/,
   );
+  for (const file of fixture.disableAttempts) {
+    const maliciousHeadHashes = {
+      ...baseHashes,
+      [file]: 'b'.repeat(64),
+    };
+    assert.throws(
+      () =>
+        assertTrustedFileHashes(
+          'a'.repeat(40),
+          'b'.repeat(40),
+          baseHashes,
+          maliciousHeadHashes,
+        ),
+      /改変されています/,
+      `trust無効化の改変を検出できません: ${file}`,
+    );
+  }
   const missingHashes = { ...baseHashes };
   delete missingHashes[fixture.tamperedFile];
   assert.throws(

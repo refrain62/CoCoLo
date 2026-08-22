@@ -1,6 +1,12 @@
 {
-  "description": "固定malicious fixture: scannerの設定・parser・validator・CODEOWNERSを同時改変するPR",
+  "description": "固定malicious fixture: trust jobとsecurity gateを無効化し、scannerの設定・parser・validator・CODEOWNERSを同時改変するPR",
   "tamperedFile": "scripts/security-scanner-summary.ts",
+  "disableAttempts": [
+    "scripts/prepare-security-target.ts",
+    "scripts/verify-security-trust.ts",
+    ".github/workflows/security-scanners.yml",
+    ".github/workflows/quality.yml"
+  ],
   "changedFiles": [
     ".github/CODEOWNERS",
     ".github/security/scanner-exceptions.json",
@@ -15,6 +21,8 @@
     "package.json",
     "pnpm-lock.yaml",
     "scripts/run-security-scanners.ts",
+    "scripts/prepare-security-target.ts",
+    "scripts/security-scan-root.ts",
     "scripts/security-scanner-config.ts",
     "scripts/security-scanner-summary.ts",
     "scripts/security-scanner.test.ts",
