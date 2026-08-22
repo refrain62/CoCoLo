@@ -114,6 +114,11 @@ const centralFeaturePaths = {
     }),
   },
   '/events/{eventId}': {
+    get: featureOperation({
+      operationId: 'getEvent',
+      summary: '予定詳細を取得',
+      parameters: [idParameter('eventId')],
+    }),
     patch: featureOperation({
       operationId: 'updateEvent',
       summary: '予定を編集',

@@ -716,7 +716,7 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * `GET/POST/PATCH/DELETE /api/v1/board-members`、`POST /api/v1/board-members/copy-year`
 * `GET/POST/PATCH/DELETE /api/v1/orders`、`/orders/:id/items`、`/orders/:id/user-items`
 * `PATCH /api/v1/user-order-items/:id/payment`、`GET /api/v1/orders/:id/summary.csv`
-* `GET/POST/PATCH/DELETE /api/v1/events`、`PUT /api/v1/events/:id/attendance`
+* `GET/POST/PATCH /api/v1/events`、`GET /api/v1/events/:id`、`PUT /api/v1/events/:id/attendance`
 * `POST /api/v1/uploads`（Phase 4、JSON でアップロードセッションを作成し、短期署名 URL と Attachment の資源 ID を返却。ファイル本体は受け取らない）
 * `PUT <signed upload URL>`（Phase 4、Web から非公開 R2 へ直接 PUT。署名のオブジェクトキー・MIME・サイズ制限に一致しない要求を拒否）
 * `POST /api/v1/uploads/:id/complete`（Phase 4、所有者・期限・未使用・オブジェクトキー・実体サイズ・マジックバイト・SHA-256 を検証し、成功時だけ `available` へ遷移）
