@@ -4,6 +4,8 @@
 /.github/security/* @refrain62
 /package.json @refrain62
 /pnpm-lock.yaml @refrain62
+/biome.json @refrain62
+/tsconfig.scripts.json @refrain62
 /packages/db/prisma/migrations* @refrain62
 /packages/db/prisma/schema.prisma @refrain62
 /scripts/* @refrain62

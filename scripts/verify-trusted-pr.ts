@@ -23,6 +23,8 @@ export function isProtectedPath(filename: string): boolean {
     filename.startsWith('.github/workflows/') ||
     filename === 'package.json' ||
     filename === 'pnpm-lock.yaml' ||
+    filename === 'biome.json' ||
+    filename === 'tsconfig.scripts.json' ||
     filename === 'packages/db/prisma/schema.prisma' ||
     filename.startsWith('packages/db/prisma/migrations/') ||
     filename === 'packages/db/prisma/migrations.sha256' ||
