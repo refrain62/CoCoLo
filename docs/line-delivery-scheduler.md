@@ -20,11 +20,24 @@ pnpm line:schedule
 
 1. `APP_ENV`、workerのmodule、worker専用DB接続先、LINE送信設定、件数、再実行設定を検証する。
 2. outboxを短時間transaction内で一件claimし、`attempt_token`とlease期限を保存する。
-3. transactionを終了してから通知単位のprovider冪等キー付きで外部LINE APIへ送信し、同じtokenを条件に送信済みまたは再試行へ確定する。
+3. transactionを終了してから通知行に固定したUUIDを`X-Line-Retry-Key`へ設定して外部LINE Messaging APIへ送信し、同じtokenを条件に送信済みまたは再試行へ確定する。
 4. workerの結果を秘密情報・通知本文を含まないJSONで標準出力へ出し、終了コードを返す。
 
 claimは`FOR UPDATE SKIP LOCKED`で一件だけ取得し、外部送信中にDB transactionを保持しません。
 lease切れのclaimは再取得できますが、古いworkerの状態更新は`attempt_token`不一致で`stale`として無視します。
+
+## 業務APIからの登録
+
+認証済みのowner/adminは`POST /api/v1/notifications/line`から通知を登録できます。
+
+リクエストには`Idempotency-Key`ヘッダーと、`sourceId`、`destination`、`title`、`body`、`deepLink`を含めます。
+
+APIはJWTから解決したtenant・user・roleだけをproducerへ渡し、producerは業務監査イベントと`app_enqueue_line_delivery`を同じtransactionで実行します。
+
+同じ`sourceId`、冪等キー、payloadを再送すると既存outbox IDを返します。
+異なるpayloadや冪等キーの再利用は409で拒否します。
+
+この入口はAPI serverの`createMemberRepositories`からproductionへ配線され、`@cocolo/db`のtransaction helperをテストだけで呼ぶ構成にはしません。
 
 ## 必須環境値
 
@@ -79,7 +92,10 @@ schedulerはこの値を実行中に書き換えず、設定値を検証して�
 
 providerから明確な失敗応答を得た通知は、`failed`、試行回数、DB時刻基準の再試行時刻、失敗コードを保存します。
 
-timeout、scheduler Abort、または2xx応答なのにprovider IDが欠落した場合は外部副作用を取り消せないため、`unknown`（照合待ち）へ遷移します。`unknown`は自動claimせず、providerへ通知単位の冪等キーで照合してから運用者が確定します。
+timeout、scheduler Abort、または2xx応答なのにprovider IDが欠落した場合は外部副作用を取り消せないため、`unknown`（照合待ち）へ遷移します。`unknown`は自動claimせず、providerへ通知行に固定した`X-Line-Retry-Key`で照合してから運用者が確定します。
+
+明確なprovider失敗やlease切れで再送する場合も、同じpayload hashと内部冪等キーを持つoutbox行の`provider_retry_key`を使います。
+そのため、外部送信が成功した後に応答を失ったretryや、leaseを再取得したworkerは、provider側で同じretry keyとして照合できます。
 
 この場合、schedulerの実行自体は`completed`として扱い、同じ起動内で即時再送しません。
 
@@ -119,6 +135,6 @@ min(LINE_DELIVERY_RETRY_BASE_DELAY_SECONDS * 2 ^ (attempt - 1), 3600秒)
 - 実行ログへtoken、DB URL、LINE本文、providerのレスポンス本文を出していない。
 - schedulerの標準出力に出るJSONと終了コードだけを監視へ渡している。
 
-業務transactionは`@cocolo/db`の`enqueueLineDelivery`を同一transaction clientから呼び、membership行を`FOR UPDATE`でロックしてactive確認とoutbox登録を原子化します。release成果物は`apps/api/dist/line-delivery-worker.js`の存在を梱包前に検証します。
+業務APIはproducerが`enqueueLineDelivery`を同一transaction clientから呼び、membership行を`FOR UPDATE`でロックしてactive確認とoutbox登録を原子化します。release成果物は`apps/api/dist/line-delivery-worker.js`の存在を梱包前に検証します。
 
 変更対象はscheduler adapter、実行可能worker、outbox enqueue/claim/状態遷移、専用DB role、実PostgreSQL統合テスト、release成果物、運用文書です。
