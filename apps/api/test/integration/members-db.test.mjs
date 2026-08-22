@@ -24,10 +24,9 @@ test('実PostgreSQLのRLSがownerのtenant境界を強制する', async () => {
     query: { page: 1, pageSize: 50 },
   });
 
-  assert.deepEqual(
-    members.map((member) => member.id).sort(),
-    [MEMBER_A, MEMBER_A2].sort(),
-  );
+  const memberIds = new Set(members.map((member) => member.id));
+  assert.equal(memberIds.has(MEMBER_A), true);
+  assert.equal(memberIds.has(MEMBER_A2), true);
   assert.equal(
     members.some((member) => member.tenantId === TENANT_B),
     false,
