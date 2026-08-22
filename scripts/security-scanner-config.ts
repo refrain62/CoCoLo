@@ -155,7 +155,10 @@ const scannerRuleFileAllowlist: Record<ScannerName, string> = {
   trivy: '.trivy-secret.yaml',
 };
 
-const scannerNetworkAllowlist: Record<ScannerName, ScannerToolConfig['network']> = {
+const scannerNetworkAllowlist: Record<
+  ScannerName,
+  ScannerToolConfig['network']
+> = {
   gitleaks: 'none',
   semgrep: 'none',
   trivy: 'bridge',
@@ -183,7 +186,10 @@ const isStringRecord = (value: unknown): value is Record<string, string> =>
   isRecord(value) &&
   Object.values(value).every((entry) => typeof entry === 'string');
 
-const arraysEqual = (actual: unknown[], expected: readonly unknown[]): boolean =>
+const arraysEqual = (
+  actual: unknown[],
+  expected: readonly unknown[],
+): boolean =>
   actual.length === expected.length &&
   actual.every((entry, index) => entry === expected[index]);
 
