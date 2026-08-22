@@ -67,3 +67,17 @@ PR #39 の競合解消後、`apps/api/package.json` の `test` script と `packa
 また、ブランチ切替直後に `pnpm exec biome check` を実行したところ、依存モジュール再構成の非対話確認で停止しました。
 
 ブランチ切替・develop追随後は、検証開始前に `pnpm install --frozen-lockfile --config.confirmModulesPurge=false` を実行し、`pnpm build` 完了後にlint・testを実行します。
+
+### 追加記録：trust-rootとスカッシュマージ（2026-08-23）
+
+PR #50 のowner bootstrapコミットSHAを `trust-root.json` に保持したままスカッシュマージしたため、元ブランチのSHAがdevelopの祖先にならず、CIの `pnpm verify:trust-root` が失敗しました。
+
+スカッシュマージで履歴上のコミットSHAが変わる保護設定では、マージ直後に実際のdevelop上のスカッシュコミットSHAへ参照を更新し、`pnpm verify:trust-root` を実行してから後続PRを検証します。
+
+同時に、bootstrap後に追加されたworkflow、script、migrationがtrusted manifestへ登録されておらず、manifest欠落でもCIが停止しました。
+
+bootstrap後に保護対象ファイルを追加するPRでは、ファイル内容のSHA-256をmanifestへ追加し、`pnpm verify:trust-root` を実行して未登録ファイルがないことを確認します。
+
+なお、JSON以外の手順書をJSONパーサーへ渡す誤検査も発生しました。JSONはパーサー、Markdownは`git diff --check`と内容レビューという対象別の検査を徹底します。
+
+GitHub CLIの差分確認では、`gh pr diff <番号> --patch`のオプションと、`git diff origin/develop...HEAD -- <paths>`のパス指定を混在させて引数エラーを起こしました。統計や特定パスの確認はGitで行い、GitHub上のPR全体確認は`gh pr diff`の対応オプションだけを使います。
