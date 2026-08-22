@@ -39,7 +39,6 @@ const tarResult = spawnSync(
   ['-czf', archive, '-C', root, ...manifest.files],
   {
     stdio: 'inherit',
-    shell: process.platform === 'win32',
   },
 );
 if (tarResult.error) throw tarResult.error;

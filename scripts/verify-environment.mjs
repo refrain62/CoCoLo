@@ -35,6 +35,39 @@ if (allowed[appEnv].R2_BUCKET)
   assert.equal(process.env.R2_BUCKET, allowed[appEnv].R2_BUCKET);
 if (allowed[appEnv].PUBLIC_APP_URL)
   assert.equal(process.env.PUBLIC_APP_URL, allowed[appEnv].PUBLIC_APP_URL);
+if (appEnv !== 'local') {
+  assert.ok(
+    process.env.SUPABASE_ALLOWED_URL,
+    `${appEnv}ではSUPABASE_ALLOWED_URLが必要です`,
+  );
+  assert.ok(
+    process.env.SUPABASE_ALLOWED_JWKS_URL,
+    `${appEnv}ではSUPABASE_ALLOWED_JWKS_URLが必要です`,
+  );
+  assert.ok(
+    process.env.PUBLIC_APP_URL_ALLOWLIST,
+    `${appEnv}ではPUBLIC_APP_URL_ALLOWLISTが必要です`,
+  );
+}
+if (process.env.SUPABASE_ALLOWED_URL)
+  assert.equal(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ALLOWED_URL,
+    'SUPABASE_URLが許可された環境値と一致しません',
+  );
+if (process.env.SUPABASE_ALLOWED_JWKS_URL)
+  assert.equal(
+    process.env.SUPABASE_JWKS_URL,
+    process.env.SUPABASE_ALLOWED_JWKS_URL,
+    'SUPABASE_JWKS_URLが許可された環境値と一致しません',
+  );
+if (process.env.PUBLIC_APP_URL_ALLOWLIST)
+  assert.ok(
+    process.env.PUBLIC_APP_URL_ALLOWLIST.split(',')
+      .map((value) => value.trim())
+      .includes(process.env.PUBLIC_APP_URL),
+    'PUBLIC_APP_URLが許可リストに含まれていません',
+  );
 if (appEnv === 'production') {
   assert.ok(
     process.env.SUPABASE_SERVICE_ROLE_KEY,
