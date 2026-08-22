@@ -8,7 +8,8 @@
     "./orders": {
       "types": "./dist/orders-repository.d.ts",
       "import": "./dist/orders-repository.js"
-    }
+    },
+    "./events": "./dist/event-repository.js"
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
