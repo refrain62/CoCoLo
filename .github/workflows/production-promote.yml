@@ -63,6 +63,9 @@ jobs:
           PUBLIC_APP_URL_ALLOWLIST: ${{ vars.PUBLIC_APP_URL_ALLOWLIST }}
           RETIRED_DATA_RETENTION_DAYS: ${{ vars.RETIRED_DATA_RETENTION_DAYS }}
           AUDIT_LOG_RETENTION_DAYS: ${{ vars.AUDIT_LOG_RETENTION_DAYS }}
+          RATE_LIMIT_STORE: distributed
+          RATE_LIMIT_FAIL_CLOSED: 'true'
+          RATE_LIMIT_ADAPTER_MODULE: ${{ vars.RATE_LIMIT_ADAPTER_MODULE }}
       - name: 検証済みマイグレーションだけを適用
         run: pnpm exec prisma migrate deploy --schema .release/extracted/packages/db/prisma/schema.prisma
         env:

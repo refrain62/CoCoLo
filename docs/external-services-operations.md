@@ -10,6 +10,7 @@
 | --- | --- | --- |
 | Supabase Auth | Phase 1 で利用中 | ログイン、JWT 発行、ユーザー停止・資格情報管理 |
 | Supabase PostgreSQL | Phase 1 で利用中 | アプリケーションデータ、RLS、監査ログ、マイグレーション |
+| 分散レート制限ストア（Redis等） | staging / productionで利用 | 複数API instance間の原子的なレート制限カウンター |
 | Cloudflare R2 | Phase 4 で導入予定 | 非公開の添付ファイル保存・配信 |
 | Cloudflare の配置先 | 環境固有の配置アダプターで接続 | Web/API の配置と HTTPS 公開 |
 | GitHub Actions | CI/CD で利用中 | 品質検査、staging 配置、production 昇格、証跡保存 |
@@ -57,6 +58,10 @@ GitHub Actions
 - 配置アダプターと配置先の認証情報
 
 API 起動時は `APP_ENV`、Supabase URL/JWKS URL、R2 バケット名、公開 URL の許可値を検証します。環境値が一致しない場合は fail-closed とし、起動や配置を継続しません。
+
+分散レート制限ストアの設定、adapter 契約、障害対応は [分散レート制限の運用契約](rate-limit-operations.md) を正本とします。
+
+`local` は in-memory 実装だけを使い、`staging` と `production` は原子的な分散 adapter が設定されていなければ起動しません。
 
 ## 4. Supabase Auth の運用
 

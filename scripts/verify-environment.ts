@@ -30,6 +30,15 @@ if (expectedIndex !== -1)
     process.argv[expectedIndex + 1],
     'APP_ENV が期待値と一致しません。',
   );
+
+function hasUnsafeControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code <= 31 || code === 127) return true;
+  }
+  return false;
+}
+
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URL が必要です');
 assert.ok(process.env.DIRECT_URL, 'DIRECT_URL が必要です');
 assert.ok(process.env.SUPABASE_URL, 'SUPABASE_URL が必要です');
@@ -37,6 +46,35 @@ assert.ok(process.env.SUPABASE_JWKS_URL, 'SUPABASE_JWKS_URL が必要です');
 assert.ok(process.env.SUPABASE_ANON_KEY, 'SUPABASE_ANON_KEY が必要です');
 assert.ok(process.env.R2_BUCKET, 'R2_BUCKET が必要です');
 assert.ok(process.env.PUBLIC_APP_URL, 'PUBLIC_APP_URL が必要です');
+assert.ok(process.env.RATE_LIMIT_STORE, 'RATE_LIMIT_STORE が必要です');
+assert.equal(
+  process.env.RATE_LIMIT_STORE,
+  appEnv === 'local' ? 'memory' : 'distributed',
+  `${appEnv}環境のRATE_LIMIT_STOREが許可値と一致しません。`,
+);
+assert.equal(
+  process.env.RATE_LIMIT_FAIL_CLOSED,
+  'true',
+  'RATE_LIMIT_FAIL_CLOSED は true に固定してください。',
+);
+const rateLimitAdapterModule = process.env.RATE_LIMIT_ADAPTER_MODULE?.trim();
+if (appEnv === 'local')
+  assert.equal(
+    rateLimitAdapterModule ?? '',
+    '',
+    'local環境ではRATE_LIMIT_ADAPTER_MODULEを設定できません。',
+  );
+else {
+  assert.ok(
+    rateLimitAdapterModule,
+    `${appEnv}環境ではRATE_LIMIT_ADAPTER_MODULEが必要です。`,
+  );
+  assert.equal(
+    hasUnsafeControlCharacter(rateLimitAdapterModule ?? ''),
+    false,
+    'RATE_LIMIT_ADAPTER_MODULEに制御文字を指定できません。',
+  );
+}
 if (allowed[appEnv].R2_BUCKET)
   assert.equal(process.env.R2_BUCKET, allowed[appEnv].R2_BUCKET);
 if (allowed[appEnv].PUBLIC_APP_URL)
