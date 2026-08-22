@@ -65,6 +65,44 @@ describe('送迎ドメイン', () => {
     ).toThrow(RideCapacityError);
   });
 
+  it('状態がpendingでも既存割当のある希望を二重割当しない', () => {
+    expect(
+      matchRideRequests({
+        offers: [
+          {
+            id: 'offer-1',
+            planId: 'plan-1',
+            driverUserId: 'driver-1',
+            capacity: 4,
+            status: 'open',
+            createdAt: '2026-08-22T00:00:00.000Z',
+          },
+        ],
+        requests: [
+          {
+            id: 'request-1',
+            planId: 'plan-1',
+            memberId: 'member-1',
+            requesterUserId: 'guardian-1',
+            passengerCount: 1,
+            status: 'pending',
+            createdAt: '2026-08-22T00:01:00.000Z',
+          },
+        ],
+        assignments: [
+          {
+            id: 'assignment-1',
+            planId: 'plan-1',
+            requestId: 'request-1',
+            offerId: 'offer-1',
+            passengerCount: 1,
+            createdAt: '2026-08-22T00:02:00.000Z',
+          },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
   it('Google Maps以外のホスト、HTTP、認証情報、fragmentを拒否する', () => {
     expect(() => validateGoogleMapsUrl('https://example.com/maps')).toThrow();
     expect(() =>

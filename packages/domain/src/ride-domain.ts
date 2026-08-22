@@ -139,7 +139,10 @@ export function matchRideRequests(input: {
   const sortedRequests = input.requests
     .filter(
       (request) =>
-        request.status === 'pending' || request.status === 'unassigned',
+        (request.status === 'pending' || request.status === 'unassigned') &&
+        !input.assignments.some(
+          (assignment) => assignment.requestId === request.id,
+        ),
     )
     .sort((left, right) =>
       left.createdAt === right.createdAt
