@@ -4,7 +4,7 @@ import {
   lineConnectInputSchema,
   lineNotificationInputSchema,
   lineWebhookBodySchema,
-} from '../src/line-contract.mjs';
+} from '../src/line-contract.ts';
 
 test('LINE契約はtenantIdを入力として受け付けない', () => {
   assert.equal(

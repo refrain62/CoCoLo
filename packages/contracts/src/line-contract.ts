@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+export type LineNotificationSource = z.infer<
+  typeof lineNotificationSourceSchema
+>;
+export type LineConnectInput = z.infer<typeof lineConnectInputSchema>;
+export type LineNotificationInput = z.infer<typeof lineNotificationInputSchema>;
+export type LineWebhookEvent = z.infer<typeof lineWebhookEventSchema>;
+export type LineWebhookBody = z.infer<typeof lineWebhookBodySchema>;
+
 export const lineNotificationSourceSchema = z.enum([
   'event',
   'deadline',
@@ -65,14 +73,16 @@ export const lineNotificationResponseSchema = z.object({
   nextRetryAt: z.string().datetime().nullable(),
 });
 
-export function parseLineConnectInput(input) {
+export function parseLineConnectInput(input: unknown): LineConnectInput {
   return lineConnectInputSchema.parse(input);
 }
 
-export function parseLineNotificationInput(input) {
+export function parseLineNotificationInput(
+  input: unknown,
+): LineNotificationInput {
   return lineNotificationInputSchema.parse(input);
 }
 
-export function parseLineWebhookBody(input) {
+export function parseLineWebhookBody(input: unknown): LineWebhookBody {
   return lineWebhookBodySchema.parse(input);
 }

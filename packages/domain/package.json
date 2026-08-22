@@ -8,10 +8,10 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test test/*.test.mjs",
-    "test:unit": "pnpm build && node --test test/*.test.mjs",
-    "lint": "tsc -p tsconfig.json --noEmit",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test": "node --test test/*.test.ts",
+    "test:unit": "pnpm build && node --test test/*.test.ts",
+    "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
   },
   "devDependencies": {
     "typescript": "5.9.2"

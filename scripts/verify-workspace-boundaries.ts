@@ -3,11 +3,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const sourceExtensions = new Set(['.js', '.mjs', '.ts', '.tsx']);
+const sourceExtensions = new Set(['.ts', '.tsx']);
 const ignored = new Set(['node_modules', 'dist', 'coverage', '.git']);
 
 // 依存境界検査の対象ファイルを再帰的に収集し、生成物や管理対象外のディレクトリは除外する。
-async function filesUnder(directory) {
+async function filesUnder(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
@@ -57,7 +57,7 @@ for (const file of await filesUnder(root)) {
   if (
     isProductionSource &&
     !relative.includes('/test/') &&
-    !relative.endsWith('.test.mjs') &&
+    !relative.endsWith('.test.ts') &&
     content.includes('@cocolo/test-fixtures')
   ) {
     violations.push(
