@@ -10,8 +10,8 @@ import type {
   ExpiredAttachmentCleanupInput,
 } from '@cocolo/domain/attachment';
 import { createAttachmentApp } from '../dist/features/attachments/attachment-app.js';
-import { createFakeAttachmentStorage } from '../dist/features/attachments/fake-attachment-storage.js';
 import type { FakeAttachmentStorage } from '../dist/features/attachments/fake-attachment-storage.js';
+import { createFakeAttachmentStorage } from '../dist/features/attachments/fake-attachment-storage.js';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
@@ -320,7 +320,10 @@ test('ストレージ未反映は2回再試行でき、3回目でrejectedにす�
     );
     assert.equal(response.status, expected);
   }
-  assert.equal(repository.records.get(session.attachmentId)?.status, 'rejected');
+  assert.equal(
+    repository.records.get(session.attachmentId)?.status,
+    'rejected',
+  );
 });
 
 test('cleanup失敗は503で残し、cleanup endpointで再試行できる', async () => {

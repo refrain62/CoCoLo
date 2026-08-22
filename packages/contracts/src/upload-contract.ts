@@ -28,9 +28,7 @@ export const uploadSessionRequestSchema = z
   .strict();
 
 // 外部入力をupload session契約へ変換し、呼び出し側が未検証値を扱わないようにする。
-export function parseUploadSessionInput(
-  input: unknown,
-): UploadSessionRequest {
+export function parseUploadSessionInput(input: unknown): UploadSessionRequest {
   return uploadSessionInputSchema.parse(input);
 }
 
