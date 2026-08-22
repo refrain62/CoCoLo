@@ -1,0 +1,117 @@
+export type MemberCategory = 'student' | 'adult';
+export type MemberStatus = 'active' | 'suspended' | 'retired';
+
+export type MemberSummary = {
+  id: string;
+  name: string;
+  kana: string | null;
+  category: MemberCategory;
+  gradeLevel: number | null;
+  ageGroup?: string | null;
+  status: MemberStatus;
+  createdAt?: string;
+};
+
+export type MemberListFilters = {
+  q: string;
+  category: '' | MemberCategory;
+  status: '' | MemberStatus;
+};
+
+export type MemberCreateInput = {
+  name: string;
+  kana?: string | null;
+  category: MemberCategory;
+  gradeLevel?: number | null;
+  ageGroup?: string | null;
+  status: 'active' | 'suspended';
+};
+
+type MemberListResponse = {
+  data: MemberSummary[];
+  page: number;
+  pageSize: number;
+};
+
+type MemberApiErrorBody = {
+  error?: {
+    code?: string;
+    message?: string;
+  };
+};
+
+export class MemberApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'MemberApiError';
+  }
+}
+
+export type MemberApi = {
+  list: (filters: MemberListFilters) => Promise<MemberSummary[]>;
+  create: (input: MemberCreateInput) => Promise<MemberSummary>;
+};
+
+type MemberApiOptions = {
+  baseUrl?: string;
+  getAccessToken?: () => string | null;
+};
+
+function getStoredAccessToken() {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem('cocolo.accessToken');
+}
+
+async function readError(response: Response) {
+  const body = (await response.json().catch(() => ({}))) as MemberApiErrorBody;
+  return new MemberApiError(
+    response.status,
+    body.error?.code ?? 'REQUEST_FAILED',
+    body.error?.message ?? '通信に失敗しました。',
+  );
+}
+
+export function createMemberApi({
+  baseUrl = '',
+  getAccessToken = getStoredAccessToken,
+}: MemberApiOptions = {}): MemberApi {
+  async function request<T>(path: string, init?: RequestInit): Promise<T> {
+    const accessToken = getAccessToken();
+    if (!accessToken)
+      throw new MemberApiError(401, 'UNAUTHENTICATED', 'ログインが必要です。');
+
+    const response = await fetch(`${baseUrl}/api/v1/members${path}`, {
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+        ...init?.headers,
+      },
+    });
+    if (!response.ok) throw await readError(response);
+    return (await response.json()) as T;
+  }
+
+  return {
+    async list(filters) {
+      const params = new URLSearchParams({ page: '1', pageSize: '50' });
+      if (filters.q.trim()) params.set('q', filters.q.trim());
+      if (filters.category) params.set('category', filters.category);
+      if (filters.status) params.set('status', filters.status);
+      const response = await request<MemberListResponse>(`?${params}`);
+      return response.data;
+    },
+    async create(input) {
+      const response = await request<{ data: MemberSummary }>('', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
+      return response.data;
+    },
+  };
+}
