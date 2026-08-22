@@ -645,7 +645,12 @@ function renderCentralRoute(
     case 'event-detail':
       return (
         <IntegrationNotice>
-          <EventDetailPage api={apis.events} eventId={route.eventId} />
+          <EventDetailPage
+            api={apis.events}
+            eventId={route.eventId}
+            memberOptions={memberOptions}
+            role={role}
+          />
         </IntegrationNotice>
       );
     case 'board-contacts':
@@ -791,6 +796,7 @@ export function CentralNavigation({
   const route = useMemo(() => matchCentralRoute(pathname), [pathname]);
   const needsMemberOptions =
     route.kind === 'events' ||
+    route.kind === 'event-detail' ||
     route.kind === 'ride' ||
     (route.kind === 'orders' &&
       identity.status === 'ready' &&
