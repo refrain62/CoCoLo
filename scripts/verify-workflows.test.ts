@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  validateCodeowners,
   validatePackageScripts,
   validateQualityWorkflow,
   validateWorkflow,
@@ -242,5 +243,16 @@ test('検査用package scriptの差し替えを拒否する', () => {
         'test:security': 'node --test scripts/security-scanner.test.ts',
       },
     }),
+  );
+});
+
+test('CODEOWNERSの信頼境界削除を拒否する', async () => {
+  const codeowners = await readFile(
+    path.join(worktreeRoot, '.github', 'CODEOWNERS'),
+    'utf8',
+  );
+  assert.doesNotThrow(() => validateCodeowners(codeowners));
+  assert.throws(() =>
+    validateCodeowners(codeowners.replace('/package.json @refrain62', '')),
   );
 });

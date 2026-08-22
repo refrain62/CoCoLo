@@ -1034,6 +1034,27 @@ export function validatePackageScripts(value: unknown): void {
   );
 }
 
+export function validateCodeowners(content: string): void {
+  const expected = [
+    '# Workflowとvalidatorは、品質ゲートの信頼境界を変更するためownerレビューを必須とする。',
+    '/.github/workflows/* @refrain62',
+    '/scripts/verify-workflows.ts @refrain62',
+    '/scripts/verify-workflows.test.ts @refrain62',
+    '/scripts/verify-security-scanners.ts @refrain62',
+    '/scripts/security-scanner-config.ts @refrain62',
+    '/scripts/security-scanner-summary.ts @refrain62',
+    '/scripts/run-security-scanners.ts @refrain62',
+    '/scripts/security-scanner.test.ts @refrain62',
+    '/.github/security/* @refrain62',
+    '/package.json @refrain62',
+  ].join('\n');
+  assert.equal(
+    content.replaceAll('\r\n', '\n').trim(),
+    expected,
+    '.github/CODEOWNERSの信頼境界を変更できません',
+  );
+}
+
 async function main(): Promise<void> {
   const files = (await readdir(directory)).filter(
     (name) => name.endsWith('.yml') || name.endsWith('.yaml'),
@@ -1047,6 +1068,9 @@ async function main(): Promise<void> {
     validateWorkflow(file, await readFile(path.join(directory, file), 'utf8'));
   validatePackageScripts(
     JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8')),
+  );
+  validateCodeowners(
+    await readFile(path.join(root, '.github', 'CODEOWNERS'), 'utf8'),
   );
   console.log('GitHub Actions のWorkflow構造と信頼境界を検証しました。');
 }
