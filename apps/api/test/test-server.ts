@@ -6,7 +6,7 @@ import { createApp } from '../src/app.js';
 const testEmail = 'owner-a@example.test';
 const testPassword = 'owner-password';
 const testAccessToken = 'local-test-owner-token';
-const appEnv = process.env.APP_ENV ?? 'local';
+const appEnv = process.env.APP_ENV;
 if (appEnv !== 'local')
   throw new Error('test-only Auth serverはlocal環境でのみ起動できます。');
 if (!process.env.DATABASE_URL)
