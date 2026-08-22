@@ -53,12 +53,9 @@ test.describe('部員ライフサイクルAPI', () => {
     expect(suspend.status()).toBe(200);
     expect((await suspend.json()).data.status).toBe('suspended');
 
-    const retire = await request.post(
-      `/api/v1/members/${memberId}/retire`,
-      {
+    const retire = await request.post(`/api/v1/members/${memberId}/retire`, {
       headers: { Authorization: authorization },
-      },
-    );
+    });
     const retry = await request.post(`/api/v1/members/${memberId}/retire`, {
       headers: { Authorization: authorization },
     });

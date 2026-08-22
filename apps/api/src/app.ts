@@ -351,7 +351,12 @@ export function createApp(options: AppOptions = {}) {
       throw error;
     }
     if (!member)
-      return errorResponse(c, 404, 'MEMBER_NOT_FOUND', '部員が見つかりません。');
+      return errorResponse(
+        c,
+        404,
+        'MEMBER_NOT_FOUND',
+        '部員が見つかりません。',
+      );
     return c.json({ data: projectMember(member, auth.membership.role) });
   });
 
@@ -394,7 +399,12 @@ export function createApp(options: AppOptions = {}) {
       throw error;
     }
     if (!member)
-      return errorResponse(c, 404, 'MEMBER_NOT_FOUND', '部員が見つかりません。');
+      return errorResponse(
+        c,
+        404,
+        'MEMBER_NOT_FOUND',
+        '部員が見つかりません。',
+      );
     return c.json({ data: projectMember(member, auth.membership.role) });
   });
 

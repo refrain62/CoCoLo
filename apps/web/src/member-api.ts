@@ -77,7 +77,10 @@ export class MemberApiError extends Error {
 export type MemberApi = {
   list: (filters: MemberListFilters) => Promise<MemberSummary[]>;
   create: (input: MemberCreateInput) => Promise<MemberSummary>;
-  update: (memberId: string, input: MemberUpdateInput) => Promise<MemberSummary>;
+  update: (
+    memberId: string,
+    input: MemberUpdateInput,
+  ) => Promise<MemberSummary>;
   retire: (memberId: string) => Promise<MemberSummary>;
   promote: (
     input: PromotionRequest,

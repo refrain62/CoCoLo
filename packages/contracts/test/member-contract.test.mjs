@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  memberIdSchema,
-  memberUpdateSchema,
-} from '../src/member-contract.mjs';
+import { memberIdSchema, memberUpdateSchema } from '../src/member-contract.mjs';
 
 test('部員編集契約は区分と学年・年代の組み合わせを検証する', () => {
   const parsed = memberUpdateSchema.parse({
