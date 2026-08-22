@@ -72,6 +72,7 @@ export type EventRepository = {
   list: (
     input: EventRepositoryInput & { from: Date; to: Date },
   ) => Promise<EventRecord[]>;
+  /** 所属テナントとDBのRLS境界を通過した予定だけを返す。 */
   get: (
     input: EventRepositoryInput & { eventId: string },
   ) => Promise<EventRecord>;
