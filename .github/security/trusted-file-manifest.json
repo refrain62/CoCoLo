@@ -34,6 +34,6 @@
     "scripts/verify-trusted-pr.ts": "3b3fa662512e1b811d5072d586e1ff7a4c549cb0732b2b916041c88b962c2bb1",
     "scripts/verify-workflows.test.ts": "790324afc6bf4860c35790f7e7a08f0122bec02182671f98680ede33b30260d3",
     "scripts/verify-workflows.ts": "d508d9ade1dff8db927c6c350fbe88ff40ae806cfb6789e25c0a53895245df8b",
-    "packages/db/prisma/schema.prisma": "acfa2b6e48487b684cc7329d3c55dcdb065e4d63e734861cbb3a2221a597bec0"
+    "packages/db/prisma/schema.prisma": "ea0e0ee6158b15538bf749f975e9158f51c1e1b048c11971014a9541870cb267"
   }
 }
