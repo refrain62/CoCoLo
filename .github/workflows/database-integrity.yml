@@ -60,6 +60,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+      - name: migration履歴照合用のPrisma Clientを生成
+        run: pnpm --filter @cocolo/db exec prisma generate
       - name: DB migration履歴をchecksumと照合
         run: pnpm verify:migration-history
         env:
