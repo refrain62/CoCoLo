@@ -13,6 +13,8 @@
       "!**/dist",
       "!coverage",
       "!**/coverage",
+      "!test-results",
+      "!**/test-results",
       "!packages/contracts/openapi.yaml"
     ]
   },
