@@ -37,6 +37,7 @@
     "verify:production-bundle": "node scripts/verify-production-bundle.ts",
     "verify:release": "node scripts/verify-release.ts",
     "lint:workflows": "node scripts/verify-workflows.ts",
+    "create:pgpass": "node scripts/create-pgpass.ts",
     "db:prepare:test": "node scripts/db-prepare-test.ts",
     "db:seed:test": "node scripts/db-seed-test.ts",
     "deploy:staging": "node scripts/deploy-artifact.ts staging",

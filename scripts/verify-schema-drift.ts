@@ -14,6 +14,7 @@ import {
   readMigrationHistory,
   verifyMigrationHistory,
 } from './verify-migration-history.ts';
+import { assertMigrationSqlSafe } from './verify-shadow-role.ts';
 
 export type SchemaDriftPaths = Readonly<{
   dbDirectory: string;
@@ -108,6 +109,21 @@ export function buildPrismaDiffArgs(
   ];
 }
 
+export function buildDirectDatabaseDiffArgs(
+  paths: SchemaDriftPaths,
+): readonly string[] {
+  return [
+    'migrate',
+    'diff',
+    '--from-schema-datasource',
+    paths.schemaFile,
+    '--to-schema-datamodel',
+    paths.schemaFile,
+    '--script',
+    '--exit-code',
+  ];
+}
+
 export function redactDatabaseUrl(
   value: string | undefined,
 ): RedactedDatabaseUrl {
@@ -121,6 +137,12 @@ export function redactDatabaseUrl(
   parsed.password = '';
   parsed.searchParams.delete('password');
   return { argvUrl: parsed.toString(), password };
+}
+
+function sanitizeDiagnostics(value: string): string {
+  return value
+    .replace(/(?:postgres(?:ql)?):\/\/[^\s"']+/gi, '[REDACTED_POSTGRES_URL]')
+    .replace(/(?:password|passwd|secret)\s*[=:]\s*[^\s,;]+/gi, '$1=[REDACTED]');
 }
 
 function outputText(value: string | Buffer | null | undefined): string {
@@ -406,18 +428,28 @@ export function assertSchemaDriftWorkflowConnected(content: string): void {
   );
   assert.match(
     content,
-    /CREATE ROLE cocolo_shadow LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION/,
-    'schema-drift WorkflowはShadow roleの管理者権限とpassword設定を無効化してください。',
+    /CREATE ROLE cocolo_shadow LOGIN PASSWORD\s+:'shadow_password' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION/,
+    'schema-drift WorkflowはShadow roleへSCRAM passwordと管理者権限無効化を設定してください。',
   );
   assert.match(
     content,
     /CREATE ROLE cocolo_app NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION/,
     'schema-drift WorkflowはShadow serviceの互換roleをNOLOGINにしてください。',
   );
-  assert.match(
+  assert.doesNotMatch(
     content,
     /POSTGRES_HOST_AUTH_METHOD:\s*trust/,
-    '専用Shadow serviceはCI限定のpasswordless接続を使用してください。',
+    'Shadow serviceをtrust認証にしてはいけません。',
+  );
+  assert.match(
+    content,
+    /CREATE ROLE cocolo_shadow LOGIN PASSWORD\s+:'shadow_password'/,
+    'Shadow roleはSCRAM passwordを設定してください。',
+  );
+  assert.match(
+    content,
+    /PGPASSFILE:/,
+    'Prisma CLIにcredential fileを渡してください。',
   );
   const postgresService =
     /^\s{6}postgres:\s*\r?\n([\s\S]*?)(?=^\s{6}shadow:\s*$)/m.exec(
@@ -431,8 +463,13 @@ export function assertSchemaDriftWorkflowConnected(content: string): void {
   );
   assert.match(
     content,
-    /SHADOW_DATABASE_URL:\s*postgresql:\/\/[^\s:@]+@(?:shadow:5432|localhost:5433)\/[^\s?]+\?sslmode=disable/,
-    'schema-drift Workflowはpasswordless Shadow URLを使用してください。',
+    /SHADOW_DATABASE_URL:\s*postgresql:\/\/[^\s:@]+:[^\s@]+@(?:shadow:5432|localhost:5433)\/[^\s?]+\?sslmode=disable/,
+    'schema-drift WorkflowはSCRAM password付きShadow URLをenvへ渡してください。',
+  );
+  assert.match(
+    content,
+    /prisma migrate deploy/,
+    'Shadow DBへPrisma CLIでmigrationを適用してください。',
   );
   assert.match(
     content,
@@ -545,7 +582,7 @@ function diagnostics(result: PrismaDiffResult): string {
   const output = [result.stderr.trim(), result.stdout.trim()]
     .filter(Boolean)
     .join('\n');
-  return output ? `\n${output.slice(0, 4000)}` : '';
+  return output ? `\n${sanitizeDiagnostics(output).slice(0, 4000)}` : '';
 }
 
 // Prismaの終了状態と差分出力を両方検査し、CLI失敗やschema driftを合格へ変換しない。
@@ -609,31 +646,59 @@ export async function verifySchemaDrift(
   const lockContent = lockBytes.toString('utf8');
   assertMigrationLock(lockContent);
   const migrationCount = await assertMigrationLayout(paths);
+  const migrationEntries = await readdir(paths.migrationsDirectory, {
+    withFileTypes: true,
+  });
+  for (const entry of migrationEntries.filter((item) => item.isDirectory())) {
+    const migrationFile = path.join(
+      paths.migrationsDirectory,
+      entry.name,
+      'migration.sql',
+    );
+    assertMigrationSqlSafe(
+      (await readRequiredFile(migrationFile, 'migration.sql')).toString('utf8'),
+      migrationFile,
+    );
+  }
   await integrityVerifier(paths);
-  const redactedShadowUrl = redactDatabaseUrl(shadowDatabaseUrl);
-  assert.equal(
-    redactedShadowUrl.password,
-    '',
-    'SHADOW_DATABASE_URLにパスワードを含めず、専用の外部認証を設定してください。',
-  );
+  const directUrl = config.directUrl ?? process.env.DIRECT_URL;
+  const directEnv = {
+    ...process.env,
+    DATABASE_URL: directUrl,
+    DIRECT_URL: directUrl,
+    SHADOW_DATABASE_URL: shadowDatabaseUrl,
+  };
+  const databaseDiffEnv: NodeJS.ProcessEnv = { ...directEnv };
+  delete databaseDiffEnv.SHADOW_DATABASE_URL;
+  databaseDiffEnv.PRISMA_HIDE_UPDATE_MESSAGE = '1';
   const result = runner(
     process.execPath,
-    [
-      prismaEntryPoint(paths),
-      ...buildPrismaDiffArgs(paths, redactedShadowUrl.argvUrl),
-    ],
+    [prismaEntryPoint(paths), ...buildDirectDatabaseDiffArgs(paths)],
     {
       cwd: paths.dbDirectory,
       encoding: 'utf8',
       shell: false,
       windowsHide: true,
       env: {
-        ...process.env,
-        SHADOW_DATABASE_URL: shadowDatabaseUrl,
+        ...databaseDiffEnv,
+        DATABASE_URL: shadowDatabaseUrl,
+        DIRECT_URL: shadowDatabaseUrl,
       },
     },
   );
   assertPrismaDiffClean(result);
+  const directResult = runner(
+    process.execPath,
+    [prismaEntryPoint(paths), ...buildDirectDatabaseDiffArgs(paths)],
+    {
+      cwd: paths.dbDirectory,
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+      env: databaseDiffEnv,
+    },
+  );
+  assertPrismaDiffClean(directResult);
   return migrationCount;
 }
 

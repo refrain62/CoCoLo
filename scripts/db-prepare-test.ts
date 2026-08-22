@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { withPostgresClient } from './postgres-client.ts';
 
 // migration owner接続でRLS用のcocolo_app roleを準備し、アプリroleへbypass権限を与えない。
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URL が必要です');
 assert.ok(process.env.DIRECT_URL, 'DIRECT_URL が必要です');
-const sql = `
+const roleSql = `
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cocolo_app') THEN
@@ -14,36 +14,12 @@ BEGIN
   END IF;
 END
 $$;
-GRANT USAGE ON SCHEMA public TO cocolo_app;
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO cocolo_app;
 `;
-const dockerContainer = process.env.PSQL_DOCKER_CONTAINER;
-const dockerDatabase = process.env.PSQL_DOCKER_DATABASE ?? 'postgres';
-const command = dockerContainer
-  ? process.platform === 'win32'
-    ? 'docker.exe'
-    : 'docker'
-  : process.platform === 'win32'
-    ? 'psql.exe'
-    : 'psql';
-const args = dockerContainer
-  ? [
-      'exec',
-      dockerContainer,
-      'psql',
-      '--no-psqlrc',
-      '--username',
-      'postgres',
-      '--dbname',
-      dockerDatabase,
-      '--command',
-      sql,
-    ]
-  : ['--no-psqlrc', '--dbname', process.env.DIRECT_URL, '--command', sql];
-const result = spawnSync(command, args, {
-  stdio: 'inherit',
-  shell: process.platform === 'win32' && !dockerContainer,
+await withPostgresClient(process.env.DIRECT_URL, async (client) => {
+  await client.$executeRawUnsafe(roleSql);
+  await client.$executeRawUnsafe('GRANT USAGE ON SCHEMA public TO cocolo_app');
+  await client.$executeRawUnsafe(
+    'GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO cocolo_app',
+  );
 });
-if (result.error) throw result.error;
-assert.equal(result.status, 0, 'テスト DB の RLS 用ロール準備に失敗しました。');
 console.log('テスト DB の cocolo_app ロールと RLS 用ロールを準備しました。');

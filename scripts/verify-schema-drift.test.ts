@@ -4,9 +4,11 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { sanitizePostgresErrorMessage } from './postgres-client.ts';
 import {
   assertMigrationLock,
   assertPrismaDiffClean,
+  buildDirectDatabaseDiffArgs,
   buildPrismaDiffArgs,
   type PrismaDiffResult,
   redactDatabaseUrl,
@@ -326,24 +328,22 @@ test('終了コード0でもPrisma CLIの標準エラーを成功扱いにしな
 
 test('差分なしではPrisma CLIをexit-code付きで実行して成功する', async () => {
   const fixture = await createFixture();
-  let received:
-    | {
-        command: string;
-        args: readonly string[];
-        cwd: string;
-        env?: NodeJS.ProcessEnv;
-      }
-    | undefined;
+  const received: {
+    command: string;
+    args: readonly string[];
+    cwd: string;
+    env?: NodeJS.ProcessEnv;
+  }[] = [];
   try {
     const migrationCount = await verifySchemaDrift(
       fixture.paths,
       (command, args, options) => {
-        received = {
+        received.push({
           command,
           args,
           cwd: options.cwd,
           env: options.env,
-        };
+        });
         return cleanResult;
       },
       shadowDatabaseUrl,
@@ -351,8 +351,8 @@ test('差分なしではPrisma CLIをexit-code付きで実行して成功する'
       async () => undefined,
     );
     assert.equal(migrationCount, 1);
-    assert.ok(received);
-    assert.equal(received.cwd, fixture.paths.dbDirectory);
+    assert.equal(received.length, 2);
+    assert.equal(received[0]?.cwd, fixture.paths.dbDirectory);
     assert.deepEqual(
       [
         path.join(
@@ -362,21 +362,61 @@ test('差分なしではPrisma CLIをexit-code付きで実行して成功する'
           'build',
           'index.js',
         ),
-        ...buildPrismaDiffArgs(fixture.paths, shadowDatabaseArg),
+        ...buildDirectDatabaseDiffArgs(fixture.paths),
       ],
-      received.args,
+      received[0]?.args,
     );
-    assert.equal(received.command, process.execPath);
-    assert.equal(received.env?.SHADOW_DATABASE_URL, shadowDatabaseUrl);
-    assert.equal(received.env?.PGPASSWORD, undefined);
+    assert.equal(received[0]?.command, process.execPath);
+    assert.equal(received[0]?.env?.SHADOW_DATABASE_URL, undefined);
+    assert.equal(received[0]?.env?.PGPASSWORD, undefined);
     assert.equal(
-      received.args.includes(shadowDatabaseUrlWithPassword),
+      received[0]?.args.includes(shadowDatabaseUrlWithPassword),
       false,
       'Shadow DB URLをPrisma CLIのargvへ渡してはいけません。',
     );
+    assert.deepEqual(received[1]?.args, [
+      path.join(
+        fixture.paths.dbDirectory,
+        'node_modules',
+        'prisma',
+        'build',
+        'index.js',
+      ),
+      ...buildDirectDatabaseDiffArgs(fixture.paths),
+    ]);
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }
+});
+
+test('実DB構造比較はDIRECT_URLをargvへ渡さずschema datasourceから実行する', () => {
+  const args = buildDirectDatabaseDiffArgs(
+    fixturePaths('C:\\schema-drift-fixture'),
+  );
+  assert.deepEqual(args, [
+    'migrate',
+    'diff',
+    '--from-schema-datasource',
+    'C:\\schema-drift-fixture\\packages\\db\\prisma\\schema.prisma',
+    '--to-schema-datamodel',
+    'C:\\schema-drift-fixture\\packages\\db\\prisma\\schema.prisma',
+    '--script',
+    '--exit-code',
+  ]);
+  assert.equal(
+    args.some((arg) => arg.includes('postgresql://')),
+    false,
+  );
+});
+
+test('PostgreSQLエラーから接続情報を秘匿する', () => {
+  const message = sanitizePostgresErrorMessage(
+    new Error(
+      'connect postgresql://cocolo_app:secret@db.example/cocolo?password=secret',
+    ),
+  );
+  assert.doesNotMatch(message, /secret|postgresql:\/\//);
+  assert.match(message, /REDACTED_POSTGRES_URL/);
 });
 
 test('migration履歴DBへ接続できない場合はfail-closedにする', async () => {
