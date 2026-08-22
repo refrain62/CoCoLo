@@ -67,16 +67,26 @@ function createTestApp() {
         actorUserId,
       }),
       update: async ({ tenantId, memberId, member: input }) => ({
-        ...members[0],
-        ...input,
         id: memberId,
         tenantId,
+        name: input.name,
+        kana: input.kana ?? null,
+        category: input.category,
+        gradeLevel: input.gradeLevel ?? null,
+        ageGroup: input.ageGroup ?? null,
+        status: input.status,
+        createdAt: members[0]?.createdAt ?? '2026-08-22T00:00:00.000Z',
       }),
       retire: async ({ tenantId, memberId }) => ({
-        ...members[0],
         id: memberId,
         tenantId,
+        name: members[0]?.name ?? 'テスト部員',
+        kana: members[0]?.kana ?? null,
+        category: members[0]?.category ?? 'student',
+        gradeLevel: members[0]?.gradeLevel ?? null,
+        ageGroup: members[0]?.ageGroup ?? null,
         status: 'retired',
+        createdAt: members[0]?.createdAt ?? '2026-08-22T00:00:00.000Z',
       }),
     },
   });
@@ -298,7 +308,7 @@ test('owner の編集は認証コンテキストのテナントで実行する',
       }),
     },
   );
-  const payload = await readJson(response);
+  const payload = await readJson<Record<string, unknown>>(response);
 
   assert.equal(response.status, 200);
   assert.equal(payload.data.name, '更新後の部員');
@@ -339,7 +349,7 @@ test('owner の退部操作は退部結果を返す', async () => {
     `/api/v1/members/${MEMBER_A}/retire`,
     { method: 'POST', headers: { authorization: 'Bearer owner-a' } },
   );
-  const payload = await readJson(response);
+  const payload = await readJson<Record<string, unknown>>(response);
 
   assert.equal(response.status, 200);
   assert.equal(payload.data.status, 'retired');
@@ -361,6 +371,8 @@ test('リポジトリの予期しない失敗は requestId 付きの500へ収束
       create: async () => {
         throw new Error('database failure');
       },
+      update: async () => null,
+      retire: async () => null,
     },
   });
   const response = await app.request('/api/v1/members', {

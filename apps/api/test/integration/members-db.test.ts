@@ -198,7 +198,10 @@ test('別テナントの部員は編集・退部できず、退部済みは通�
         status: 'active',
       },
     }),
-    (error) => error?.status === 409,
+    (error: unknown) =>
+      error instanceof Error &&
+      'status' in error &&
+      error.status === 409,
   );
 });
 
