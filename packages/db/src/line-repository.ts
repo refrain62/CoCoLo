@@ -502,3 +502,68 @@ export function createSqlLineRepository(
     },
   };
 }
+
+export type LineWebhookTargetType = 'group' | 'official_account';
+
+export type LineWebhookBinding = {
+  tenantId: string;
+  targetType: LineWebhookTargetType;
+  targetId: string;
+};
+
+export type LineWebhookRepository = {
+  findBindingByTarget: (input: {
+    targetType: LineWebhookTargetType;
+    targetId: string;
+  }) => Promise<LineWebhookBinding | null>;
+  claimWebhookEvent: (input: {
+    webhookEventId: string;
+    tenantId: string;
+    targetType: LineWebhookTargetType;
+    targetId: string;
+    receivedAt?: Date;
+  }) => Promise<{ duplicate: boolean; conflict: boolean }>;
+};
+
+// Webhook単体テスト用の最小repository。通常の通知repositoryとは責務を分離し、接続先と重複排除だけを再現する。
+export function createLineNotificationRepository(): LineWebhookRepository & {
+  upsertBinding: (input: {
+    tenantId: string;
+    targetType: LineWebhookTargetType;
+    targetId: string;
+  }) => Promise<LineWebhookBinding>;
+} {
+  const bindings = new Map<string, LineWebhookBinding>();
+  const claimedEvents = new Set<string>();
+  const bindingKey = (targetType: LineWebhookTargetType, targetId: string) =>
+    `${targetType}:${targetId}`;
+
+  return {
+    async upsertBinding(input) {
+      const binding = {
+        tenantId: input.tenantId,
+        targetType: input.targetType,
+        targetId: input.targetId.trim(),
+      } satisfies LineWebhookBinding;
+      bindings.set(bindingKey(binding.targetType, binding.targetId), binding);
+      return { ...binding };
+    },
+    async findBindingByTarget(input) {
+      const binding = bindings.get(
+        bindingKey(input.targetType, input.targetId.trim()),
+      );
+      return binding ? { ...binding } : null;
+    },
+    async claimWebhookEvent(input) {
+      const key = `${input.targetType}:${input.targetId}:${input.webhookEventId}`;
+      if (claimedEvents.has(key)) return { duplicate: true, conflict: false };
+      const binding = bindings.get(
+        bindingKey(input.targetType, input.targetId),
+      );
+      if (!binding || binding.tenantId !== input.tenantId)
+        return { duplicate: false, conflict: true };
+      claimedEvents.add(key);
+      return { duplicate: false, conflict: false };
+    },
+  };
+}
