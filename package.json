@@ -30,6 +30,7 @@
     "verify:production-bundle": "node scripts/verify-production-bundle.ts",
     "verify:release": "node scripts/verify-release.ts",
     "lint:workflows": "node scripts/verify-workflows.ts",
+    "test:workflows": "node --test scripts/verify-workflows.test.ts",
     "security:verify": "node scripts/verify-security-scanners.ts",
     "security:scan": "node scripts/run-security-scanners.ts",
     "db:prepare:test": "node scripts/db-prepare-test.ts",
