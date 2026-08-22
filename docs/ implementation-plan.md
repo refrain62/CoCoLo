@@ -391,9 +391,6 @@ name: ステージングへデプロイ
 # SHA はリリースタグと署名を確認したうえで Dependabot / Renovate から更新する。
 permissions:
   contents: read
-  actions: write
-  id-token: write
-  attestations: write
 
 on:
   push:
@@ -412,6 +409,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     concurrency: staging-deploy
+    permissions:
+      contents: read
+      actions: write
+      id-token: write
+      attestations: write
     env:
       APP_ENV: staging
       PUBLIC_APP_URL: ${{ vars.STAGING_APP_URL }}
@@ -473,13 +475,16 @@ jobs:
         run: pnpm deploy:staging --artifact-sha "${{ github.sha }}"
 
       - name: ステージングのsmoke testを実行
-        run: pnpm smoke:staging --base-url "${{ vars.STAGING_APP_URL }}"
+        env:
+          BASE_URL: ${{ vars.STAGING_APP_URL }}
+        run: pnpm smoke:staging --base-url "$BASE_URL"
 
       - name: ステージングの認証ユーザーでE2Eを実行
-        run: pnpm test:e2e:staging --base-url "${{ vars.STAGING_APP_URL }}"
         env:
+          BASE_URL: ${{ vars.STAGING_APP_URL }}
           STAGING_E2E_USER_EMAIL: ${{ secrets.STAGING_E2E_USER_EMAIL }}
           STAGING_E2E_USER_PASSWORD: ${{ secrets.STAGING_E2E_USER_PASSWORD }}
+        run: pnpm test:e2e:staging --base-url "$BASE_URL"
 
       - name: ステージング検証証跡を保存
         run: pnpm publish:staging-evidence --artifact-sha "${{ github.sha }}"
@@ -515,6 +520,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      attestations: read
     steps:
       - name: staging証跡とartifactを検証前に取得
         env:
@@ -532,7 +538,7 @@ jobs:
           ARTIFACT_SHA: ${{ inputs.artifact_sha }}
         run: |
           sha256sum --check .release/SHA256SUMS
-          gh attestation verify .release/release.tar.gz --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/staging-deploy.yml"
+          gh attestation verify .release/release.tar.gz --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/staging-deploy.yml" --source-digest "$ARTIFACT_SHA"
           test "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)" = "$(cat .release/artifact.sha256)"
       - name: 検証済みSHAのリポジトリを取得
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -565,12 +571,13 @@ jobs:
           ARTIFACT_SHA: ${{ inputs.artifact_sha }}
         run: pnpm deploy:production --artifact-sha "$ARTIFACT_SHA"
       - name: 本番のsmoke testを実行
-        run: pnpm smoke:production --base-url "${{ vars.PRODUCTION_APP_URL }}"
         env:
           APP_ENV: production
+          BASE_URL: ${{ vars.PRODUCTION_APP_URL }}
+        run: pnpm smoke:production --base-url "$BASE_URL"
 ```
 
-`package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、migration checksum manifest を同一の immutable release artifact に含め、`.release/release.tar.gz` と `artifact.sha256` を生成します。staging の `publish:release` は GitHub Actions artifact `release-${{ github.sha }}` として保存し、production は `actions: read` で同名 artifact だけを取得します。staging は GitHub 公式 provenance action をSHA固定で実行し、production は checkout・pnpm install・リポジトリ内 script より前に標準 GitHub CLI の `gh attestation verify` で署名者リポジトリ、workflow、SHA-256を検証します。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・migration checksum・artifact SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリの migration を参照せず、検証済み `.release` 内の migration だけを `prisma migrate deploy` へ渡します。staging / production の workflow は `APP_ENV`、Supabase URL/JWKS、R2 endpoint/bucket、公開URLの allowlist を `verify:environment` で検証し、production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
+`package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、migration checksum manifest を同一の immutable release artifact に含め、`.release/release.tar.gz` と `artifact.sha256` を生成します。staging の `publish:release` は GitHub Actions artifact `release-${{ github.sha }}` として保存し、production は `actions: read` で同名 artifact だけを取得します。staging は GitHub 公式 provenance action をSHA固定で実行し、production は checkout・pnpm install・リポジトリ内 script より前に標準 GitHub CLI の `gh attestation verify` で署名者リポジトリ、workflow、source digest、SHA-256を検証します。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・migration checksum・artifact SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリの migration を参照せず、検証済み `.release` 内の migration だけを `prisma migrate deploy` へ渡します。staging job の強い権限は main push かつ protected staging Environment のこのjobだけに限定し、PRの `quality.yml` は `contents: read` のみとします。将来buildと公開をjob分離する場合も、`actions: write`、`id-token: write`、`attestations: write` は公開・provenance jobにだけ付与します。staging / production の workflow は `APP_ENV`、Supabase URL/JWKS、R2 endpoint/bucket、公開URLの allowlist を `verify:environment` で検証し、production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
 
 ### 6.1 サプライチェーン攻撃対策
 
