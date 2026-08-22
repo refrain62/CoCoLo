@@ -69,13 +69,15 @@ DECLARE
 BEGIN
   IF p_id IS NULL
     OR p_tenant_id IS NULL
+    OR p_tenant_id <> NULLIF(current_setting('app.tenant_id', true), '')::uuid
     OR p_actor_user_id <> current_setting('app.user_id', true)
     OR current_setting('app.role', true) NOT IN ('owner', 'admin')
     OR NOT EXISTS (
       SELECT 1 FROM tenant_memberships
-       WHERE tenant_id = p_tenant_id
+         WHERE tenant_id = p_tenant_id
          AND user_id = p_actor_user_id
          AND status = 'active'
+         AND role::text = current_setting('app.role', true)
     ) THEN
     RAISE EXCEPTION 'LINE通知の登録権限がありません';
   END IF;

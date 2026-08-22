@@ -411,6 +411,10 @@ test('通知失敗は個人情報を結果へ出さず、再試行状態へ確�
 
 test('migrationはtenant・認可・監査・冪等性の境界をDB側で保証する', () => {
   assert.match(MIGRATION, /UNIQUE \(tenant_id, source_type, source_id\)/);
+  assert.match(
+    MIGRATION,
+    /p_tenant_id <> NULLIF\(current_setting\('app\.tenant_id'/,
+  );
   assert.match(MIGRATION, /current_setting\('app\.user_id', true\)/);
   assert.match(
     MIGRATION,
