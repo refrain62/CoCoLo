@@ -13,6 +13,12 @@ export type SignedDownload = {
   expiresAt: Date;
 };
 
+export type AttachmentObjectMetadata = {
+  byteSize: number;
+  contentType: string;
+  metadata: Readonly<Record<string, string>>;
+};
+
 export type AttachmentStorage = {
   createSignedUpload: (input: {
     objectKey: string;
@@ -20,6 +26,9 @@ export type AttachmentStorage = {
     byteSize: number;
     expiresAt: Date;
   }) => Promise<SignedUpload>;
+  readObjectMetadata?: (input: {
+    objectKey: string;
+  }) => Promise<AttachmentObjectMetadata | null>;
   readObject: (input: {
     objectKey: string;
   }) => Promise<StoredAttachmentObject | null>;

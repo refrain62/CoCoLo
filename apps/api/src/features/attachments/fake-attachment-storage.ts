@@ -1,4 +1,5 @@
 import type {
+  AttachmentObjectMetadata,
   AttachmentStorage,
   SignedDownload,
   SignedUpload,
@@ -7,11 +8,12 @@ import type {
 type Stored = {
   bytes: Uint8Array;
   contentType: string;
+  metadata: Record<string, string>;
 };
 
 type SignedObject = {
   objectKey: string;
-  mode: 'upload' | 'download';
+  mode: 'upload' | 'download' | 'delete';
   expiresAt: Date;
 };
 
@@ -21,7 +23,7 @@ export type FakeAttachmentStorage = AttachmentStorage & {
   deletedObjectKeys: readonly string[];
 };
 
-// local検証ではR2を公開せず、署名URLの対象・期限・PUT経路を同じ境界で再現する。
+// local/test用adapter。R2実接続とは別に、期限切れ署名・上書き不可・cleanupを再現する。
 export function createFakeAttachmentStorage(
   now: () => Date = () => new Date(),
 ): FakeAttachmentStorage {
@@ -45,6 +47,8 @@ export function createFakeAttachmentStorage(
 
   return {
     async createSignedUpload(input): Promise<SignedUpload> {
+      if (objects.has(input.objectKey))
+        throw new Error('fakeストレージは既存オブジェクトへ署名しません。');
       return {
         url: issueUrl({
           objectKey: input.objectKey,
@@ -53,6 +57,18 @@ export function createFakeAttachmentStorage(
         }),
         expiresAt: input.expiresAt,
       };
+    },
+    async readObjectMetadata({
+      objectKey,
+    }): Promise<AttachmentObjectMetadata | null> {
+      const stored = objects.get(objectKey);
+      return stored
+        ? {
+            byteSize: stored.bytes.length,
+            contentType: stored.contentType,
+            metadata: { ...stored.metadata },
+          }
+        : null;
     },
     async readObject({ objectKey }) {
       const stored = objects.get(objectKey);
@@ -64,6 +80,8 @@ export function createFakeAttachmentStorage(
         : null;
     },
     async createSignedDownload(input): Promise<SignedDownload> {
+      if (!objects.has(input.objectKey))
+        throw new Error('fakeストレージに対象オブジェクトがありません。');
       return {
         url: issueUrl({
           objectKey: input.objectKey,
@@ -74,6 +92,12 @@ export function createFakeAttachmentStorage(
       };
     },
     async deleteObject({ objectKey }) {
+      const url = issueUrl({
+        objectKey,
+        mode: 'delete',
+        expiresAt: new Date(now().getTime() + 60_000),
+      });
+      resolve(url, 'delete');
       objects.delete(objectKey);
       deletedObjectKeys.push(objectKey);
     },
@@ -84,6 +108,10 @@ export function createFakeAttachmentStorage(
       objects.set(signed.objectKey, {
         bytes: new Uint8Array(bytes),
         contentType,
+        metadata: {
+          'cocolo-byte-size': String(bytes.length),
+          'cocolo-content-type': contentType,
+        },
       });
     },
     objects,

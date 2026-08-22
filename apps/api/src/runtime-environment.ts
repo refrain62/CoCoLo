@@ -9,6 +9,8 @@ export type RuntimeEnvironment = {
   supabaseUrl: string;
   supabaseJwksUrl: string;
   supabaseIssuer: string;
+  r2Endpoint: string;
+  r2Bucket: string;
 };
 
 const allowedBuckets: Record<AppEnvironment, string> = {
@@ -33,6 +35,20 @@ function assertUrl(name: string, value: string) {
     );
 }
 
+function assertR2Endpoint(appEnv: AppEnvironment, value: string) {
+  const url = new URL(value);
+  if (appEnv === 'local' && ['localhost', '127.0.0.1'].includes(url.hostname))
+    return;
+  if (appEnv !== 'local' && ['localhost', '127.0.0.1'].includes(url.hostname))
+    throw new Error(
+      'staging / production の R2_ENDPOINT にローカルURLは使用できません。',
+    );
+  if (url.protocol !== 'https:')
+    throw new Error(
+      'R2_ENDPOINT には HTTPS のS3互換エンドポイントが必要です。',
+    );
+}
+
 // 環境、Supabase接続先、R2 bucket、公開URLを相互検証し、環境混同をfail-closedで防ぐ。
 export function readRuntimeEnvironment(
   environment: RuntimeEnvironmentInput,
@@ -49,11 +65,15 @@ export function readRuntimeEnvironment(
   const supabaseJwksUrl = required(environment, 'SUPABASE_JWKS_URL');
   required(environment, 'SUPABASE_ANON_KEY');
   const r2Bucket = required(environment, 'R2_BUCKET');
+  const r2Endpoint = required(environment, 'R2_ENDPOINT').replace(/\/$/, '');
+  required(environment, 'R2_ACCESS_KEY_ID');
+  required(environment, 'R2_SECRET_ACCESS_KEY');
   const publicAppUrl = required(environment, 'PUBLIC_APP_URL');
   const supabaseIssuer = `${supabaseUrl}/auth/v1`;
 
   assertUrl('SUPABASE_URL', supabaseUrl);
   assertUrl('SUPABASE_JWKS_URL', supabaseJwksUrl);
+  assertR2Endpoint(appEnv, r2Endpoint);
   if (r2Bucket !== allowedBuckets[appEnv])
     throw new Error('R2_BUCKET が環境の許可値と一致しません。');
 
@@ -98,5 +118,7 @@ export function readRuntimeEnvironment(
     supabaseUrl,
     supabaseJwksUrl,
     supabaseIssuer,
+    r2Endpoint,
+    r2Bucket,
   };
 }
