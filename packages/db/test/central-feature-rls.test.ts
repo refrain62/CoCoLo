@@ -111,9 +111,9 @@ async function seedFixture(client: PrismaClient) {
         expires_at, complete_attempts, cleanup_attempts, created_at, available_at)
      VALUES
        ($1::uuid, $3::uuid, 'guardian-a', 'tenant-a/00000000-0000-7000-8000-000000000501', 'image/png', 8,
-        repeat('a', 64), 'uploaded', '2099-01-01T00:00:00Z', 1, 0, now(), NULL),
+        NULL, 'uploaded', '2099-01-01T00:00:00Z', 0, 0, now(), NULL),
        ($2::uuid, $4::uuid, 'owner-b', 'tenant-b/00000000-0000-7000-8000-000000000502', 'application/pdf', 5,
-        repeat('b', 64), 'uploaded', '2099-01-01T00:00:00Z', 1, 0, now(), NULL)`,
+        NULL, 'uploaded', '2099-01-01T00:00:00Z', 0, 0, now(), NULL)`,
     attachmentA,
     attachmentB,
     tenantA,
@@ -122,7 +122,9 @@ async function seedFixture(client: PrismaClient) {
   await execute(
     client,
     `UPDATE attachments
-        SET status = 'available', available_at = now()
+        SET status = 'available',
+            sha256 = CASE WHEN id = $1::uuid THEN repeat('a', 64) ELSE repeat('b', 64) END,
+            available_at = now()
       WHERE id IN ($1::uuid, $2::uuid)`,
     attachmentA,
     attachmentB,
