@@ -41,6 +41,7 @@ main ── push ──▶ staging deploy
 | 種別 | 名前 | 設定内容 |
 | --- | --- | --- |
 | Secret | `DATABASE_URL` | RLS を回避しない `cocolo_app` のアプリ接続URL。通常のAPI接続に使う。 |
+| Secret | `LINE_DELIVERY_WORKER_DATABASE_URL` | LINE配信worker専用の`line_delivery_worker`接続URL。claim/markだけを実行し、APIへ注入しない。 |
 | Secret | `DIRECT_URL` | migration owner 接続URL。role準備とmigration管理に使う。 |
 | Secret | `SUPABASE_ANON_KEY` | staging Supabase の anon key。ブラウザへ公開され得る値だが、GitHub上ではsecretとして管理する。 |
 | Secret | `STAGING_DEPLOY_ADAPTER` | staging providerへ配置する実行可能なadapter。引数は[adapter契約](deployment-adapter.md)に従う。 |
@@ -70,6 +71,7 @@ Workflow内で次の値は固定されており、Environment variableとして�
 | 種別 | 名前 | 設定内容 |
 | --- | --- | --- |
 | Secret | `DATABASE_URL` | RLS を回避しない `cocolo_app` の本番アプリ接続URL。 |
+| Secret | `LINE_DELIVERY_WORKER_DATABASE_URL` | 本番LINE配信worker専用roleの接続URL。`cocolo_app`とは別secret・別接続として検証する。 |
 | Secret | `DIRECT_URL` | 本番migration owner接続URL。 |
 | Secret | `SUPABASE_ANON_KEY` | production Supabase の anon key。 |
 | Secret | `SUPABASE_SERVICE_ROLE_KEY` | APIサーバー専用のService Role Key。Webのビルド変数やブラウザへ絶対に渡さない。 |

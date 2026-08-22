@@ -1,4 +1,5 @@
 import { extractBearerToken, type TokenVerifier } from '@cocolo/auth';
+import { lineDeliveryPublishSchema } from '@cocolo/contracts/line-delivery';
 import type {
   MemberCreateInput,
   MemberListQuery,
@@ -13,6 +14,7 @@ import {
   memberUpdateSchema,
   promotionRequestSchema,
 } from '@cocolo/contracts/member';
+import type { LineDeliveryProducer } from '@cocolo/db';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
 import {
   createRateLimitMiddleware,
@@ -102,6 +104,7 @@ export type AppOptions = {
   membershipRepository?: MembershipRepository;
   memberRepository?: MemberRepository;
   promotionRepository?: PromotionRepository;
+  lineDeliveryProducer?: LineDeliveryProducer;
   rateLimit?: {
     environment?: RateLimitEnvironment;
     mode?: RateLimitStoreMode;
@@ -254,6 +257,7 @@ export function createApp(options: AppOptions = {}) {
 
   app.use('/api/v1/members', authenticate);
   app.use('/api/v1/members/*', authenticate);
+  app.use('/api/v1/notifications/line', authenticate);
 
   // 認証後のtenant/userだけをキーに使い、production系では起動時に分散adapterを要求する。
   const authenticatedRateLimit = createRateLimitMiddleware({
@@ -526,6 +530,70 @@ export function createApp(options: AppOptions = {}) {
           409,
           'PROMOTION_CONFLICT',
           '年度繰り上げの実行が競合しました。',
+        );
+      throw error;
+    }
+  });
+
+  // 認証済みowner/adminの通知依頼を業務transactionへ渡し、tenantをbodyから受け取らない。
+  app.post('/api/v1/notifications/line', async (c) => {
+    if (!options.lineDeliveryProducer)
+      return errorResponse(
+        c,
+        503,
+        'DEPENDENCY_UNAVAILABLE',
+        'LINE通知producerが設定されていません。',
+      );
+    const auth = c.get('auth');
+    if (!managerRoles.has(auth.membership.role))
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        'LINE通知を登録する権限がありません。',
+      );
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return errorResponse(c, 400, 'VALIDATION_ERROR', 'JSON入力が不正です。');
+    }
+    const parsed = lineDeliveryPublishSchema.safeParse(body);
+    if (!parsed.success)
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        '入力値が不正です。',
+        parsed.error.flatten(),
+      );
+    const idempotencyKey = c.req.header('idempotency-key')?.trim();
+    if (!idempotencyKey || idempotencyKey.length > 128)
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        'LINE通知ではIdempotency-Keyが必要です。',
+      );
+    try {
+      const result = await options.lineDeliveryProducer.publish({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        ...parsed.data,
+        idempotencyKey,
+      });
+      return c.json(
+        { data: { notificationId: result.notificationId, status: 'pending' } },
+        202,
+      );
+    } catch (error) {
+      if (error instanceof Error && 'status' in error && error.status === 409)
+        return errorResponse(
+          c,
+          409,
+          'LINE_DELIVERY_CONFLICT',
+          '同じtenant内で通知の冪等キーまたはpayloadが競合しました。',
         );
       throw error;
     }

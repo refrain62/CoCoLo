@@ -68,6 +68,14 @@ PR #39 の競合解消後、`apps/api/package.json` の `test` script と `packa
 
 ブランチ切替・develop追随後は、検証開始前に `pnpm install --frozen-lockfile --config.confirmModulesPurge=false` を実行し、`pnpm build` 完了後にlint・testを実行します。
 
+### 追加記録：scheduler統合後の実行環境確認（2026-08-23）
+
+PR本文に「Node/pnpm本体がないためローカル未実行」と記録されていても、直接`node`がPATHにないだけで、workspaceの`pnpm`が提供する実行環境を利用できる場合があります。
+
+実行可否は推測せず、`pnpm --version`、`pnpm exec node --version`を確認し、可能なら`pnpm`経由で検証します。
+
+今回のscheduler統合では、`pnpm build`、`pnpm test`（130件）、`pnpm lint`、`pnpm typecheck`が成功しました。
+
 ### 追加記録：trust-rootとスカッシュマージ（2026-08-23）
 
 PR #50 のowner bootstrapコミットSHAを `trust-root.json` に保持したままスカッシュマージしたため、元ブランチのSHAがdevelopの祖先にならず、CIの `pnpm verify:trust-root` が失敗しました。
@@ -81,3 +89,5 @@ bootstrap後に保護対象ファイルを追加するPRでは、ファイル内
 なお、JSON以外の手順書をJSONパーサーへ渡す誤検査も発生しました。JSONはパーサー、Markdownは`git diff --check`と内容レビューという対象別の検査を徹底します。
 
 GitHub CLIの差分確認では、`gh pr diff <番号> --patch`のオプションと、`git diff origin/develop...HEAD -- <paths>`のパス指定を混在させて引数エラーを起こしました。統計や特定パスの確認はGitで行い、GitHub上のPR全体確認は`gh pr diff`の対応オプションだけを使います。
+
+検証コマンドを`;`で連結した際、途中の`pnpm verify:trust-root`が失敗しても後続の`git commit`まで実行されました。検証失敗時にコミットへ進まないよう、重要なゲートは単独で実行するか、PowerShellの`$LASTEXITCODE`を確認してから次のGit操作へ進みます。

@@ -13,6 +13,46 @@ export const openapiDocument = {
   servers: [{ url: '/api/v1' }],
   security: [{ bearerAuth: [] }],
   paths: {
+    '/notifications/line': {
+      post: {
+        operationId: 'publishLineNotification',
+        summary: 'LINE通知をoutboxへ登録',
+        parameters: [
+          {
+            name: 'Idempotency-Key',
+            in: 'header',
+            required: true,
+            schema: { type: 'string', minLength: 1, maxLength: 128 },
+            description:
+              '同じpayloadの再送では同じ値を使い、通知の重複登録を防ぎます。',
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/LineDeliveryPublishInput' },
+            },
+          },
+        },
+        responses: {
+          202: {
+            description: '通知をoutboxへ登録',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/LineDeliveryPublishResponse',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          409: { description: '同じsourceのpayloadまたは冪等キーが競合' },
+        },
+      },
+    },
     '/uploads': {
       post: {
         operationId: 'createUploadSession',
@@ -175,6 +215,37 @@ export const openapiDocument = {
       bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
     },
     schemas: {
+      LineDeliveryPublishInput: {
+        type: 'object',
+        required: ['sourceId', 'destination', 'title', 'body', 'deepLink'],
+        additionalProperties: false,
+        properties: {
+          sourceId: { type: 'string', minLength: 1, maxLength: 128 },
+          destination: { type: 'string', minLength: 1, maxLength: 128 },
+          title: { type: 'string', minLength: 1, maxLength: 200 },
+          body: { type: 'string', minLength: 1, maxLength: 4000 },
+          deepLink: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 2048,
+            pattern: '^https://|^http://localhost(:[0-9]+)?/',
+          },
+        },
+      },
+      LineDeliveryPublishResponse: {
+        type: 'object',
+        required: ['data'],
+        properties: {
+          data: {
+            type: 'object',
+            required: ['notificationId', 'status'],
+            properties: {
+              notificationId: { type: 'string', format: 'uuid' },
+              status: { type: 'string', const: 'pending' },
+            },
+          },
+        },
+      },
       UploadSessionInput: {
         type: 'object',
         required: ['mediaType', 'byteSize'],

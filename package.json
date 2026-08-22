@@ -24,6 +24,7 @@
     "generate:openapi": "node scripts/generate-openapi.ts",
     "lint:openapi": "node scripts/verify-openapi.ts",
     "test:contract": "node --test packages/contracts/test/*.test.ts",
+    "test:release": "node --test scripts/release-artifact.test.ts",
     "verify:workspace-boundaries": "depcruise --config .dependency-cruiser.cjs apps packages --output-type err-long && node scripts/verify-workspace-boundaries.ts",
     "verify:migration-sql": "node scripts/verify-migration-sql.ts",
     "verify:pnpm-config": "node scripts/verify-pnpm-config.ts",
@@ -38,6 +39,7 @@
     "deploy:staging": "node scripts/deploy-artifact.ts staging",
     "deploy:production": "node scripts/deploy-artifact.ts production",
     "dev:test": "pnpm --filter @cocolo/api dev:test",
+    "line:schedule": "pnpm --filter @cocolo/api line:schedule",
     "package:release": "node scripts/package-release.ts"
   },
   "devDependencies": {
