@@ -123,7 +123,7 @@ tenant IDを利用者入力の認可根拠にせず、JWTのuser IDからactive 
 ## 外部サービスと将来のDB分離
 
 - Supabase Authは認証とJWT発行、Supabase PostgreSQLは現行のアプリケーションデータを担当します。
-- Cloudflare R2はprivate bucketと短期署名URLを前提にPhase 4で導入予定です。未実装の機能を運用済みとして扱いません。
+- Cloudflare R2はprivate bucketと短期署名URLで添付を扱います。実bucket、secret、配置adapterが未設定の環境では成功扱いにしません。
 - DBを将来分離しても、認証ユーザー識別子は外部IDの文字列として保持し、Auth内部schemaを移行対象にしません。
 - 移行時のRLS、ロール、バックアップ、照合、切り戻し、forward recoveryはDB分離仕様・移行計画に従います。
 

@@ -102,11 +102,15 @@ Webhook の応答に tenant ID、user ID、受信本文を含めません。
 
 ## 予定、締切、回覧との統合境界
 
-予定、締切、回覧の各機能は LINE の内部 repository を直接参照せず、`buildLineNotificationInput` で通知 DTO を作ります。
+予定、締切、回覧の各機能はLINEの内部repositoryを直接参照せず、`buildLineNotificationInput`で通知DTOを作る契約です。
 
 通知元は `event`、`deadline`、`bulletin` のいずれかです。
 
-通知元 ID、タイトル、本文、同一環境のリンクを DTO に設定し、認証済みの実行者として `service.enqueue` を呼び出します。
+通知元ID、タイトル、本文、同一環境のリンクをDTOへ設定し、認証済みの実行者として`service.enqueue`を呼び出します。
+
+現状の中央統合では、利用者がLINE通知画面から手動登録する経路とDTO生成器までを接続しています。
+予定・締切・回覧の保存成功を起点に自動で`service.enqueue`するoutbox経路は未実装です。
+保存処理へ直接通知を追加すると、外部送信障害で業務保存を巻き戻せないため、次の実装では同一tenantのoutboxまたは通知依頼表を追加し、保存と通知依頼を同一transactionで確定します。
 
 各機能は通知の送信結果を自分の状態遷移へ直接反映せず、通知キューの ID と状態を参照します。
 
@@ -173,8 +177,8 @@ staging と production で channel secret、access token、group ID を共有し
 
 ## 統合前の確認
 
-- [ ] Central app へ feature app を mount し、既存 JWT と active membership を渡した。
-- [ ] LINE 専用 migration の RLS、connected group の一意制約、Webhook 重複制約を実 PostgreSQL で確認した。
+- [x] Central app へ feature app を mount し、既存 JWT と active membership を渡した。
+- [ ] LINE 専用 migration のRLS、connected groupの一意制約、Webhook重複制約、worker関数を実PostgreSQLで確認した。
 - [ ] staging の専用 LINE channel と専用 group で、接続、未接続、通知登録、送信、失敗、再試行を確認した。
 - [ ] 不正署名、destination 不一致、未知 group、重複 webhook、別 tenant の通知参照を拒否した。
 - [ ] 通知本文、ログ、監査 metadata、Webhook 応答へ個人情報と秘密情報が混入しないことを確認した。

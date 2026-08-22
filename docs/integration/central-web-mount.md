@@ -28,8 +28,8 @@ tenant IDをURL、query、body、画面のチーム選択値へ渡しません�
 | `/attachments` | 添付 | `AttachmentUploader`を接続 |
 | `/line` | LINE通知 | `LineNotificationPanel`を接続 |
 | `/ride/:planId` | 送迎 | UUIDv7の `planId` を検証して接続 |
-| `/bulletins` | 回覧板 | PR #30のWeb画面を接続。APIは未mount |
-| `/team-selection` | チーム選択 | PR #31のWeb画面を接続。APIは`/api/v1/auth` mount待ち |
+| `/bulletins` | 回覧板 | Web画面と中央APIを接続 |
+| `/team-selection` | チーム選択 | Web画面と`/api/v1/auth` APIを接続 |
 | `/manual` | 操作マニュアル | 認証前後に表示可能 |
 
 予定、共同購買、添付、回覧板の詳細URLは、UUIDv7を検証した後に詳細画面未接続として表示します。
@@ -44,7 +44,7 @@ UUIDv7でない `planId` や詳細資源IDは、APIへ渡さずエラー表示�
 
 認証後の中央Webは `GET /api/v1/session` から `{ data: { tenantId, role } }` を取得する契約を使用します。
 
-このendpointは現在の `integration/all-features` に未実装です。
+このendpointは中央APIへ実装済みです。
 
 応答が取得できない場合は、所属情報を確認できない状態として機能画面を表示しません。
 
@@ -76,7 +76,7 @@ roleは中央APIの所属解決結果だけを使用し、画面上にrole選択
 
 各feature画面の読み込み中、空、通信エラーはfeature画面自身の状態表示へ委譲します。
 
-feature APIは中央 `apps/api/src/app.ts` へまだmountしていないため、Webの上部に未接続の注意を表示します。
+feature APIは中央 `apps/api/src/app.ts` へmount済みですが、環境依存性が未設定の場合はAPIの503を画面側でエラーとして表示します。
 
 この注意表示は、feature画面やデータ操作が本番接続済みであることを意味しません。
 
@@ -102,7 +102,7 @@ PR #30からWeb画面とAPI clientだけを `apps/web/src/features/bulletin-boar
 
 中央navigationは `createBulletinBoardApi` へ現在のsession tokenを渡し、`BulletinBoardPage` へ中央roleを渡します。
 
-回覧板API、DB migration、RLS、添付ダウンロードの実接続は、中央API統合後の条件です。
+回覧板API、DB migration、RLS、添付ダウンロードは中央API統合へ接続済みです。
 
 PR #31のチーム選択画面、API client、UUIDv7契約を `apps/web/src/features/auth-team-selection/` と `packages/contracts/src/auth-team-selection-contract.ts` へ取り込みました。
 
@@ -136,7 +136,9 @@ Web clientの一覧・選択pathは、中央APIを `/api/v1/auth` へmountした
 
 feature API、OpenAPI、DB migration、実LINE、実R2の接続は、このブランチの検証範囲に含めません。
 
-中央Webの追加後に、対象テスト8件、domainとUIのbuild、Web typecheck、リポジトリ全体buildが成功しました。
+詳細画面（予定、共同購買、添付、回覧板）は、UUIDv7を検証したうえで未接続表示を返します。
+
+中央Webの追加後に、対象テスト、domainとUIのbuild、Web typecheck、リポジトリ全体buildを実行します。
 
 リポジトリ全体のVitestは17ファイル51件が成功しました。
 
