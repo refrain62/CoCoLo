@@ -13,11 +13,11 @@ assert.ok(process.env.DATABASE_URL, 'DATABASE_URLが必要です');
 const prisma = createPrismaClient();
 const repository = createEventRepository(prisma);
 
-function eventInput(suffix, late = false) {
+function eventInput(suffix: string | number, late = false) {
   const startsAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
   return {
     title: `統合テスト予定-${suffix}`,
-    type: 'practice',
+    type: 'practice' as const,
     startsAt,
     endsAt: new Date(startsAt.getTime() + 2 * 60 * 60 * 1000),
     location: '統合テスト会場',

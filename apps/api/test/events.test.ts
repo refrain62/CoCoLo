@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type {
+  AttendanceRecord,
+  AttendanceSummary,
+  EventRecord,
+  EventRepository,
+  EventWriteInput,
+} from '@cocolo/db/events';
 import {
   AttendancePolicyError,
   assertValidEventSchedule,
+  type EventRole,
 } from '@cocolo/domain/event';
 import { createEventsApp } from '../dist/features/events/event-api.js';
 
@@ -12,7 +20,7 @@ const EVENT_A = '00000000-0000-7000-8000-000000000101';
 const MEMBER_A = '00000000-0000-7000-8000-000000000201';
 const MEMBER_B = '00000000-0000-7000-8000-000000000202';
 
-const memberships = {
+const memberships: Record<string, { tenantId: string; role: EventRole }> = {
   'owner-a': { tenantId: TENANT_A, role: 'owner' },
   'admin-a': { tenantId: TENANT_A, role: 'admin' },
   'staff-a': { tenantId: TENANT_A, role: 'staff' },
@@ -20,7 +28,7 @@ const memberships = {
   'owner-b': { tenantId: TENANT_B, role: 'owner' },
 };
 
-function event(overrides = {}) {
+function event(overrides: Partial<EventRecord> = {}): EventRecord {
   return {
     id: EVENT_A,
     tenantId: TENANT_A,
@@ -42,11 +50,14 @@ function event(overrides = {}) {
   };
 }
 
-function createFakeRepository() {
+function createFakeRepository(): EventRepository & {
+  events: EventRecord[];
+  responses: Map<string, AttendanceRecord>;
+} {
   const events = [event()];
   const responses = new Map();
   const assigned = new Set([`guardian-a:${MEMBER_A}`]);
-  const assertEvent = (input) =>
+  const assertEvent = (input: EventWriteInput) =>
     assertValidEventSchedule(
       {
         startsAt: input.startsAt,
@@ -74,7 +85,6 @@ function createFakeRepository() {
         meetingTime: input.meetingTime?.toISOString() ?? null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        createdByUserId: actorUserId,
       });
       events.push(created);
       return created;
@@ -85,8 +95,9 @@ function createFakeRepository() {
           candidate.id === eventId && candidate.tenantId === tenantId,
       );
       if (!current) {
-        const error = new Error('予定が見つかりません。');
-        error.status = 404;
+        const error = Object.assign(new Error('予定が見つかりません。'), {
+          status: 404,
+        });
         throw error;
       }
       const next = {
@@ -127,8 +138,9 @@ function createFakeRepository() {
           candidate.id === eventId && candidate.tenantId === tenantId,
       );
       if (!current) {
-        const error = new Error('予定が見つかりません。');
-        error.status = 404;
+        const error = Object.assign(new Error('予定が見つかりません。'), {
+          status: 404,
+        });
         throw error;
       }
       const deadlinePassed =
@@ -166,6 +178,7 @@ function createFakeRepository() {
         memberId,
         response,
         correctionReason: null,
+        respondedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
       value.response = response;
@@ -179,7 +192,7 @@ function createFakeRepository() {
       );
       return value;
     },
-    summary: async ({ tenantId, eventId }) => {
+    summary: async ({ tenantId, eventId }): Promise<AttendanceSummary> => {
       const values = [...responses.values()].filter(
         (candidate) =>
           candidate.tenantId === tenantId && candidate.eventId === eventId,
@@ -218,11 +231,11 @@ function createTestApp(repository = createFakeRepository()) {
   });
 }
 
-async function json(response) {
+async function json(response: Response) {
   return response.json();
 }
 
-function auth(token) {
+function auth(token: string) {
   return { authorization: `Bearer ${token}` };
 }
 
@@ -278,7 +291,9 @@ test('ownerは所属tenantの予定だけを取得し、tenantIdをDTOへ返さ�
 
 test('guardianは担当部員の締切前回答を一意に更新できる', async () => {
   const repository = createFakeRepository();
-  repository.events[0].attendanceDeadline = new Date(
+  const currentEvent = repository.events[0];
+  assert.ok(currentEvent);
+  currentEvent.attendanceDeadline = new Date(
     Date.now() + 3_600_000,
   ).toISOString();
   const app = createTestApp(repository);
@@ -291,12 +306,16 @@ test('guardianは担当部員の締切前回答を一意に更新できる', asy
     assert.equal(response.status, 200);
   }
   assert.equal(repository.responses.size, 1);
-  assert.equal([...repository.responses.values()][0].response, 'absent');
+  const savedResponse = [...repository.responses.values()][0];
+  assert.ok(savedResponse);
+  assert.equal(savedResponse.response, 'absent');
 });
 
 test('guardianの担当外と締切後の回答を拒否する', async () => {
   const repository = createFakeRepository();
-  repository.events[0].attendanceDeadline = new Date(
+  const currentEvent = repository.events[0];
+  assert.ok(currentEvent);
+  currentEvent.attendanceDeadline = new Date(
     Date.now() - 3_600_000,
   ).toISOString();
   const app = createTestApp(repository);
@@ -317,7 +336,9 @@ test('guardianの担当外と締切後の回答を拒否する', async () => {
 
 test('締切後のstaff修正は理由を要求し、集計はmanagerだけに許可する', async () => {
   const repository = createFakeRepository();
-  repository.events[0].attendanceDeadline = new Date(
+  const currentEvent = repository.events[0];
+  assert.ok(currentEvent);
+  currentEvent.attendanceDeadline = new Date(
     Date.now() - 3_600_000,
   ).toISOString();
   const app = createTestApp(repository);
