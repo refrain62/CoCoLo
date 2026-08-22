@@ -62,6 +62,8 @@ jobs:
         run: pnpm build && pnpm package:release --artifact-sha "${GITHUB_SHA}" --output .release
         env:
           ARTIFACT_SHA: ${{ github.sha }}
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       - name: release artifactを検証
         run: pnpm verify:release --release-dir .release --artifact-sha "${GITHUB_SHA}"
       - name: release provenanceを生成
@@ -69,16 +71,22 @@ jobs:
         with:
           subject-path: .release/release.tar.gz
       - name: stagingへ配置
-        run: echo 'staging artifactを配置しました。実デプロイadapterは環境設定に従います。'
+        run: pnpm deploy:staging --artifact-sha "${GITHUB_SHA}" --release-dir .release
+        env:
+          STAGING_DEPLOY_ADAPTER: ${{ secrets.STAGING_DEPLOY_ADAPTER }}
       - name: staging E2E smoke
         run: pnpm test:e2e:staging
         env:
           APP_ENV: staging
           STAGING_BASE_URL: ${{ vars.PUBLIC_APP_URL }}
+          E2E_TEST_EMAIL: ${{ secrets.STAGING_E2E_TEST_EMAIL }}
+          E2E_TEST_PASSWORD: ${{ secrets.STAGING_E2E_TEST_PASSWORD }}
       - name: staging evidenceを作成
         run: node scripts/create-staging-evidence.mjs
         env:
           ARTIFACT_SHA: ${{ github.sha }}
+          STAGING_BASE_URL: ${{ vars.PUBLIC_APP_URL }}
+          STAGING_DEPLOYMENT_RECORD: .release/deployment-record.json
       - name: release artifactを保存
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

@@ -91,7 +91,7 @@ const managerRoles = new Set<MemberRole>(['owner', 'admin']);
 
 function errorResponse(
   c: Context<ApiEnv>,
-  status: 400 | 401 | 403 | 404 | 409 | 503,
+  status: 400 | 401 | 403 | 404 | 409 | 500 | 503,
   code: string,
   message: string,
   details: unknown = {},
@@ -138,6 +138,16 @@ export function createApp(options: AppOptions = {}) {
     c.set('requestId', requestId);
     c.header('x-request-id', requestId);
     await next();
+  });
+
+  app.onError((error, c) => {
+    void error;
+    return errorResponse(
+      c,
+      500,
+      'INTERNAL_SERVER_ERROR',
+      '予期しないエラーが発生しました。',
+    );
   });
 
   app.get('/health', (c) => c.json({ status: 'ok', service: 'api' }));

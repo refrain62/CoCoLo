@@ -71,6 +71,34 @@ test('実PostgreSQLのowner登録は同一transactionで監査される', async 
   assert.equal(created.ageGroup, '30代');
 });
 
+test('部員一覧の監査ログへ検索語を保存しない', async () => {
+  const searchTerm = `監査対象の個人名-${Date.now()}`;
+  await repositories.memberRepository.list({
+    tenantId: TENANT_A,
+    userId: 'owner-a',
+    role: 'owner',
+    query: { q: searchTerm, page: 1, pageSize: 50 },
+  });
+
+  const auditLogs = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT
+        set_config('app.tenant_id', ${TENANT_A}, true),
+        set_config('app.user_id', 'owner-a', true),
+        set_config('app.role', 'owner', true)
+    `;
+    return tx.auditLog.findMany({
+      where: { tenantId: TENANT_A, action: 'member.list' },
+      select: { metadata: true },
+    });
+  });
+
+  assert.equal(
+    auditLogs.some((log) => JSON.stringify(log.metadata).includes(searchTerm)),
+    false,
+  );
+});
+
 test.after(async () => {
   await prisma.$disconnect();
 });

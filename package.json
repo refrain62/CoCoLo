@@ -31,6 +31,8 @@
     "lint:workflows": "node scripts/verify-workflows.mjs",
     "db:prepare:test": "node scripts/db-prepare-test.mjs",
     "db:seed:test": "node scripts/db-seed-test.mjs",
+    "deploy:staging": "node scripts/deploy-artifact.mjs staging",
+    "deploy:production": "node scripts/deploy-artifact.mjs production",
     "dev:test": "pnpm --filter @cocolo/api dev:test",
     "package:release": "node scripts/package-release.mjs"
   },

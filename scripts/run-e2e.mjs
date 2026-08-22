@@ -21,7 +21,7 @@ const result = spawnSync(
   {
     stdio: 'inherit',
     shell: process.platform === 'win32',
-    env: { ...process.env, E2E_ENV: environment },
+    env: { ...process.env, APP_ENV: environment, E2E_ENV: environment },
   },
 );
 if (result.error) throw result.error;

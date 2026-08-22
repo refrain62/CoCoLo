@@ -131,6 +131,44 @@ test('不正な学年と特記事項を含む登録は400で拒否する', async
   assertError(await readJson(response), 'VALIDATION_ERROR');
 });
 
+test('studentに年代を指定した登録は400で拒否する', async () => {
+  const response = await createTestApp().request('/api/v1/members', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer owner-a',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: '区分不整合',
+      category: 'student',
+      gradeLevel: 1,
+      ageGroup: '30代',
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assertError(await readJson(response), 'VALIDATION_ERROR');
+});
+
+test('adultに学年を指定した登録は400で拒否する', async () => {
+  const response = await createTestApp().request('/api/v1/members', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer owner-a',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: '区分不整合',
+      category: 'adult',
+      gradeLevel: 1,
+      ageGroup: '30代',
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assertError(await readJson(response), 'VALIDATION_ERROR');
+});
+
 test('ownerの一覧はmembershipで解決したtenant内だけを返す', async () => {
   const response = await createTestApp().request('/api/v1/members', {
     headers: { authorization: 'Bearer owner-a' },
@@ -181,4 +219,39 @@ test('ownerの登録はmembershipのtenantで作成し、noteを永続化しな�
   assert.equal(payload.data.tenantId, undefined);
   assert.equal(payload.data.name, '新規部員');
   assert.equal(payload.data.note, undefined);
+});
+
+test('repositoryの予期せぬ失敗はrequestId付きの500へ収束する', async () => {
+  const app = createApp({
+    verifyToken: async () => ({
+      userId: 'owner-a',
+      issuer: 'https://example.supabase.co/auth/v1',
+      audience: 'authenticated',
+      expiresAt: Math.floor(Date.now() / 1000) + 300,
+    }),
+    membershipRepository: {
+      findActiveByUserId: async () => ({ tenantId: TENANT_A, role: 'owner' }),
+    },
+    memberRepository: {
+      list: async () => [],
+      create: async () => {
+        throw new Error('database failure');
+      },
+    },
+  });
+  const response = await app.request('/api/v1/members', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer owner-a',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: 'DB失敗',
+      category: 'student',
+      gradeLevel: 1,
+    }),
+  });
+
+  assert.equal(response.status, 500);
+  assertError(await readJson(response), 'INTERNAL_SERVER_ERROR');
 });
