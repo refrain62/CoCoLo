@@ -56,6 +56,7 @@ feature app自身がBearer token、有効期限、active membershipを検証し�
 | `GET` | `/api/v1/events/:eventId` | 予定詳細 | 全権限（所属tenant内のみ） |
 | `PATCH` | `/api/v1/events/:eventId` | 予定編集 | `owner`、`admin`、`staff` |
 | `PUT` | `/api/v1/events/:eventId/attendance` | 出欠回答または管理修正 | `guardian`、`owner`、`admin`、`staff` |
+| `GET` | `/api/v1/events/:eventId/attendance` | 認可済みの現在回答を取得 | `guardian`、`owner`、`admin`、`staff` |
 | `GET` | `/api/v1/events/:eventId/attendance/summary` | 出欠集計 | `owner`、`admin`、`staff` |
 
 レスポンスDTOへ`tenantId`、回答者の`userId`、監査情報は返しません。

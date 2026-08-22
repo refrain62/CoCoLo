@@ -86,6 +86,13 @@ function createFakeRepository(): EventRepository & {
       }
       return current;
     },
+    currentAttendance: async ({ tenantId, eventId, actorUserId, role }) =>
+      [...responses.values()].filter(
+        (candidate) =>
+          candidate.tenantId === tenantId &&
+          candidate.eventId === eventId &&
+          (role !== 'guardian' || candidate.userId === actorUserId),
+      ),
     create: async ({ tenantId, actorUserId, ...input }) => {
       assertEvent(input);
       const created = event({

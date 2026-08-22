@@ -102,6 +102,59 @@ function eventRepository() {
         updatedAt: '2026-08-22T00:00:00.000Z',
       };
     },
+    update: async (input: { eventId: string }) => {
+      calls.push(input);
+      return {
+        id: input.eventId,
+        tenantId: TEAM_A,
+        title: '中央mount予定',
+        type: 'practice' as const,
+        startsAt: '2026-09-01T10:00:00.000Z',
+        endsAt: '2026-09-01T12:00:00.000Z',
+        location: null,
+        itemsToBring: null,
+        fee: 0,
+        announcementImageAttachmentId: null,
+        opponent: null,
+        meetingTime: null,
+        transportationRequired: false,
+        attendanceDeadline: '2026-09-01T09:00:00.000Z',
+        createdAt: '2026-08-22T00:00:00.000Z',
+        updatedAt: '2026-08-22T00:00:00.000Z',
+      };
+    },
+    upsertAttendance: async (input: {
+      eventId: string;
+      memberId: string;
+      response: 'attending' | 'absent' | 'pending';
+    }) => {
+      calls.push(input);
+      return {
+        id: '00000000-0000-7000-8000-000000000601',
+        eventId: input.eventId,
+        userId: 'user-a',
+        memberId: input.memberId,
+        response: input.response,
+        correctionReason: null,
+        respondedAt: '2026-08-22T00:00:00.000Z',
+        updatedAt: '2026-08-22T00:00:00.000Z',
+      };
+    },
+    currentAttendance: async (input: { eventId: string }) => {
+      calls.push(input);
+      return [];
+    },
+    summary: async (input: { eventId: string }) => {
+      calls.push(input);
+      return {
+        totalMembers: 1,
+        attending: 0,
+        absent: 0,
+        pending: 0,
+        unanswered: 1,
+        unansweredMemberIds: ['00000000-0000-7000-8000-000000000201'],
+      };
+    },
   } as unknown as EventRepository;
   return { repository, calls };
 }
@@ -219,4 +272,51 @@ test('中央path validationはfeatureへ不正なUUIDを渡さない', async () 
 
   assert.equal(response.status, 400);
   assert.equal((await json(response)).error?.code, 'VALIDATION_ERROR');
+});
+
+test('予定詳細の回答・現在値・締切延長・集計を中央mountから操作する', async () => {
+  const eventStore = eventRepository();
+  const app = createApp({
+    verifyToken,
+    membershipRepository: membershipRepository(),
+    central: {
+      features: { events: { repository: eventStore.repository } },
+      logSink: () => undefined,
+    },
+  });
+  const memberId = '00000000-0000-7000-8000-000000000201';
+  const answer = await app.request(`/api/v1/events/${EVENT_A}/attendance`, {
+    method: 'PUT',
+    headers: { ...authHeaders, 'content-type': 'application/json' },
+    body: JSON.stringify({ memberId, response: 'attending' }),
+  });
+  const current = await app.request(`/api/v1/events/${EVENT_A}/attendance`, {
+    headers: authHeaders,
+  });
+  const extended = await app.request(`/api/v1/events/${EVENT_A}`, {
+    method: 'PATCH',
+    headers: { ...authHeaders, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      attendanceDeadline: '2026-09-01T09:00:00.000Z',
+    }),
+  });
+  const summary = await app.request(
+    `/api/v1/events/${EVENT_A}/attendance/summary`,
+    { headers: authHeaders },
+  );
+
+  assert.equal(answer.status, 200);
+  assert.equal(current.status, 200);
+  assert.equal(extended.status, 200);
+  assert.equal(summary.status, 200);
+  assert.equal(
+    eventStore.calls.filter(
+      (call) =>
+        typeof call === 'object' &&
+        call !== null &&
+        'eventId' in call &&
+        (call as { eventId: string }).eventId === EVENT_A,
+    ).length,
+    4,
+  );
 });

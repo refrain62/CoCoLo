@@ -93,6 +93,9 @@ export type EventRepository = {
       correctionReason?: string | null;
     },
   ) => Promise<AttendanceRecord>;
+  currentAttendance: (
+    input: EventRepositoryInput & { eventId: string },
+  ) => Promise<AttendanceRecord[]>;
   summary: (
     input: EventRepositoryInput & { eventId: string },
   ) => Promise<AttendanceSummary>;
@@ -561,6 +564,37 @@ export function createEventRepository(
           },
         );
         return toAttendanceRecord(row);
+      }),
+    currentAttendance: (input) =>
+      client.$transaction(async (tx) => {
+        await setRlsContext(tx, input);
+        await assertActiveMembership(tx, input);
+        const eventRows = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id
+          FROM events
+          WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
+        `;
+        if (!eventRows[0]) throw new EventNotFoundError();
+        const rows = await tx.$queryRaw<AttendanceRow[]>`
+          SELECT DISTINCT ON (member_id)
+                 id, event_id, user_id, member_id, response, correction_reason,
+                 responded_at, updated_at
+          FROM attendance_responses
+          WHERE tenant_id = ${input.tenantId}::uuid
+            AND event_id = ${input.eventId}::uuid
+            AND (${input.role} = 'guardian' AND user_id = ${input.actorUserId}
+                 OR ${input.role} <> 'guardian')
+          ORDER BY member_id, updated_at DESC, id DESC
+        `;
+        await audit(
+          tx,
+          input,
+          'attendance.current.list',
+          'event',
+          input.eventId,
+          {},
+        );
+        return rows.map(toAttendanceRecord);
       }),
     summary: (input) =>
       client.$transaction(async (tx) => {

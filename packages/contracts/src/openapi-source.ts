@@ -127,6 +127,11 @@ const centralFeaturePaths = {
     }),
   },
   '/events/{eventId}/attendance': {
+    get: featureOperation({
+      operationId: 'getCurrentAttendance',
+      summary: '現在の出欠回答を取得',
+      parameters: [idParameter('eventId')],
+    }),
     put: featureOperation({
       operationId: 'upsertAttendance',
       summary: '出欠を登録',
