@@ -20,42 +20,8 @@
     "enabled": true,
     "indentStyle": "space",
     "indentWidth": 2,
-    "lineEnding": "lf"
+    "lineEnding": "auto"
   },
-  "overrides": [
-    {
-      "includes": [
-        "apps/api/package.json",
-        "apps/api/test/health.test.ts",
-        "apps/api/tsconfig.json",
-        "apps/api/tsconfig.test.json",
-        "apps/web/package.json",
-        "apps/web/src/vite-env.d.ts",
-        "apps/web/tsconfig.json",
-        "e2e/health.spec.ts",
-        "packages/auth/package.json",
-        "packages/auth/test/supabase-verifier.vitest.ts",
-        "packages/auth/tsconfig.json",
-        "packages/contracts/package.json",
-        "packages/db/tsconfig.json",
-        "packages/domain/package.json",
-        "packages/domain/test/grade.test.ts",
-        "packages/domain/test/grade.vitest.ts",
-        "packages/domain/tsconfig.json",
-        "packages/test-fixtures/package.json",
-        "packages/test-fixtures/src/index.ts",
-        "packages/test-fixtures/tsconfig.json",
-        "packages/ui/package.json",
-        "packages/ui/src/index.tsx",
-        "packages/ui/tsconfig.json",
-        "playwright.config.ts",
-        "tsconfig.base.json"
-      ],
-      "formatter": {
-        "lineEnding": "crlf"
-      }
-    }
-  ],
   "linter": {
     "enabled": true,
     "rules": {
