@@ -12,7 +12,7 @@ const safeMigration: MigrationSqlFile = {
     "COMMENT ON TABLE tenants IS 'team';",
     'ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;',
     'ALTER TABLE tenants FORCE ROW LEVEL SECURITY;',
-    'CREATE POLICY tenants_select ON tenants FOR SELECT USING (true);',
+    "CREATE POLICY tenants_select ON tenants FOR SELECT USING (id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);",
     'GRANT SELECT ON tenants TO cocolo_app;',
   ].join('\n'),
 };
@@ -112,9 +112,108 @@ test('既存のDROP POLICYとDROP TRIGGERは再作成用として許可する', 
         content: [
           'DROP POLICY IF EXISTS tenants_select ON tenants;',
           'DROP TRIGGER IF EXISTS tenant_guard ON tenants;',
-          'CREATE POLICY tenants_select ON tenants FOR SELECT USING (true);',
+          "CREATE POLICY tenants_select ON tenants FOR SELECT USING (id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);",
         ].join('\n'),
       },
     ]),
   );
+});
+
+test('コメント内の危険SQLは無視し、コメントを挟んだ危険SQLは拒否する', () => {
+  assert.doesNotThrow(() =>
+    validateMigrationSql([
+      safeMigration,
+      {
+        path: '20260822110000_comment/migration.sql',
+        content:
+          "-- DROP TABLE tenants;\n/* ALTER TABLE tenants DISABLE ROW LEVEL SECURITY; */\nCOMMENT ON TABLE tenants IS 'still safe';",
+      },
+    ]),
+  );
+  assert.throws(() =>
+    validateMigrationSql([
+      safeMigration,
+      {
+        path: '20260822110000_comment/migration.sql',
+        content: 'ALTER TABLE tenants DISABLE /* intent */ ROW LEVEL SECURITY;',
+      },
+    ]),
+  );
+});
+
+test('CREATE TABLE ASとLIKEを拒否する', () => {
+  for (const content of [
+    'CREATE TABLE leaked AS SELECT * FROM members;',
+    'CREATE TABLE leaked (LIKE members);',
+  ]) {
+    assert.throws(() =>
+      validateMigrationSql([
+        safeMigration,
+        {
+          path: '20260822110000_unsafe/migration.sql',
+          content,
+        },
+      ]),
+    );
+  }
+});
+
+test('未知DDLと危険DDL・複数granteeを拒否する', () => {
+  for (const content of [
+    'ALTER TABLE members DROP CONSTRAINT members_fk;',
+    'ALTER TABLE members DISABLE TRIGGER ALL;',
+    'CREATE OR REPLACE FUNCTION unsafe() RETURNS void LANGUAGE sql SECURITY DEFINER AS $$ SELECT 1 $$;',
+    'CREATE VIEW leaked AS SELECT * FROM members;',
+    'SET row_security = off;',
+    'GRANT SELECT ON members TO cocolo_app, PUBLIC;',
+    'CREATE SCHEMA leaked;',
+  ]) {
+    assert.throws(() =>
+      validateMigrationSql([
+        safeMigration,
+        {
+          path: '20260822110000_unsafe/migration.sql',
+          content,
+        },
+      ]),
+    );
+  }
+});
+
+test('必須tableのtenant_id欠落を拒否する', () => {
+  assert.throws(() =>
+    validateMigrationSql([
+      safeMigration,
+      {
+        path: '20260822110000_missing-tenant/migration.sql',
+        content: [
+          'CREATE TABLE members (id uuid PRIMARY KEY);',
+          "COMMENT ON TABLE members IS 'members';",
+          'ALTER TABLE members ENABLE ROW LEVEL SECURITY;',
+          'ALTER TABLE members FORCE ROW LEVEL SECURITY;',
+          "CREATE POLICY members_select ON members FOR SELECT USING (id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);",
+          'GRANT SELECT ON members TO cocolo_app;',
+        ].join('\n'),
+      },
+    ]),
+  );
+});
+
+test('RLS policyのUSINGとWITH CHECKにtenant境界を要求する', () => {
+  for (const content of [
+    'CREATE POLICY members_select ON members FOR SELECT USING (true);',
+    "CREATE POLICY members_select ON members FOR SELECT USING (true OR tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);",
+    "CREATE POLICY members_write ON members FOR ALL USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid) WITH CHECK (true);",
+    "CREATE POLICY members_select ON members FOR SELECT USING (tenant_id IS NOT NULL AND current_setting('app.tenant_id', true) IS NOT NULL);",
+  ]) {
+    assert.throws(() =>
+      validateMigrationSql([
+        safeMigration,
+        {
+          path: '20260822110000_unsafe-policy/migration.sql',
+          content,
+        },
+      ]),
+    );
+  }
 });
