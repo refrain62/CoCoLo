@@ -91,6 +91,92 @@ function storedAccessToken() {
   return window.localStorage.getItem('cocolo.accessToken');
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isDateString(value: unknown): value is string {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+}
+
+function isEventSummary(value: unknown): value is EventSummary {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    (value.type === 'practice' ||
+      value.type === 'match' ||
+      value.type === 'event') &&
+    isDateString(value.startsAt) &&
+    isDateString(value.endsAt) &&
+    (typeof value.location === 'string' || value.location === null) &&
+    (typeof value.itemsToBring === 'string' || value.itemsToBring === null) &&
+    typeof value.fee === 'number' &&
+    Number.isInteger(value.fee) &&
+    value.fee >= 0 &&
+    (typeof value.announcementImageAttachmentId === 'string' ||
+      value.announcementImageAttachmentId === null) &&
+    (typeof value.opponent === 'string' || value.opponent === null) &&
+    (typeof value.meetingTime === 'string' || value.meetingTime === null) &&
+    (typeof value.meetingTime !== 'string' ||
+      isDateString(value.meetingTime)) &&
+    typeof value.transportationRequired === 'boolean' &&
+    isDateString(value.attendanceDeadline) &&
+    isDateString(value.createdAt) &&
+    isDateString(value.updatedAt)
+  );
+}
+
+function isAttendanceResponse(value: unknown): value is AttendanceResponse {
+  return value === 'attending' || value === 'absent' || value === 'pending';
+}
+
+function isAttendanceResult(value: unknown): value is {
+  eventId: string;
+  memberId: string;
+  response: AttendanceResponse;
+  updatedAt: string;
+} {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.eventId === 'string' &&
+    typeof value.memberId === 'string' &&
+    isAttendanceResponse(value.response) &&
+    isDateString(value.updatedAt)
+  );
+}
+
+function isAttendanceSummary(value: unknown): value is AttendanceSummary {
+  if (!isRecord(value)) return false;
+  const countKeys = [
+    'totalMembers',
+    'attending',
+    'absent',
+    'pending',
+    'unanswered',
+  ] as const;
+  return (
+    countKeys.every(
+      (key) =>
+        typeof value[key] === 'number' &&
+        Number.isInteger(value[key]) &&
+        value[key] >= 0,
+    ) &&
+    Array.isArray(value.unansweredMemberIds) &&
+    value.unansweredMemberIds.every((id) => typeof id === 'string')
+  );
+}
+
+function readData<T>(
+  body: unknown,
+  guard: (value: unknown) => value is T,
+  message: string,
+) {
+  if (!isRecord(body) || !guard(body.data))
+    throw new EventsApiError(502, 'INVALID_RESPONSE', message);
+  return body.data;
+}
+
 async function readError(response: Response) {
   const body = (await response.json().catch(() => ({}))) as ErrorBody;
   return new EventsApiError(
@@ -126,46 +212,50 @@ export function createEventsApi({
   return {
     async list(from, to) {
       const params = new URLSearchParams({ from, to });
-      const result = await request<{ data: EventSummary[] }>(`?${params}`);
-      return result.data;
+      const result = await request<unknown>(`?${params}`);
+      return readData(
+        result,
+        (value): value is EventSummary[] =>
+          Array.isArray(value) && value.every(isEventSummary),
+        '予定一覧の応答形式が不正です。',
+      );
     },
     async get(eventId) {
-      const result = await request<{ data: EventSummary }>(`/${eventId}`);
-      return result.data;
+      const result = await request<unknown>(`/${eventId}`);
+      return readData(result, isEventSummary, '予定詳細の応答形式が不正です。');
     },
     async create(input) {
-      const result = await request<{ data: EventSummary }>('', {
+      const result = await request<unknown>('', {
         method: 'POST',
         body: JSON.stringify(input),
       });
-      return result.data;
+      return readData(result, isEventSummary, '予定登録の応答形式が不正です。');
     },
     async update(eventId, input) {
-      const result = await request<{ data: EventSummary }>(`/${eventId}`, {
+      const result = await request<unknown>(`/${eventId}`, {
         method: 'PATCH',
         body: JSON.stringify(input),
       });
-      return result.data;
+      return readData(result, isEventSummary, '予定更新の応答形式が不正です。');
     },
     async answer(eventId, input) {
-      const result = await request<{
-        data: {
-          eventId: string;
-          memberId: string;
-          response: AttendanceResponse;
-          updatedAt: string;
-        };
-      }>(`/${eventId}/attendance`, {
+      const result = await request<unknown>(`/${eventId}/attendance`, {
         method: 'PUT',
         body: JSON.stringify(input),
       });
-      return result.data;
+      return readData(
+        result,
+        isAttendanceResult,
+        '出欠回答の応答形式が不正です。',
+      );
     },
     async summary(eventId) {
-      const result = await request<{ data: AttendanceSummary }>(
-        `/${eventId}/attendance/summary`,
+      const result = await request<unknown>(`/${eventId}/attendance/summary`);
+      return readData(
+        result,
+        isAttendanceSummary,
+        '出欠集計の応答形式が不正です。',
       );
-      return result.data;
     },
   };
 }
