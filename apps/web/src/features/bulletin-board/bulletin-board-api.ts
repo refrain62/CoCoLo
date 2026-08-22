@@ -83,10 +83,7 @@ async function readError(response: Response) {
 export function createBulletinBoardApi({
   baseUrl = '',
   getAccessToken = getStoredAccessToken,
-<<<<<<< HEAD
-=======
   fetcher = fetch,
->>>>>>> origin/integration/web-mount
 }: BulletinBoardApiOptions = {}) {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
