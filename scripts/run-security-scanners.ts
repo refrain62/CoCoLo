@@ -12,6 +12,7 @@ import {
   scannerImageReference,
   scannerNames,
 } from './security-scanner-config.ts';
+import { readScannerExceptions } from './security-scanner-exceptions.ts';
 import { summarizeScannerResult } from './security-scanner-summary.ts';
 
 const root = securityScanRoot(
@@ -111,6 +112,7 @@ await chmod(outputRoot, 0o700);
 let overallPassed = true;
 try {
   const config = await readScannerConfig(root);
+  const exceptions = await readScannerExceptions(root);
   for (const name of scannerNames) {
     const exitCode = await runDocker(name, config);
     const passed = await summarizeScannerResult(
@@ -119,6 +121,7 @@ try {
       exitCode,
       runUrl,
       summaryPath,
+      exceptions,
     );
     overallPassed = overallPassed && passed;
   }

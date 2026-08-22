@@ -14,14 +14,19 @@ function requiredEnvironment(name: string): string {
 function assertSha(value: string, name: string): void {
   if (!shaPattern.test(value))
     throw new Error(`${name}は40桁の小文字hex SHAで指定してください。`);
+  if (value === '0'.repeat(40)) throw new Error(`${name}がゼロSHAです。`);
 }
 
-function fetchHead(headSha: string): void {
+function fetchCommit(
+  revision: string,
+  name: string,
+  usePullRequestRef: boolean,
+): void {
   try {
-    execFileSync('git', ['cat-file', '-e', `${headSha}^{commit}`]);
+    execFileSync('git', ['cat-file', '-e', `${revision}^{commit}`]);
     return;
   } catch {
-    // base checkoutにhead objectがない場合だけ、PR refまたはSHAを取得する。
+    // shallow checkoutに対象commitがない場合だけ、PR refまたはSHAを取得する。
   }
   const token = requiredEnvironment('GITHUB_TOKEN');
   const authHeader = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
@@ -33,20 +38,20 @@ function fetchHead(headSha: string): void {
     '--depth=1',
     'origin',
   ];
-  if (process.env.GITHUB_EVENT_NAME === 'pull_request_target') {
+  if (usePullRequestRef) {
     const number = requiredEnvironment('TRUST_PR_NUMBER');
     if (!pullRequestNumberPattern.test(number))
       throw new Error('pull_request_targetの番号が不正です。');
     execFileSync('git', [...fetchArguments, `refs/pull/${number}/head`]);
   } else {
-    execFileSync('git', [...fetchArguments, headSha]);
+    execFileSync('git', [...fetchArguments, revision]);
   }
 
   const fetchedSha = execFileSync('git', ['rev-parse', 'FETCH_HEAD'], {
     encoding: 'utf8',
   }).trim();
-  if (fetchedSha !== headSha)
-    throw new Error(`取得したhead SHAが一致しません: ${fetchedSha}`);
+  if (fetchedSha !== revision)
+    throw new Error(`取得した${name} SHAが一致しません: ${fetchedSha}`);
 }
 
 const baseSha = requiredEnvironment('TRUST_BASE_SHA');
@@ -57,7 +62,12 @@ assertSha(headSha, 'head SHA');
 if (targetRoot === path.resolve(process.cwd()))
   throw new Error('head対象をbase checkoutへ展開できません。');
 
-fetchHead(headSha);
+fetchCommit(baseSha, 'base', false);
+fetchCommit(
+  headSha,
+  'head',
+  process.env.GITHUB_EVENT_NAME === 'pull_request_target',
+);
 await rm(targetRoot, { recursive: true, force: true });
 await mkdir(targetRoot, { recursive: true, mode: 0o700 });
 execFileSync('git', [

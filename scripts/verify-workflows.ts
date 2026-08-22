@@ -23,6 +23,11 @@ function githubExpression(body: string): string {
   return ['$', '{', '{ ', body, ' }}'].join('');
 }
 
+const securityBaseShaExpression =
+  "github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha || github.sha";
+const securityHeadShaExpression =
+  "github.event_name == 'push' && github.sha || github.event.pull_request.head.sha || github.sha";
+
 const actionAllowlist = {
   'actions/checkout': '11bd71901bbe5b1630ceea73d27597364c9af683',
   'actions/attest-build-provenance': 'e8998f949152b193b063cb0ec769d69d929409be',
@@ -380,6 +385,8 @@ const safeExpressionBodies = new Set([
   'github.sha',
   'github.event.pull_request.base.sha || github.sha',
   'github.event.pull_request.head.sha || github.sha',
+  securityBaseShaExpression,
+  securityHeadShaExpression,
   "vars.DEPLOYMENT_PROTECTION_ENABLED == 'true'",
   'github.token',
   'inputs.artifact_sha',
@@ -455,6 +462,16 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
             location.endsWith('.env.TRUST_HEAD_SHA') ||
             location.endsWith('.with.ref'),
           `${location}: base/head SHAの用途を許可していません`,
+        );
+      if (
+        body === securityBaseShaExpression ||
+        body === securityHeadShaExpression
+      )
+        assert.ok(
+          location.endsWith('.env.TRUST_BASE_SHA') ||
+            location.endsWith('.env.TRUST_HEAD_SHA') ||
+            location.endsWith('.with.ref'),
+          `${location}: push/PR base/head SHAの用途を許可していません`,
         );
       if (body === 'github.event.pull_request.number || 0')
         assert.ok(
@@ -957,12 +974,8 @@ function validateSecurityWorkflowDocument(workflow: WorkflowRecord): void {
   assertExactRecord(
     trust.env,
     {
-      TRUST_BASE_SHA: githubExpression(
-        'github.event.pull_request.base.sha || github.sha',
-      ),
-      TRUST_HEAD_SHA: githubExpression(
-        'github.event.pull_request.head.sha || github.sha',
-      ),
+      TRUST_BASE_SHA: githubExpression(securityBaseShaExpression),
+      TRUST_HEAD_SHA: githubExpression(securityHeadShaExpression),
       TRUST_PR_NUMBER: githubExpression(
         'github.event.pull_request.number || 0',
       ),
@@ -982,7 +995,7 @@ function validateSecurityWorkflowDocument(workflow: WorkflowRecord): void {
     `actions/checkout@${actionAllowlist['actions/checkout']}`,
     {
       'persist-credentials': false,
-      ref: githubExpression('github.event.pull_request.base.sha || github.sha'),
+      ref: githubExpression(securityBaseShaExpression),
       'fetch-depth': 1,
     },
   );
@@ -998,6 +1011,8 @@ function validateSecurityWorkflowDocument(workflow: WorkflowRecord): void {
     `set -euo pipefail
 [[ "$TRUST_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
 [[ "$TRUST_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+[[ "$TRUST_BASE_SHA" != "0000000000000000000000000000000000000000" ]]
+[[ "$TRUST_HEAD_SHA" != "0000000000000000000000000000000000000000" ]]
 node scripts/prepare-security-target.ts
 node scripts/verify-security-trust.ts`,
   );
@@ -1027,12 +1042,8 @@ node scripts/verify-security-trust.ts`,
   assertExactRecord(
     config.env,
     {
-      TRUST_BASE_SHA: githubExpression(
-        'github.event.pull_request.base.sha || github.sha',
-      ),
-      TRUST_HEAD_SHA: githubExpression(
-        'github.event.pull_request.head.sha || github.sha',
-      ),
+      TRUST_BASE_SHA: githubExpression(securityBaseShaExpression),
+      TRUST_HEAD_SHA: githubExpression(securityHeadShaExpression),
       TRUST_PR_NUMBER: githubExpression(
         'github.event.pull_request.number || 0',
       ),
@@ -1052,7 +1063,7 @@ node scripts/verify-security-trust.ts`,
     `actions/checkout@${actionAllowlist['actions/checkout']}`,
     {
       'persist-credentials': false,
-      ref: githubExpression('github.event.pull_request.base.sha || github.sha'),
+      ref: githubExpression(securityBaseShaExpression),
       'fetch-depth': 1,
     },
   );
@@ -1123,12 +1134,8 @@ node scripts/verify-security-trust.ts`,
   assertExactRecord(
     scanners.env,
     {
-      TRUST_BASE_SHA: githubExpression(
-        'github.event.pull_request.base.sha || github.sha',
-      ),
-      TRUST_HEAD_SHA: githubExpression(
-        'github.event.pull_request.head.sha || github.sha',
-      ),
+      TRUST_BASE_SHA: githubExpression(securityBaseShaExpression),
+      TRUST_HEAD_SHA: githubExpression(securityHeadShaExpression),
       TRUST_PR_NUMBER: githubExpression(
         'github.event.pull_request.number || 0',
       ),
@@ -1149,7 +1156,7 @@ node scripts/verify-security-trust.ts`,
     `actions/checkout@${actionAllowlist['actions/checkout']}`,
     {
       'persist-credentials': false,
-      ref: githubExpression('github.event.pull_request.base.sha || github.sha'),
+      ref: githubExpression(securityBaseShaExpression),
       'fetch-depth': 1,
     },
   );
@@ -1284,6 +1291,7 @@ export function validateCodeowners(content: string): void {
     '/scripts/verify-workflows.test.ts @refrain62',
     '/scripts/verify-security-scanners.ts @refrain62',
     '/scripts/security-scanner-config.ts @refrain62',
+    '/scripts/security-scanner-exceptions.ts @refrain62',
     '/scripts/security-scanner-summary.ts @refrain62',
     '/scripts/security-scanner.test.ts @refrain62',
     '/scripts/run-security-scanners.ts @refrain62',

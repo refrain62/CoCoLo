@@ -4,6 +4,7 @@
 /scripts/verify-workflows.test.ts @refrain62
 /scripts/verify-security-scanners.ts @refrain62
 /scripts/security-scanner-config.ts @refrain62
+/scripts/security-scanner-exceptions.ts @refrain62
 /scripts/security-scanner-summary.ts @refrain62
 /scripts/security-scanner.test.ts @refrain62
 /scripts/run-security-scanners.ts @refrain62

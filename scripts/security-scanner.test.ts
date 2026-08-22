@@ -154,6 +154,59 @@ test('SemgrepとTrivyのreport schemaは不正時にfail-closedになる', async
   }
 });
 
+test('scanner exceptionはrule ID一致時だけ実行結果から除外される', async () => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), 'cocolo-scanner-exception-test-'),
+  );
+  try {
+    const semgrepPath = path.join(directory, 'semgrep.json');
+    await writeFile(
+      semgrepPath,
+      JSON.stringify({
+        results: [
+          {
+            check_id: 'cocolo-approved-rule',
+            path: 'src/example.ts',
+            start: { line: 1, col: 1 },
+            end: { line: 1, col: 2 },
+            extra: { severity: 'ERROR' },
+          },
+        ],
+        errors: [],
+      }),
+      'utf8',
+    );
+    const exception = {
+      id: 'SEC-TEST-1',
+      tool: 'semgrep' as const,
+      ruleId: 'cocolo-approved-rule',
+      severity: 'HIGH',
+      owner: '@refrain62',
+      rationale: 'fixture',
+      mitigation: 'fixture',
+      issue: 'https://github.com/refrain62/CoCoLo/issues/999',
+      expires: '2099-12-31',
+    };
+    assert.equal(
+      await summarizeScannerResult(
+        'semgrep',
+        semgrepPath,
+        1,
+        'local',
+        undefined,
+        [exception],
+      ),
+      true,
+    );
+    assert.equal(
+      await summarizeScannerResult('semgrep', semgrepPath, 1, 'local'),
+      false,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('固定malicious fixtureのscanner信頼対象改変を拒否する', async () => {
   const fixture = JSON.parse(
     await readFile(

@@ -23,6 +23,7 @@ export const trustedScannerFiles = [
   'scripts/prepare-security-target.ts',
   'scripts/security-scan-root.ts',
   'scripts/security-scanner-config.ts',
+  'scripts/security-scanner-exceptions.ts',
   'scripts/security-scanner-summary.ts',
   'scripts/security-scanner.test.ts',
   'scripts/verify-security-scanners.ts',
@@ -37,6 +38,7 @@ export type TrustedFileHashes = Record<string, string>;
 function assertCommitSha(value: string, name: string): void {
   if (!shaPattern.test(value))
     throw new Error(`${name}は40桁の小文字hex SHAで指定してください。`);
+  if (value === '0'.repeat(40)) throw new Error(`${name}がゼロSHAです。`);
 }
 
 function assertHash(value: string, file: string, revision: string): void {

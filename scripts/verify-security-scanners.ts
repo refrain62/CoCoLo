@@ -5,10 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { securityScanRoot } from './security-scan-root.ts';
 import {
   readScannerConfig,
-  type ScannerName,
   scannerNames,
   scannerRuleAllowlist,
 } from './security-scanner-config.ts';
+import { readScannerExceptions } from './security-scanner-exceptions.ts';
 
 const root = securityScanRoot(
   path.dirname(path.dirname(fileURLToPath(import.meta.url))),
@@ -18,12 +18,6 @@ const workflowPath = path.join(
   '.github',
   'workflows',
   'security-scanners.yml',
-);
-const exceptionsPath = path.join(
-  root,
-  '.github',
-  'security',
-  'scanner-exceptions.json',
 );
 
 const workflow = await readFile(workflowPath, 'utf8');
@@ -111,72 +105,7 @@ for (const name of scannerNames) {
   );
 }
 
-type ScannerException = {
-  id: string;
-  tool: ScannerName;
-  ruleId: string;
-  severity: string;
-  owner: string;
-  rationale: string;
-  mitigation: string;
-  issue: string;
-  expires: string;
-};
-
-type ExceptionFile = {
-  schemaVersion: number;
-  policy: { criticalMaxDays: number; highMaxDays: number };
-  exceptions: ScannerException[];
-};
-
-const exceptionFile = JSON.parse(
-  await readFile(exceptionsPath, 'utf8'),
-) as ExceptionFile;
-assert.equal(exceptionFile.schemaVersion, 1);
-assert.equal(exceptionFile.policy.criticalMaxDays, 7);
-assert.equal(exceptionFile.policy.highMaxDays, 14);
-assert.ok(Array.isArray(exceptionFile.exceptions));
-
-const today = new Date().toISOString().slice(0, 10);
-const todayStart = new Date(`${today}T00:00:00.000Z`);
-const ids = new Set<string>();
-for (const exception of exceptionFile.exceptions) {
-  assert.ok(!ids.has(exception.id), `例外IDが重複しています: ${exception.id}`);
-  ids.add(exception.id);
-  assert.match(exception.id, /^SEC-[A-Z0-9-]+$/);
-  assert.ok(scannerNames.includes(exception.tool));
-  assert.match(exception.ruleId, /^[A-Za-z0-9._-]+$/);
-  assert.match(exception.severity, /^(CRITICAL|HIGH|MEDIUM|LOW)$/);
-  for (const [field, value] of Object.entries(exception))
-    if (field !== 'expires')
-      assert.ok(typeof value === 'string' && value.trim());
-  assert.match(
-    exception.issue,
-    /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+$/,
-  );
-  assert.match(exception.expires, /^\d{4}-\d{2}-\d{2}$/);
-  const expires = new Date(`${exception.expires}T23:59:59.999Z`);
-  assert.ok(
-    !Number.isNaN(expires.valueOf()),
-    `${exception.id}: 失効日が不正です`,
-  );
-  assert.ok(exception.expires >= today, `${exception.id}: 期限切れの例外です`);
-
-  const maxDays =
-    exception.severity === 'CRITICAL'
-      ? exceptionFile.policy.criticalMaxDays
-      : exception.severity === 'HIGH'
-        ? exceptionFile.policy.highMaxDays
-        : undefined;
-  if (maxDays !== undefined) {
-    const latest = new Date(todayStart);
-    latest.setUTCDate(latest.getUTCDate() + maxDays);
-    assert.ok(
-      expires <= new Date(`${latest.toISOString().slice(0, 10)}T23:59:59.999Z`),
-      `${exception.id}: ${exception.severity}例外の期限が長すぎます`,
-    );
-  }
-}
+await readScannerExceptions(root);
 
 console.log(
   'Security scanner設定、秘密情報非注入、出力秘匿、例外期限を検証しました。',
