@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "mode": "owner-only-one-time",
+  "owner": "@refrain62",
+  "head_sha": "00e24ff7683b3467bb747939a087dcee7c23d328",
+  "files": {
+    ".github/CODEOWNERS": "da27760a9659de12ab0109fae8d1ff60c910b104bdb85ef835e83b0b3c7e29d8",
+    ".github/security/fixtures/malicious-scanner-pr.json": "6c91e6e415b2a1e3e974d4ddbc300dff8c281ceb73e2c89eb656b002182f9e29",
+    ".github/security/scanner-exceptions.json": "7a3c078c216d1c811aea8e31cfa891696178bb360a4c10f37876816a3d41b95b",
+    ".github/security/security-scanners.json": "e8d7fe65a3c020ac6f979dd887e43c4c24c439cce9c4a8a43ae3f0f51261daed",
+    ".github/workflows/production-promote.yml": "c1862160827866abe2856b99aa0c9bb4ff050f9738e020e3e3b8b63d14a330c7",
+    ".github/workflows/quality.yml": "36c6d08e74eb7a86cccdefbb75ee38f8d46790020c8e8efac45dc07a8c60d606",
+    ".github/workflows/security-scanners.yml": "547681fd95c028203822620cf18c5a2ceeb83d93b02bd9b5beccecf01dba7b4f",
+    ".github/workflows/staging-deploy.yml": "e08ce5b44a2b0b23bc0d98417e4359a62d545de512b6852691b04cc43baf867e",
+    "biome.json": "f6a3cbc4d9cea951b92fef50b960a38b99904c27075a6782f1c70fd4be98cd48",
+    "package.json": "b6bef0f6d4a4e5fe327e318f03d1e8ec2d286f16908092f6c26a9e42c2ecba65",
+    "pnpm-lock.yaml": "b61e4f2fc9cf64ceb3135b6b26f0bf206f06b08fb1c6e561cd109ce0966dc5f3",
+    "scripts/prepare-security-target.ts": "75eb7e65ce35f2645d87c13f6a2d036956a5141abbd4bbd575913c01d95e9d24",
+    "scripts/run-security-scanners.ts": "1f73c2907cc8b50a30f3d7efd5bf890a476f55e2e3a6c75255bac7eb39d1070b",
+    "scripts/security-scan-root.ts": "029bed47cb524f3a22d30db6bccb309b457516b46d6357c52ff73b3adaaff26d",
+    "scripts/security-scanner-config.ts": "1567a27c017d2846d0694e36b149518320bab24182246f447c82a9c9ea9a6975",
+    "scripts/security-scanner-exceptions.ts": "d6184ab1b1d75e8d7153b789d4ced1383bfa2980b394efa1d9b02d7386fda6fc",
+    "scripts/security-scanner-summary.ts": "954cc61a08670787997ae0b14769a5533d2d6cbe97aa565051dec0b2a49f115b",
+    "scripts/security-scanner.test.ts": "c29bc11ec37f14509ad5cbfb9833113bc9612c3dec10abb983cc1f1d03173deb",
+    "scripts/verify-security-scanners.ts": "445f89ef35c4b94f3f333a29e80c3a43746cbb3b7504f7d212c915147f69e7af",
+    "scripts/verify-security-trust.ts": "23bd1967bff41557c72750ef1a108391f7a5391e4775e6b9716e50c554133bcd",
+    "scripts/verify-workflows.test.ts": "639187bcee7e2b60172c8d6a731cd4d903c3b34e8a37caf882230fe39afcccac",
+    "scripts/verify-workflows.ts": "9b8a5eb7efd70d2f8fd47937995dfc2d984ce50ecdd8ce535b799b8386f14dbb"
+  }
+}

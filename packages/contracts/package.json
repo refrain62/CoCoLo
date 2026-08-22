@@ -15,9 +15,33 @@
       "types": "./src/member-contract.ts",
       "import": "./dist/member-contract.js"
     },
+    "./line": {
+      "types": "./src/line-contract.ts",
+      "import": "./dist/line-contract.js"
+    },
     "./line-delivery": {
       "types": "./src/line-delivery-contract.ts",
       "import": "./dist/line-delivery-contract.js"
+    },
+    "./auth-team-selection": {
+      "types": "./src/auth-team-selection-contract.ts",
+      "import": "./dist/auth-team-selection-contract.js"
+    },
+    "./ride": {
+      "types": "./src/ride-contract.ts",
+      "import": "./dist/ride-contract.js"
+    },
+    "./orders": {
+      "types": "./src/orders-contract.ts",
+      "import": "./dist/orders-contract.js"
+    },
+    "./bulletin-board": {
+      "types": "./src/bulletin-board-contract.ts",
+      "import": "./dist/bulletin-board-contract.js"
+    },
+    "./events": {
+      "types": "./src/event-contract.ts",
+      "import": "./dist/event-contract.js"
     }
   },
   "scripts": {
@@ -29,5 +53,8 @@
   },
   "dependencies": {
     "zod": "4.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0"
   }
 }

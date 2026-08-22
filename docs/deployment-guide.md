@@ -50,7 +50,8 @@ main ── push ──▶ staging deploy
 | Variable | `SUPABASE_URL` | staging Supabase projectのURL。HTTPSを使う。 |
 | Variable | `SUPABASE_JWKS_URL` | staging SupabaseのJWKS URL。`SUPABASE_URL`のprojectと一致させる。 |
 | Variable | `PUBLIC_APP_URL` | staging Webアプリの公開HTTPS URL。 |
-| Variable | `PUBLIC_APP_URL_ALLOWLIST` | `PUBLIC_APP_URL`を含むカンマ区切りの許可リスト。 |
+| Variable | `PUBLIC_APP_URL_ALLOWLIST` | コード側のstaging固定allowlistに含まれるURLだけを指定する。任意のURL追加は拒否する。 |
+| Variable | `RATE_LIMIT_ADAPTER_MODULE` | providerをlockfileとallowlistへ追加した場合だけ設定する。現時点は実provider未同梱のため未設定。 |
 
 Workflow内で次の値は固定されており、Environment variableとして別値を設定しません。
 
@@ -58,6 +59,12 @@ Workflow内で次の値は固定されており、Environment variableとして�
 - `R2_BUCKET=cocolo-staging-private`
 - `SUPABASE_ALLOWED_URL=SUPABASE_URL`
 - `SUPABASE_ALLOWED_JWKS_URL=SUPABASE_JWKS_URL`
+- `SUPABASE_URL`、`SUPABASE_JWKS_URL`、`PUBLIC_APP_URL` はコード側のstaging固定allowlistにも一致させる。
+- `RATE_LIMIT_STORE=distributed`
+- `RATE_LIMIT_FAIL_CLOSED=true`
+
+現時点では実Redis providerをrepositoryへ同梱していないため、stagingの `RATE_LIMIT_ADAPTER_MODULE` は未設定です。
+値を設定しても、provider packageがlockfileとadapter allowlistの両方にない限り、`pnpm verify:environment` は停止します。
 
 ### production
 
@@ -72,9 +79,10 @@ Workflow内で次の値は固定されており、Environment variableとして�
 | Variable | `SUPABASE_URL` | production Supabase projectのURL。stagingと異なる場合は後述の昇格前提を満たすこと。 |
 | Variable | `SUPABASE_JWKS_URL` | production SupabaseのJWKS URL。 |
 | Variable | `PUBLIC_APP_URL` | production Webアプリの公開HTTPS URL。 |
-| Variable | `PUBLIC_APP_URL_ALLOWLIST` | `PUBLIC_APP_URL`を含むカンマ区切りの許可リスト。 |
+| Variable | `PUBLIC_APP_URL_ALLOWLIST` | コード側のproduction固定allowlistに含まれるURLだけを指定する。任意のURL追加は拒否する。 |
 | Variable | `RETIRED_DATA_RETENTION_DAYS` | 退部データを保持する日数。運用上の保存期間を整数で設定する。 |
 | Variable | `AUDIT_LOG_RETENTION_DAYS` | 監査ログを保持する日数。運用上の保存期間を整数で設定する。 |
+| Variable | `RATE_LIMIT_ADAPTER_MODULE` | providerをlockfileとallowlistへ追加した場合だけ設定する。stagingと同じmoduleを無条件に共有しない。現時点は未設定。 |
 
 Workflow内で次の値は固定されており、Environment variableとして別値を設定しません。
 
@@ -82,6 +90,12 @@ Workflow内で次の値は固定されており、Environment variableとして�
 - `R2_BUCKET=cocolo-production-private`
 - `SUPABASE_ALLOWED_URL=SUPABASE_URL`
 - `SUPABASE_ALLOWED_JWKS_URL=SUPABASE_JWKS_URL`
+- `SUPABASE_URL`、`SUPABASE_JWKS_URL`、`PUBLIC_APP_URL` はコード側のproduction固定allowlistにも一致させる。
+- `RATE_LIMIT_STORE=distributed`
+- `RATE_LIMIT_FAIL_CLOSED=true`
+
+productionも実provider未同梱のため、`RATE_LIMIT_ADAPTER_MODULE` 未設定では起動と昇格を継続しません。
+providerを追加する場合は、stagingとproductionのRedis endpoint、Secret、監視、namespaceを分離し、実Redis検証の記録をstaging evidenceへ残します。
 
 ### Webのビルド設定に関する重要な前提
 
@@ -154,7 +168,7 @@ pnpm verify:production-bundle
 承認済みのリリース候補を `main` へ反映すると、`.github/workflows/staging-deploy.yml` が起動します。Workflowは次の順序で処理します。
 
 1. pnpm 10.26.0 と Node.js 24 を準備し、`pnpm install --frozen-lockfile` を実行する。
-2. `verify:environment --expected staging` で環境名、DB URL、Supabase URL/JWKS、R2 bucket、公開URL、allowlistを検証する。
+2. `verify:environment --expected staging` で環境名、DB URL、Supabase URL/JWKS、R2 bucket、公開URL、allowlist、分散rate-limit adapter設定を検証する。
 3. `db:prepare:test` をmigration owner接続で実行し、RLSを回避しない `cocolo_app` roleとtable grantを準備する。
 4. stagingへ Prisma migrationを適用する。
 5. PostgreSQL major version 17を検証する。
@@ -163,8 +177,9 @@ pnpm verify:production-bundle
 8. artifact SHAとSHA-256を検証し、GitHub build provenance attestationを付与する。
 9. staging deploy adapterでartifactを配置し、配置記録を検証する。
 10. staging URLへPlaywright E2E smokeを実行する。ログイン、部員登録、Bearer token送信を確認する。
-11. migration、smoke、E2E、配置URL、artifact SHAを `.evidence/evidence.json` へ束ねる。
-12. release artifactとstaging evidenceをGitHub Actions artifactとして保存する。保存期間は14日である。
+11. 複数API instanceからの同時リクエストで分散rate-limitの原子性と障害時の `503` を確認する。
+12. migration、smoke、E2E、配置URL、artifact SHAを `.evidence/evidence.json` へ束ねる。
+13. release artifactとstaging evidenceをGitHub Actions artifactとして保存する。保存期間は14日である。
 
 配置後は、Workflowの全stepが成功し、次の値を記録します。
 
@@ -215,7 +230,7 @@ gh run watch <production-run-id>
 4. evidenceのmigration / smoke / E2Eがsuccessであることを確認する。
 5. release.tar.gzのSHA-256とGitHub attestationを、production secretを読み込む前に検証する。
 6. 検証済みSHAをcheckoutし、artifactを展開する。ここで再ビルドしない。
-7. production環境、DB URL、Supabase URL/JWKS、R2 bucket、公開URL、保持期間、Service Role Keyを検証する。
+7. production環境、DB URL、Supabase URL/JWKS、R2 bucket、公開URL、保持期間、Service Role Key、分散rate-limit adapter設定を検証する。
 8. artifactに同梱されたschema / migrationだけを使って `prisma migrate deploy` を実行する。
 9. production deploy adapterでartifactを配置し、production配置記録を検証する。
 

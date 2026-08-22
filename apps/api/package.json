@@ -4,16 +4,18 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/contracts build && pnpm --filter @cocolo/db build && pnpm build && node --test test/line-delivery-scheduler.test.ts",
+    "test": "pnpm test:unit",
     "dev:test": "tsx test/test-server.ts",
     "start": "node dist/server.js",
     "line:schedule": "node dist/line-delivery-scheduler.js",
     "lint": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/contracts build && pnpm --filter @cocolo/db build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "typecheck": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/contracts build && pnpm --filter @cocolo/db build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "test:unit": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/contracts build && pnpm --filter @cocolo/db build && pnpm build && node --test test/*.test.ts",
+    "test:unit": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/contracts build && pnpm --filter @cocolo/db build && pnpm build && node --test test/*.test.ts test/board-contact/*.test.mjs",
     "test:integration": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/contracts build && pnpm --filter @cocolo/db build && pnpm build && node --test test/integration/*.test.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1116.0",
+    "@aws-sdk/s3-request-presigner": "3.1116.0",
     "@cocolo/auth": "workspace:*",
     "@cocolo/contracts": "workspace:*",
     "@cocolo/db": "workspace:*",
