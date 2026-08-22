@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type {
   AnnouncementRecord,
   AnnouncementStatus,
@@ -7,6 +6,7 @@ import type {
   BulletinBoardRole,
   UnreadMember,
 } from '@cocolo/domain/bulletin-board';
+import { createUuidV7 } from '@cocolo/domain/line';
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -126,7 +126,7 @@ async function audit(
       id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata
     )
     VALUES (
-      gen_random_uuid(),
+      app_uuidv7(),
       ${input.tenantId}::uuid,
       ${input.actorUserId},
       ${input.action},
@@ -265,7 +265,7 @@ export function createBulletinBoardRepositories(
 ): { bulletinBoardRepository: BulletinBoardRepository } {
   const lookup = options.attachmentLookup ?? defaultAttachmentLookup;
   const now = options.now ?? (() => new Date());
-  const createId = options.createId ?? randomUUID;
+  const createId = options.createId ?? createUuidV7;
 
   const bulletinBoardRepository: BulletinBoardRepository = {
     publish: (input) =>

@@ -215,17 +215,15 @@ R2本体とLINE外部設定はDB dumpへ含めず、環境別の設定台帳と�
 
 次の事項は、このDB schemaだけで完了したとは扱わない。
 
-1. FS-ORDの永続repositoryは未実装である。
-   `purchase_orders`系の列とtriggerをSQL adapterが使うことを、注文機能の中央統合時に確認する。
-2. board-contactとbulletin-boardの一部repositoryは、現在`gen_random_uuid()`または`randomUUID()`を使う。
-   UUIDv7 CHECKを満たす生成器へ交換してからrouteをmountする。
-3. LINE SQL repositoryは、確認した実装ではtransaction-local RLS contextの設定を内部で行わない。
-   接続、queue claim、送信結果更新、Webhook重複排除を、contextを設定済みのtransaction clientへ包むadapterが必要である。
-   DB roleをBYPASSRLSへ変更して回避してはならない。
-4. 回覧掲載時の添付参照は`available`状態をrepositoryが照合する。
+1. 回覧掲載時の添付参照は`available`状態をrepositoryが照合する。
    migrationの外部キーはtenant境界を保証し、状態照合はrepositoryの責務として残す。
-5. `cocolo_app`は単一roleである。
+2. `cocolo_app`は単一roleである。
    役員連絡先の列投影、LINE group IDの非表示、送迎の識別子投影は中央APIのresponse DTOで検証する。
-6. fresh DBへの修正版migration再適用と、接続中断時のtransaction再試行は、Dockerまたはstaging DBを接続できる環境で追加確認する。
+3. fresh DBへの修正版migration再適用と、接続中断時のtransaction再試行は、Dockerまたはstaging DBを接続できる環境で追加確認する。
+
+FS-ORDの永続repository、中央R2 adapter、LINEの利用者向けrepository、Webhook重複排除関数、LINE配信worker用関数は中央統合ブランチへ接続済みです。
+
+LINE配信workerは`pnpm line:deliver`で一件ずつ処理し、`app_claim_due_line_notification`などの限定`SECURITY DEFINER`関数だけを使います。
+workerは利用者向けHTTP endpointではなく、外部schedulerから起動します。
 
 この未確定事項は外部サービスの実接続を推測で完了扱いにしないための統合条件である。

@@ -6,9 +6,7 @@
 
 LINE の接続状態、グループ ID の tenant 紐付け、通知キュー、送信失敗、Webhook、LIFF リンクを対象にします。
 
-今回の feature branch は `apps/api/src/app.ts`、`apps/web/src/main.tsx`、Prisma schema、共有 index を変更しません。
-
-中央の起動処理への mount と LINE 専用 migration は、次の統合担当がこの文書の順序で行います。
+中央統合ブランチでは、中央APIへのmount、LINE専用migration、RLS付きrepository、Webhook重複排除関数を接続します。
 
 ## 実装モジュール
 
@@ -130,9 +128,9 @@ URL の query へ tenant ID や個人情報を含めません。
 
 ## LINE 専用 DB migration の統合契約
 
-この feature branch は Prisma schema を変更しないため、次の表は設計契約として残します。
+Prisma schemaの業務モデルと、RLS・trigger・worker関数を含むSQL migrationを正本とします。
 
-統合担当は PostgreSQL 17 の migration で表、RLS、権限、tenant 条件、複合制約を追加してから SQL repository を有効化します。
+migrationはPostgreSQL 17で表、RLS、権限、tenant条件、複合制約、Webhook重複排除、worker用claim・状態更新関数を追加してからSQL repositoryを有効化します。
 
 必要な表は次のとおりです。
 
@@ -145,6 +143,14 @@ URL の query へ tenant ID や個人情報を含めません。
 すべての表へ RLS を有効化し、API の transaction-local context と一致する tenant だけを参照・変更できるようにします。
 
 queue の claim、送信結果更新、接続解除と登録の競合は、同じ tenant を直列化する transaction または advisory lock で保護します。
+
+利用者APIのqueue操作はtransaction-local RLS contextとactive membershipを再確認します。
+全tenantを処理するworkerだけは、`app_claim_due_line_notification`、`app_mark_line_notification_sent`、`app_mark_line_notification_failed`の限定関数を使います。
+これらの関数は`cocolo_app`へ実行権限を限定し、任意のSQLやtenant一覧を返しません。
+
+`pnpm line:deliver`はdue通知を一件処理して終了します。
+外部schedulerはこのコマンドを定期実行し、複数workerの同時起動は`FOR UPDATE SKIP LOCKED`で同じ通知をclaimしないようにします。
+外部送信とDB確定は別transactionのため、worker停止時は同じ通知が再送される可能性があります。
 
 queue 作成時の `group_id` は送信対象を固定するため、接続解除後に別 group へ再接続しても古い通知を新 group へ転送しません。
 

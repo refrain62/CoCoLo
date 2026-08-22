@@ -98,6 +98,11 @@ export type LineNotificationRepository = {
   }) => Promise<LineNotification>;
 };
 
+export type LineDeliveryRepository = Pick<
+  LineNotificationRepository,
+  'claimDue' | 'markSent' | 'markFailed'
+>;
+
 function clone<T>(value: T): T {
   if (value instanceof Date) return new Date(value.getTime()) as T;
   if (Array.isArray(value)) return value.map((item) => clone(item)) as T;
@@ -585,7 +590,11 @@ export function createSqlLineRepository(
         );
         const row = result.rows[0];
         if (!row) return 'ignored';
-        return row.accepted ? 'accepted' : row.duplicate ? 'duplicate' : 'ignored';
+        return row.accepted
+          ? 'accepted'
+          : row.duplicate
+            ? 'duplicate'
+            : 'ignored';
       });
     },
     async enqueue(input, now) {
@@ -730,6 +739,70 @@ export function createSqlLineRepository(
                       provider_message_id, last_error, created_at, sent_at`,
           [
             actor.tenantId,
+            input.notificationId,
+            input.error.slice(0, 500),
+            input.nextRetryAt,
+            input.now,
+          ],
+        );
+        const row = result.rows[0];
+        if (!row)
+          throw new LineNotificationStateError('通知を失敗へ変更できません。');
+        return toNotification(row);
+      });
+    },
+  };
+}
+
+// 利用者actorを持たない内部worker専用。SECURITY DEFINER関数以外から全tenantを走査しない。
+export function createSqlLineDeliveryRepository(
+  client: LineSqlClient,
+): LineDeliveryRepository {
+  return {
+    async claimDue(input) {
+      return client.transaction(async (transaction) => {
+        const result = await transaction.query<NotificationRow>(
+          `SELECT id, tenant_id, group_id, created_by_user_id, source_type, source_id,
+                  title, body, deep_link, status, attempts, next_retry_at,
+                  provider_message_id, last_error, created_at, sent_at
+             FROM app_claim_due_line_notification($1, $2)`,
+          [input.now, input.maxAttempts ?? 5],
+        );
+        const row = result.rows[0];
+        return row?.group_id
+          ? { notification: toNotification(row), groupId: row.group_id }
+          : null;
+      });
+    },
+    async markSent(input) {
+      return client.transaction(async (transaction) => {
+        const result = await transaction.query<NotificationRow>(
+          `SELECT id, tenant_id, group_id, created_by_user_id, source_type, source_id,
+                  title, body, deep_link, status, attempts, next_retry_at,
+                  provider_message_id, last_error, created_at, sent_at
+             FROM app_mark_line_notification_sent($1, $2, $3, $4)`,
+          [
+            input.tenantId,
+            input.notificationId,
+            input.providerMessageId,
+            input.now,
+          ],
+        );
+        const row = result.rows[0];
+        if (!row)
+          throw new LineNotificationStateError('通知を送信済みにできません。');
+        return toNotification(row);
+      });
+    },
+    async markFailed(input) {
+      return client.transaction(async (transaction) => {
+        const result = await transaction.query<NotificationRow>(
+          `SELECT id, tenant_id, group_id, created_by_user_id, source_type, source_id,
+                  title, body, deep_link, status, attempts, next_retry_at,
+                  provider_message_id, last_error, created_at, sent_at
+             FROM app_mark_line_notification_failed($1, $2, $3, $4, $5)`,
+          [
+            input.tenantId,
             input.notificationId,
             input.error.slice(0, 500),
             input.nextRetryAt,

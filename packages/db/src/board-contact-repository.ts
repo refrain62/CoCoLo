@@ -202,7 +202,7 @@ async function writeAudit(
       resource_id,
       metadata
     ) VALUES (
-      gen_random_uuid(),
+      app_uuidv7(),
       ${input.tenantId}::uuid,
       ${input.actorUserId},
       ${action},
@@ -315,7 +315,7 @@ export function createBoardContactRepository(client: PrismaClient) {
             phone,
             contact_preference
           ) VALUES (
-            gen_random_uuid(),
+            app_uuidv7(),
             ${input.tenantId}::uuid,
             ${input.contact.fiscalYear},
             ${input.contact.roleName},
@@ -475,7 +475,7 @@ export function createBoardContactRepository(client: PrismaClient) {
             contact_preference
           )
           SELECT
-            gen_random_uuid(),
+            app_uuidv7(),
             tenant_id,
             ${input.toFiscalYear},
             role_name,

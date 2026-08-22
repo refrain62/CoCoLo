@@ -29,6 +29,15 @@ export type LineActor = {
   role: 'owner' | 'admin' | 'staff' | 'guardian';
 };
 
+export type LineDeliveryRepository = Pick<
+  LineNotificationRepository,
+  'claimDue' | 'markSent' | 'markFailed'
+>;
+
+export type LineDeliveryService = {
+  deliverOne: (now?: Date) => Promise<LineNotification | null>;
+};
+
 export type LineNotificationService = {
   status: (actor: LineActor) => Promise<{
     status: 'connected' | 'disconnected';
@@ -129,6 +138,60 @@ function parseWebhook(rawBody: string): LineWebhookBody {
   return parseLineWebhookBody(JSON.parse(rawBody) as unknown);
 }
 
+// DBでclaim済みの通知を一件だけ外部APIへ送り、結果を状態へ戻す。外部送信とDB更新は別transactionのためat-least-onceになる。
+export function createLineDeliveryService({
+  repository,
+  adapter,
+  now = () => new Date(),
+  maxAttempts = 5,
+}: {
+  repository: LineDeliveryRepository;
+  adapter: LineMessagingAdapter;
+  now?: () => Date;
+  maxAttempts?: number;
+}): LineDeliveryService {
+  return {
+    async deliverOne(currentTime = now()) {
+      const claim = await repository.claimDue({
+        now: currentTime,
+        maxAttempts,
+      });
+      if (!claim) return null;
+      try {
+        const sent = await adapter.send({
+          groupId: claim.groupId,
+          notification: {
+            id: claim.notification.id,
+            title: claim.notification.title,
+            body: claim.notification.body,
+            deepLink: claim.notification.deepLink,
+          },
+        });
+        return repository.markSent({
+          tenantId: claim.notification.tenantId,
+          notificationId: claim.notification.id,
+          providerMessageId: sent.providerMessageId,
+          now: currentTime,
+        });
+      } catch (error) {
+        const attempts = claim.notification.attempts;
+        const retryAt =
+          attempts < maxAttempts
+            ? new Date(currentTime.getTime() + retryDelayMs(attempts))
+            : null;
+        return repository.markFailed({
+          tenantId: claim.notification.tenantId,
+          notificationId: claim.notification.id,
+          error:
+            error instanceof Error ? error.message : 'LINE送信に失敗しました。',
+          nextRetryAt: retryAt,
+          now: currentTime,
+        });
+      }
+    },
+  };
+}
+
 // LINE APIを直接画面へ公開せず、接続状態・キュー・署名検証・再試行を一つの状態境界に集約する。
 export function createLineNotificationService({
   repository,
@@ -140,6 +203,12 @@ export function createLineNotificationService({
   now = () => new Date(),
   maxAttempts = 5,
 }: CreateLineNotificationServiceOptions): LineNotificationService {
+  const deliveryService = createLineDeliveryService({
+    repository,
+    adapter,
+    now,
+    maxAttempts,
+  });
   return {
     async status(actor) {
       const connection = await repository.getConnection(actor);
@@ -223,44 +292,7 @@ export function createLineNotificationService({
         now: now(),
       });
     },
-    async deliverOne(currentTime = now()) {
-      const claim = await repository.claimDue({
-        now: currentTime,
-        maxAttempts,
-      });
-      if (!claim) return null;
-      try {
-        const sent = await adapter.send({
-          groupId: claim.groupId,
-          notification: {
-            id: claim.notification.id,
-            title: claim.notification.title,
-            body: claim.notification.body,
-            deepLink: claim.notification.deepLink,
-          },
-        });
-        return repository.markSent({
-          tenantId: claim.notification.tenantId,
-          notificationId: claim.notification.id,
-          providerMessageId: sent.providerMessageId,
-          now: currentTime,
-        });
-      } catch (error) {
-        const attempts = claim.notification.attempts;
-        const retryAt =
-          attempts < maxAttempts
-            ? new Date(currentTime.getTime() + retryDelayMs(attempts))
-            : null;
-        return repository.markFailed({
-          tenantId: claim.notification.tenantId,
-          notificationId: claim.notification.id,
-          error:
-            error instanceof Error ? error.message : 'LINE送信に失敗しました。',
-          nextRetryAt: retryAt,
-          now: currentTime,
-        });
-      }
-    },
+    deliverOne: deliveryService.deliverOne,
     async receiveWebhook({ rawBody, signature }) {
       if (Buffer.byteLength(rawBody, 'utf8') > MAX_WEBHOOK_BYTES)
         throw new Error('LINE webhookの本文が大きすぎます。');

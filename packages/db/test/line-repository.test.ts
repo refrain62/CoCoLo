@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSqlLineRepository } from '../dist/line-repository.js';
+import {
+  createSqlLineDeliveryRepository,
+  createSqlLineRepository,
+} from '../dist/line-repository.js';
 
 const TENANT_ID = '00000000-0000-7000-8000-000000000001';
 const GROUP_ID = 'Cgroup-a';
@@ -111,5 +114,61 @@ test('SQL repositoryはqueueを接続中の同一tenant・groupへ限定する',
   );
   assert.ok(
     queries.some((query) => query.sql.includes('FROM tenant_memberships')),
+  );
+});
+
+test('worker repositoryは利用者RLS contextを要求せず、限定DB関数だけを呼ぶ', async () => {
+  const queries: Array<{ sql: string; values: readonly unknown[] }> = [];
+  const query = async <Row>(sql: string, values: readonly unknown[]) => {
+    queries.push({ sql, values });
+    if (sql.includes('app_claim_due_line_notification'))
+      return {
+        rows: [{ ...notificationRow, status: 'sending', attempts: 1 }] as Row[],
+      };
+    if (sql.includes('app_mark_line_notification_sent'))
+      return {
+        rows: [
+          {
+            ...notificationRow,
+            status: 'sent',
+            attempts: 1,
+            provider_message_id: 'line-request-1',
+            sent_at: NOW,
+          },
+        ] as Row[],
+      };
+    throw new Error(`想定外のSQLです: ${sql}`);
+  };
+  const client = {
+    async transaction<T>(
+      work: (transaction: { query: typeof query }) => Promise<T>,
+    ) {
+      return work({ query });
+    },
+  };
+  const repository = createSqlLineDeliveryRepository(client);
+
+  const claim = await repository.claimDue({ now: NOW, maxAttempts: 5 });
+  assert.equal(claim?.notification.status, 'sending');
+  const sent = await repository.markSent({
+    tenantId: TENANT_ID,
+    notificationId: notificationRow.id,
+    providerMessageId: 'line-request-1',
+    now: NOW,
+  });
+  assert.equal(sent.status, 'sent');
+  assert.ok(
+    queries.some((query) =>
+      query.sql.includes('app_claim_due_line_notification'),
+    ),
+  );
+  assert.ok(
+    queries.some((query) =>
+      query.sql.includes('app_mark_line_notification_sent'),
+    ),
+  );
+  assert.equal(
+    queries.some((query) => query.sql.includes('set_config')),
+    false,
   );
 });

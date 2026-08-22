@@ -109,7 +109,7 @@ async function audit(
   await client.$executeRaw`
     INSERT INTO audit_logs (id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata)
     VALUES (
-      gen_random_uuid(),
+      app_uuidv7(),
       ${input.tenantId}::uuid,
       ${input.actorUserId},
       ${input.action},
