@@ -1,0 +1,361 @@
+# 中断再開タスクリスト
+
+更新日：2026-08-23
+
+状態：実装作業を中断中
+
+この文書は、作業を再開するときに、現在の実装状態、レビュー指摘、作業ツリーの差分、依存関係、検証条件を復元するための台帳です。
+
+## 1. 停止時点の基準
+
+現行の`develop`は`5e346d1`（部員編集と退部を実装）です。
+
+`develop`へ反映済みの業務機能は、認証、テナント境界、部員一覧、検索、登録、編集、退部、学年表示、年度繰り上げです。
+
+Draft PRに実装が存在しても、`develop`へ統合されていない機能は現行環境では未実装として扱います。
+
+停止時点では、`develop`へのマージ、force push、未コミット差分の破棄を行っていません。
+
+### 状態記号
+
+- `[x]`：実装、検証、敵対的レビューの完了を確認した項目
+- `[~]`：実装または修正が進行中で、再開時に検証が必要な項目
+- `[ ]`：未着手、または前提PRの完了待ちの項目
+- `[!]`：外部操作、所有者承認、環境資格情報など、コード以外の停止条件がある項目
+
+## 2. 最初に行う復元作業
+
+再開時は、次の順序で作業状態を確認します。
+
+1. Node.js 24.12以降とpnpm 10.26.0を確認します。
+2. `develop`、`origin/develop`、対象PRのhead SHAを確認します。
+3. 次の作業ツリーで`git status --short --branch`を実行します。
+4. 未コミット差分を確認し、`git reset --hard`、`git clean`、force pushを実行しません。
+5. 差分を作成した担当ブランチへ戻り、実装、テスト、commit、push、CI、敵対的レビューの順に再開します。
+6. CriticalまたはHighの指摘が残るPRを次の機能へ進めません。
+
+### 作業ツリーの保存場所
+
+| 対象 | パス | 停止時点 |
+| --- | --- | --- |
+| PR #41 | `C:\develop\repositories\CoCoLo\.worktrees\t014-pr-gate` | `fcc4b83`、未コミット差分なし |
+| PR #42 | `C:\develop\repositories\CoCoLo\.worktrees\t014-db-integrity` | `a66bc2a`、未コミット差分なし |
+| PR #43 | `C:\develop\repositories\CoCoLo\.worktrees\t014-schema-drift` | `69a58b0`、修正差分あり |
+| PR #48 | `C:\develop\repositories\CoCoLo\.worktrees\t014-security-scanners` | `00e24ff`、修正差分あり |
+| PR #50 | `C:\develop\repositories\CoCoLo\.worktrees\t014-trust-root-bootstrap` | `15c082a`、修正差分あり |
+| 停止時の共有作業ツリー | `C:\develop\repositories\CoCoLo` | `feature/t014-periodic-e2e`、scanner関連の未コミット差分あり |
+
+共有作業ツリーのscanner差分は、PR #48の修正差分と同一視せず、内容を比較してから扱います。
+
+## 3. T-014の再開タスク
+
+T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted root、定期E2E、分散rate limitを対象とするCI強化です。
+
+実装計画ではT-013が未完了のまま残っていますが、実作業の単位は次のT-014 PR群です。
+
+### 3.1 trusted rootのbootstrap
+
+- `[~]` **T014-ROOT-001：mainのowner-only bootstrapを完了する。**
+  - 対象：PR #51
+  - ブランチ：`feature/t014-trust-root-main-bootstrap`
+  - 最新commit：`c12d411`
+  - base：`main`
+  - 状態：Draft、CI check未報告
+  - 確認事項：main側の`trust-root.json`、trust contract、trusted manifest、manifest self-hash、scanner rule 3ファイルの保護対象が一致することを確認します。
+  - 外部条件：リポジトリ所有者がowner-only手順を実行し、bootstrap commitを保護対象として確定します。
+  - 完了条件：owner-only bootstrapの実行記録、main向けCI、trusted root検査、悪性fixture検査が成功することです。
+
+- `[~]` **T014-ROOT-002：developのowner-only bootstrapを完了する。**
+  - 対象：PR #50
+  - ブランチ：`feature/t014-trust-root-bootstrap`
+  - 最新commit：`15c082a`
+  - base：`develop`
+  - 最新成功CI：品質ゲート run `32596723583`
+  - 未コミット差分：`.github/security/bootstrap-extension.json`、`.github/security/trust-root.json`、`.github/security/trusted-file-manifest.json`、`scripts/trust-root.ts`、`scripts/verify-trust-root.ts`、`scripts/verify-trusted-pr.ts`、`.github/security/bootstrap-owner-procedure.md`、`.github/security/trust-root-contract.json`
+  - 直前レビューのHigh：scanner rule 3ファイルの保護対象不足、mainとdevelopのroot分離、manifest self-hashとbootstrap extensionの整合不足です。
+  - 完了条件：#51とのroot contractが一致し、owner-only手順を実行した後に`pnpm verify:trust-root`がbootstrap済みになります。
+
+- `[ ]` **T014-ROOT-003：mainからdevelopへのtrusted root昇格契約を確定する。**
+  - mainとdevelopが別rootとして独立してしまわないことを確認します。
+  - manifest、trust contract、bootstrap extension、scanner ruleのhashが、mainからdevelopへ昇格する経路で検証されることを確認します。
+  - GitHub Free環境でCODEOWNERSが自動強制されない前提を、owner-only手順とCIの停止条件へ反映します。
+
+### 3.2 security scanner
+
+- `[~]` **T014-SCAN-001：scanner ruleの改変をtrusted path検査へ接続する。**
+  - 対象：PR #48
+  - ブランチ：`feature/t014-security-scanners`
+  - 最新commit：`00e24ff`
+  - base：`feature/t014-trust-root-bootstrap`
+  - 最新成功CI：品質ゲート run `32596118308`
+  - 未コミット差分：`.github/security/fixtures/malicious-scanner-pr.json`、`.github/workflows/security-scanners.yml`、`scripts/security-scanner.test.ts`、`scripts/verify-security-trust.ts`、`scripts/verify-workflows.test.ts`、`scripts/verify-workflows.ts`
+  - 直前レビューのHigh：`.gitleaks.toml`、`.semgrep/ci.yml`、`.trivy-secret.yaml`がprotected pathsに列挙されていても、`isProtectedPath`と差分hash検査の対象から漏れることです。
+  - 完了条件：3ファイルを変更する悪性fixtureが検査で拒否され、manifest、CODEOWNERS、trust root、scanner workflowの許可対象が一致することです。
+
+- `[~]` **T014-SCAN-002：scanner初回導入時のpush境界を成立させる。**
+  - `event.before`側にscannerファイルが存在しない初回導入では、正当な導入を検査可能にします。
+  - 初回導入を例外扱いする場合も、owner-only bootstrap extension、対象path、許可SHA、変更後の固定hashを限定します。
+  - 任意のbase欠落を許可してgeneric trustを弱めないことが条件です。
+
+- `[ ]` **T014-SCAN-003：scanner workflowのtoken露出を閉じる。**
+  - `GITHUB_TOKEN`をjob全体の環境変数へ置かず、GitHub APIを呼ぶstepだけへ渡します。
+  - `pnpm install`のlifecycle scriptからtokenを読めないことをfixtureで確認します。
+  - Gitleaks、Semgrep、Trivyのimage、version、digest、rule、exception、report schemaをfail-closedで検査します。
+
+### 3.3 PR信頼ゲート
+
+- `[~]` **T014-PR-001：PR #41のbase正本ゲートを再検証する。**
+  - 対象：PR #41
+  - ブランチ：`feature/t014-pr-gate`
+  - 最新commit：`fcc4b83`
+  - 最新commitの変更：RLS正本、artifact SHA、DB検査、trust rootのfail-closed境界を強化しました。
+  - Peirceによる検証：typecheck、build、lint、workflow、migration checksum、対象テスト18件、PostgreSQL 17 Docker実DB検査が成功しています。
+  - 未実行：停止時点では全体`pnpm test`とGitHub Actions CIを再実行していません。
+  - 依存：trusted rootがbootstrap済みになるまで、`pnpm verify:trust-root`が`manual-owner-bootstrap-required`で停止することは仕様どおりです。
+  - 完了条件：#50のbootstrap後にCIを再実行し、PR head SHAとbase正本の比較、変更ファイルAPI、3000件上限、permissions、workflow改変検査が成功することです。
+
+### 3.4 DB整合性と権限検査
+
+- `[~]` **T014-DB-001：PR #42のDB integrity gateを再検証する。**
+  - 対象：PR #42
+  - ブランチ：`feature/t014-db-integrity`
+  - 最新commit：`a66bc2a`
+  - 最新commitの変更：membership resolverの撤去、RLS正本、SECURITY DEFINER分類、column ACL、artifact SHA検査を強化しました。
+  - Peirceによる検証：typecheck、build、lint、workflow、migration checksum、対象テスト23件、PostgreSQL 17 Docker実DB検査が成功しています。
+  - 未実行：停止時点では全体`pnpm test`とGitHub Actions CIを再実行していません。
+  - 依存：trusted rootのbootstrap後にCIを再実行します。
+  - 完了条件：app roleのowner、BYPASSRLS、membership、table ACL、column ACL、RLS policy本文、SECURITY DEFINER function、migration履歴、deploy前後DB検査が同一artifact SHAで成功することです。
+
+- `[ ]` **T014-DB-002：DB検査の悪性fixtureを再実行する。**
+  - tenant-only policy、`role IS NOT NULL`だけのpolicy、user_id条件を除いたmembership policy、column GRANT、GRANT OPTION、想定外のSECURITY DEFINER functionを拒否することを確認します。
+  - 通常の関数をSECURITY DEFINER関数として誤検出しないことを確認します。
+  - migrationに存在しないfunctionを検査対象へ要求しないことを確認します。
+
+### 3.5 schema driftとdeploy provenance
+
+- `[~]` **T014-DRIFT-001：PR #43のschema drift検査を完了する。**
+  - 対象：PR #43
+  - ブランチ：`feature/t014-schema-drift`
+  - 最新commit：`69a58b0`
+  - 未コミット差分：`.github/workflows/production-promote.yml`、`.github/workflows/quality.yml`、`package.json`、`scripts/create-staging-evidence.ts`、`scripts/database-security.ts`、`scripts/database-security.test.ts`、`scripts/deployment-preconditions.ts`、`scripts/deployment-preconditions.test.ts`、`scripts/package-release.ts`、`scripts/verify-release.ts`、`scripts/verify-workflows.ts`、`scripts/release-provenance.ts`、`scripts/release-provenance.test.ts`、`scripts/staging-evidence.ts`
+  - 直前レビューのHigh：RLS policyのmarker存在だけを検査し、owner/admin、user_id、guardian条件を削除したpolicyを通すことです。
+  - 直前レビューのHigh：任意artifact SHA、自己申告manifest、自己生成staging evidence、直接CLIを、Git commit、GitHub attestation、実staging runへ結び付けられていないことです。
+  - 直前レビューのMedium：quality workflowのtrigger、permissions、checkout credential、timeout、function本体とtriggerのdrift検査が不足していることです。
+  - 完了条件：RLSの完全allowlist、GitHub runのworkflow pathとjob成功、artifact checksum、attestation、migration checksum、production deploy前後DB検査を同一SHAで検証し、直接CLIをGitHub provenanceなしでは拒否することです。
+
+### 3.6 T-014の周辺タスク
+
+- `[ ]` **T014-BOUNDARY-001：PR #45のDB security boundaryを再レビューする。**
+  - ブランチ：`feature/t014-database-security-boundary`
+  - 最新commit：`05d373c`
+  - DB role、owner、BYPASSRLS、membership、ACL、RLS、function検査の実DB証拠を確認します。
+  - #41/#42の検査ロジックと重複する場合は、検査責務を一つへ集約して二重の正本を作りません。
+
+- `[ ]` **T014-E2E-001：PR #46のperiodic E2Eを再検証する。**
+  - ブランチ：`feature/t014-periodic-e2e`
+  - 最新commit：`988a9d7`
+  - 既存レビューはCritical 0、High 0ですが、Docker Engine未接続のためPostgreSQL付きlocal E2Eの実行証跡がありません。
+  - 日次、週次、手動SHA指定、固定レポート、個人情報秘匿、失敗Issue同期、retryなしをGitHub Actionsで確認します。
+
+- `[ ]` **T014-RATE-001：PR #47の分散rate limit adapterを配置条件まで検証する。**
+  - ブランチ：`feature/distributed-rate-limit-adapter`
+  - 最新commit：`8e53e80`
+  - 既存レビューはCritical 0、High 0ですが、実Redis adapter、Luaまたは同等の原子処理、複数API instance、TTL、障害時503、非PIIキーをstagingで確認していません。
+
+- `[ ]` **T014-RELEASE-001：T-014全PRの共通CIとレビュー記録を更新する。**
+  - 各PRの最新head SHA、CI run、Docker実DB結果、敵対的レビュー結果を`/docs`へ記録します。
+  - `docs/ implementation-plan.md`のT-013状態を、実際の完了条件と一致するよう更新します。
+  - Critical、Highが0件になるまで完了チェックを付けません。
+
+## 4. LINE配信の状態
+
+- `[x]` **LINE-DELIVERY-001：LINE配信schedulerのHigh指摘を修正した。**
+  - 対象：PR #44
+  - ブランチ：`feature/line-delivery-scheduler`
+  - 最新commit：`f1c27c2`
+  - 最新CI：quality run `32597529863`が成功しました。
+  - 独立再レビュー：Critical 0、High 0、Medium 0、Low 0で合格しました。
+  - 修正内容：期限切れleaseの古いtokenによる`unknown`上書きを禁止し、release artifactへAPI実行時のworkspace packageを梱包し、冪等キーの409、LINE retry keyの扱い、実DB統合テストを補正しました。
+  - 残作業：`develop`への統合、LINE providerのstaging接続、unknown照合運用の別タスク化、Windowsのlint改行差分の再確認です。
+
+- `[ ]` **LINE-DELIVERY-002：unknown照合運用を別機能として設計する。**
+  - `unknown`を自動claim対象へ戻さない前提を維持します。
+  - provider側の送達確認、retry keyの保持期間、重複送信リスク、管理者による再照合、再送の監査を仕様化します。
+  - 仕様と運用手順が決まるまで、unknownを自動的にsentまたはfailedへ変更しません。
+
+## 5. 認証と共通基盤の未統合タスク
+
+- `[ ]` **AUTH-001：複数チーム所属時の明示的チーム選択を統合する。**
+  - 対象：PR #31、`feature/auth-team-selection`
+  - API、Web、RLS、再読み込み時の選択状態、複数所属の実DB検証を中央mountへ接続します。
+  - 所属一覧を認証情報の一部として扱い、利用者入力のtenant IDだけで認可しないことを確認します。
+
+- `[ ]` **AUTH-002：Supabase Auth session lifecycleを統合する。**
+  - 対象：PR #34、`feature/auth-session-lifecycle`
+  - 期限前refresh、401時の一度だけの再送、single-flight、古いrefresh応答の無効化、logout、保存tokenの消去をWebの中央mountへ接続します。
+  - localStorageのXSSリスク、staging Supabase E2E、logout UIを受け入れ条件へ追加します。
+
+- `[ ]` **API-001：共通API hardeningを中央APIへ接続する。**
+  - 対象：PR #29、`feature/api-hardening`
+  - CORS allowlist、認証後のtenantとuser単位rate limit、構造化ログ、runtime response schema検証を`apps/api/src/app.ts`へ接続します。
+  - staging、productionでは分散rate limit adapterを必須にし、in-memory fallbackを許可しません。
+
+- `[ ]` **API-002：WebとAPIの中央mountを統合する。**
+  - 対象：PR #32、PR #35
+  - `apps/web/src/main.tsx`と`apps/api/src/app.ts`へ各機能を登録します。
+  - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証、Webのloading、empty、error、権限不足表示を確認します。
+
+- `[ ]` **DB-001：中央DB schemaと機能別migrationを統合する。**
+  - 対象：PR #37、`feature/central-db-schema`
+  - feature PRが個別に持つmigration、RLS、複合制約、監査、状態遷移を中央schemaへ統合します。
+  - migration適用順、checksum、rollback不可の差分、tenant複合キーを確認します。
+
+- `[ ]` **RELEASE-001：release artifactの環境境界を統合する。**
+  - 対象：PR #38、`feature/release-artifact-env-boundary`
+  - Supabase URL、JWKS path、R2 bucket、環境名、secret注入順序、artifact SHAをstagingとproductionで分離します。
+  - Service Role Key、JWT、DB接続文字列、個人情報がartifact、ログ、監査metadataへ混入しないことを確認します。
+
+## 6. Phase 2の未統合タスク
+
+- `[ ]` **EVT-001：予定と出欠を中央API、Web、DBへ統合する。**
+  - 対象：PR #27、`feature/phase2-events-attendance`
+  - 予定登録、期間一覧、編集、月間表示、週間表示、出欠回答、締切、管理者修正、集計を中央routeへ接続します。
+  - PR固有の実DBテストは成功報告がありますが、中央統合後にmigration、RLS、OpenAPI、Playwrightを再実行します。
+
+- `[ ]` **EVT-002：予定詳細と出欠回答状態を統合する。**
+  - 対象：PR #49、`feature/central-event-detail`
+  - baseが`feature/line-notification-outbox`であるため、先にoutboxの統合方針を確認します。
+  - 出欠回答の対象部員、締切後修正理由、guardianの担当部員境界、更新競合を実DBで確認します。
+
+- `[ ]` **EVT-003：予定と締切をLINE outboxへ接続する。**
+  - 対象：PR #40、`feature/line-notification-outbox`
+  - 業務transaction内のoutbox登録、同一eventの重複通知抑止、workerのlease、同時実行、実DB RLS、専用LINE channel E2Eを確認します。
+
+## 7. Phase 3の未統合タスク
+
+- `[ ]` **BRD-001：役員名簿と連絡先表示を統合する。**
+  - 対象：PR #22、`feature/phase3-board-contact`
+  - 年度役職枠、担当者、前年度からの枠複製、電話番号表示設定、個人情報投影、owner/admin認可を中央schemaへ接続します。
+  - 既存レビューのMediumである中央migration、RLS、実DB統合テストを完了します。
+
+- `[ ]` **ORD-001：共同購買と集金を本番DBへ統合する。**
+  - 対象：PR #25、`feature/phase3-orders-payments-isolated`
+  - 商品、選択肢、注文、担当部員境界、支払い状態、監査、集計、UTF-8 BOM付きCSVを統合します。
+  - feature側のmemory adapterをPrisma repositoryへ置き換え、migration、RLS、idempotency、CSV式注入対策を実DBで確認します。
+
+## 8. Phase 4の未統合タスク
+
+- `[ ]` **FIL-001：R2添付のupload sessionを中央APIへ統合する。**
+  - 対象：PR #26、`feature/phase4-r2-attachments`
+  - upload session、署名URL、MIME、magic bytes、サイズ、SHA-256、TTL、complete再試行、rejected cleanup、tenantとowner境界を統合します。
+  - feature側の中央mount、Prisma model、migration、RLS、staging E2Eを完了します。
+
+- `[ ]` **FIL-002：Cloudflare R2の実adapterをstagingへ接続する。**
+  - 対象：PR #39、`feature/phase4-r2-real-adapter`
+  - private bucket、環境別bucket、HTTPS、署名URL期限、object key、HEADまたはGET metadata、PUT、GET、DELETEを実環境で確認します。
+  - local fake adapterとproduction adapterの切り替えを環境変数だけで認可根拠にしないことを確認します。
+
+- `[ ]` **ANN-001：回覧板と既読管理を統合する。**
+  - 対象：PR #30、`feature/phase4-bulletin-board`
+  - 掲載、添付ID、参照、既読記録、未読者一覧、RLS、監査、opaque user IDを中央routeへ接続します。
+  - 添付の非公開配信とR2の認可を結合して確認します。
+
+- `[ ]` **NOT-001：LINE通知契約とWebhookを統合する。**
+  - 対象：PR #28、PR #36
+  - LINE channel、groupIdとtenantの紐付け、未接続状態、署名検証、Webhook重複排除、未知group拒否、再試行、LIFF、deep linkを統合します。
+  - `POST /api/v1/notifications/line`、Webhook route、outbox、workerを同一の認可と監査契約で確認します。
+
+- `[ ]` **NOT-002：LINEグループ連携を実サービスで受け入れる。**
+  - staging専用LINE channelとテスト用groupを用意します。
+  - groupIdの登録、Webhook署名、予定作成から通知送信までの流れ、通知内deep link、未接続、provider 4xx、provider timeout、再送を確認します。
+  - 本番group、個人LINE、アクセストークン、Webhook raw bodyをlocalログへ持ち込みません。
+
+## 9. Phase 5の未統合タスク
+
+- `[ ]` **RIDE-001：送迎希望と配車表を統合する。**
+  - 対象：PR #23、`feature/phase5-ride-operations`
+  - 車を出せるか、乗車可能数、乗車希望、補助マッチング、手動割当、未割当、変更履歴、配車表、Google Mapsリンクを中央routeへ接続します。
+  - driver、希望者、割当のtenant境界、同時割当、監査、個人情報表示を実DBで検証します。
+
+- `[ ]` **RIDE-002：Google Maps連携の外部条件を確定する。**
+  - API key、許可origin、利用規約、費用上限、障害時の表示、リンクだけで代替する条件を運用文書へ追加します。
+  - 外部APIが未設定のlocalとstagingを「連携済み」と表示しません。
+
+## 10. 外部サービスと本番運用の残タスク
+
+- `[!]` **OPS-001：Supabase Authのstaging接続を完了する。**
+  - staging専用project、テスト専用user、JWKS、password grant、refresh、logout、停止ユーザーを設定します。
+  - production userやproduction tokenをlocalへ持ち込みません。
+
+- `[!]` **OPS-002：Supabase PostgreSQLのstaging接続を完了する。**
+  - migration owner、`cocolo_app`、worker role、shadow role、RLS、backup、接続TLS、schema driftを設定します。
+  - DB分離時に守る契約は`docs/database-separation-plan.md`と一致させます。
+
+- `[!]` **OPS-003：Cloudflare R2の環境分離を完了する。**
+  - local、staging、productionでbucket、access key、endpoint、署名URL期限を分離します。
+  - public bucket、公開URL保存、長期署名URLを許可しません。
+
+- `[!]` **OPS-004：LINE Messaging APIとLIFFの本番条件を確定する。**
+  - channel secret、access token、Webhook URL、group受信条件、LIFF URL、deep link、retry key保持期間、障害連絡先を確定します。
+  - 未接続状態を成功として表示しません。
+
+- `[!]` **OPS-005：分散rate limitの実providerを配置する。**
+  - Redisまたは同等サービス、原子的consume、Lua、TTL、secret、複数API instance、provider障害時503をstagingで確認します。
+
+- `[!]` **OPS-006：GitHub Actionsの保護設定を確定する。**
+  - mainとdevelopのbranch protection、required checks、Environment approval、CODEOWNERS、Actions permission、artifact attestationを設定します。
+  - GitHub Freeの制約で技術的に強制できない条件は、owner-only手順とfail-closed検査へ記録します。
+
+- `[!]` **OPS-007：stagingからproductionへの昇格を実施する。**
+  - staging成功run、同一commit SHA、同一artifact checksum、migration checksum、DB検査、smoke、E2E、attestationを確認します。
+  - productionへ別commitをcheckoutして検査する経路を許可しません。
+
+## 11. 改行、Node.js、pnpmの残タスク
+
+- `[ ]` **TOOL-001：Node.js 24とpnpm 10.26.0で全体検証を再実行する。**
+  - `pnpm install --frozen-lockfile`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm lint:workflows`
+  - `pnpm verify:migration-sql`
+  - `pnpm verify:production-bundle`
+
+- `[ ]` **TOOL-002：CRLF検査の実行結果を統一する。**
+  - tracked fileのbyte scan、`git diff --check`、Biomeの結果を同じcommitで記録します。
+  - 既存ファイルを目的外に一括formatせず、CRLFが検出されたファイルだけを修正します。
+  - Windowsのroot lintがCRLFを報告する場合は、対象ファイル、検出コマンド、Linux CIとの差分を記録します。
+
+- `[ ]` **TOOL-003：GitHub ActionsのNode 20警告を解消する。**
+  - Actionのruntime警告とアプリのNode.js 24要件を分けて確認します。
+  - ActionのSHA固定を維持し、更新時はworkflow検査とCIを再実行します。
+
+## 12. 再開時のレビュー手順
+
+機能単位では、次の順序を崩しません。
+
+1. `/docs`の機能仕様IDとこの台帳の依存タスクを確認します。
+2. 専用ブランチの未コミット差分を確認します。
+3. Red、Green、Refactorの順に実装します。
+4. tenant越境、認可、個人情報、入力検証、状態遷移、競合、テスト不足、仕様不整合を敵対的に確認します。
+5. CriticalとHighを0件にします。
+6. Node.js 24、pnpm 10.26.0で`test`、`build`、`typecheck`、`lint`を実行します。
+7. 日本語の小さなcommitを作成してpushします。
+8. Draft PRのCI成功を確認します。
+9. 独立した担当者が最新SHAを再レビューします。
+10. レビュー記録とこの台帳を更新してから、次の機能へ進みます。
+
+## 13. 完了判定
+
+この台帳は、次の条件をすべて満たすまで未完了です。
+
+- `develop`上の機能範囲と`docs/functional-specification.md`の受け入れ条件が一致していることです。
+- T-014のtrust root、scanner、DB、schema drift、deploy provenanceが同じSHAのCIで成功していることです。
+- 各機能PRのCriticalとHighが0件であることです。
+- 中央API、Web、DB、OpenAPI、実DB RLS、staging E2Eが統合済みであることです。
+- Supabase、Cloudflare R2、LINE、分散rate limit、Google Mapsの未設定状態と障害状態が利用者へ正しく表示されることです。
+- productionへstagingで検証した同一artifactだけを昇格できることです。
+- 完了したPRのDraft状態、レビュー記録、実装計画のチェック状態が一致していることです。
+
+完了条件を満たす前に、PRを通常公開へ変更したり、`develop`へ統合したりしません。

@@ -149,6 +149,7 @@ staging / productionの配置手順は docs/deployment-guide.md、配置アダ�
 
 - docs/functional-specification.md: 利用者向け機能仕様、権限、状態遷移、受け入れ条件
 - docs/ implementation-plan.md: 技術選定、DB、CI/CD、実装タスク、完了記録
+- docs/resume-task-list.md: 中断時点の残タスク、PR、作業ツリー、再開条件
 - docs/external-services-operations.md: Supabase、Cloudflare、GitHub Actionsの設定・権限・監視・障害対応
 - docs/database-separation-plan.md: DB分離の不変契約、移行、照合、復旧
 - docs/deployment-guide.md: staging / productionの環境設定、配置、昇格、障害対応
