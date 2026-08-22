@@ -2,7 +2,7 @@
 
 対象ブランチは `integration/web-mount` です。
 
-対象コミットは `e3be64b`、`630bd7d`、`30cf646` と、その後の中央Web文書です。
+対象コミットは `e3be64b`、`630bd7d`、`30cf646`、`3659a14`、`e0bdfd1`、`cf055df`、`16fdd73` と、その後の中央Web文書です。
 
 ## 判定
 
@@ -10,14 +10,14 @@ Criticalは0件です。
 
 Highは0件です。
 
-中央Webを次の統合工程へ渡せますが、中央APIとPR #30、PR #31の取り込みが完了するまで本番機能として扱えません。
+中央Webを次の統合工程へ渡せますが、中央APIのmountとteam header再検証が完了するまで本番機能として扱えません。
 
 ## 確認項目
 
 | 観点 | 判定 | 確認内容 |
 | --- | --- | --- |
-| 認証状態 | 合格 | sessionがない場合に機能routeを表示せず、ログイン画面へ戻る既存経路を維持した |
-| tenant境界 | 合格 | tenant IDをURL、query、body、チーム選択UIへ置かず、中央所属APIの応答だけを利用する |
+| 認証状態 | 合格 | sessionがない場合に機能routeを表示せず、ログイン画面へ戻る。期限切れ401はrefresh後に一回だけ再送する |
+| tenant境界 | 合格 | 保存済みtenant IDはBearer tokenで再取得したactive所属一覧に一致した場合だけ復元し、feature requestはserver再検証前提のheaderを使う |
 | role | 合格 | roleを中央APIから取得し、管理画面をowner/adminへ限定し、画面のrole選択を用意しない |
 | 資源ID | 合格 | 送迎と詳細URLの資源IDをUUIDv7で検証し、不正値をfeature APIへ渡さない |
 | 直接URL | 合格 | 既知route、未認証、UUIDv7不正、unknown pathを専用テストで確認した |
@@ -43,9 +43,13 @@ PR #30からWeb画面とAPI clientだけを取り込み、中央navigationへ接
 
 ### チーム選択とsession lifecycle
 
-PR #31のチーム選択画面はリモートで利用可能ですが、`auth-context` との接続は後続条件です。
+PR #31のチーム選択画面と契約を中央Webへ取り込み、`/team-selection` と `/api/v1/auth/teams` のpathを固定しました。
 
-session refresh/logoutと同時に変更すると認証状態の競合を起こすため、今回のブランチでは扱いません。
+選択IDはsessionStorageへ保存しますが、再読み込み時にactive所属一覧と一致しない値は復元しません。
+
+`auth-context` のrefresh/logout、全中央feature APIへのauthenticatedFetch注入、401 retryを実装しました。
+
+中央APIの `/api/v1/auth` mount、`X-CoCoLo-Team-Id` のJWT・membership再検証、実Supabase staging E2Eは後続条件です。
 
 ### 非管理者向けの読み取り画面
 
@@ -57,7 +61,9 @@ session refresh/logoutと同時に変更すると認証状態の競合を起こ�
 
 ## 検証結果
 
-`pnpm exec vitest run apps/web/src/central-navigation.vitest.ts` は8件成功しました。
+`pnpm exec vitest run apps/web/src/central-navigation.vitest.ts` は10件成功しました。
+
+Auth session、中央navigation、team selection APIの対象テストは20件成功しました。
 
 リポジトリ全体のVitestは17ファイル51件が成功しました。
 

@@ -4,7 +4,7 @@
 
 この文書は、`FS-AUTH-001`の期限切れ対応と、T-009敵対的レビューの`T009-M-001`で残ったrefresh/logoutを定義する。
 
-対象実装は`apps/web/src/auth-client.ts`と`apps/web/src/auth-context.tsx`であり、APIのJWT検証、チーム選択、中央Web mountは変更しない。
+対象実装は`apps/web/src/auth-client.ts`と`apps/web/src/auth-context.tsx`であり、APIのJWT検証は変更しない。
 
 `local`では既存のtest-only Auth adapterを使い、`staging`と`production`では`VITE_SUPABASE_URL`と`VITE_SUPABASE_ANON_KEY`だけをブラウザへ渡す。
 
@@ -46,7 +46,7 @@ refreshが失敗した場合は元の`401`を返し、sessionと保存済みtoke
 
 bodyが再利用できない`ReadableStream`の要求は、refresh後に再送せず元の`401`を返す。
 
-`authenticatedFetch`を使わず、保存領域からaccess tokenを直接読むAPI clientは、期限前refreshの反映は受け取れるが、401時の自動refreshと一回再送の保証を持たない。
+中央Webへ接続するfeature API clientは、`authenticatedFetch`をfetcherとして受け取り、401時の自動refreshと一回再送を共有する。
 
 ## logoutの動作
 
@@ -66,7 +66,7 @@ bodyが再利用できない`ReadableStream`の要求は、refresh後に再送�
 4. `requiresReauthentication`が`true`になった場合は、保護画面を再ログイン導線へ遷移させる。
 5. チームID、権限、個人情報の判定は引き続きAPIとDBの認可へ任せる。
 
-今回の変更では`apps/web/src/main.tsx`と既存featureのAPI clientを変更していない。
+中央Webでは`apps/web/src/main.tsx`から`authenticatedFetch`と`logout`を渡し、既存feature API clientには通信入口だけを注入する。
 
 ## 環境境界
 
@@ -88,6 +88,6 @@ refresh tokenの実値を含むfixtureはリポジトリへ追加せず、テス
 
 `localStorage`へtokenを保存する構成はXSS時の窃取リスクを残すため、将来BFFとHttpOnly Secure SameSite cookieへ移行する。
 
-中央Web mountが未接続の間は、既存API clientの401要求を自動refreshできないため、接続完了をこの機能の運用開始条件とする。
+中央APIのJWT検証、team header再検証、実Supabaseのstaging E2Eが完了するまで、本番運用開始条件は満たさない。
 
 実Supabaseを使うstaging E2Eは、専用ユーザー、環境変数、デプロイ先が揃った環境でログイン、期限切れ、refresh失敗、logoutを確認する。

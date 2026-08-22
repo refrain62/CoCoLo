@@ -8,7 +8,9 @@
 
 中央Webは `apps/web/src/main.tsx` から認証済み `session` を `CentralNavigation` へ渡します。
 
-feature画面へ渡すAPI clientは、保存済みのtokenを読み直さず、現在の `session.accessToken` をBearer tokenとして利用します。
+feature画面へ渡すAPI clientは、保存済みのtokenを読み直さず、`useAuth().authenticatedFetch`を通信入口として利用します。
+
+期限前更新または401後の一回だけのrefresh retryは、Auth session managerへ集約します。
 
 tenant IDをURL、query、body、画面のチーム選択値へ渡しません。
 
@@ -27,6 +29,7 @@ tenant IDをURL、query、body、画面のチーム選択値へ渡しません�
 | `/line` | LINE通知 | `LineNotificationPanel`を接続 |
 | `/ride/:planId` | 送迎 | UUIDv7の `planId` を検証して接続 |
 | `/bulletins` | 回覧板 | PR #30のWeb画面を接続。APIは未mount |
+| `/team-selection` | チーム選択 | PR #31のWeb画面を接続。APIは`/api/v1/auth` mount待ち |
 | `/manual` | 操作マニュアル | 認証前後に表示可能 |
 
 予定、共同購買、添付、回覧板の詳細URLは、UUIDv7を検証した後に詳細画面未接続として表示します。
@@ -49,7 +52,7 @@ UUIDv7でない `planId` や詳細資源IDは、APIへ渡さずエラー表示�
 
 roleは中央APIの所属解決結果だけを使用し、画面上にrole選択UIを用意しません。
 
-部員選択肢は、同じBearer tokenで取得した部員APIの結果だけから作成します。
+部員選択肢は、同じBearer tokenと選択済みtenant headerで取得した部員APIの結果だけから作成します。
 
 別tenantの部員IDを画面状態へ追加する入力欄はありません。
 
@@ -101,15 +104,19 @@ PR #30からWeb画面とAPI clientだけを `apps/web/src/features/bulletin-boar
 
 回覧板API、DB migration、RLS、添付ダウンロードの実接続は、中央API統合後の条件です。
 
-PR #31のチーム選択画面exportは `apps/web/src/features/auth-team-selection/` にありますが、現在の統合ベースへは未取り込みです。
+PR #31のチーム選択画面、API client、UUIDv7契約を `apps/web/src/features/auth-team-selection/` と `packages/contracts/src/auth-team-selection-contract.ts` へ取り込みました。
 
-PR #31のチーム選択は、中央APIのactive membership解決と同じtenant境界を持つrouteへ接続します。
+Web clientの一覧・選択pathは、中央APIを `/api/v1/auth` へmountした場合の `GET /api/v1/auth/teams` と `POST /api/v1/auth/teams/select` に固定しています。
 
-チーム選択の選択結果をlocalStorageやURLだけで認可根拠にしません。
+選択後のtenant IDだけをsessionStorageへ保存し、再読み込み時は同じBearer tokenで取得したactive所属一覧に一致した場合だけ復元します。
 
-`auth-context` のsession refresh/logoutは別ブランチの後続作業です。
+選択結果は認可根拠にせず、中央APIはuser IDとtenant IDのactive membershipを毎回再検証します。
 
-そのブランチと競合しないよう、今回の中央Webmountでは `auth-context.tsx`、refresh token、logout処理を変更しません。
+中央Webのfeature requestには `X-CoCoLo-Team-Id` を付けますが、API側でJWTとmembershipを再検証できない間は業務画面を表示しません。
+
+`auth-context` のsession refresh/logoutは `AuthProvider` と中央navigationへ接続済みです。
+
+ログアウトはAuthenticated画面の中央navigationから実行し、失敗時も先に画面上のsessionを消去します。
 
 ## 中央API統合後の作業
 
@@ -117,10 +124,11 @@ PR #31のチーム選択は、中央APIのactive membership解決と同じtenant
 
 1. `GET /api/v1/session` を既存のJWT検証とactive membership解決へ接続する。
 2. feature APIを既存の認証middleware後へmountする。
-3. PR #31を統合ベースへ取り込み、チーム選択結果を中央所属状態へ接続する。
-4. `apps/api` のOpenAPIと実PostgreSQL migrationを更新する。
-5. tenant A、tenant B、owner、admin、staff、guardianで画面とAPIの境界を検証する。
-6. stagingのSupabase Auth、R2、LINE、回覧板、チーム切り替えを実E2Eで確認する。
+3. APIへ `createAuthTeamSelectionApp()` を `/api/v1/auth` でmountする。
+4. PR #31の選択結果を中央所属状態へ接続し、業務APIで `X-CoCoLo-Team-Id` を再検証する。
+5. `apps/api` のOpenAPIと実PostgreSQL migrationを更新する。
+6. tenant A、tenant B、owner、admin、staff、guardianで画面とAPIの境界を検証する。
+7. stagingのSupabase Auth、R2、LINE、回覧板、チーム切り替えを実E2Eで確認する。
 
 ## 検証
 
