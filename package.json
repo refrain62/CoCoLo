@@ -13,6 +13,8 @@
     "test:integration": "pnpm -r --if-present test:integration",
     "test:e2e:local": "node scripts/run-e2e.ts local",
     "test:e2e:staging": "node scripts/run-e2e.ts staging",
+    "test:e2e:periodic": "node scripts/run-periodic-e2e.ts",
+    "test:e2e:report": "node --test scripts/e2e-report.test.ts",
     "build": "pnpm -r --if-present build",
     "lint": "pnpm lint:biome && pnpm -r --if-present lint && node scripts/verify-workspace-boundaries.ts",
     "lint:biome": "biome check .",
