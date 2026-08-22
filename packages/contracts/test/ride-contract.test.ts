@@ -4,7 +4,7 @@ import {
   rideOfferCreateSchema,
   ridePlanCreateSchema,
   rideRequestCreateSchema,
-} from '../src/ride-contract.mjs';
+} from '../src/ride-contract.ts';
 
 test('送迎入力は容量、日時、Google Maps URLの基本形式を検証する', () => {
   const plan = ridePlanCreateSchema.parse({

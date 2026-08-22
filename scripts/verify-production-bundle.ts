@@ -18,7 +18,7 @@ const roots = [
 ];
 let scanned = 0;
 // dist配下を再帰走査し、禁止文字列を見つけた時点でreleaseを不合格にする。
-async function scan(directory) {
+async function scan(directory: string): Promise<void> {
   const entries = await readdir(directory, { withFileTypes: true }).catch(
     () => [],
   );
