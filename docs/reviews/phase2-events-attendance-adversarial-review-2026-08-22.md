@@ -1,6 +1,6 @@
 # Phase 2の敵対的レビュー
 
-レビュー対象は`feature/phase2-events-attendance`の`759b2d0`です。
+レビュー対象は`feature/phase2-events-attendance`の実装コミット`a543d92`です。
 
 対象機能はFS-EVT-001〜003です。
 
@@ -76,6 +76,8 @@ DB triggerは締切後のguardian回答を拒否し、管理者修正理由を�
 | --- | --- | --- | --- | --- |
 | PH2-H-001 | High | repositoryを経由しない直接SQLで予定の作成者や出欠回答者を偽装できる余地があった | RLS policy、識別子固定trigger、回答者固定trigger、締切後理由triggerを追加 | `fbf8a37` |
 | PH2-H-002 | High | APIに予定編集があってもWeb画面から編集できなかった | owner、admin、staff向けの予定編集フォームを追加 | `759b2d0` |
+| PH2-H-003 | High | guardianの出欠登録で、Prisma生成モデル経由の監査INSERTがRLS下で失敗した | 監査INSERTをパラメータ化SQLへ統一し、guardianの実DB登録を追加検証 | `bbbdb54`、`a95d283` |
+| PH2-H-004 | High | guardianの担当部員確認で`FOR SHARE`を使うとRLS下の参照行が見えず、正しい回答まで拒否された | 参照クエリから不要なロック句を除去し、締切競合はDB triggerで判定する構成に修正 | `bbbdb54` |
 
 上記のCriticalとHighは修正後に再確認し、残っていません。
 
@@ -92,13 +94,18 @@ DB triggerは締切後のguardian回答を拒否し、管理者修正理由を�
 * `pnpm --filter @cocolo/web build`
 * `pnpm --filter @cocolo/db build`
 * `pnpm verify:migration-sql`
+* `pnpm build`
+* `pnpm test`
+* `pnpm --filter @cocolo/api test:unit`
+* `pnpm --filter @cocolo/api test:integration`
+* `pnpm exec biome check .`
 * `git diff --check`
 
-`apps/api/test/integration/events-db.test.mjs`は実PostgreSQLで実行するテストです。
+`apps/api/test/integration/events-db.test.ts`は実PostgreSQLで実行するテストです。
 
-今回の分離環境ではDocker EngineのAPIへ接続できなかったため、実PostgreSQLの統合テストはローカル実行できていません。
+ローカルPostgreSQLへPhase 2 migrationとテストseedを適用し、実DB統合テスト12件がすべて成功しました。
 
-Draft PRの品質ゲートではmigration適用後にこの統合テストを実行し、SQL triggerとRLSの実行結果を確認する必要があります。
+この12件には、tenant境界、guardianの担当範囲、一意回答、締切後の管理者修正理由、直接SQLによるtrigger拒否を含みます。
 
 ## 残余リスク
 

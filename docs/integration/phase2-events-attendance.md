@@ -12,7 +12,7 @@
 * `apps/web/src/features/events/events-api.ts`
 * `apps/web/src/features/events/events-page.tsx`
 * `apps/web/src/features/events/events.css`
-* `packages/contracts/src/event-contract.mjs`
+* `packages/contracts/src/event-contract.ts`
 * `packages/domain/src/event-domain.ts`
 * `packages/db/src/event-repository.ts`
 * `packages/db/prisma/migrations/20260822130000_phase2_events_attendance/migration.sql`
@@ -120,12 +120,14 @@ productionへ昇格する際は、migration適用後にtenant A/B、owner/admin/
 ```text
 pnpm test:contracts
 pnpm --filter @cocolo/domain test
-node --test apps/api/test/events.test.mjs
+pnpm --filter @cocolo/api test:unit
 pnpm exec vitest run apps/web/src/features/events/events-api.vitest.ts
 pnpm verify:migration-sql
 ```
 
-`apps/api/test/integration/events-db.test.mjs`は実PostgreSQLとPhase 2 migration、テストseedを使う統合テストです。
+`apps/api/test/integration/events-db.test.ts`は実PostgreSQLとPhase 2 migration、テストseedを使う統合テストです。
+
+Node標準TypeScript実行へ移行した`origin/develop`の`d7e5f16`を取り込み、Phase 2の契約と専用テストも`.ts`へ統一しています。
 
 ## 統合時に残る作業
 
