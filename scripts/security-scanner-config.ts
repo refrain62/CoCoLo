@@ -202,6 +202,7 @@ export function validateScannerConfig(value: unknown): ScannerConfig {
     const raw = value.tools[name];
     if (!isRecord(raw)) throw new Error(`${name}の設定が不正です。`);
 
+    const expectedNetwork = scannerNetworkAllowlist[name];
     const { image, version, digest, network, ruleFile, command, environment } =
       raw;
     if (
@@ -211,7 +212,7 @@ export function validateScannerConfig(value: unknown): ScannerConfig {
       version !== scannerImageAllowlist[name].version ||
       typeof digest !== 'string' ||
       digest !== scannerImageAllowlist[name].digest ||
-      network !== scannerNetworkAllowlist[name] ||
+      network !== expectedNetwork ||
       typeof ruleFile !== 'string' ||
       ruleFile !== scannerRuleFileAllowlist[name] ||
       !Array.isArray(command) ||
@@ -238,7 +239,7 @@ export function validateScannerConfig(value: unknown): ScannerConfig {
       image,
       version,
       digest,
-      network,
+      network: expectedNetwork,
       ruleFile,
       command,
       environment,
