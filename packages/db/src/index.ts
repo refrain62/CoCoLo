@@ -9,6 +9,7 @@ import {
   type MemberStatus,
   type Prisma,
   PrismaClient,
+  type Role,
 } from '@prisma/client';
 
 export type MemberRole = 'owner' | 'admin' | 'staff' | 'guardian';
@@ -110,18 +111,24 @@ async function assertActiveMembership(
   client: Prisma.TransactionClient,
   input: { tenantId: string; userId: string; role: MemberRole },
 ) {
-  // membershipsはSELECT policyのみのため、更新と競合するFOR SHAREで所属を固定する。
-  const memberships = await client.$queryRaw<
-    Array<{ role: string; status: string }>
-  >`
-    SELECT role, status
-    FROM tenant_memberships
-    WHERE tenant_id = ${input.tenantId}::uuid
-      AND user_id = ${input.userId}
-    FOR SHARE
+  // 所属変更と同一ユーザーの処理を直列化し、RLSのSELECT policyに従って確認する。
+  const membershipLockKey = `${input.tenantId}:${input.userId}`;
+  await client.$queryRaw`
+    SELECT pg_advisory_xact_lock(hashtextextended(${membershipLockKey}, 0))
   `;
-  const membership = memberships[0];
-  if (membership?.status !== 'active' || membership?.role !== input.role)
+  const membership = await client.tenantMembership.findUnique({
+    where: {
+      tenantId_userId: {
+        tenantId: input.tenantId,
+        userId: input.userId,
+      },
+    },
+    select: { role: true, status: true },
+  });
+  if (
+    membership?.status !== 'active' ||
+    membership?.role !== (input.role as Role)
+  )
     throw new Error('active membership context changed');
 }
 
