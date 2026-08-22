@@ -651,7 +651,7 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
     outboxSourceA,
     outboxSourceStaff,
   );
-  assert.equal(pendingOutboxes.length, 2);
+  assert.equal(pendingOutboxes.length, 2, JSON.stringify(pendingOutboxes));
   assert.equal(pendingOutboxes[0]?.status, 'pending');
   assert.equal(pendingOutboxes[0]?.title, '予定通知A（更新）');
 
