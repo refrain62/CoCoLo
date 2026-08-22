@@ -139,6 +139,7 @@ function MemberForm({
   api: MemberApi;
   onCreated: (member: MemberSummary) => void;
 }) {
+  // 入力中の状態はフォーム内に閉じ込め、API成功時だけ親の一覧へ新しい部員を反映する。
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);

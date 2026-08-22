@@ -7,6 +7,7 @@ const testEmail = 'owner-a@example.test';
 const testPassword = 'owner-password';
 const testAccessToken = 'local-test-owner-token';
 const appEnv = process.env.APP_ENV;
+// 固定tokenのtest-only Authはlocal E2E専用で、本番・stagingの起動経路から分離する。
 if (appEnv !== 'local')
   throw new Error('test-only Auth serverはlocal環境でのみ起動できます。');
 if (!process.env.DATABASE_URL)

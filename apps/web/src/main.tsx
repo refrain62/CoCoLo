@@ -7,6 +7,7 @@ import { MemberManagementPage } from './member-management-page.js';
 import './styles.css';
 
 function AuthenticatedApp() {
+  // 認証状態が確定するまでLoginPageを表示し、部員APIへ到達できる画面をsession保有者に限定する。
   const { session } = useAuth();
   const memberApi = useMemo(
     () =>
