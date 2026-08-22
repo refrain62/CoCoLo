@@ -56,7 +56,7 @@ test('部員一覧は検索条件を送り、公開項目だけを表示する',
 test('部員登録はstudentの必須項目を検証し、tenant情報を送らない', async ({
   page,
 }) => {
-  let postBody;
+  let postBody: Record<string, unknown> | undefined;
   await page.route('**/api/v1/members', async (route) => {
     if (route.request().method() === 'POST') {
       postBody = route.request().postDataJSON();
