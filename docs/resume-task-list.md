@@ -6,11 +6,23 @@
 
 この文書は、作業を再開するときに、現在の実装状態、レビュー指摘、作業ツリーの差分、依存関係、検証条件を復元するための台帳です。
 
+## 再開時の読み込みルール
+
+再開時に最初に読む文書は、この台帳だけにします。
+
+完了済みの実装内容、検証結果、レビューの経緯は、[完了タスクと実施履歴](resume-task-history.md)へ移しています。
+
+履歴文書は、現行タスクが参照を指定している場合、同じ検証を再実行する場合、状態差分やレビュー判断の根拠を確認する場合、監査記録を作る場合だけ該当見出しを読みます。
+
+完了項目をこの台帳へ再掲しません。
+
+タスクを完了したときは、実施内容を履歴文書へ追記し、この台帳から完了項目を削除します。
+
 ## 1. 停止時点の基準
 
 現行の`develop`は`5e346d1`（部員編集と退部を実装）です。
 
-`develop`へ反映済みの業務機能は、認証、テナント境界、部員一覧、検索、登録、編集、退部、学年表示、年度繰り上げです。
+`develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
 Draft PRに実装が存在しても、`develop`へ統合されていない機能は現行環境では未実装として扱います。
 
@@ -18,10 +30,11 @@ Draft PRに実装が存在しても、`develop`へ統合されていない機能
 
 ### 状態記号
 
-- `[x]`：実装、検証、敵対的レビューの完了を確認した項目
 - `[~]`：実装または修正が進行中で、再開時に検証が必要な項目
 - `[ ]`：未着手、または前提PRの完了待ちの項目
 - `[!]`：外部操作、所有者承認、環境資格情報など、コード以外の停止条件がある項目
+
+完了した項目は、完了確認後にこの台帳から削除し、履歴文書へ移します。
 
 ## 2. 最初に行う復元作業
 
@@ -108,9 +121,8 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - 対象：PR #41
   - ブランチ：`feature/t014-pr-gate`
   - 最新commit：`fcc4b83`
-  - 最新commitの変更：RLS正本、artifact SHA、DB検査、trust rootのfail-closed境界を強化しました。
-  - Peirceによる検証：typecheck、build、lint、workflow、migration checksum、対象テスト18件、PostgreSQL 17 Docker実DB検査が成功しています。
-  - 未実行：停止時点では全体`pnpm test`とGitHub Actions CIを再実行していません。
+  - 状態：実装と対象範囲の検証は完了していますが、全体`pnpm test`、GitHub Actions CI、trusted root bootstrap後の再検証が残っています。
+  - 実施済みの変更と検証結果：[T014-PR-001の履歴](resume-task-history.md#t014-pr-001)
   - 依存：trusted rootがbootstrap済みになるまで、`pnpm verify:trust-root`が`manual-owner-bootstrap-required`で停止することは仕様どおりです。
   - 完了条件：#50のbootstrap後にCIを再実行し、PR head SHAとbase正本の比較、変更ファイルAPI、3000件上限、permissions、workflow改変検査が成功することです。
 
@@ -120,9 +132,8 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - 対象：PR #42
   - ブランチ：`feature/t014-db-integrity`
   - 最新commit：`a66bc2a`
-  - 最新commitの変更：membership resolverの撤去、RLS正本、SECURITY DEFINER分類、column ACL、artifact SHA検査を強化しました。
-  - Peirceによる検証：typecheck、build、lint、workflow、migration checksum、対象テスト23件、PostgreSQL 17 Docker実DB検査が成功しています。
-  - 未実行：停止時点では全体`pnpm test`とGitHub Actions CIを再実行していません。
+  - 状態：実装と対象範囲の検証は完了していますが、全体`pnpm test`、GitHub Actions CI、trusted root bootstrap後の再検証が残っています。
+  - 実施済みの変更と検証結果：[T014-DB-001の履歴](resume-task-history.md#t014-db-001)
   - 依存：trusted rootのbootstrap後にCIを再実行します。
   - 完了条件：app roleのowner、BYPASSRLS、membership、table ACL、column ACL、RLS policy本文、SECURITY DEFINER function、migration履歴、deploy前後DB検査が同一artifact SHAで成功することです。
 
@@ -138,9 +149,8 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - ブランチ：`feature/t014-schema-drift`
   - 最新commit：`69a58b0`
   - 未コミット差分：`.github/workflows/production-promote.yml`、`.github/workflows/quality.yml`、`package.json`、`scripts/create-staging-evidence.ts`、`scripts/database-security.ts`、`scripts/database-security.test.ts`、`scripts/deployment-preconditions.ts`、`scripts/deployment-preconditions.test.ts`、`scripts/package-release.ts`、`scripts/verify-release.ts`、`scripts/verify-workflows.ts`、`scripts/release-provenance.ts`、`scripts/release-provenance.test.ts`、`scripts/staging-evidence.ts`
-  - 直前レビューのHigh：RLS policyのmarker存在だけを検査し、owner/admin、user_id、guardian条件を削除したpolicyを通すことです。
-  - 直前レビューのHigh：任意artifact SHA、自己申告manifest、自己生成staging evidence、直接CLIを、Git commit、GitHub attestation、実staging runへ結び付けられていないことです。
-  - 直前レビューのMedium：quality workflowのtrigger、permissions、checkout credential、timeout、function本体とtriggerのdrift検査が不足していることです。
+  - 状態：修正差分が未コミットです。Highの指摘はRLS完全allowlistと、artifactおよびstaging証跡をGitHub provenanceへ結び付ける検査です。
+  - 直前レビューの詳細：[T014-DRIFT-001の履歴](resume-task-history.md#t014-drift-001)
   - 完了条件：RLSの完全allowlist、GitHub runのworkflow pathとjob成功、artifact checksum、attestation、migration checksum、production deploy前後DB検査を同一SHAで検証し、直接CLIをGitHub provenanceなしでは拒否することです。
 
 ### 3.6 T-014の周辺タスク
@@ -154,29 +164,30 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
 - `[ ]` **T014-E2E-001：PR #46のperiodic E2Eを再検証する。**
   - ブランチ：`feature/t014-periodic-e2e`
   - 最新commit：`988a9d7`
-  - 既存レビューはCritical 0、High 0ですが、Docker Engine未接続のためPostgreSQL付きlocal E2Eの実行証跡がありません。
+  - 状態：静的レビューは通過していますが、Docker Engineを使ったPostgreSQL付きlocal E2Eの実行証跡がありません。
+  - 既存レビューの詳細：[T014-E2E-001の履歴](resume-task-history.md#t014-e2e-001)
   - 日次、週次、手動SHA指定、固定レポート、個人情報秘匿、失敗Issue同期、retryなしをGitHub Actionsで確認します。
 
 - `[ ]` **T014-RATE-001：PR #47の分散rate limit adapterを配置条件まで検証する。**
   - ブランチ：`feature/distributed-rate-limit-adapter`
   - 最新commit：`8e53e80`
-  - 既存レビューはCritical 0、High 0ですが、実Redis adapter、Luaまたは同等の原子処理、複数API instance、TTL、障害時503、非PIIキーをstagingで確認していません。
+  - 状態：静的レビューは通過していますが、実Redis adapterを使ったstaging検証がありません。
+  - 既存レビューの詳細：[T014-RATE-001の履歴](resume-task-history.md#t014-rate-001)
+  - 実Redis adapter、Luaまたは同等の原子処理、複数API instance、TTL、障害時503、非PIIキーをstagingで確認します。
 
 - `[ ]` **T014-RELEASE-001：T-014全PRの共通CIとレビュー記録を更新する。**
   - 各PRの最新head SHA、CI run、Docker実DB結果、敵対的レビュー結果を`/docs`へ記録します。
   - `docs/ implementation-plan.md`のT-013状態を、実際の完了条件と一致するよう更新します。
   - Critical、Highが0件になるまで完了チェックを付けません。
 
-## 4. LINE配信の状態
+## 4. LINE配信の残タスク
 
-- `[x]` **LINE-DELIVERY-001：LINE配信schedulerのHigh指摘を修正した。**
+- `[~]` **LINE-DELIVERY-001：修正済みschedulerを統合後の環境で検証する。**
   - 対象：PR #44
   - ブランチ：`feature/line-delivery-scheduler`
   - 最新commit：`f1c27c2`
-  - 最新CI：quality run `32597529863`が成功しました。
-  - 独立再レビュー：Critical 0、High 0、Medium 0、Low 0で合格しました。
-  - 修正内容：期限切れleaseの古いtokenによる`unknown`上書きを禁止し、release artifactへAPI実行時のworkspace packageを梱包し、冪等キーの409、LINE retry keyの扱い、実DB統合テストを補正しました。
-  - 残作業：`develop`への統合、LINE providerのstaging接続、unknown照合運用の別タスク化、Windowsのlint改行差分の再確認です。
+  - 状態：実装、quality CI、独立再レビューは完了しています。`develop`への統合、LINE providerのstaging接続、unknown照合運用、Windowsのlint改行差分の再確認が残っています。
+  - 完了済みの実施内容：[LINE-DELIVERY-001の履歴](resume-task-history.md#line-delivery-001)
 
 - `[ ]` **LINE-DELIVERY-002：unknown照合運用を別機能として設計する。**
   - `unknown`を自動claim対象へ戻さない前提を維持します。
