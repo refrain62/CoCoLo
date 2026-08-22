@@ -8,12 +8,17 @@ import './styles.css';
 
 function AuthenticatedApp() {
   // 認証状態が確定するまでLoginPageを表示し、中央ナビゲーションへtokenを渡す。
-  const { session } = useAuth();
+  const { authenticatedFetch, isLoggingOut, logout, session } = useAuth();
   if (!session) return <LoginPage />;
 
   return (
     <AppShell>
-      <CentralNavigation session={session} />
+      <CentralNavigation
+        authenticatedFetch={authenticatedFetch}
+        isLoggingOut={isLoggingOut}
+        onLogout={() => void logout()}
+        session={session}
+      />
     </AppShell>
   );
 }

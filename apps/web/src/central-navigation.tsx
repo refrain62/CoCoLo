@@ -1,3 +1,7 @@
+import {
+  selectedTeamHeaderName,
+  type TeamOption,
+} from '@cocolo/contracts/auth-team-selection';
 import type { MemberRole } from '@cocolo/contracts/member';
 import {
   type ReactNode,
@@ -7,11 +11,18 @@ import {
   useState,
 } from 'react';
 import type { AuthSession } from './auth-client.js';
+import type { AuthenticatedFetch } from './auth-context.js';
 import {
   type AttachmentApi,
   createAttachmentApi,
 } from './features/attachments/attachment-api.js';
 import { AttachmentUploader } from './features/attachments/attachment-uploader.js';
+import {
+  createTeamSelectionApi,
+  SelectedTeamHeader,
+  type TeamSelectionApi,
+  TeamSelectionPage,
+} from './features/auth-team-selection/index.js';
 import {
   BoardContactPage,
   createBoardContactApi,
@@ -53,6 +64,7 @@ export type CentralResourceFeature =
 export type CentralRoute =
   | { kind: 'home' }
   | { kind: 'manual' }
+  | { kind: 'team-selection' }
   | { kind: 'members' }
   | { kind: 'events' }
   | { kind: 'board-contacts' }
@@ -154,6 +166,7 @@ export function matchCentralRoute(pathname: string): CentralRoute {
   if (extra) return { kind: 'unknown', pathname: normalized };
 
   if (resource === 'manual' && !id) return { kind: 'manual' };
+  if (resource === 'team-selection' && !id) return { kind: 'team-selection' };
   if (resource === 'members' && !id) return { kind: 'members' };
   if (resource === 'events' && !id) return { kind: 'events' };
   if (resource === 'board-contacts' && !id) return { kind: 'board-contacts' };
@@ -290,17 +303,41 @@ type CentralApis = {
   bulletinBoard: ReturnType<typeof createBulletinBoardApi>;
 };
 
-function createCentralApis(accessToken: string | null): CentralApis {
+export function createCentralApis(
+  accessToken: string | null,
+  fetcher: AuthenticatedFetch = fetch,
+  selectedTeamId: string | null = null,
+): CentralApis {
   const getAccessToken = () => accessToken;
+  const featureFetcher: AuthenticatedFetch = (input, init) => {
+    const headers = new Headers(init?.headers);
+    if (selectedTeamId) headers.set(selectedTeamHeaderName, selectedTeamId);
+    return fetcher(input, { ...init, headers });
+  };
   return {
-    member: createMemberApi({ getAccessToken }),
-    events: createEventsApi({ getAccessToken }),
-    boardContacts: createBoardContactApi({ getAccessToken }),
-    orders: createOrdersPaymentsApi({ getAccessToken }),
-    attachments: createAttachmentApi({ getAccessToken }),
-    line: createLineNotificationApi({ getAccessToken }),
-    ride: createRideOperationsApi({ getAccessToken }),
-    bulletinBoard: createBulletinBoardApi({ getAccessToken }),
+    member: createMemberApi({ getAccessToken, fetcher: featureFetcher }),
+    events: createEventsApi({ getAccessToken, fetcher: featureFetcher }),
+    boardContacts: createBoardContactApi({
+      getAccessToken,
+      fetcher: featureFetcher,
+    }),
+    orders: createOrdersPaymentsApi({
+      getAccessToken,
+      fetcher: featureFetcher,
+    }),
+    attachments: createAttachmentApi({
+      getAccessToken,
+      fetcher: featureFetcher,
+    }),
+    line: createLineNotificationApi({
+      getAccessToken,
+      fetcher: featureFetcher,
+    }),
+    ride: createRideOperationsApi({ getAccessToken, fetcher: featureFetcher }),
+    bulletinBoard: createBulletinBoardApi({
+      getAccessToken,
+      fetcher: featureFetcher,
+    }),
   };
 }
 
@@ -341,12 +378,89 @@ function useMemberOptions(
   return state;
 }
 
+const SELECTED_TEAM_STORAGE_KEY = 'cocolo.selectedTeamId';
+
+// 保存済みIDは、同じBearer tokenで取得したactive所属一覧に存在する場合だけ復元する。
+export function reconcileSelectedTeam(
+  teams: TeamOption[],
+  storedId: string | null,
+) {
+  if (storedId) return teams.find((team) => team.tenantId === storedId) ?? null;
+  return teams.length === 1 ? (teams[0] ?? null) : null;
+}
+
+function readStoredSelectedTeamId() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const value = window.sessionStorage.getItem(SELECTED_TEAM_STORAGE_KEY);
+    return value && isUuidV7(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSelectedTeamId(teamId: string | null) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (teamId)
+      window.sessionStorage.setItem(SELECTED_TEAM_STORAGE_KEY, teamId);
+    else window.sessionStorage.removeItem(SELECTED_TEAM_STORAGE_KEY);
+  } catch {
+    // sessionStorageが利用できなくても、現在のタブ内の選択状態はメモリで維持する。
+  }
+}
+
+function useSelectedTeam(session: AuthSession | null, api: TeamSelectionApi) {
+  const [state, setState] = useState<{
+    status: 'idle' | 'loading' | 'unavailable' | 'ready';
+    teams: TeamOption[];
+    selected: TeamOption | null;
+  }>({ status: 'idle', teams: [], selected: null });
+
+  useEffect(() => {
+    if (!session) {
+      writeStoredSelectedTeamId(null);
+      setState({ status: 'idle', teams: [], selected: null });
+      return;
+    }
+    let active = true;
+    setState((current) => ({ ...current, status: 'loading' }));
+    void api
+      .list()
+      .then((teams) => {
+        if (!active) return;
+        const storedId = readStoredSelectedTeamId();
+        const selected = reconcileSelectedTeam(teams, storedId);
+        writeStoredSelectedTeamId(selected?.tenantId ?? null);
+        setState({ status: 'ready', teams, selected });
+      })
+      .catch(() => {
+        if (active)
+          setState({ status: 'unavailable', teams: [], selected: null });
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, session]);
+
+  function select(team: TeamOption) {
+    writeStoredSelectedTeamId(team.tenantId);
+    setState((current) => ({ ...current, selected: team }));
+  }
+
+  return { ...state, select };
+}
+
 function CentralNavigationLinks({
   pathname,
   onNavigate,
+  onLogout,
+  isLoggingOut,
 }: {
   pathname: string;
   onNavigate: (href: string) => void;
+  onLogout?: () => void;
+  isLoggingOut: boolean;
 }) {
   const links = [
     ['/members', '部員管理'],
@@ -357,6 +471,7 @@ function CentralNavigationLinks({
     ['/line', 'LINE通知'],
     ['/ride', '送迎'],
     ['/bulletins', '回覧板'],
+    ['/team-selection', 'チーム選択'],
     ['/manual', '操作マニュアル'],
   ] as const;
 
@@ -385,6 +500,11 @@ function CentralNavigationLinks({
           {label}
         </a>
       ))}
+      {onLogout ? (
+        <button disabled={isLoggingOut} onClick={onLogout} type="button">
+          {isLoggingOut ? 'ログアウト中…' : 'ログアウト'}
+        </button>
+      ) : null}
     </nav>
   );
 }
@@ -458,6 +578,8 @@ function renderCentralRoute(
   identity: Extract<CentralIdentityState, { status: 'ready' }>,
   apis: CentralApis,
   memberOptions: MemberOption[],
+  teamApi: TeamSelectionApi,
+  onTeamSelected: (team: TeamOption) => void,
 ) {
   const { role } = identity;
   switch (route.kind) {
@@ -470,6 +592,12 @@ function renderCentralRoute(
       );
     case 'manual':
       return <UserManualPage />;
+    case 'team-selection':
+      return (
+        <IntegrationNotice>
+          <TeamSelectionPage api={teamApi} onSelected={onTeamSelected} />
+        </IntegrationNotice>
+      );
     case 'members':
       return managerRoles.has(role) ? (
         <IntegrationNotice>
@@ -560,11 +688,17 @@ export function CentralNavigation({
   identityState,
   identityApi,
   memberApi,
+  authenticatedFetch = fetch,
+  onLogout,
+  isLoggingOut = false,
 }: {
   session: AuthSession | null;
   identityState?: CentralIdentityState;
   identityApi?: CentralIdentityApi;
   memberApi?: MemberApi;
+  authenticatedFetch?: AuthenticatedFetch;
+  onLogout?: () => void;
+  isLoggingOut?: boolean;
 }) {
   const [pathname, setPathname] = useState(() =>
     typeof window === 'undefined' ? '/' : window.location.pathname,
@@ -574,9 +708,20 @@ export function CentralNavigation({
     [session?.accessToken],
   );
   const resolvedIdentityApi = useMemo(
-    () => identityApi ?? createCentralIdentityApi({ getAccessToken }),
-    [getAccessToken, identityApi],
+    () =>
+      identityApi ??
+      createCentralIdentityApi({ getAccessToken, fetcher: authenticatedFetch }),
+    [authenticatedFetch, getAccessToken, identityApi],
   );
+  const teamApi = useMemo(
+    () =>
+      createTeamSelectionApi({
+        getAccessToken,
+        fetcher: authenticatedFetch,
+      }),
+    [authenticatedFetch, getAccessToken],
+  );
+  const teamState = useSelectedTeam(session, teamApi);
   const identity = useCentralIdentity(
     session,
     resolvedIdentityApi,
@@ -586,11 +731,19 @@ export function CentralNavigation({
     () =>
       memberApi
         ? {
-            ...createCentralApis(session?.accessToken ?? null),
+            ...createCentralApis(
+              session?.accessToken ?? null,
+              authenticatedFetch,
+              teamState.selected?.tenantId ?? null,
+            ),
             member: memberApi,
           }
-        : createCentralApis(session?.accessToken ?? null),
-    [memberApi, session?.accessToken],
+        : createCentralApis(
+            session?.accessToken ?? null,
+            authenticatedFetch,
+            teamState.selected?.tenantId ?? null,
+          ),
+    [authenticatedFetch, memberApi, session?.accessToken, teamState.selected],
   );
   const route = useMemo(() => matchCentralRoute(pathname), [pathname]);
   const needsMemberOptions =
@@ -629,17 +782,59 @@ export function CentralNavigation({
 
   return (
     <>
-      <CentralNavigationLinks pathname={pathname} onNavigate={navigate} />
+      <CentralNavigationLinks
+        isLoggingOut={isLoggingOut}
+        onLogout={onLogout}
+        onNavigate={navigate}
+        pathname={pathname}
+      />
       {identity.status === 'loading' ? (
-        <p className="central-state" role="status">
-          所属情報を確認中…
-        </p>
+        route.kind === 'team-selection' ? (
+          <IntegrationNotice>
+            <TeamSelectionPage
+              api={teamApi}
+              onSelected={(team) => {
+                teamState.select(team);
+                navigate('/');
+              }}
+            />
+          </IntegrationNotice>
+        ) : (
+          <p className="central-state" role="status">
+            所属情報を確認中…
+          </p>
+        )
       ) : identity.status === 'unavailable' ? (
+        route.kind === 'team-selection' ? (
+          <IntegrationNotice>
+            <TeamSelectionPage
+              api={teamApi}
+              onSelected={(team) => {
+                teamState.select(team);
+                navigate('/');
+              }}
+            />
+          </IntegrationNotice>
+        ) : (
+          <p className="central-state" role="alert">
+            {identity.message}
+          </p>
+        )
+      ) : teamState.status === 'ready' &&
+        teamState.teams.length > 1 &&
+        !teamState.selected &&
+        route.kind !== 'team-selection' ? (
         <p className="central-state" role="alert">
-          {identity.message}
+          操作対象のチームを選択してください。
+          <button onClick={() => navigate('/team-selection')} type="button">
+            チーム選択へ進む
+          </button>
         </p>
       ) : (
         <>
+          {teamState.selected ? (
+            <SelectedTeamHeader team={teamState.selected} />
+          ) : null}
           <p className="central-identity" role="status">
             現在の権限: {roleLabels[identity.role]}
           </p>
@@ -653,6 +848,11 @@ export function CentralNavigation({
               memberOptionsState.status === 'ready'
                 ? memberOptionsState.options
                 : [],
+              teamApi,
+              (team) => {
+                teamState.select(team);
+                navigate('/');
+              },
             )
           )}
         </>

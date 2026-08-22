@@ -9,7 +9,8 @@
     "./events": "./src/event-contract.ts",
     "./orders": "./src/orders-contract.ts",
     "./line": "./src/line-contract.ts",
-    "./ride": "./src/ride-contract.ts"
+    "./ride": "./src/ride-contract.ts",
+    "./auth-team-selection": "./src/auth-team-selection-contract.ts"
   },
   "scripts": {
     "build": "node ../../scripts/generate-openapi.ts",

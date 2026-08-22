@@ -2,16 +2,20 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { AuthSession } from './auth-client.js';
+import { createAuthSessionManager } from './auth-context.js';
 import {
   CentralNavigation,
+  createCentralApis,
   createCentralIdentityApi,
   isUuidV7,
   matchCentralRoute,
+  reconcileSelectedTeam,
   resolveCentralAuthState,
 } from './central-navigation.js';
 
 const tenantId = '018f0c80-7b00-7000-8000-000000000001';
 const resourceId = '018f0c80-7b00-7000-8000-000000000002';
+const otherTenantId = '018f0c80-7b00-7000-8000-000000000003';
 const session: AuthSession = {
   accessToken: 'access-token',
   refreshToken: null,
@@ -51,6 +55,9 @@ describe('中央Webのroute境界', () => {
     });
     expect(matchCentralRoute('/manual')).toEqual({ kind: 'manual' });
     expect(matchCentralRoute('/bulletins')).toEqual({ kind: 'bulletins' });
+    expect(matchCentralRoute('/team-selection')).toEqual({
+      kind: 'team-selection',
+    });
   });
 
   it('UUIDv7でない資源IDをAPIへ渡さない', () => {
@@ -126,5 +133,62 @@ describe('中央所属API', () => {
     });
 
     await expect(api.getCurrent()).rejects.toMatchObject({ status: 502 });
+  });
+
+  it('期限切れ401は中央のauthenticatedFetchでrefresh後に一度だけ再送する', async () => {
+    const requests: RequestInit[] = [];
+    let refreshCount = 0;
+    const manager = createAuthSessionManager({
+      storage: {
+        getItem: (key) =>
+          ({
+            'cocolo.accessToken': 'old-access-token',
+            'cocolo.refreshToken': 'refresh-token',
+          })[key] ?? null,
+        setItem: () => undefined,
+        removeItem: () => undefined,
+      },
+      client: {
+        signInWithPassword: async () => session,
+        refreshSession: async () => {
+          refreshCount += 1;
+          return {
+            accessToken: 'new-access-token',
+            refreshToken: 'new-refresh-token',
+            expiresAt: null,
+          };
+        },
+        signOut: async () => undefined,
+      },
+      requester: async (_input, init) => {
+        requests.push(init ?? {});
+        return new Response(JSON.stringify({ data: [] }), {
+          status: requests.length === 1 ? 401 : 200,
+        });
+      },
+    });
+    const apis = createCentralApis(
+      'old-access-token',
+      manager.authenticatedFetch,
+      tenantId,
+    );
+
+    await expect(apis.events.list('2026-01-01', '2026-01-02')).resolves.toEqual(
+      [],
+    );
+    expect(refreshCount).toBe(1);
+    expect(requests).toHaveLength(2);
+    expect(new Headers(requests[1]?.headers).get('Authorization')).toBe(
+      'Bearer new-access-token',
+    );
+    expect(new Headers(requests[1]?.headers).get('X-CoCoLo-Team-Id')).toBe(
+      tenantId,
+    );
+  });
+
+  it('再読み込み候補はBearerで再取得した所属一覧にないtenantを復元しない', () => {
+    const teams = [{ tenantId, tenantName: 'Aチーム', role: 'owner' as const }];
+    expect(reconcileSelectedTeam(teams, otherTenantId)).toBeNull();
+    expect(reconcileSelectedTeam(teams, tenantId)).toEqual(teams[0]);
   });
 });
