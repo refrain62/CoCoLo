@@ -27,6 +27,15 @@ export type MemberCreateInput = {
   status: 'active' | 'suspended';
 };
 
+export type MemberUpdateInput = {
+  name: string;
+  kana?: string | null;
+  category: MemberCategory;
+  gradeLevel?: number | null;
+  ageGroup?: string | null;
+  status: 'active' | 'suspended';
+};
+
 export type PromotionRequest = {
   mode: 'preview' | 'execute';
   fiscalYear: number;
@@ -68,6 +77,8 @@ export class MemberApiError extends Error {
 export type MemberApi = {
   list: (filters: MemberListFilters) => Promise<MemberSummary[]>;
   create: (input: MemberCreateInput) => Promise<MemberSummary>;
+  update: (memberId: string, input: MemberUpdateInput) => Promise<MemberSummary>;
+  retire: (memberId: string) => Promise<MemberSummary>;
   promote: (
     input: PromotionRequest,
     idempotencyKey?: string,
@@ -132,6 +143,23 @@ export function createMemberApi({
         method: 'POST',
         body: JSON.stringify(input),
       });
+      return response.data;
+    },
+    async update(memberId, input) {
+      const response = await request<{ data: MemberSummary }>(
+        `/${encodeURIComponent(memberId)}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(input),
+        },
+      );
+      return response.data;
+    },
+    async retire(memberId) {
+      const response = await request<{ data: MemberSummary }>(
+        `/${encodeURIComponent(memberId)}/retire`,
+        { method: 'POST' },
+      );
       return response.data;
     },
     async promote(input, idempotencyKey) {
