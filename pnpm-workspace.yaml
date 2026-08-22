@@ -1,0 +1,19 @@
+packages:
+  - apps/*
+  - packages/*
+
+minimumReleaseAge: 2880
+minimumReleaseAgeExclude: []
+blockExoticSubdeps: true
+strictDepBuilds: true
+trustPolicy: no-downgrade
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma
+  - esbuild
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  prisma: true
+  esbuild: true

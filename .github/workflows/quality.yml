@@ -1,0 +1,26 @@
+name: 品質ゲート
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Node.js環境を準備
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: pnpmを準備
+        run: corepack enable && corepack prepare pnpm@10.26.0 --activate
+      - name: 依存関係を固定インストール
+        run: pnpm install --frozen-lockfile
+      - name: 静的品質検査
+        run: pnpm verify:pnpm-config && pnpm lint:workflows && pnpm verify:migration-sql && pnpm lint:biome && pnpm verify:workspace-boundaries
+      - name: 契約とテスト
+        run: pnpm generate:openapi && git diff --exit-code -- packages/contracts/openapi.yaml && pnpm test:unit
+      - name: 型検査とビルド
+        run: pnpm typecheck && pnpm build

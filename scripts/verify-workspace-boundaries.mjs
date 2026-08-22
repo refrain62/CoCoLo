@@ -1,0 +1,77 @@
+import { readdir, readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const sourceExtensions = new Set(['.js', '.mjs', '.ts', '.tsx']);
+const ignored = new Set(['node_modules', 'dist', 'coverage', '.git']);
+
+async function filesUnder(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    if (ignored.has(entry.name)) continue;
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...(await filesUnder(fullPath)));
+    else if (sourceExtensions.has(path.extname(entry.name)))
+      files.push(fullPath);
+  }
+  return files;
+}
+
+const rules = [
+  {
+    scope: 'apps/web',
+    forbidden: [
+      '@cocolo/db',
+      '@cocolo/auth',
+      '@cocolo/api',
+      'apps/api',
+      'SUPABASE_SERVICE_ROLE_KEY',
+      'DATABASE_URL',
+    ],
+  },
+  {
+    scope: 'packages/domain',
+    forbidden: ['hono', 'react', '@prisma/client', 'process.env'],
+  },
+  { scope: 'packages/contracts', forbidden: ['@cocolo/db', '@cocolo/domain'] },
+];
+const violations = [];
+
+for (const file of await filesUnder(root)) {
+  const relative = path.relative(root, file).replaceAll('\\', '/');
+  const content = await readFile(file, 'utf8');
+  for (const rule of rules) {
+    if (
+      relative.startsWith(`${rule.scope}/`) &&
+      rule.forbidden.some((token) => content.includes(token))
+    ) {
+      violations.push(`${relative}: ${rule.scope} の禁止依存を検出しました`);
+    }
+  }
+  const isProductionSource =
+    relative.startsWith('apps/') || relative.startsWith('packages/');
+  if (
+    isProductionSource &&
+    !relative.includes('/test/') &&
+    !relative.endsWith('.test.mjs') &&
+    content.includes('@cocolo/test-fixtures')
+  ) {
+    violations.push(
+      `${relative}: production code から test-fixtures を参照しています`,
+    );
+  }
+  if (
+    relative.startsWith('apps/') &&
+    /from ['"].*apps\/(web|api)/.test(content)
+  ) {
+    violations.push(`${relative}: apps 間の直接 import は禁止です`);
+  }
+}
+
+if (violations.length) {
+  console.error(violations.join('\n'));
+  process.exit(1);
+}
+console.log('workspace依存境界を検証しました。');
