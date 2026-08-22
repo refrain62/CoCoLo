@@ -99,6 +99,7 @@ AS $$
     WHERE tenant_id = requested_tenant_id
       AND id = requested_announcement_id
       AND author_user_id = requested_user_id
+      AND status = 'published'::announcement_status
       AND app_is_active_announcement_member(requested_tenant_id, requested_user_id)
   )
 $$;
@@ -139,6 +140,13 @@ CREATE POLICY announcement_attachments_select ON announcement_attachments
       tenant_id,
       current_setting('app.user_id', true)
     )
+    AND EXISTS (
+      SELECT 1
+      FROM announcements
+      WHERE announcements.tenant_id = announcement_attachments.tenant_id
+        AND announcements.id = announcement_attachments.announcement_id
+        AND announcements.status = 'published'::announcement_status
+    )
   );
 
 CREATE POLICY announcement_attachments_insert ON announcement_attachments
@@ -157,6 +165,13 @@ CREATE POLICY announcement_reads_select ON announcement_reads
   FOR SELECT
   USING (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+    AND EXISTS (
+      SELECT 1
+      FROM announcements
+      WHERE announcements.tenant_id = announcement_reads.tenant_id
+        AND announcements.id = announcement_reads.announcement_id
+        AND announcements.status = 'published'::announcement_status
+    )
     AND (
       user_id = current_setting('app.user_id', true)
       OR app_is_announcement_author(
@@ -187,6 +202,7 @@ CREATE POLICY tenant_memberships_announcement_author_select ON tenant_membership
   FOR SELECT
   USING (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+    AND status = 'active'::membership_status
     AND NULLIF(current_setting('app.announcement_id', true), '') IS NOT NULL
     AND app_is_announcement_author(
       tenant_id,
