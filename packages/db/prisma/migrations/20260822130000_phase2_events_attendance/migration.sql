@@ -54,6 +54,74 @@ COMMENT ON COLUMN events.attendance_deadline IS 'サーバー時刻で回答可�
 COMMENT ON COLUMN events.announcement_image_attachment_id IS '将来の非公開添付を参照するID。公開URLは保存しない';
 COMMENT ON COLUMN attendance_responses.correction_reason IS '締切後にowner/admin/staffが修正した理由';
 
+CREATE OR REPLACE FUNCTION app_guard_event_identity()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF OLD.id <> NEW.id
+    OR OLD.tenant_id <> NEW.tenant_id
+    OR OLD.created_by_user_id <> NEW.created_by_user_id THEN
+    RAISE EXCEPTION '予定の識別子、tenant、作成者は変更できません';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER event_identity_guard
+BEFORE UPDATE ON events
+FOR EACH ROW
+EXECUTE FUNCTION app_guard_event_identity();
+
+CREATE OR REPLACE FUNCTION app_guard_attendance_response()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  deadline timestamptz;
+  role_name text := current_setting('app.role', true);
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF OLD.id <> NEW.id
+      OR OLD.tenant_id <> NEW.tenant_id
+      OR OLD.event_id <> NEW.event_id
+      OR OLD.user_id <> NEW.user_id
+      OR OLD.member_id <> NEW.member_id THEN
+      RAISE EXCEPTION '出欠回答の識別子と所属は変更できません';
+    END IF;
+  END IF;
+  IF TG_OP = 'INSERT' AND NEW.user_id <> current_setting('app.user_id', true) THEN
+    RAISE EXCEPTION '出欠回答の回答者は実行者に固定されます';
+  END IF;
+  SELECT attendance_deadline INTO deadline
+  FROM events
+  WHERE tenant_id = NEW.tenant_id AND id = NEW.event_id;
+  IF deadline IS NULL THEN
+    RAISE EXCEPTION '出欠回答の予定が見つかりません';
+  END IF;
+  IF now() > deadline AND role_name = 'guardian' THEN
+    RAISE EXCEPTION '出欠締切後はguardianの回答を変更できません';
+  END IF;
+  IF now() > deadline
+    AND role_name IN ('owner', 'admin', 'staff')
+    AND NULLIF(trim(NEW.correction_reason), '') IS NULL THEN
+    RAISE EXCEPTION '締切後の管理者修正には理由が必要です';
+  END IF;
+  IF now() <= deadline THEN
+    NEW.correction_reason := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER attendance_response_guard
+BEFORE INSERT OR UPDATE ON attendance_responses
+FOR EACH ROW
+EXECUTE FUNCTION app_guard_attendance_response();
+
+COMMENT ON FUNCTION app_guard_event_identity() IS '予定のtenant、ID、作成者を固定';
+COMMENT ON FUNCTION app_guard_attendance_response() IS '出欠回答の主体、締切、締切後修正理由をDBで強制';
+
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE events FORCE ROW LEVEL SECURITY;
 ALTER TABLE attendance_responses ENABLE ROW LEVEL SECURITY;
@@ -62,8 +130,16 @@ ALTER TABLE attendance_responses FORCE ROW LEVEL SECURITY;
 CREATE POLICY events_select ON events
   FOR SELECT
   USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
-CREATE POLICY events_write ON events
-  FOR ALL
+CREATE POLICY events_insert ON events
+  FOR INSERT
+  WITH CHECK (
+    tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+    AND current_setting('app.role', true) IN ('owner', 'admin', 'staff')
+    AND created_by_user_id = current_setting('app.user_id', true)
+    AND updated_by_user_id = current_setting('app.user_id', true)
+  );
+CREATE POLICY events_update ON events
+  FOR UPDATE
   USING (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     AND current_setting('app.role', true) IN ('owner', 'admin', 'staff')
@@ -71,6 +147,7 @@ CREATE POLICY events_write ON events
   WITH CHECK (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     AND current_setting('app.role', true) IN ('owner', 'admin', 'staff')
+    AND updated_by_user_id = current_setting('app.user_id', true)
   );
 
 CREATE POLICY attendance_select ON attendance_responses
@@ -95,7 +172,10 @@ CREATE POLICY attendance_insert ON attendance_responses
   WITH CHECK (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     AND (
-      current_setting('app.role', true) IN ('owner', 'admin', 'staff')
+      (
+        current_setting('app.role', true) IN ('owner', 'admin', 'staff')
+        AND user_id = current_setting('app.user_id', true)
+      )
       OR (
         user_id = current_setting('app.user_id', true)
         AND EXISTS (
