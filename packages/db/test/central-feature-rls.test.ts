@@ -702,7 +702,8 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
 
   await execute(
     direct,
-    `UPDATE line_connections SET status = 'disconnected'
+    `UPDATE line_connections
+        SET status = 'disconnected', group_id = NULL, connected_at = NULL
       WHERE tenant_id = $1::uuid`,
     tenantB,
   );
