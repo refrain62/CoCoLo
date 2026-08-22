@@ -5,6 +5,11 @@ import { createSqlLineRepository } from '../dist/line-repository.js';
 const TENANT_ID = '00000000-0000-7000-8000-000000000001';
 const GROUP_ID = 'Cgroup-a';
 const NOW = new Date('2026-08-22T00:00:00.000Z');
+const ACTOR = {
+  tenantId: TENANT_ID,
+  userId: 'owner-a',
+  role: 'owner' as const,
+};
 
 const connectionRow = {
   tenant_id: TENANT_ID,
@@ -35,19 +40,32 @@ const notificationRow = {
 
 test('SQL repositoryはqueueを接続中の同一tenant・groupへ限定する', async () => {
   const queries: Array<{ sql: string; values: readonly unknown[] }> = [];
+  let transactionCount = 0;
+  const query = async <Row>(sql: string, values: readonly unknown[]) => {
+    queries.push({ sql, values });
+    if (sql.includes('FROM tenant_memberships'))
+      return { rows: [{ role: 'owner', status: 'active' }] as Row[] };
+    if (sql.includes('set_config') || sql.includes('pg_advisory_xact_lock'))
+      return { rows: [] as Row[] };
+    if (sql.includes('INSERT INTO line_connections'))
+      return { rows: [connectionRow] as Row[] };
+    if (sql.includes('INSERT INTO line_notification_queue'))
+      return { rows: [notificationRow] as Row[] };
+    if (sql.includes('WITH candidate'))
+      return { rows: [notificationRow] as Row[] };
+    throw new Error(`想定外のSQLです: ${sql}`);
+  };
   const client = {
-    async query<Row>(sql: string, values: readonly unknown[]) {
-      queries.push({ sql, values });
-      if (sql.includes('INSERT INTO line_connections'))
-        return { rows: [connectionRow] as Row[] };
-      if (sql.includes('INSERT INTO line_notification_queue'))
-        return { rows: [notificationRow] as Row[] };
-      if (sql.includes('WITH candidate'))
-        return { rows: [notificationRow] as Row[] };
-      throw new Error(`想定外のSQLです: ${sql}`);
+    async transaction<T>(
+      work: (transaction: { query: typeof query }) => Promise<T>,
+    ) {
+      transactionCount += 1;
+      return work({ query });
     },
   };
-  const repository = createSqlLineRepository(client);
+  const repository = createSqlLineRepository(client, {
+    resolveActor: () => ACTOR,
+  });
 
   const connection = await repository.connect({
     tenantId: TENANT_ID,
@@ -87,4 +105,11 @@ test('SQL repositoryはqueueを接続中の同一tenant・groupへ限定する',
   assert.ok(claimQuery);
   assert.match(claimQuery.sql, /c\.group_id = q\.group_id/);
   assert.match(claimQuery.sql, /LIMIT 1\s+FOR UPDATE OF q SKIP LOCKED/);
+  assert.ok(transactionCount >= 3);
+  assert.ok(
+    queries.some((query) => query.sql.includes("set_config('app.tenant_id'")),
+  );
+  assert.ok(
+    queries.some((query) => query.sql.includes('FROM tenant_memberships')),
+  );
 });
