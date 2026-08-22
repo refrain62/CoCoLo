@@ -452,6 +452,7 @@ export function createEventRepository(
           SELECT attendance_deadline
           FROM events
           WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
+          FOR UPDATE
         `;
         const event = eventRows[0];
         if (!event) throw new EventNotFoundError();
@@ -512,6 +513,10 @@ export function createEventRepository(
               ${responseUserId}, ${input.memberId}::uuid, ${input.response}::attendance_response,
               ${deadlinePassed ? (input.correctionReason?.trim() ?? null) : null}
             )
+            ON CONFLICT (tenant_id, event_id, user_id, member_id) DO UPDATE SET
+              response = EXCLUDED.response,
+              correction_reason = EXCLUDED.correction_reason,
+              updated_at = now()
             RETURNING id, event_id, user_id, member_id, response, correction_reason,
                       responded_at, updated_at
           `;
@@ -557,9 +562,10 @@ export function createEventRepository(
         const responseRows = await tx.$queryRaw<
           Array<{ response: AttendanceResponse; member_id: string }>
         >`
-          SELECT response, member_id
+          SELECT DISTINCT ON (member_id) response, member_id
           FROM attendance_responses
           WHERE tenant_id = ${input.tenantId}::uuid AND event_id = ${input.eventId}::uuid
+          ORDER BY member_id, updated_at DESC, id DESC
         `;
         const totalMembers = Number(totalRows[0]?.count ?? 0n);
         const counts = summarizeAttendance(
