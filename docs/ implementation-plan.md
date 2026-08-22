@@ -487,7 +487,7 @@ jobs:
         run: pnpm test:e2e:staging --base-url "$BASE_URL"
 
       - name: ステージング検証証跡を保存
-        run: pnpm publish:staging-evidence --artifact-sha "${{ github.sha }}"
+        run: pnpm publish:staging-evidence --artifact-sha "${{ github.sha }}" --evidence-artifact-name "staging-evidence-${{ github.sha }}"
 ```
 
 `production-promote.yml` は `workflow_dispatch` と protected `production` Environment からのみ起動し、入力された artifact SHA が staging evidence の成功 SHA と一致することを確認します。production job の最初の処理は、リポジトリ checkout、pnpm install、リポジトリ内 script 実行より前に、固定版の release 取得ツールで証跡・artifact名・SHA-256 manifest・provenance を検証して immutable artifact を取得することです。検証前に untrusted な repository code、migration、production secret を実行しません。検証後に入力 SHA を `ref` として checkout し、同じ artifact を production へ配置し、production migration、health check、smoke test を実行します。migration は expand → application deploy → contract cleanup の後方互換順序を守り、失敗時は直前の application artifact へ戻します。既に適用済みの migration を逆向きに戻す rollback は行わず、修正 migration とデータ復旧手順を別途レビューします。
@@ -511,17 +511,13 @@ jobs:
     concurrency: production-migration
     env:
       APP_ENV: production
-      PUBLIC_APP_URL: ${{ vars.PRODUCTION_APP_URL }}
-      SUPABASE_URL: ${{ vars.PRODUCTION_SUPABASE_URL }}
-      SUPABASE_JWKS_URL: ${{ vars.PRODUCTION_SUPABASE_JWKS_URL }}
-      SUPABASE_ANON_KEY: ${{ secrets.PRODUCTION_SUPABASE_ANON_KEY }}
-      R2_ENDPOINT: ${{ vars.PRODUCTION_R2_ENDPOINT }}
-      R2_BUCKET: ${{ vars.PRODUCTION_R2_BUCKET }}
     permissions:
       contents: read
       actions: read
       attestations: read
     steps:
+      - name: GitHub CLIのバージョンを検証
+        run: test "$(gh --version | awk 'NR==1 {print $3}')" = "2.97.0"
       - name: staging証跡とartifactを検証前に取得
         env:
           GH_TOKEN: ${{ github.token }}
@@ -530,8 +526,11 @@ jobs:
         run: |
           [[ "$STAGING_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'staging_run_id must be numeric' >&2; exit 1; }
           [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'artifact_sha must be a lowercase 40-digit SHA-1' >&2; exit 1; }
-          gh run view "$STAGING_RUN_ID" --json conclusion,headSha --jq '.conclusion + " " + .headSha' | grep -Fx "success $ARTIFACT_SHA"
+          gh run view "$STAGING_RUN_ID" --json conclusion,headSha,workflowPath,event,headBranch > .staging-run.json
+          jq -e --arg sha "$ARTIFACT_SHA" '.conclusion == "success" and .headSha == $sha and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main"' .staging-run.json
           gh run download "$STAGING_RUN_ID" --name "release-$ARTIFACT_SHA" --dir .release
+          gh run download "$STAGING_RUN_ID" --name "staging-evidence-$ARTIFACT_SHA" --dir .evidence
+          jq -e --arg sha "$ARTIFACT_SHA" '.workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success"' .evidence/evidence.json
       - name: artifactのchecksumとprovenanceを検証
         env:
           GH_TOKEN: ${{ github.token }}
@@ -555,6 +554,15 @@ jobs:
       - name: 検証後に依存関係を固定インストール
         run: pnpm install --frozen-lockfile
       - name: 本番環境境界を検証
+        env:
+          APP_ENV: production
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PUBLIC_APP_URL: ${{ vars.PRODUCTION_APP_URL }}
+          SUPABASE_URL: ${{ vars.PRODUCTION_SUPABASE_URL }}
+          SUPABASE_JWKS_URL: ${{ vars.PRODUCTION_SUPABASE_JWKS_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.PRODUCTION_SUPABASE_ANON_KEY }}
+          R2_ENDPOINT: ${{ vars.PRODUCTION_R2_ENDPOINT }}
+          R2_BUCKET: ${{ vars.PRODUCTION_R2_BUCKET }}
         run: pnpm verify:environment --expected production
       - name: production PostgreSQLのメジャーバージョンを検証
         run: pnpm verify:database-version --expected-major 17
@@ -578,6 +586,7 @@ jobs:
 ```
 
 `package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、migration checksum manifest を同一の immutable release artifact に含め、`.release/release.tar.gz` と `artifact.sha256` を生成します。staging の `publish:release` は GitHub Actions artifact `release-${{ github.sha }}` として保存し、production は `actions: read` で同名 artifact だけを取得します。staging は GitHub 公式 provenance action をSHA固定で実行し、production は checkout・pnpm install・リポジトリ内 script より前に標準 GitHub CLI の `gh attestation verify` で署名者リポジトリ、workflow、source digest、SHA-256を検証します。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・migration checksum・artifact SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリの migration を参照せず、検証済み `.release` 内の migration だけを `prisma migrate deploy` へ渡します。staging job の強い権限は main push かつ protected staging Environment のこのjobだけに限定し、PRの `quality.yml` は `contents: read` のみとします。将来buildと公開をjob分離する場合も、`actions: write`、`id-token: write`、`attestations: write` は公開・provenance jobにだけ付与します。staging / production の workflow は `APP_ENV`、Supabase URL/JWKS、R2 endpoint/bucket、公開URLの allowlist を `verify:environment` で検証し、production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
+`publish:staging-evidence` は `.evidence/evidence.json`（`workflowPath`、`event`、`headBranch`、`headSha`、`artifactSha`、`migration`、`smoke`、`e2e`）を生成し、`staging-evidence-${{ github.sha }}` という上書き不可のartifact名で保存します。本番はこの証跡とrelease artifactを同じstaging runから取得し、checkout前に固定フィールドを検証します。
 
 ### 6.1 サプライチェーン攻撃対策
 
@@ -833,6 +842,7 @@ Phase 1 の実装開始前に、次の契約を選択肢なしで `packages/db/p
 * **Member:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、`name`（必須）、`kana`、`category MemberCategory`（`student` / `adult`）、`gradeLevel`、`ageGroup`、`status MemberStatus`（`active` / `retired` / `suspended`）、`note`、`createdAt`。Phase 1 の POST DTO は `note` を受け付けず、管理者専用の別操作でのみ扱います。
 * **GuardianMember:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、外部 `userId String @db.VarChar(128)`、`memberId String @db.Uuid`、`relationship`、`consentedAt`、`@@unique([tenantId, userId, memberId])`、Member への複合 relation は `onDelete: Restrict`。`FOREIGN KEY(tenantId, memberId) REFERENCES members(tenantId, id)` とし、テナントの異なる部員を参照できないようにします。Phase 1 は Member を物理削除せず retired 化し、将来の消去処理では GuardianMember を先に削除してから Member を削除します。
 * **AuditLog:** `id String @db.Uuid`（UUIDv7）、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、actor の外部 `userId String @db.VarChar(128)`、`action`、`resourceType`、nullable の `resourceId String @db.Uuid`、`metadata Json`（許可キーと最大8KBを入力スキーマで制限）、`createdAt`、`@@index([tenantId, createdAt])`。アプリの更新 API から delete を公開せず append-only とします。
+* **PromotionRun:** `id String @db.Uuid`（UUIDv7）、`tenantId String @db.Uuid`、`fiscalYear`、`status`（`preview` / `completed` / `failed`）、`previewCount`、`executedAt`、外部 `actorUserId String @db.VarChar(128)`、`createdAt`、`@@unique([tenantId, fiscalYear])`。年度繰り上げの冪等性と実行監査を担保し、Phase 1 の完了条件に含めます。
 
 `Role`、`MembershipStatus`、`MemberCategory`、`MemberStatus` は Prisma enum として上記の値だけを定義します。Phase 1 の Prisma relation、`onDelete`、nullability、default、index、unique、CHECK はこの契約から省略しません。
 
@@ -954,7 +964,7 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 * [ ] **T-009 E2E:** local は test-only Auth、staging は staging Supabase のテスト専用ユーザーを使い、管理者のログインから部員登録までを Playwright で検証する。
 * [ ] **T-010 実装後敵対的レビュー:** T-005〜T-009 の成果物に対して越境、PII、認可、入力、環境混同、test-only Auth混入、テスト不足をレビューする。
 * [ ] **T-011 指摘修正とリリース判定:** Critical / High をゼロにし、受け入れ条件と CI 全件を再確認する。
-* [ ] **T-012 Phase 1追加機能:** 年度繰り上げを別の Red → Green → Refactor 縦切りとして実装し、冪等性・プレビュー・監査ログを検証する。
+* [ ] **T-012 Phase 1完了機能:** 年度繰り上げを別の Red → Green → Refactor 縦切りとして実装し、`PromotionRun` のスキーマ・冪等性・プレビュー・監査ログを検証する。T-012の受け入れまでをPhase 1完了条件とする。
 
 ### 9.2 タスク完了記録
 
