@@ -43,7 +43,7 @@ jobs:
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
       - name: 静的品質検査
-        run: pnpm verify:pnpm-config && pnpm lint:workflows && pnpm verify:migration-sql && pnpm lint:biome && pnpm verify:workspace-boundaries
+        run: pnpm verify:pnpm-config && pnpm lint:workflows && pnpm test:workflows && pnpm verify:migration-sql && pnpm lint:biome && pnpm verify:workspace-boundaries
       - name: テストDBのRLS用ロールを準備
         run: pnpm db:prepare:test
         env:
