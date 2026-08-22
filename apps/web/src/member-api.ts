@@ -75,10 +75,13 @@ async function readError(response: Response) {
   );
 }
 
+// 部員APIのBearer付与、未認証拒否、共通エラー変換を一箇所へ集約する。
+// baseUrlの既定値はlocal Vite proxyと同一originを使うためのもの。
 export function createMemberApi({
   baseUrl = '',
   getAccessToken = getStoredAccessToken,
 }: MemberApiOptions = {}): MemberApi {
+  // すべての部員リクエストでaccess tokenを必須にし、APIへ匿名リクエストを送らない。
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
     if (!accessToken)
