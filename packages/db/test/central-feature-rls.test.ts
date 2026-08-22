@@ -599,6 +599,10 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
       '予定通知A（更新）',
       '2099-07-02T00:00:00Z',
     );
+  });
+
+  // PostgreSQLは拒否SQLの後にtransactionをabortするため、正常系と同じtransactionへ混在させない。
+  await withContext(app, tenantA, 'owner-a', 'owner', async (tx) => {
     await rejects(() =>
       enqueueOutbox(
         tx,
