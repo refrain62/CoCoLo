@@ -9,7 +9,8 @@
     "./orders": {
       "types": "./dist/orders-repository.d.ts",
       "import": "./dist/orders-repository.js"
-    }
+    },
+    "./attachment": "./dist/attachment-repository.js"
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
