@@ -60,6 +60,9 @@ importers:
       '@cocolo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@cocolo/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@cocolo/ui':
         specifier: workspace:*
         version: link:../../packages/ui

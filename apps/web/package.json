@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@cocolo/contracts": "workspace:*",
+    "@cocolo/domain": "workspace:*",
     "@cocolo/ui": "workspace:*",
     "react": "19.1.1",
     "react-dom": "19.1.1"

@@ -2,6 +2,8 @@ import { AppShell } from '@cocolo/ui';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AuthProvider, LoginPage, useAuth } from './auth-context.js';
+import { MemberManagementPage } from './member-management-page.js';
+import './styles.css';
 
 function AuthenticatedApp() {
   const { session } = useAuth();
@@ -9,10 +11,7 @@ function AuthenticatedApp() {
 
   return (
     <AppShell>
-      <main>
-        <h1>CoCoLo</h1>
-        <p>チーム運営を、心をひとつに。</p>
-      </main>
+      <MemberManagementPage />
     </AppShell>
   );
 }
