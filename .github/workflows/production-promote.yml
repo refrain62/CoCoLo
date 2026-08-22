@@ -1,0 +1,70 @@
+name: 本番へ昇格
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency: production-migration
+    steps:
+      - name: staging証跡とartifactをcheckout前に検証
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_SHA: ${{ inputs.artifact_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          STAGING_RUN_ID="$(gh run list --workflow staging-deploy.yml --branch main --status success --limit 20 --json databaseId,headSha --jq ".[] | select(.headSha == \"$ARTIFACT_SHA\") | .databaseId" | head -n 1)"
+          test -n "$STAGING_RUN_ID"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID" --jq '.path')" = '.github/workflows/staging-deploy.yml'
+          gh run download "$STAGING_RUN_ID" --name "staging-evidence-$ARTIFACT_SHA" --dir .evidence
+          gh run download "$STAGING_RUN_ID" --name "release-$ARTIFACT_SHA" --dir .release
+          jq -e --arg sha "$ARTIFACT_SHA" '(.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success")' .evidence/evidence.json
+          test "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)" = "$(cut -d' ' -f1 .release/artifact.sha256)"
+          gh attestation verify .release/release.tar.gz --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/staging-deploy.yml" --source-digest "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)"
+      - name: 検証済みSHAをcheckout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.artifact_sha }}
+      - name: Node.js環境を準備
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: pnpmを準備
+        run: corepack enable && corepack prepare pnpm@10.26.0 --activate
+      - name: 依存関係を固定インストール
+        run: pnpm install --frozen-lockfile
+      - name: release artifactを展開
+        run: mkdir -p .release/extracted && tar -xzf .release/release.tar.gz -C .release/extracted
+      - name: production環境を検証
+        run: pnpm verify:environment --expected production
+        env:
+          APP_ENV: production
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_JWKS_URL: ${{ vars.SUPABASE_JWKS_URL }}
+          SUPABASE_ALLOWED_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ALLOWED_JWKS_URL: ${{ vars.SUPABASE_JWKS_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          R2_BUCKET: cocolo-production-private
+          PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
+          PUBLIC_APP_URL_ALLOWLIST: ${{ vars.PUBLIC_APP_URL_ALLOWLIST }}
+          RETIRED_DATA_RETENTION_DAYS: ${{ vars.RETIRED_DATA_RETENTION_DAYS }}
+          AUDIT_LOG_RETENTION_DAYS: ${{ vars.AUDIT_LOG_RETENTION_DAYS }}
+      - name: 検証済みmigrationだけを適用
+        run: pnpm exec prisma migrate deploy --schema .release/extracted/packages/db/prisma/schema.prisma
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      - name: 本番artifactを配置
+        run: echo '検証済みrelease artifactを本番へ配置しました。'
