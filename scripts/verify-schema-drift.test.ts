@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -9,11 +10,22 @@ import {
   buildPrismaDiffArgs,
   type PrismaDiffResult,
   type SchemaDriftPaths,
+  validateShadowDatabaseConfig,
   verifySchemaDrift,
 } from './verify-schema-drift.ts';
 
 const shadowDatabaseUrl =
-  'postgresql://shadow:shadow@localhost:5432/cocolo_shadow';
+  'postgresql://cocolo_shadow:cocolo_shadow@localhost:5432/cocolo_shadow';
+
+const shadowConfig = {
+  environment: 'local',
+  databaseUrl: 'postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_local',
+  directUrl:
+    'postgresql://cocolo_migration:cocolo_migration@localhost:5432/cocolo_local',
+  expectedRole: 'cocolo_shadow',
+  allowedHosts: 'localhost',
+  allowedDatabases: 'cocolo_shadow',
+};
 
 const cleanResult: PrismaDiffResult = {
   status: 0,
@@ -52,6 +64,17 @@ async function createFixture(includeLock = true) {
     ),
     'CREATE TABLE fixture (id uuid PRIMARY KEY);\n',
   );
+  const migrationBytes = await readFile(
+    path.join(
+      paths.migrationsDirectory,
+      '20260823000000_fixture',
+      'migration.sql',
+    ),
+  );
+  await writeFile(
+    path.join(paths.migrationsDirectory, '..', 'migrations.sha256'),
+    `${createHash('sha256').update(migrationBytes).digest('hex')}  20260823000000_fixture/migration.sql\n`,
+  );
   if (includeLock)
     await writeFile(
       paths.migrationLockFile,
@@ -79,8 +102,48 @@ test('PostgreSQLのmigration_lock.tomlだけを受理する', () => {
 test('shadow database URLの欠落を成功扱いにしない', () => {
   assert.throws(
     () =>
-      buildPrismaDiffArgs(fixturePaths('C:\\schema-drift-fixture'), undefined),
-    /専用のSHADOW_DATABASE_URLが必要です/,
+      validateShadowDatabaseConfig(
+        undefined,
+        'local',
+        'postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_local',
+        'postgresql://cocolo_migration:cocolo_migration@localhost:5432/cocolo_local',
+        'cocolo_shadow',
+        'localhost',
+        'cocolo_shadow',
+      ),
+    /SHADOW_DATABASE_URLが必要です/,
+  );
+});
+
+test('同じhost・port・DBのShadow URLを拒否する', () => {
+  assert.throws(
+    () =>
+      validateShadowDatabaseConfig(
+        'postgresql://cocolo_shadow:cocolo_shadow@localhost:5432/cocolo_local',
+        'local',
+        'postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_local',
+        'postgresql://cocolo_migration:cocolo_migration@localhost:5432/cocolo_local',
+        'cocolo_shadow',
+        'localhost',
+        'cocolo_shadow',
+      ),
+    /DATABASE_URLと同じhost・port・DB/,
+  );
+});
+
+test('本番相当環境でprimaryと同じhostのShadow URLを拒否する', () => {
+  assert.throws(
+    () =>
+      validateShadowDatabaseConfig(
+        'postgresql://cocolo_shadow:cocolo_shadow@prod-db.example:5432/cocolo_shadow',
+        'production',
+        'postgresql://cocolo_app:cocolo_app@prod-db.example:5432/cocolo_prod',
+        'postgresql://cocolo_migration:cocolo_migration@migration.example:5432/cocolo_prod',
+        'cocolo_shadow',
+        'prod-db.example',
+        'cocolo_shadow',
+      ),
+    /アプリDBと別host/,
   );
 });
 
@@ -97,6 +160,8 @@ test('migration_lock.tomlの欠落を成功扱いにしない', async () => {
             return cleanResult;
           },
           shadowDatabaseUrl,
+          shadowConfig,
+          async () => undefined,
         ),
       /migration_lock\.tomlを読み込めません/,
     );
@@ -163,16 +228,24 @@ test('差分なしではPrisma CLIをexit-code付きで実行して成功する'
         command: string;
         args: readonly string[];
         cwd: string;
+        env?: NodeJS.ProcessEnv;
       }
     | undefined;
   try {
     const migrationCount = await verifySchemaDrift(
       fixture.paths,
       (command, args, options) => {
-        received = { command, args, cwd: options.cwd };
+        received = {
+          command,
+          args,
+          cwd: options.cwd,
+          env: options.env,
+        };
         return cleanResult;
       },
       shadowDatabaseUrl,
+      shadowConfig,
+      async () => undefined,
     );
     assert.equal(migrationCount, 1);
     assert.ok(received);
@@ -186,11 +259,17 @@ test('差分なしではPrisma CLIをexit-code付きで実行して成功する'
           'build',
           'index.js',
         ),
-        ...buildPrismaDiffArgs(fixture.paths, shadowDatabaseUrl),
+        ...buildPrismaDiffArgs(fixture.paths),
       ],
       received.args,
     );
     assert.equal(received.command, process.execPath);
+    assert.equal(received.env?.SHADOW_DATABASE_URL, shadowDatabaseUrl);
+    assert.equal(
+      received.args.includes(shadowDatabaseUrl),
+      false,
+      'Shadow DB URLをPrisma CLIのargvへ渡してはいけません。',
+    );
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }

@@ -13,6 +13,9 @@ const result = spawnSync(command, ['validate'], {
     DIRECT_URL:
       process.env.DIRECT_URL ??
       'postgresql://cocolo_migration:cocolo_migration@localhost:5432/cocolo_local',
+    SHADOW_DATABASE_URL:
+      process.env.SHADOW_DATABASE_URL ??
+      'postgresql://cocolo_shadow:cocolo_shadow@localhost:5432/cocolo_shadow',
   },
 });
 
