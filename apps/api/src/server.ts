@@ -1,8 +1,5 @@
 import { createSupabaseTokenVerifier } from '@cocolo/auth';
-import {
-  createMemberRepositories,
-  createPrismaClient,
-} from '@cocolo/db';
+import { createMemberRepositories, createPrismaClient } from '@cocolo/db';
 import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
@@ -15,7 +12,9 @@ const port = Number(process.env.PORT ?? 8787);
 const prisma = createPrismaClient();
 const repositories = createMemberRepositories(prisma);
 const corsOrigins = (
-  process.env.PUBLIC_APP_URL_ALLOWLIST ?? process.env.PUBLIC_APP_URL ?? ''
+  process.env.PUBLIC_APP_URL_ALLOWLIST ??
+  process.env.PUBLIC_APP_URL ??
+  ''
 )
   .split(',')
   .map((value) => value.trim())
