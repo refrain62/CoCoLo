@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type {
-  AuthTeamMembership,
-  AuthTeamSelectionRepository,
-} from '@cocolo/db/auth-team-selection';
+import type { AuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
+import type { AuthTeamMembership } from '@cocolo/domain/auth-team-selection';
 import { createAuthTeamSelectionApp } from '../dist/features/auth-team-selection/app.js';
 
 const TEAM_A = '00000000-0000-7000-8000-000000000001';
