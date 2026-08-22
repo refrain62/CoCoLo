@@ -35,7 +35,7 @@
 
 ## 再現テスト
 
-専用テストは次の8項目を実行する。
+専用テストは次の9項目を実行する。
 
 - password grantのsession変換
 - refresh grantのtoken rotation
@@ -45,8 +45,9 @@
 - 同時401のrefresh単一化と一回再送
 - refresh失敗時の保存領域消去
 - リモートlogout失敗時の先行消去
+- Auth providerへの通信例外の秘匿
 
-`pnpm exec vitest run apps/web/src/auth-client.vitest.ts`は8件成功した。
+`pnpm test:unit`は専用Vitest 9件を含む17件が成功した。
 
 `pnpm exec biome check apps/web/src/auth-client.ts apps/web/src/auth-context.tsx apps/web/src/auth-client.vitest.ts`は成功した。
 
