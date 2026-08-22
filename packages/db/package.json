@@ -5,7 +5,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/index.js",
-    "./bulletin-board": "./dist/bulletin-board-repository.js"
+    "./bulletin-board": "./dist/bulletin-board-repository.js",
+    "./events": "./dist/event-repository.js"
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
