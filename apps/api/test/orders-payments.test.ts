@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createInMemoryOrdersRepository } from '@cocolo/db/orders';
+import type { OrdersRole } from '@cocolo/domain/orders';
 import { createOrdersPaymentsApp } from '../dist/features/orders-payments/orders-payments-app.js';
+
+type OrdersPaymentsApp = ReturnType<typeof createOrdersPaymentsApp>;
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
 const MEMBER_A = '00000000-0000-7000-8000-000000000201';
 
-const memberships = {
+const memberships: Record<string, { tenantId: string; role: OrdersRole }> = {
   'owner-a': { tenantId: TENANT_A, role: 'owner' },
   'admin-a': { tenantId: TENANT_A, role: 'admin' },
   'guardian-a': { tenantId: TENANT_A, role: 'guardian' },
@@ -15,7 +18,7 @@ const memberships = {
   'owner-b': { tenantId: TENANT_B, role: 'owner' },
 };
 
-function createTestApp() {
+function createTestApp(): OrdersPaymentsApp {
   const repository = createInMemoryOrdersRepository({
     now: () => new Date('2026-08-22T00:00:00.000Z'),
     members: [
@@ -42,18 +45,18 @@ function createTestApp() {
   });
 }
 
-async function json(response) {
+async function json(response: Response) {
   return response.json();
 }
 
-function headers(token) {
+function headers(token: string): Record<string, string> {
   return {
     authorization: `Bearer ${token}`,
     'content-type': 'application/json',
   };
 }
 
-async function createCampaign(app) {
+async function createCampaign(app: OrdersPaymentsApp) {
   const response = await app.request('/api/v1/orders', {
     method: 'POST',
     headers: { ...headers('owner-a'), 'idempotency-key': 'campaign-1' },
