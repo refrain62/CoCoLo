@@ -13,7 +13,7 @@
     ".github/workflows/e2e-weekly.yml": "1c1e3154428be8a31f93633fd2a99d750741914623118da9fc9493e936971bfd",
     ".github/workflows/pr-trust-gate.yml": "2ceac57c4586f633f02cc1363821b1218c2b94e9b15775422807907839870e3c",
     ".github/workflows/production-promote.yml": "a5cf0aa90c57f4d0196b94fda93c2275080fbb0ad3bb0e0defbf7e0ceada589b",
-    ".github/workflows/quality.yml": "6c3b4b330d947917b6aea00234c08e1d1b942391be93ebbacb4e5d0d6b8035c0",
+    ".github/workflows/quality.yml": "78aa0741a7b7aadb5a1ca01856026564c00693008997404f97386b8656bab790",
     ".github/workflows/staging-deploy.yml": "4d668ffc773cb65ae91c7ac766b93fcc588a146ffe2c3b3128a74ba93bf11842",
     "biome.json": "74437b5c2be07576e44847a3e94549625d5ce290698c56a3754b1759352a7124",
     "package.json": "a71ffa4fb7ffe2bb1ebb12de52fdc9a0234ba0abe2ba404967329ef4a652edea",
