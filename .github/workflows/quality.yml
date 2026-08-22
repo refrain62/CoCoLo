@@ -63,3 +63,6 @@ jobs:
           pnpm test:release
           pnpm package:release --artifact-sha "$GITHUB_SHA" --output .release-ci
           pnpm verify:release --artifact-sha "$GITHUB_SHA" --release-dir .release-ci
+        env:
+          VITE_SUPABASE_URL: https://quality-ref.supabase.co
+          VITE_SUPABASE_ANON_KEY: quality-anon-key.jwt
