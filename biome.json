@@ -11,6 +11,8 @@
       "!**/dist",
       "!coverage",
       "!**/coverage",
+      "!.worktrees",
+      "!**/.worktrees",
       "!test-results",
       "!**/test-results",
       "!packages/contracts/openapi.yaml"
@@ -20,7 +22,7 @@
     "enabled": true,
     "indentStyle": "space",
     "indentWidth": 2,
-    "lineEnding": "auto"
+    "lineEnding": "lf"
   },
   "linter": {
     "enabled": true,

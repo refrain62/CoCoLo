@@ -4,10 +4,14 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./client": "./dist/index.js"
+    "./client": "./dist/index.js",
+    "./bulletin-board": "./dist/bulletin-board-repository.js",
+    "./attachment": "./dist/attachment-repository.js",
+    "./events": "./dist/event-repository.js"
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
+    "test": "pnpm build && node --test test/*.test.mjs",
     "lint": "node ../../scripts/prisma-validate.ts",
     "typecheck": "node ../../scripts/prisma-validate.ts",
     "prisma:validate": "prisma validate",

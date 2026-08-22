@@ -3,6 +3,7 @@ import { z } from 'zod';
 export type MemberRole = 'owner' | 'admin' | 'staff' | 'guardian';
 export type MemberListQuery = z.infer<typeof memberListQuerySchema>;
 export type MemberCreateInput = z.infer<typeof memberCreateSchema>;
+export type MemberUpdateInput = z.infer<typeof memberUpdateSchema>;
 export type PromotionMode = 'preview' | 'execute';
 export type PromotionRequest = z.infer<typeof promotionRequestSchema>;
 
@@ -58,6 +59,46 @@ export const memberCreateSchema = z
         message: '一般の場合、学年は指定できません。',
       });
   });
+
+// 編集は全項目を受け取る置換更新とし、区分と学年・年代の不整合を残さない。
+export const memberUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    kana: optionalTrimmedString(200),
+    category: z.enum(['student', 'adult']),
+    gradeLevel: z.number().int().min(1).max(16).nullable().optional(),
+    ageGroup: optionalTrimmedString(100),
+    status: z.enum(['active', 'suspended']),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.category === 'student' && value.gradeLevel == null)
+      context.addIssue({
+        code: 'custom',
+        path: ['gradeLevel'],
+        message: '学生の場合は学年を入力してください。',
+      });
+    if (value.category === 'student' && value.ageGroup != null)
+      context.addIssue({
+        code: 'custom',
+        path: ['ageGroup'],
+        message: '学生の場合、年代は指定できません。',
+      });
+    if (value.category === 'adult' && value.ageGroup == null)
+      context.addIssue({
+        code: 'custom',
+        path: ['ageGroup'],
+        message: '一般の場合は年代を入力してください。',
+      });
+    if (value.category === 'adult' && value.gradeLevel != null)
+      context.addIssue({
+        code: 'custom',
+        path: ['gradeLevel'],
+        message: '一般の場合、学年は指定できません。',
+      });
+  });
+
+export const memberIdSchema = z.string().uuid();
 
 export const promotionRequestSchema = z
   .object({

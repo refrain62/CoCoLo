@@ -2,17 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseUploadSessionInput } from '../src/upload-contract.ts';
 
-test('アップロードセッションは許可 MIME・20 MiB 以下・所有者の範囲を受け付ける', () => {
+test('アップロードセッションは許可 MIMEと20 MiB以下を受け付ける', () => {
   const parsed = parseUploadSessionInput({
     mediaType: 'image/jpeg',
     byteSize: 20 * 1024 * 1024,
-    ownerUserId: 'user-1',
   });
 
   assert.deepEqual(parsed, {
     mediaType: 'image/jpeg',
     byteSize: 20 * 1024 * 1024,
-    ownerUserId: 'user-1',
   });
 });
 
