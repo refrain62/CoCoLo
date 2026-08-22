@@ -16,6 +16,50 @@ assert.ok(
   files.includes('production-promote.yml'),
   'production-promote.yml が必要です',
 );
+const quality = await readFile(path.join(directory, 'quality.yml'), 'utf8');
+assert.match(
+  quality,
+  /on:\s*\n[\s\S]*pull_request:/,
+  'quality.yml: pull_request trigger が必要です',
+);
+assert.match(
+  quality,
+  /on:\s*\n[\s\S]*push:\s*\n\s+branches:\s*\[develop, main\]/,
+  'quality.yml: develop/main push trigger が必要です',
+);
+assert.match(
+  quality,
+  /on:\s*\n[\s\S]*workflow_call:/,
+  'quality.yml: workflow_call trigger が必要です',
+);
+assert.match(
+  quality,
+  /permissions:\s*\n\s+contents:\s*read/,
+  'quality.yml: read-only permissions が必要です',
+);
+assert.match(
+  quality,
+  /concurrency:\s*\n[\s\S]*cancel-in-progress:\s*\$\{\{ github\.event_name == 'pull_request' \}\}/,
+  'quality.yml: PRだけを中止するconcurrencyが必要です',
+);
+assert.match(
+  quality,
+  /runs-on:\s*ubuntu-24\.04\s*\n\s+timeout-minutes:\s+10/,
+  'quality.yml: runnerとjob timeoutを固定してください',
+);
+assert.match(
+  quality,
+  /uses:\s*actions\/checkout@[0-9a-f]{40}[\s\S]*?with:\s*\n\s+persist-credentials:\s*false/,
+  'quality.yml: checkoutのcredential保持を無効化してください',
+);
+
+for (const forbidden of ['pull_request_target', 'workflow_run', 'secrets: inherit']) {
+  assert.doesNotMatch(
+    quality,
+    new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    `quality.yml: 禁止されたWorkflow構文です: ${forbidden}`,
+  );
+}
 for (const file of files.filter(
   (name) => name.endsWith('.yml') || name.endsWith('.yaml'),
 )) {
