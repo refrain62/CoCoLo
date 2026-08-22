@@ -30,6 +30,7 @@ export type LineDeliveryClaim = {
   body: string;
   deepLink: string;
   idempotencyKey: string;
+  providerRetryKey: string;
   payloadHash: string;
   attempt: number;
   attemptToken: string;
@@ -70,6 +71,7 @@ export type LineDeliveryTransport = {
       'notificationId' | 'destination' | 'title' | 'body' | 'deepLink'
     >;
     idempotencyKey: string;
+    retryKey: string;
     signal: AbortSignal;
   }) => Promise<{ providerMessageId: string }>;
 };
@@ -396,6 +398,7 @@ type ClaimRow = {
   body: string;
   deep_link: string;
   idempotency_key: string;
+  provider_retry_key: string;
   payload_hash: string;
   attempt: number;
   attempt_token: string;
@@ -408,6 +411,9 @@ function toClaim(row: ClaimRow | undefined): LineDeliveryClaim | null {
     !row.notification_id ||
     !row.tenant_id ||
     !row.destination ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      row.provider_retry_key,
+    ) ||
     !row.attempt_token ||
     !(row.lease_expires_at instanceof Date)
   )
@@ -420,6 +426,7 @@ function toClaim(row: ClaimRow | undefined): LineDeliveryClaim | null {
     body: row.body,
     deepLink: row.deep_link,
     idempotencyKey: row.idempotency_key,
+    providerRetryKey: row.provider_retry_key,
     payloadHash: row.payload_hash,
     attempt: row.attempt,
     attemptToken: row.attempt_token,
@@ -436,7 +443,8 @@ export function createPostgresLineDeliveryRepository(
       database.transaction(async (transaction) => {
         const rows = await transaction.queryRaw<ClaimRow[]>`
           SELECT notification_id, tenant_id, destination, title, body, deep_link,
-                 idempotency_key, payload_hash, attempt, attempt_token, lease_expires_at
+                 idempotency_key, provider_retry_key, payload_hash, attempt,
+                 attempt_token, lease_expires_at
             FROM app_claim_line_delivery_outbox(${maxAttempts}::integer, ${leaseMs}::integer)
         `;
         if (!Array.isArray(rows) || rows.length > 1)
@@ -543,6 +551,7 @@ async function sendWithTimeout(
           deepLink: claim.deepLink,
         },
         idempotencyKey: claim.idempotencyKey,
+        retryKey: claim.providerRetryKey,
         signal: controller.signal,
       }),
       timeout,
@@ -620,7 +629,13 @@ type WorkerModule = {
 };
 
 function toWorkerStatus(value: unknown): LineDeliveryWorkerStatus {
-  if (value === 'idle' || value === 'sent' || value === 'failed') return value;
+  if (
+    value === 'idle' ||
+    value === 'sent' ||
+    value === 'failed' ||
+    value === 'unknown'
+  )
+    return value;
   throw new Error('LINE delivery workerの結果が不正です。');
 }
 
@@ -667,9 +682,11 @@ function createPrismaDatabase(
   };
 }
 
-function createLineMessagingTransport(token: string): LineDeliveryTransport {
+export function createLineMessagingTransport(
+  token: string,
+): LineDeliveryTransport {
   return {
-    async send({ notification, idempotencyKey, signal }) {
+    async send({ notification, retryKey, signal }) {
       const text = `${notification.title}\n${notification.body}\n${notification.deepLink}`;
       if (text.length > 5000) throw new Error('LINE通知本文が長すぎます。');
       const response = await fetch('https://api.line.me/v2/bot/message/push', {
@@ -678,7 +695,7 @@ function createLineMessagingTransport(token: string): LineDeliveryTransport {
           Accept: 'application/json',
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'X-Idempotency-Key': idempotencyKey,
+          'X-Line-Retry-Key': retryKey,
         },
         body: JSON.stringify({
           to: notification.destination,

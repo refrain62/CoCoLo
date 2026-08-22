@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   createLineDeliveryProcessor,
+  createLineMessagingTransport,
   createPostgresLineDeliveryRepository,
   type LineDeliveryClaim,
   type LineDeliveryClaimRepository,
@@ -36,6 +37,13 @@ const MIGRATION = readFileSync(
 const HARDENING_MIGRATION = readFileSync(
   new URL(
     '../../../packages/db/prisma/migrations/20260823110000_line_delivery_security_hardening/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const PROVIDER_RETRY_MIGRATION = readFileSync(
+  new URL(
+    '../../../packages/db/prisma/migrations/20260823120000_line_delivery_provider_retry_key/migration.sql',
     import.meta.url,
   ),
   'utf8',
@@ -95,6 +103,7 @@ function claim(overrides: Partial<LineDeliveryClaim> = {}): LineDeliveryClaim {
     body: 'private body',
     deepLink: 'https://app.example.test/notification/1',
     idempotencyKey: 'line-delivery-11111111-1111-4111-8111-111111111111',
+    providerRetryKey: '11111111-1111-4111-8111-111111111111',
     payloadHash: 'a'.repeat(64),
     attempt: 1,
     attemptToken: '33333333-3333-4333-8333-333333333333',
@@ -321,6 +330,7 @@ test('claim transactionは外部LINE送信前に終了し、attempt token付きs
                   body: claim().body,
                   deep_link: claim().deepLink,
                   idempotency_key: claim().idempotencyKey,
+                  provider_retry_key: claim().providerRetryKey,
                   payload_hash: claim().payloadHash,
                   attempt: 1,
                   attempt_token: claim().attemptToken,
@@ -488,6 +498,34 @@ test('provider ID欠落は外部副作用不明としてunknownへ遷移する',
   );
 });
 
+test('LINE送信は正式なX-Line-Retry-Keyだけをproviderへ渡す', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestHeaders: Headers | undefined;
+  globalThis.fetch = async (_input, init) => {
+    requestHeaders = new Headers(init?.headers);
+    return new Response(null, {
+      status: 200,
+      headers: { 'x-line-request-id': 'provider-request-id' },
+    });
+  };
+  try {
+    const retryKey = claim().providerRetryKey;
+    const result = await createLineMessagingTransport(
+      'channel-access-token',
+    ).send({
+      notification: claim(),
+      idempotencyKey: claim().idempotencyKey,
+      retryKey,
+      signal: new AbortController().signal,
+    });
+    assert.deepEqual(result, { providerMessageId: 'provider-request-id' });
+    assert.equal(requestHeaders?.get('x-line-retry-key'), retryKey);
+    assert.equal(requestHeaders?.has('x-idempotency-key'), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('migrationはtenant・認可・監査・冪等性の境界をDB側で保証する', () => {
   assert.match(MIGRATION, /UNIQUE \(tenant_id, source_type, source_id\)/);
   assert.match(
@@ -531,6 +569,17 @@ test('security hardening migrationはDB時刻・unknown・専用worker権限を�
   );
   assert.match(HARDENING_MIGRATION, /payload_hash/);
   assert.match(HARDENING_MIGRATION, /idempotency_key/);
+});
+
+test('provider retry key migrationはpayload冪等性と同じoutbox行へ固定する', () => {
+  assert.match(PROVIDER_RETRY_MIGRATION, /provider_retry_key uuid/);
+  assert.match(PROVIDER_RETRY_MIGRATION, /X-Line-Retry-Key/);
+  assert.match(PROVIDER_RETRY_MIGRATION, /provider_retry_key\s*\)\s*VALUES/);
+  assert.match(
+    PROVIDER_RETRY_MIGRATION,
+    /provider_retry_key, updated\.payload_hash/,
+  );
+  assert.match(PROVIDER_RETRY_MIGRATION, /status IN \('pending', 'failed'\)/);
 });
 
 test('schedulerの実行失敗は指数backoffだけを返し、例外本文を返さない', async () => {
