@@ -67,3 +67,19 @@ R2添付の契約変更と中央OpenAPIの同期は、中央接続時に同一�
 - 各機能のWeb画面を `apps/web/src/main.tsx` へ登録する。
 - 実PostgreSQL、R2、LINEのstaging接続で結合テストを行う。
 - 統合後に、認可、テナント越境、個人情報、入力検証、状態遷移、外部サービス障害時の挙動を再度敵対的に確認する。
+
+## 統合ベースの検証結果
+
+2026-08-22時点で、次の検証を実施しました。
+
+- `pnpm install --lockfile-only --frozen-lockfile`: 成功。
+- `pnpm install --frozen-lockfile`: lockfileが最新であることを確認し、依存パッケージの展開まで成功。
+- `git diff --check origin/develop...HEAD`: 成功。
+- 中央接続ファイルと `origin/develop` の一致確認: 成功。
+- 各機能ブランチの変更ファイル照合: 成功（中央接続ファイルとして明示的に除外したものを除き欠落なし）。
+- `pnpm exec biome check .`: コマンドは成功したが、worktreeのパスに含まれる `.worktrees` がBiome設定の除外パターンに一致し、0ファイル検査となった。
+- Git管理下ファイルを明示したBiome検査: 共有pnpmストアへ `projects` ディレクトリを作成する際の `EPERM` で実行基盤が失敗した。
+- `pnpm test`、`pnpm build`: 依存関係実行基盤が共有pnpmストアの権限エラーとなったため、この統合ベースでは未実行。
+
+Biomeおよび全体テスト・ビルドの未完了理由はコードエラーではなく、共有pnpmストアの権限競合です。
+このブランチでは、依存キャッシュの所有者または作業環境を整えた後に再実行してください。
