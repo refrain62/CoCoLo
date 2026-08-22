@@ -92,6 +92,7 @@ function protectedPath(filename: string): boolean {
     filename.startsWith('.github/workflows/') ||
     filename === 'package.json' ||
     filename === 'pnpm-lock.yaml' ||
+    filename === 'packages/db/prisma/schema.prisma' ||
     filename.startsWith('packages/db/prisma/migrations/') ||
     filename === 'packages/db/prisma/migrations.sha256' ||
     filename.startsWith('scripts/verify-') ||
