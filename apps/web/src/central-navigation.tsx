@@ -17,6 +17,10 @@ import {
   createBoardContactApi,
 } from './features/board-contact/index.js';
 import {
+  BulletinBoardPage,
+  createBulletinBoardApi,
+} from './features/bulletin-board/index.js';
+import {
   createEventsApi,
   type EventsApi,
 } from './features/events/events-api.js';
@@ -283,6 +287,7 @@ type CentralApis = {
   attachments: AttachmentApi;
   line: LineNotificationApi;
   ride: RideOperationsApi;
+  bulletinBoard: ReturnType<typeof createBulletinBoardApi>;
 };
 
 function createCentralApis(accessToken: string | null): CentralApis {
@@ -295,6 +300,7 @@ function createCentralApis(accessToken: string | null): CentralApis {
     attachments: createAttachmentApi({ getAccessToken }),
     line: createLineNotificationApi({ getAccessToken }),
     ride: createRideOperationsApi({ getAccessToken }),
+    bulletinBoard: createBulletinBoardApi({ getAccessToken }),
   };
 }
 
@@ -529,7 +535,9 @@ function renderCentralRoute(
       );
     case 'bulletins':
       return (
-        <AccessDenied message="回覧板画面は統合ベースに未取り込のため、実装済みとして表示していません。" />
+        <IntegrationNotice>
+          <BulletinBoardPage api={apis.bulletinBoard} role={role} />
+        </IntegrationNotice>
       );
     case 'resource-unavailable':
       return (
