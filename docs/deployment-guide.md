@@ -50,7 +50,7 @@ main ── push ──▶ staging deploy
 | Variable | `SUPABASE_JWKS_URL` | staging SupabaseのJWKS URL。`SUPABASE_URL`のprojectと一致させる。 |
 | Variable | `PUBLIC_APP_URL` | staging Webアプリの公開HTTPS URL。 |
 | Variable | `PUBLIC_APP_URL_ALLOWLIST` | `PUBLIC_APP_URL`を含むカンマ区切りの許可リスト。 |
-| Variable | `RATE_LIMIT_ADAPTER_MODULE` | stagingで読み込む分散rate-limit adapter module。 |
+| Variable | `RATE_LIMIT_ADAPTER_MODULE` | providerをlockfileとallowlistへ追加した場合だけ設定する。現時点は実provider未同梱のため未設定。 |
 
 Workflow内で次の値は固定されており、Environment variableとして別値を設定しません。
 
@@ -60,6 +60,9 @@ Workflow内で次の値は固定されており、Environment variableとして�
 - `SUPABASE_ALLOWED_JWKS_URL=SUPABASE_JWKS_URL`
 - `RATE_LIMIT_STORE=distributed`
 - `RATE_LIMIT_FAIL_CLOSED=true`
+
+現時点では実Redis providerをrepositoryへ同梱していないため、stagingの `RATE_LIMIT_ADAPTER_MODULE` は未設定です。
+値を設定しても、provider packageがlockfileとadapter allowlistの両方にない限り、`pnpm verify:environment` は停止します。
 
 ### production
 
@@ -76,7 +79,7 @@ Workflow内で次の値は固定されており、Environment variableとして�
 | Variable | `PUBLIC_APP_URL_ALLOWLIST` | `PUBLIC_APP_URL`を含むカンマ区切りの許可リスト。 |
 | Variable | `RETIRED_DATA_RETENTION_DAYS` | 退部データを保持する日数。運用上の保存期間を整数で設定する。 |
 | Variable | `AUDIT_LOG_RETENTION_DAYS` | 監査ログを保持する日数。運用上の保存期間を整数で設定する。 |
-| Variable | `RATE_LIMIT_ADAPTER_MODULE` | productionで読み込む分散rate-limit adapter module。stagingと同じmoduleを無条件に共有しない。 |
+| Variable | `RATE_LIMIT_ADAPTER_MODULE` | providerをlockfileとallowlistへ追加した場合だけ設定する。stagingと同じmoduleを無条件に共有しない。現時点は未設定。 |
 
 Workflow内で次の値は固定されており、Environment variableとして別値を設定しません。
 
@@ -86,6 +89,9 @@ Workflow内で次の値は固定されており、Environment variableとして�
 - `SUPABASE_ALLOWED_JWKS_URL=SUPABASE_JWKS_URL`
 - `RATE_LIMIT_STORE=distributed`
 - `RATE_LIMIT_FAIL_CLOSED=true`
+
+productionも実provider未同梱のため、`RATE_LIMIT_ADAPTER_MODULE` 未設定では起動と昇格を継続しません。
+providerを追加する場合は、stagingとproductionのRedis endpoint、Secret、監視、namespaceを分離し、実Redis検証の記録をstaging evidenceへ残します。
 
 ### Webのビルド設定に関する重要な前提
 

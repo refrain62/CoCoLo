@@ -31,7 +31,14 @@
 | `RATE_LIMIT_ADAPTER_MODULE` | 未設定 | `createRateLimitAdapter` を公開するNode module | いいえ |
 | Redis接続URLなどprovider固有値 | 未設定 | 配置先のSecret | はい |
 
-`RATE_LIMIT_ADAPTER_MODULE` は GitHub Environment の Variable または配置先の非秘密設定で管理します。
+このrepositoryには実Redis providerを同梱していません。
+
+そのため、adapter packageのallowlistは空であり、stagingとproductionの `RATE_LIMIT_ADAPTER_MODULE` は未設定のままです。
+moduleを設定して起動を継続するには、provider packageをlockfileへ追加し、ソースのallowlistへ同じpackage名を登録してから、契約テストを通過させる必要があります。
+未設定またはallowlistとlockfileのどちらかにないmoduleは、API起動と `pnpm verify:environment` の両方で拒否します。
+
+`RATE_LIMIT_ADAPTER_MODULE` はGitHub EnvironmentのVariableまたは配置先の非秘密設定で管理します。
+ただし、provider未同梱の現在は設定してはいけません。
 
 Redis接続URL、認証情報、TLS秘密鍵は adapter が参照する Secret として管理し、リポジトリ、成果物、ログへ出力しません。
 
@@ -55,16 +62,39 @@ type RateLimitConsumeResult = {
   resetAtMs: number;
 };
 
+type RateLimitConsumeContext = {
+  signal: AbortSignal;
+  timeoutMs: number;
+};
+
 type DistributedRateLimitAdapter = {
   consumeAtomic: (
     input: RateLimitConsumeInput,
+    context: RateLimitConsumeContext,
   ) => Promise<RateLimitConsumeResult>;
+};
+
+type RateLimitStore = {
+  distributed: boolean;
+  consume: (
+    input: RateLimitConsumeInput,
+    options?: {
+      signal?: AbortSignal;
+      timeoutMs?: number;
+    },
+  ) => Promise<RateLimitConsumeResult> | RateLimitConsumeResult;
+};
+
+type CentralRateLimitStore = RateLimitStore & {
+  distributed: true;
+  adapter: DistributedRateLimitAdapter;
+  namespace: 'local' | 'staging' | 'production';
 };
 
 export async function createRateLimitAdapter(): Promise<DistributedRateLimitAdapter> {
   return {
-    async consumeAtomic(input) {
-      return executeAtomicRateLimitOperation(input);
+    async consumeAtomic(input, context) {
+      return executeAtomicRateLimitOperation(input, context);
     },
   };
 }
@@ -72,15 +102,32 @@ export async function createRateLimitAdapter(): Promise<DistributedRateLimitAdap
 
 `consumeAtomic` はカウンターの加算、初回だけの有効期限設定、現在値の読み取りを分散ストア上の一つの原子的操作として実行します。
 
+APIは各呼び出しに正の有限値である `timeoutMs` と派生した `AbortSignal` を付けます。
+外部storeがsignalを無視しても、timeoutでadapter呼び出しを打ち切り、middlewareは `503 RATE_LIMIT_UNAVAILABLE` を返します。
+リクエストの中断も同じsignalへ伝播させます。
+
+中央統合側へ渡す分散storeは `distributed: true`、注入済みの `adapter`、`APP_ENV` 由来の `namespace` を公開します。
+stagingとproductionでは、このstoreを生成するためのadapterがなければ構成生成を拒否します。
+
 Redis を使う場合は `INCR` と初回の `PEXPIRE` を Lua `EVAL` または同等のサーバー側スクリプトへまとめます。
 
 `MULTI/EXEC` だけで実装する場合は、初回判定と有効期限設定を別クライアントから割り込まれないことを provider の仕様とテストで確認します。
 
 adapter は入力 `key` をそのままストレージキーとして使い、利用者の tenant ID、user ID、IPアドレスを再構成してはいけません。
 
-adapter が受け取るキーは `user:<sha256>:<sha256>` または `client:<sha256>:<sha256>` の形式に限ります。
+adapterが受け取るキーは `user:<APP_ENV>:<sha256>:<sha256>` または `client:<APP_ENV>:<sha256>:<sha256>` の形式に限ります。
+`APP_ENV=staging` と `APP_ENV=production` は異なるnamespaceを使うため、同じtenantとuserでもカウンターを共有しません。
 
 API 側の adapter wrapper はこの形式以外のキーを外部ストアへ渡しません。
+
+## moduleの読み込み制限
+
+`RATE_LIMIT_ADAPTER_MODULE` にはpackage名だけを指定します。
+`file:`, `data:`, `node:`, `http:`, `https:`, 相対パス、絶対パス、package subpathは拒否します。
+
+APIは指定名を、明示allowlistと `pnpm-lock.yaml` に記録されたpackage名へ照合してから動的importします。
+allowlistが空の状態では、実providerを含まないため、どのmodule指定も起動を通過しません。
+この検証を環境変数だけで上書きする設定は提供しません。
 
 ### Redis Lua の実装条件
 
@@ -110,6 +157,8 @@ API 起動時に `RATE_LIMIT_STORE`、`RATE_LIMIT_FAIL_CLOSED`、`RATE_LIMIT_ADA
 
 起動後に分散ストアが利用できない場合、rate-limit middleware は `503 RATE_LIMIT_UNAVAILABLE` を返し、認証後の業務 handler を呼び出しません。
 
+分散ストアが応答しない場合も、consumeのtimeoutで `503 RATE_LIMIT_UNAVAILABLE` に収束し、業務handlerを呼び出しません。
+
 identity の解決に失敗した場合も `503 RATE_LIMIT_IDENTITY_UNAVAILABLE` を返し、IPアドレスだけへフォールバックしません。
 
 分散ストア障害時に `InMemoryRateLimitStore` へ自動切り替えしたり、レート制限を無効化したりする運用手順は採用しません。
@@ -121,6 +170,9 @@ staging と production は分散ストア、認証情報、ネットワーク許
 production が staging の Redis endpoint または Secret を参照しないことを配置前に確認します。
 
 adapter module の変更は API の成果物と同じレビュー対象にし、Node.js 24 で契約テストを実行してから配置します。
+
+実Redis provider、Redis Luaの原子性、複数API instanceからの同時消費、実ネットワーク障害からの503収束は、このrepositoryでは未検証です。
+staging配置時にprovider固有の契約テストと実Redis接続を実施し、成功するまでproductionへ昇格できません。
 
 staging では複数 API instance から同一利用者が同時にリクエストを送り、制限値を超えるリクエストが業務処理へ到達しないことを確認します。
 
@@ -145,4 +197,7 @@ production では health check の成功だけで復旧と判断せず、adapter
 - local は in-memory の固定窓を使い、staging と production は分散 adapter なしで構成できない。
 - `consumeAtomic` の結果が同一キーの同時リクエストで重複せず、超過分が `429` になる。
 - 分散ストアのエラーと不正な応答が `503` に収束し、業務 handler が呼ばれない。
+- 分散ストアのtimeoutとAbortSignal中断が `503` に収束し、業務 handler が呼ばれない。
+- `APP_ENV` のnamespaceがキーへ含まれ、stagingとproductionのキーを同じstoreで共有しない。
 - API 起動時と `pnpm verify:environment` が fail-open、memory、adapter module 欠落を拒否する。
+- adapter moduleがURLやfilesystem指定ではなく、allowlistとlockfileの両方にあるpackage名だけである。
