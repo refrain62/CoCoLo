@@ -8,8 +8,8 @@
     "start": "node dist/server.js",
     "lint": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/db build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "typecheck": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/db build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "test:unit": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/db build && pnpm build && node --test test/*.test.mjs",
-    "test:integration": "pnpm --filter @cocolo/db build && node --test test/integration/*.test.mjs"
+    "test:unit": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/db build && pnpm build && node --test test/*.test.ts",
+    "test:integration": "pnpm --filter @cocolo/db build && node --test test/integration/*.test.ts"
   },
   "dependencies": {
     "@cocolo/auth": "workspace:*",
