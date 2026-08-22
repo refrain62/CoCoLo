@@ -119,6 +119,15 @@ enum LineNotificationStatus {
   @@map("line_notification_status")
 }
 
+enum LineNotificationOutboxStatus {
+  pending
+  delivered
+  ignored
+  failed
+
+  @@map("line_notification_outbox_status")
+}
+
 enum RidePlanStatus {
   draft
   open
@@ -167,6 +176,7 @@ model Tenant {
   announcementReads AnnouncementRead[]
   lineConnections LineConnection[]
   lineNotificationQueue LineNotificationQueue[]
+  lineNotificationOutboxes LineNotificationOutbox[]
   lineWebhookReceipts LineWebhookReceipt[]
   ridePlans     RidePlan[]
   rideOffers    RideOffer[]
@@ -522,6 +532,7 @@ model LineNotificationQueue {
   title             String                 @db.VarChar(200)
   body              String                 @db.VarChar(4000)
   deepLink          String                 @map("deep_link") @db.VarChar(2048)
+  outboxId          String?                @unique @map("outbox_id") @db.Uuid
   status            LineNotificationStatus
   attempts          Int                    @default(0)
   nextRetryAt      DateTime?              @map("next_retry_at")
@@ -535,6 +546,28 @@ model LineNotificationQueue {
   @@index([status, nextRetryAt, createdAt, id])
   @@index([tenantId, groupId, status])
   @@map("line_notification_queue")
+}
+
+model LineNotificationOutbox {
+  id          String                       @id @default(dbgenerated("app_uuidv7()")) @db.Uuid
+  tenantId    String                       @map("tenant_id") @db.Uuid
+  actorUserId String                       @map("actor_user_id") @db.VarChar(128)
+  sourceType  LineNotificationSource       @map("source_type")
+  sourceId    String                       @map("source_id") @db.VarChar(128)
+  title       String                       @db.VarChar(200)
+  body        String                       @db.VarChar(4000)
+  deepLink    String                       @map("deep_link") @db.VarChar(2048)
+  status      LineNotificationOutboxStatus @default(pending)
+  attempts    Int                          @default(0)
+  deliverAt   DateTime                     @map("deliver_at")
+  lastError   String?                      @map("last_error") @db.VarChar(500)
+  createdAt   DateTime                     @default(now()) @map("created_at")
+  processedAt DateTime?                    @map("processed_at")
+  tenant      Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, sourceType, sourceId])
+  @@index([status, deliverAt, createdAt, id])
+  @@map("line_notification_outbox")
 }
 
 model LineWebhookReceipt {

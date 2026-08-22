@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { createPrismaClient } from '@cocolo/db';
 import {
   createSqlLineDeliveryRepository,
+  createSqlLineOutboxRepository,
   type LineSqlClient,
 } from '@cocolo/db/line';
 import { createLineMessagingAdapter } from './features/line-notifications/line-messaging-adapter.js';
@@ -12,6 +13,13 @@ type PrismaClient = ReturnType<typeof createPrismaClient>;
 function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} が必要です。`);
+  return value;
+}
+
+function batchSize(): number {
+  const value = Number(process.env.LINE_DELIVERY_BATCH_SIZE ?? 10);
+  if (!Number.isInteger(value) || value < 1 || value > 100)
+    throw new Error('LINE_DELIVERY_BATCH_SIZE が不正です。');
   return value;
 }
 
@@ -28,23 +36,34 @@ function createPrismaLineSqlClient(client: PrismaClient): LineSqlClient {
   };
 }
 
-// 外部schedulerから一度に一件だけ処理する。並列起動はDBのSKIP LOCKEDで別通知をclaimする。
+// 外部schedulerからoutboxとqueueを限定件数だけ処理する。並列起動はDBのSKIP LOCKEDで分担する。
 export async function runLineDeliveryWorker(): Promise<
   'idle' | 'sent' | 'failed'
 > {
   const client = createPrismaClient();
   try {
+    const channelAccessToken = required('LINE_CHANNEL_ACCESS_TOKEN');
+    const sqlClient = createPrismaLineSqlClient(client);
+    const now = new Date();
+    const limit = batchSize();
+    const outbox = createSqlLineOutboxRepository(sqlClient);
+    for (let index = 0; index < limit; index += 1) {
+      const outcome = await outbox.processOne({ now, maxAttempts: 5 });
+      if (outcome === 'idle') break;
+    }
     const service = createLineDeliveryService({
-      repository: createSqlLineDeliveryRepository(
-        createPrismaLineSqlClient(client),
-      ),
+      repository: createSqlLineDeliveryRepository(sqlClient),
       adapter: createLineMessagingAdapter({
-        channelAccessToken: required('LINE_CHANNEL_ACCESS_TOKEN'),
+        channelAccessToken,
       }),
     });
-    const notification = await service.deliverOne();
-    if (!notification) return 'idle';
-    return notification.status === 'sent' ? 'sent' : 'failed';
+    let result: 'idle' | 'sent' | 'failed' = 'idle';
+    for (let index = 0; index < limit; index += 1) {
+      const notification = await service.deliverOne(now);
+      if (!notification) break;
+      result = notification.status === 'sent' ? 'sent' : 'failed';
+    }
+    return result;
   } finally {
     await client.$disconnect();
   }

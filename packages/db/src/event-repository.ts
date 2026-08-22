@@ -8,6 +8,7 @@ import {
   summarizeAttendance,
 } from '@cocolo/domain/event';
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { enqueueNotificationOutbox } from './notification-outbox.js';
 
 export type EventRecord = {
   id: string;
@@ -256,7 +257,49 @@ async function findAssignedMember(
 }
 
 // イベントと回答を同一transactionで更新し、締切判定・担当部員・監査をDB境界内で確定する。
-export function createEventRepository(client: PrismaClient): EventRepository {
+export function createEventRepository(
+  client: PrismaClient,
+  options: { notificationPublicAppUrl?: string; now?: () => Date } = {},
+): EventRepository {
+  const publicAppUrl = options.notificationPublicAppUrl?.replace(/\/$/, '');
+  const now = options.now ?? (() => new Date());
+  const enqueueEventNotifications = async (
+    tx: Prisma.TransactionClient,
+    input: EventRepositoryInput,
+    event: EventRecord,
+    includeCreatedNotification: boolean,
+  ) => {
+    if (!publicAppUrl) return;
+    const timestamp = now();
+    if (includeCreatedNotification)
+      await enqueueNotificationOutbox(tx, {
+        tenantId: input.tenantId,
+        actorUserId: input.actorUserId,
+        sourceType: 'event',
+        sourceId: event.id,
+        title: '予定のお知らせ',
+        body: '予定の詳細を確認してください。',
+        deepLink: `${publicAppUrl}/events/${event.id}`,
+        deliverAt: timestamp,
+      });
+    // 締切の24時間前を通知時刻とし、既に締切が近い予定は保存直後に送る。
+    const reminderAt = new Date(
+      Math.max(
+        timestamp.getTime(),
+        Date.parse(event.attendanceDeadline) - 24 * 60 * 60 * 1000,
+      ),
+    );
+    await enqueueNotificationOutbox(tx, {
+      tenantId: input.tenantId,
+      actorUserId: input.actorUserId,
+      sourceType: 'deadline',
+      sourceId: event.id,
+      title: '出欠締切のお知らせ',
+      body: '出欠締切が近づいています。予定の詳細を確認してください。',
+      deepLink: `${publicAppUrl}/events/${event.id}`,
+      deliverAt: reminderAt,
+    });
+  };
   return {
     list: (input) =>
       client.$transaction(async (tx) => {
@@ -312,11 +355,13 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           throw new EventNotFoundError(
             '予定の登録結果を取得できませんでした。',
           );
+        const created = toEventRecord(row);
         await audit(tx, input, 'event.create', 'event', id, {
           type: input.type,
           startsAt: input.startsAt.toISOString(),
         });
-        return toEventRecord(row);
+        await enqueueEventNotifications(tx, input, created, true);
+        return created;
       }),
     update: (input) =>
       client.$transaction(async (tx) => {
@@ -384,6 +429,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           throw new EventNotFoundError(
             '予定の更新結果を取得できませんでした。',
           );
+        const updated = toEventRecord(row);
         await audit(tx, input, 'event.update', 'event', input.eventId, {
           fields: Object.keys(input).filter(
             (key) =>
@@ -393,7 +439,8 @@ export function createEventRepository(client: PrismaClient): EventRepository {
               key !== 'eventId',
           ),
         });
-        return toEventRecord(row);
+        await enqueueEventNotifications(tx, input, updated, false);
+        return updated;
       }),
     upsertAttendance: (input) =>
       client.$transaction(async (tx) => {

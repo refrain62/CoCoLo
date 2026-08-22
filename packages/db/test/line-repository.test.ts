@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createSqlLineDeliveryRepository,
+  createSqlLineOutboxRepository,
   createSqlLineRepository,
 } from '../dist/line-repository.js';
+import { enqueueNotificationOutbox } from '../dist/notification-outbox.js';
 
 const TENANT_ID = '00000000-0000-7000-8000-000000000001';
 const GROUP_ID = 'Cgroup-a';
@@ -171,4 +173,60 @@ test('worker repositoryは利用者RLS contextを要求せず、限定DB関数�
     queries.some((query) => query.sql.includes('set_config')),
     false,
   );
+});
+
+test('outbox repositoryはworker用の限定関数を一件処理する', async () => {
+  const queries: Array<{ sql: string; values: readonly unknown[] }> = [];
+  const query = async <Row>(sql: string, values: readonly unknown[]) => {
+    queries.push({ sql, values });
+    if (sql.includes('app_process_line_notification_outbox'))
+      return { rows: [{ outcome: 'queued', outbox_id: 'outbox-1' }] as Row[] };
+    throw new Error(`想定外のSQLです: ${sql}`);
+  };
+  const client = {
+    async transaction<T>(
+      work: (transaction: { query: typeof query }) => Promise<T>,
+    ) {
+      return work({ query });
+    },
+  };
+  const repository = createSqlLineOutboxRepository(client);
+
+  assert.equal(
+    await repository.processOne({ now: NOW, maxAttempts: 5 }),
+    'queued',
+  );
+  assert.equal(queries.length, 1);
+  assert.match(queries[0]?.sql ?? '', /app_process_line_notification_outbox/);
+  assert.equal(queries[0]?.values[1], 5);
+});
+
+test('outbox writerは所属確認付きの限定DB関数だけを呼ぶ', async () => {
+  const calls: Array<{ sql: string; values: readonly unknown[] }> = [];
+  const client = {
+    async $executeRaw(
+      strings: TemplateStringsArray,
+      ...values: readonly unknown[]
+    ) {
+      calls.push({ sql: strings.join('?'), values });
+      return 1;
+    },
+  };
+
+  await enqueueNotificationOutbox(client as never, {
+    tenantId: TENANT_ID,
+    actorUserId: ACTOR.userId,
+    sourceType: 'event',
+    sourceId: 'event-001',
+    title: '予定のお知らせ',
+    body: '予定の詳細を確認してください。',
+    deepLink:
+      'http://localhost:5173/events/018f0f1e-7b9d-7c3a-8e2a-1234567890ab',
+    deliverAt: NOW,
+  });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]?.sql ?? '', /app_enqueue_line_notification_outbox/);
+  assert.equal(calls[0]?.values[0], TENANT_ID);
+  assert.equal(calls[0]?.values[2], 'event');
 });

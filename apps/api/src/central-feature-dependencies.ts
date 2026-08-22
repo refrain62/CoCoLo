@@ -30,10 +30,7 @@ function createPrismaLineSqlClient(client: PrismaClient): LineSqlClient {
       client.$transaction(async (transaction) =>
         work({
           query: async <Row>(sql: string, values: readonly unknown[]) => ({
-            rows: (await transaction.$queryRawUnsafe(
-              sql,
-              ...values,
-            )) as Row[],
+            rows: (await transaction.$queryRawUnsafe(sql, ...values)) as Row[],
           }),
         }),
       ),
@@ -55,14 +52,21 @@ function actorFromInput(input: unknown): LineActor | null {
 // DB schemaと各featureのrepositoryを同じPrisma clientへ束ねる。未対応の外部依存は返さず、中央APIの503を維持する。
 export function createCentralFeatureDependencies({
   client,
-  appEnv,
+  appEnv: _appEnv,
   environment,
 }: CentralFeatureDependencyInput): CentralFeatureDependencies {
+  const publicAppUrl = environment.PUBLIC_APP_URL?.trim();
   const attachments = createAttachmentRepositories(client);
-  const bulletinBoard = createBulletinBoardRepositories(client);
+  const bulletinBoard = createBulletinBoardRepositories(client, {
+    notificationPublicAppUrl: publicAppUrl,
+  });
 
   const dependencies: CentralFeatureDependencies = {
-    events: { repository: createEventRepository(client) },
+    events: {
+      repository: createEventRepository(client, {
+        notificationPublicAppUrl: publicAppUrl,
+      }),
+    },
     boardContact: { repository: createBoardContactRepository(client) },
     attachments: {
       repository: attachments.attachmentRepository,
@@ -78,7 +82,6 @@ export function createCentralFeatureDependencies({
   const lineChannelSecret = environment.LINE_CHANNEL_SECRET?.trim();
   const lineChannelAccessToken = environment.LINE_CHANNEL_ACCESS_TOKEN?.trim();
   const lineWebhookDestination = environment.LINE_WEBHOOK_DESTINATION?.trim();
-  const publicAppUrl = environment.PUBLIC_APP_URL?.trim();
   if (
     lineChannelSecret &&
     lineChannelAccessToken &&

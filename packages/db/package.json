@@ -17,6 +17,7 @@
     },
     "./attachment": "./dist/attachment-repository.js",
     "./line": "./dist/line-repository.js",
+    "./notification-outbox": "./dist/notification-outbox.js",
     "./ride": {
       "types": "./dist/ride-repository.d.ts",
       "import": "./dist/ride-repository.js"

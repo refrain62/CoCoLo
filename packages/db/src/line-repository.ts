@@ -103,6 +103,13 @@ export type LineDeliveryRepository = Pick<
   'claimDue' | 'markSent' | 'markFailed'
 >;
 
+export type LineOutboxRepository = {
+  processOne: (input: {
+    now: Date;
+    maxAttempts?: number;
+  }) => Promise<'queued' | 'ignored' | 'idle'>;
+};
+
 function clone<T>(value: T): T {
   if (value instanceof Date) return new Date(value.getTime()) as T;
   if (Array.isArray(value)) return value.map((item) => clone(item)) as T;
@@ -813,6 +820,27 @@ export function createSqlLineDeliveryRepository(
         if (!row)
           throw new LineNotificationStateError('通知を失敗へ変更できません。');
         return toNotification(row);
+      });
+    },
+  };
+}
+
+// 業務transactionで作られたoutboxをqueueへ移す内部worker専用repository。
+export function createSqlLineOutboxRepository(
+  client: LineSqlClient,
+): LineOutboxRepository {
+  return {
+    async processOne(input) {
+      return client.transaction(async (transaction) => {
+        const result = await transaction.query<{
+          outcome: 'queued' | 'ignored' | 'idle';
+          outbox_id: string | null;
+        }>(
+          `SELECT outcome, outbox_id
+             FROM app_process_line_notification_outbox($1, $2)`,
+          [input.now, input.maxAttempts ?? 5],
+        );
+        return result.rows[0]?.outcome ?? 'idle';
       });
     },
   };

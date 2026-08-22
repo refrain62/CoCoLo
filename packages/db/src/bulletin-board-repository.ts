@@ -8,6 +8,7 @@ import type {
 } from '@cocolo/domain/bulletin-board';
 import { createUuidV7 } from '@cocolo/domain/line';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { enqueueNotificationOutbox } from './notification-outbox.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -261,11 +262,13 @@ export function createBulletinBoardRepositories(
     attachmentLookup?: BulletinBoardAttachmentLookup;
     now?: () => Date;
     createId?: () => string;
+    notificationPublicAppUrl?: string;
   } = {},
 ): { bulletinBoardRepository: BulletinBoardRepository } {
   const lookup = options.attachmentLookup ?? defaultAttachmentLookup;
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? createUuidV7;
+  const publicAppUrl = options.notificationPublicAppUrl?.replace(/\/$/, '');
 
   const bulletinBoardRepository: BulletinBoardRepository = {
     publish: (input) =>
@@ -327,6 +330,17 @@ export function createBulletinBoardRepositories(
           resourceId: id,
           metadata: { attachmentCount: attachments.length },
         });
+        if (publicAppUrl)
+          await enqueueNotificationOutbox(tx, {
+            tenantId: input.tenantId,
+            actorUserId: input.actorUserId,
+            sourceType: 'bulletin',
+            sourceId: id,
+            title: '回覧のお知らせ',
+            body: '回覧の内容を確認してください。',
+            deepLink: `${publicAppUrl}/bulletins/${id}`,
+            deliverAt: publishedAt,
+          });
         return toAnnouncementRecord(row, attachments);
       }),
 
