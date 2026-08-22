@@ -138,7 +138,7 @@ category が adult の場合は gradeLevel ではなく ageGroup を表示しま
 
 owner または admin は年度末に、対象年度と実行内容を確認して繰り上げを実行できます。対象は `active` かつ `student` の部員だけで、gradeLevel を一度だけ +1 します。adult、retired、suspended は対象外です。
 
-実行前に対象件数を表示し、同一チーム・同一年度の二重実行は no-op とします。17以上の表示、卒業・留年・退部の扱いは実行前の確認画面に表示します。
+実行前の `preview` で対象件数を表示し、`execute` は `Idempotency-Key` を必須とします。同一チーム・同一年度の二重実行は保存済み結果を返す no-op とし、同一keyのrequest hashが異なる再送は拒否します。`PromotionRun` は `preview → completed/failed`、失敗時の再試行は `failed → completed/failed` だけを許可します。17以上の表示、卒業・留年・退部の扱いは実行前の確認画面に表示します。
 
 ## 6. 予定・出欠（Phase 2）
 
@@ -221,6 +221,7 @@ LINE連携が設定されたチームだけ、予定・締切・回覧の通知�
 | 出欠 | pending ↔ attending / absent | 締切前の回答 |
 | 注文 | open → closed → completed | 締切・発注完了 |
 | 集金 | unpaid ↔ paid | 管理者の確認 |
+| 年度繰り上げ | preview → completed / failed、failed → completed / failed | owner/adminのexecute、同一年度の再実行は保存済み結果 |
 | 添付 | uploaded → available → deleted | 検証成功・認可・削除 |
 | 添付 | uploaded → rejected | magic bytes・サイズ・形式の検証失敗 |
 

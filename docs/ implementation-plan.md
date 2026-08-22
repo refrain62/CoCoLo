@@ -506,7 +506,8 @@ on:
         type: string
 jobs:
   promote:
-    runs-on: ubuntu-latest
+    # GitHub CLIの仕様変更を許可せず、更新はrunner imageとgh versionの同時レビューで行う。
+    runs-on: ubuntu-24.04
     environment: production
     concurrency: production-migration
     env:
@@ -528,8 +529,8 @@ jobs:
           [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'artifact_sha must be a lowercase 40-digit SHA-1' >&2; exit 1; }
           gh run view "$STAGING_RUN_ID" --json conclusion,headSha,workflowName,event,headBranch > .staging-run.json
           jq -e --arg sha "$ARTIFACT_SHA" '.conclusion == "success" and .headSha == $sha and .workflowName == "ステージングへデプロイ" and .event == "push" and .headBranch == "main"' .staging-run.json
-          gh run view "$STAGING_RUN_ID" --json jobs > .staging-jobs.json
-          jq -e '[.jobs[] | select(.name == "deploy-staging" and .conclusion == "success")] | length == 1' .staging-jobs.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID/jobs?per_page=100" > .staging-jobs.json
+          jq -e '([.jobs[].steps[] | select(.name == "検証済みreleaseのstaging migrationを適用" or .name == "ステージングのsmoke testを実行" or .name == "ステージングの認証ユーザーでE2Eを実行")] | length) == 3 and ([.jobs[].steps[] | select(.name == "検証済みreleaseのstaging migrationを適用" or .name == "ステージングのsmoke testを実行" or .name == "ステージングの認証ユーザーでE2Eを実行")] | all(.[]; .conclusion == "success"))' .staging-jobs.json
           test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID" --jq '.path')" = ".github/workflows/staging-deploy.yml"
           gh run download "$STAGING_RUN_ID" --name "release-$ARTIFACT_SHA" --dir .release
           gh run download "$STAGING_RUN_ID" --name "staging-evidence-$ARTIFACT_SHA" --dir .evidence
@@ -596,7 +597,7 @@ jobs:
 ```
 
 `package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、migration checksum manifest を同一の immutable release artifact に含め、`.release/release.tar.gz` と `artifact.sha256` を生成します。staging の `publish:release` は GitHub Actions artifact `release-${{ github.sha }}` として保存し、production は `actions: read` で同名 artifact だけを取得します。staging は GitHub 公式 provenance action をSHA固定で実行し、production は checkout・pnpm install・リポジトリ内 script より前に標準 GitHub CLI の `gh attestation verify` で署名者リポジトリ、workflow、source digest、SHA-256を検証します。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・migration checksum・artifact SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリの migration を参照せず、検証済み `.release` 内の migration だけを `prisma migrate deploy` へ渡します。staging job の強い権限は main push かつ protected staging Environment のこのjobだけに限定し、PRの `quality.yml` は `contents: read` のみとします。将来buildと公開をjob分離する場合も、`actions: write`、`id-token: write`、`attestations: write` は公開・provenance jobにだけ付与します。staging / production の workflow は `APP_ENV`、Supabase URL/JWKS、R2 endpoint/bucket、公開URLの allowlist を `verify:environment` で検証し、production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
-`publish:staging-evidence` は `.evidence/evidence.json`（`workflowName`、`workflowPath`、`event`、`headBranch`、`headSha`、`artifactSha`、`migration`、`smoke`、`e2e`）を生成し、`staging-evidence-${{ github.sha }}` という上書き不可のartifact名で保存します。本番はGitHub runの `conclusion`・`jobs`・REST APIのworkflow pathを直接検証したうえで、この証跡とrelease artifactを同じstaging runから取得し、checkout前に固定フィールドを検証します。
+`publish:staging-evidence` は `.evidence/evidence.json`（`workflowName`、`workflowPath`、`event`、`headBranch`、`headSha`、`artifactSha`、`migration`、`smoke`、`e2e`）を生成し、`staging-evidence-${{ github.sha }}` という上書き不可のartifact名で保存します。本番はGitHub runの `conclusion`、job stepの直接結果、REST APIのworkflow pathを権威情報として先に検証し、evidence JSONの詳細値は補助情報として同じstaging runから取得します。checkout前に固定フィールドを検証します。
 
 ### 6.1 サプライチェーン攻撃対策
 
@@ -807,7 +808,7 @@ LINE の通知先（グループか公式アカウントか）、Google Maps の
   * `Member`: `owner/admin/staff` は同一 tenant の全件を `SELECT` でき、`owner/admin` だけが `INSERT/UPDATE` できます。`guardian` は `GuardianMember(tenant_id, member_id, user_id)` が存在する担当部員だけを `SELECT` できます。
   * `GuardianMember`: `owner/admin` は同一 tenant の管理、guardian は自分の `user_id` に一致する紐付けの `SELECT` だけを許可します。staff と guardian の登録・削除は拒否します。
    * `AuditLog`: 全 role に tenant内の append-only `INSERT` だけを許可し、`SELECT` は `owner` のみ、`UPDATE/DELETE` は table grant と policy の両方で拒否します。
-   * `PromotionRun`: `owner/admin` は同一 tenant の preview / completed / failed を `SELECT` でき、年度繰り上げの `INSERT` は `owner/admin` だけに許可します。`staff/guardian` は `SELECT/INSERT/UPDATE/DELETE` を拒否し、年度・tenant・actor は `WITH CHECK` で固定します。
+   * `PromotionRun`: `owner/admin` は同一 tenant の preview / completed / failed を `SELECT` でき、年度繰り上げの `INSERT` と `preview → completed/failed`、`failed → completed/failed` の限定 `UPDATE` は `owner/admin` だけに許可します。`staff/guardian` は `SELECT/INSERT/UPDATE/DELETE` を拒否し、年度・tenant・actor・requestHashは `USING/WITH CHECK` で固定します。execute は対象行を `FOR UPDATE` でロックし、同一 idempotency key の同一 requestHash なら保存済み result を返します。
   * すべての policy の `USING/WITH CHECK` は tenant、user、role、担当部員条件を明示し、`app.tenant_id`、`app.user_id`、`app.role` のいずれかが未設定なら false になる fail-closed 条件にします。`cocolo_app` に policy を迂回する権限を与えません。
 * **RLSの検証:** tenant A / tenant B の owner・admin・guardian を用いた実 PostgreSQL 統合テストで、一覧・登録・更新・親子参照・context 未設定・guardian 担当外の越境ができないことを確認します。アプリ側の `tenantId` 条件だけを安全性の根拠にしません。
  * **Phase 1 確定モデル:** `Tenant`、`TenantMembership`、`Member`、`GuardianMember`、`AuditLog`、`PromotionRun` を初回 migration の対象にします。出欠は `Event` に `attendanceDeadline`、`meetingAt`、`opponent`、`transportRequired` を追加し、`EventAttendance` を次の migration で追加します。これらを「完全な Schema」と「予定」に混在させません。
@@ -833,7 +834,7 @@ Phase 1 の部員 API の入出力・監査契約は次で固定します。
 | `POST /api/v1/members` | owner/admin | `name,kana,category,gradeLevel,ageGroup,status`。`tenantId,id,note` は不可 | 作成した基本項目。`note` は返却不可 | `member.create` / staff・guardianは403 |
 | `PATCH /api/v1/members/:id` | owner/admin | `name,kana,category,gradeLevel,ageGroup` と `status`（`active` ↔ `suspended` のみ）。`tenantId,id,createdAt,note` は不可 | `id,name,kana,category,gradeLevel,ageGroup,status,createdAt` | `member.update` / tenant外は404相当 |
 | `DELETE /api/v1/members/:id` | owner/admin | URLの UUIDv7 のみ。`status=retired` への状態遷移 | `204`。既に retired でも同じ結果 | `member.retire` と `previousStatus,nextStatus,requestId` / staff・guardianは403 |
-| `POST /api/v1/members/promote` | owner/admin | `fiscalYear,mode`（`preview` / `execute`）。`execute` は `Idempotency-Key` 必須 | `promotionRunId,mode,targetCount,skippedCount,status`。同一tenant・年度の2回目executeは同じ結果 | `member.promote.preview` / `member.promote.execute`。staff・guardianは403、tenant外は404相当 |
+| `POST /api/v1/members/promote` | owner/admin | preview: `fiscalYear,mode=preview`。execute: `fiscalYear,mode=execute,promotionRunId` と `Idempotency-Key` 必須 | `promotionRunId,mode,targetCount,skippedCount,status`。同一tenant・年度の2回目execute、または同一key・同一requestHashの再送は同じ保存結果 | `member.promote.preview` / `member.promote.execute`。staff・guardianは403、tenant外は404相当、key再利用でrequestHash不一致は409 |
 | `GET /api/v1/members/:id/private-note` | Phase 1 は未提供 | なし | なし | Phase 2でowner/admin専用として再設計 |
 
 API DTO は role ごとに別 schema を持ち、staff / guardian のレスポンスに電話番号、note、保護者識別子、監査 metadata を混入させません。別テナント・担当外資源は存在判定を推測できない外部結果に統一します。
@@ -854,7 +855,7 @@ Phase 1 の実装開始前に、次の契約を選択肢なしで `packages/db/p
 * **Member:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、`name`（必須）、`kana`、`category MemberCategory`（`student` / `adult`）、`gradeLevel`、`ageGroup`、`status MemberStatus`（`active` / `retired` / `suspended`）、`note`、`createdAt`。Phase 1 の POST DTO は `note` を受け付けず、管理者専用の別操作でのみ扱います。
 * **GuardianMember:** `id String @db.Uuid`、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、外部 `userId String @db.VarChar(128)`、`memberId String @db.Uuid`、`relationship`、`consentedAt`、`@@unique([tenantId, userId, memberId])`、Member への複合 relation は `onDelete: Restrict`。`FOREIGN KEY(tenantId, memberId) REFERENCES members(tenantId, id)` とし、テナントの異なる部員を参照できないようにします。Phase 1 は Member を物理削除せず retired 化し、将来の消去処理では GuardianMember を先に削除してから Member を削除します。
 * **AuditLog:** `id String @db.Uuid`（UUIDv7）、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、actor の外部 `userId String @db.VarChar(128)`、`action`、`resourceType`、nullable の `resourceId String @db.Uuid`、`metadata Json`（許可キーと最大8KBを入力スキーマで制限）、`createdAt`、`@@index([tenantId, createdAt])`。アプリの更新 API から delete を公開せず append-only とします。
-* **PromotionRun:** `id String @db.Uuid`（UUIDv7）、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、`fiscalYear Int`（`CHECK 2000〜2100`）、`status PromotionRunStatus`（`preview` / `completed` / `failed`）、`previewCount Int`、`executedAt DateTime?`、外部 `actorUserId String @db.VarChar(128)`、`createdAt DateTime`、`@@unique([tenantId, fiscalYear])`。年度繰り上げの冪等性と実行監査を担保し、Phase 1 の完了条件に含めます。
+* **PromotionRun:** `id String @db.Uuid`（UUIDv7）、`tenantId String @db.Uuid`（Tenantへ `onDelete: Restrict`）、`fiscalYear Int`（`CHECK 2000〜2100`）、`status PromotionRunStatus`（`preview` / `completed` / `failed`）、`previewCount Int @default(0)`、`executedAt DateTime?`、外部 `actorUserId String @db.VarChar(128)`、`idempotencyKey String? @db.VarChar(128)`、`requestHash String? @db.Char(64)`、`result Json?`、`createdAt DateTime @default(now())`、`@@unique([tenantId, id])`、`@@unique([tenantId, fiscalYear])`、`@@unique([tenantId, idempotencyKey])`。preview は `preview → completed/failed`、失敗再試行は `failed → completed/failed` だけを許可し、tenant・年度・actor・requestHashは変更不可とします。execute の同一 idempotency key と同一 requestHash は保存済み result を返し、異なる requestHash は409とします。年度繰り上げの冪等性と実行監査を担保し、Phase 1 の完了条件に含めます。
 
 `Role`、`MembershipStatus`、`MemberCategory`、`MemberStatus`、`PromotionRunStatus` は Prisma enum として上記の値だけを定義します。Phase 1 の Prisma relation、`onDelete`、nullability、default、index、unique、CHECK はこの契約から省略しません。
 
