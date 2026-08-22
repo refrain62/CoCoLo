@@ -1,6 +1,9 @@
-CREATE TYPE announcement_status AS ENUM ('published', 'archived');
+DO $$ BEGIN
+  CREATE TYPE announcement_status AS ENUM ('published', 'archived');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE announcements (
+CREATE TABLE IF NOT EXISTS announcements (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   author_user_id varchar(128) NOT NULL,
@@ -13,7 +16,7 @@ CREATE TABLE announcements (
   CHECK (length(btrim(body)) BETWEEN 1 AND 20000)
 );
 
-CREATE TABLE announcement_attachments (
+CREATE TABLE IF NOT EXISTS announcement_attachments (
   tenant_id uuid NOT NULL,
   announcement_id uuid NOT NULL,
   attachment_id uuid NOT NULL,
@@ -28,7 +31,7 @@ CREATE TABLE announcement_attachments (
   CHECK (media_type IN ('image/jpeg', 'image/png', 'application/pdf'))
 );
 
-CREATE TABLE announcement_reads (
+CREATE TABLE IF NOT EXISTS announcement_reads (
   tenant_id uuid NOT NULL,
   announcement_id uuid NOT NULL,
   user_id varchar(128) NOT NULL,
@@ -38,13 +41,13 @@ CREATE TABLE announcement_reads (
     REFERENCES announcements(tenant_id, id) ON DELETE CASCADE
 );
 
-CREATE INDEX announcements_tenant_status_published_idx
+CREATE INDEX IF NOT EXISTS announcements_tenant_status_published_idx
   ON announcements(tenant_id, status, published_at DESC, id DESC);
-CREATE INDEX announcement_attachments_tenant_announcement_idx
+CREATE INDEX IF NOT EXISTS announcement_attachments_tenant_announcement_idx
   ON announcement_attachments(tenant_id, announcement_id, position);
-CREATE INDEX announcement_reads_tenant_announcement_idx
+CREATE INDEX IF NOT EXISTS announcement_reads_tenant_announcement_idx
   ON announcement_reads(tenant_id, announcement_id, read_at);
-CREATE INDEX announcement_reads_tenant_user_idx
+CREATE INDEX IF NOT EXISTS announcement_reads_tenant_user_idx
   ON announcement_reads(tenant_id, user_id, read_at);
 
 COMMENT ON TABLE announcements IS 'テナント内で公開する回覧板。本文と掲載者を保持する';
@@ -110,6 +113,26 @@ REVOKE ALL ON FUNCTION app_is_active_announcement_member(uuid, varchar) FROM PUB
 REVOKE ALL ON FUNCTION app_is_announcement_author(uuid, uuid, varchar) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_is_active_announcement_member(uuid, varchar) TO cocolo_app;
 GRANT EXECUTE ON FUNCTION app_is_announcement_author(uuid, uuid, varchar) TO cocolo_app;
+
+-- 中央統合migrationが先に作成した回覧policyを、回覧featureの厳格なpolicyへ置き換える。
+DO $$
+DECLARE
+  existing_policy record;
+BEGIN
+  FOR existing_policy IN
+    SELECT tablename, policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN ('announcements', 'announcement_attachments', 'announcement_reads')
+  LOOP
+    EXECUTE format(
+      'DROP POLICY IF EXISTS %I ON public.%I',
+      existing_policy.policyname,
+      existing_policy.tablename
+    );
+  END LOOP;
+END
+$$;
 
 CREATE POLICY announcements_select ON announcements
   FOR SELECT
