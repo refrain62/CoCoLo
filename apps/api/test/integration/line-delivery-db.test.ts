@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import test from 'node:test';
+import nodeTest from 'node:test';
 import {
   createMemberRepositories,
   createPrismaClient,
@@ -13,6 +13,7 @@ import {
   type LineDeliveryDatabase,
 } from '../../dist/line-delivery-scheduler.js';
 
+const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
 const ACTOR = 'owner-a';
 const RACE_ACTOR = 'owner-b';
@@ -42,6 +43,13 @@ const api = createApp({
   },
   ...apiRepositories,
 });
+
+// outbox claim対象を共有するため、LINE配信のDB統合テストは同時実行しない。
+const test = Object.assign(
+  (name: string, fn: () => Promise<void>) =>
+    nodeTest(name, { concurrency: false }, fn),
+  { after: nodeTest.after },
+);
 
 function workerDatabase(): LineDeliveryDatabase {
   return {
@@ -107,7 +115,7 @@ test('同一tenantで別sourceがIdempotency-Keyを再利用しても500では�
   const rows = await owner.$queryRaw<Array<{ count: bigint }>>`
     SELECT count(*)::bigint AS count
       FROM line_delivery_outbox
-     WHERE tenant_id = ${TENANT_B}::uuid
+     WHERE tenant_id = ${TENANT_A}::uuid
        AND idempotency_key = ${idempotencyKey}
   `;
   assert.deepEqual(rows, [{ count: 1n }]);
@@ -310,9 +318,11 @@ test('unknown確定は古いtokenまたは期限切れleaseでは状態を変更
     title: 'unknown lease guard統合テスト',
   });
   const repository = createPostgresLineDeliveryRepository(workerDatabase());
+  const signal = new AbortController().signal;
   const firstClaim = await repository.claimDue({
     maxAttempts: 5,
     leaseMs: 5000,
+    signal,
   });
   assert.ok(firstClaim);
   assert.equal(firstClaim.notificationId, notificationId);
