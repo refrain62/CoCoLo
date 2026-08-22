@@ -8,7 +8,7 @@
       "network": "none",
       "ruleFile": ".gitleaks.toml",
       "command": [
-        "git",
+        "dir",
         "--config",
         "/src/.gitleaks.toml",
         "--redact",

@@ -40,7 +40,7 @@ test('scanner imageは固定allowlistと対応するdigestだけを受理する'
   );
 });
 
-test('Gitleaksはgit履歴を検査する固定コマンドになっている', async () => {
+test('Gitleaksはgitなしの隔離headディレクトリを検査する固定コマンドになっている', async () => {
   const configText = await readFile(
     path.join(root, '.github', 'security', 'security-scanners.json'),
     'utf8',
@@ -48,7 +48,9 @@ test('Gitleaksはgit履歴を検査する固定コマンドになっている', 
   const config = JSON.parse(configText) as {
     tools: { gitleaks: { command: string[] } };
   };
-  assert.equal(config.tools.gitleaks.command[0], 'git');
+  assert.equal(config.tools.gitleaks.command[0], 'dir');
+  assert.equal(config.tools.gitleaks.command.at(-1), '/src');
+  assert.ok(!config.tools.gitleaks.command.includes('git'));
 });
 
 test('scannerのcommand、network、ルール本文は固定allowlistと一致する', async () => {
@@ -169,6 +171,11 @@ test('固定malicious fixtureのscanner信頼対象改変を拒否する', async
     changedFiles: string[];
     disableAttempts: string[];
   };
+  assert.deepEqual(fixture.scannerRegression, {
+    tool: 'gitleaks',
+    mode: 'directory',
+    requiresGitDirectory: false,
+  });
   assert.deepEqual(fixture.changedFiles, [...trustedScannerFiles]);
   assert.ok(
     fixture.disableAttempts.includes('.github/workflows/security-scanners.yml'),

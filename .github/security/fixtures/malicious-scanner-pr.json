@@ -1,6 +1,11 @@
 {
   "description": "固定malicious fixture: trust jobとsecurity gateを無効化し、scannerの設定・parser・validator・CODEOWNERSを同時改変するPR",
   "tamperedFile": "scripts/security-scanner-summary.ts",
+  "scannerRegression": {
+    "tool": "gitleaks",
+    "mode": "directory",
+    "requiresGitDirectory": false
+  },
   "disableAttempts": [
     "scripts/prepare-security-target.ts",
     "scripts/verify-security-trust.ts",

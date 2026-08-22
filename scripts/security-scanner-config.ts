@@ -105,7 +105,7 @@ paths:
 
 const scannerCommandAllowlist: Record<ScannerName, string[]> = {
   gitleaks: [
-    'git',
+    'dir',
     '--config',
     '/src/.gitleaks.toml',
     '--redact',

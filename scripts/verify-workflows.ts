@@ -1172,7 +1172,7 @@ node scripts/verify-security-trust.ts`,
   );
   validateSecurityRunStep(
     scannerSteps[4],
-    '固定digest scannerを実行',
+    '固定digest scannerでhead directoryを実行',
     'pnpm security:scan',
   );
 

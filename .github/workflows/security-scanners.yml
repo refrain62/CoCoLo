@@ -122,7 +122,7 @@ jobs:
           check-latest: false
       - name: base側checkerでhead対象を準備
         run: node scripts/prepare-security-target.ts
-      - name: 固定digest scannerを実行
+      - name: 固定digest scannerでhead directoryを実行
         run: pnpm security:scan
 
   gate:
