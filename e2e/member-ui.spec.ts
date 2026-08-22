@@ -36,15 +36,16 @@ test('部員一覧は検索条件を送り、公開項目だけを表示する',
   await page.goto('/members');
 
   await expect(
-    page.getByRole('heading', { name: '部員一覧' }),
+    page.getByRole('heading', { name: '部員一覧', exact: true }),
   ).toBeVisible();
   await expect(page.getByText('山田太郎')).toBeVisible();
   await expect(page.getByText('小4')).toBeVisible();
   await expect(page.getByText('090-0000-0000')).toHaveCount(0);
   await expect(page.getByText('画面に表示してはいけない情報')).toHaveCount(0);
 
-  await page.getByLabel('検索').fill('山田');
-  await page.getByRole('button', { name: '検索' }).click();
+  const filters = page.getByRole('region', { name: '検索・絞り込み' });
+  await filters.getByLabel('検索').fill('山田');
+  await filters.getByRole('button', { name: '検索' }).click();
 
   await expect
     .poll(() => requests.at(-1)?.url.searchParams.get('q'))
@@ -74,15 +75,16 @@ test('部員登録はstudentの必須項目を検証し、tenant情報を送ら�
   await setAccessToken(page);
 
   await page.goto('/members');
+  const registration = page.getByRole('region', { name: '部員登録操作' });
   await page.getByRole('button', { name: '部員を登録' }).click();
-  await page.getByLabel('氏名').fill('佐藤花子');
-  await page.getByLabel('区分').selectOption('student');
-  await page.getByRole('button', { name: '登録する' }).click();
+  await registration.getByLabel('氏名').fill('佐藤花子');
+  await registration.getByLabel('区分').selectOption('student');
+  await registration.getByRole('button', { name: '登録する' }).click();
   await expect(page.getByText('学年を入力してください')).toBeVisible();
   expect(postBody).toBeUndefined();
 
-  await page.getByLabel('学年').fill('2');
-  await page.getByRole('button', { name: '登録する' }).click();
+  await registration.getByLabel('学年').fill('2');
+  await registration.getByRole('button', { name: '登録する' }).click();
   await expect(page.getByText('登録しました')).toBeVisible();
   expect(postBody).toMatchObject({
     name: '佐藤花子',
@@ -114,11 +116,12 @@ test('登録権限がないAPI応答を権限エラーとして表示する', as
   await setAccessToken(page);
 
   await page.goto('/members');
+  const registration = page.getByRole('region', { name: '部員登録操作' });
   await page.getByRole('button', { name: '部員を登録' }).click();
-  await page.getByLabel('氏名').fill('権限外登録');
-  await page.getByLabel('区分').selectOption('adult');
-  await page.getByLabel('年代').fill('30代');
-  await page.getByRole('button', { name: '登録する' }).click();
+  await registration.getByLabel('氏名').fill('権限外登録');
+  await registration.getByLabel('区分').selectOption('adult');
+  await registration.getByLabel('年代').fill('30代');
+  await registration.getByRole('button', { name: '登録する' }).click();
 
   await expect(page.getByText('登録権限がありません。')).toBeVisible();
 });
