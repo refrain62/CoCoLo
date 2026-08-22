@@ -60,7 +60,13 @@ const RideOperationsPanel = lazy(() =>
 );
 
 import { createMemberApi, type MemberApi } from './member-api.js';
-import { MemberManagementPage } from './member-management-page.js';
+
+const MemberManagementPage = lazy(() =>
+  import('./member-management-page.js').then(
+    ({ MemberManagementPage: page }) => ({ default: page }),
+  ),
+);
+
 import { UserManualPage } from './user-manual-page.js';
 
 export type CentralResourceFeature =
@@ -609,7 +615,15 @@ function renderCentralRoute(
     case 'members':
       return managerRoles.has(role) ? (
         <IntegrationNotice>
-          <MemberManagementPage api={apis.member} />
+          <Suspense
+            fallback={
+              <p className="central-state" role="status">
+                部員管理画面を読み込み中…
+              </p>
+            }
+          >
+            <MemberManagementPage api={apis.member} />
+          </Suspense>
         </IntegrationNotice>
       ) : (
         <AccessDenied message="部員管理画面はオーナーまたは管理者だけが利用できます。" />
