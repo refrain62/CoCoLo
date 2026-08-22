@@ -19,7 +19,7 @@
     "scripts/package-release.ts": "83979de776096e1c7a6e0953c7b9876b8399c70f7a7140c846820e1ca1e62513",
     "scripts/prisma-validate.ts": "d6873d328345f8cf888ae74f99678796c18f6d583d149b02d6b92914182dcc20",
     "scripts/verify-database-security.test.ts": "f8a556afb0ea3ca9406098bcd00d49ec4c7f30210b6489281a6f7d5893399f65",
-    "scripts/verify-database-security.ts": "1e99fca30b4939e3de91e779bafd422342f3ada9c9d0fc36584a535cb9e8db0e",
+    "scripts/verify-database-security.ts": "8d7f91c1cdae2c866ebe28ebdab1d25b75d1d81e4eaaddff64556148ca9da876",
     "scripts/verify-migration-baseline.test.ts": "c9af826bf0aaaa63eaf054303961e3b8940f9350daf7b00e96bbaf8e194cc0fc",
     "scripts/verify-migration-baseline.ts": "86b31e9aa466786477e2899d6bdb7a1dbe16cefcd598075068a6b95e346af8f2",
     "scripts/verify-migration-checksum.test.ts": "6a809e95e63221b3ad90aa2c449079e0b3991d82b476700ca4fa818558f9fcf6",

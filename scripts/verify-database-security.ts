@@ -162,7 +162,7 @@ async function inspectDatabase(
          WHERE rolname = 'cocolo_app'
       ),
       security_function AS (
-        SELECT p.oid, p.proowner, p.prosecdef, p.proconfig
+        SELECT p.oid, p.proowner, p.prosecdef, p.proconfig, p.proacl
           FROM pg_proc p
           JOIN pg_namespace n ON n.oid = p.pronamespace
          WHERE n.nspname = 'public'
