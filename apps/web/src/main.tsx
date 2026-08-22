@@ -1,12 +1,12 @@
 import { AppShell } from '@cocolo/ui';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MemberManagementPage } from './member-management-page.js';
 
 function App() {
   return (
     <AppShell>
-      <h1>CoCoLo</h1>
-      <p>チーム運営を、心をひとつに。</p>
+      <MemberManagementPage />
     </AppShell>
   );
 }
