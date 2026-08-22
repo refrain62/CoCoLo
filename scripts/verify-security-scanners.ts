@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
+import { securityScanRoot } from './security-scan-root.ts';
 import {
   readScannerConfig,
   type ScannerName,
@@ -10,7 +10,9 @@ import {
   scannerRuleAllowlist,
 } from './security-scanner-config.ts';
 
-const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const root = securityScanRoot(
+  path.dirname(path.dirname(fileURLToPath(import.meta.url))),
+);
 const workflowPath = path.join(
   root,
   '.github',
@@ -60,10 +62,9 @@ assert.equal(
 );
 
 assert.match(workflow, /^name:\s*セキュリティ検査\s*$/m);
-assert.match(workflow, /^\s*pull_request:\s*$/m);
+assert.match(workflow, /^\s*pull_request_target:\s*$/m);
 assert.match(workflow, /^\s*push:\s*$/m);
 assert.match(workflow, /^\s*schedule:\s*$/m);
-assert.match(workflow, /^\s*workflow_dispatch:\s*$/m);
 assert.match(workflow, /concurrency:/);
 assert.match(workflow, /timeout-minutes:/);
 assert.match(workflow, /node-version:\s*24\.12\.0/);
@@ -74,7 +75,8 @@ assert.match(workflow, /if:\s*\$\{\{\s*always\(\)/);
 assert.match(workflow, /needs\.config\.result/);
 assert.match(workflow, /needs\.scanners\.result/);
 assert.match(workflow, /contents:\s*read/);
-assert.doesNotMatch(workflow, /pull_request_target|workflow_run|secrets\s*:/);
+assert.doesNotMatch(workflow, /^\s*pull_request:\s*$/m);
+assert.doesNotMatch(workflow, /workflow_run|secrets\s*:/);
 assert.doesNotMatch(workflow, /environment\s*:/);
 assert.doesNotMatch(workflow, /upload-artifact|deploy/i);
 assert.doesNotMatch(workflow, /^\s*run:.*\$\{\{/m);

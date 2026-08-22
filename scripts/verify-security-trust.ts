@@ -20,6 +20,8 @@ export const trustedScannerFiles = [
   'package.json',
   'pnpm-lock.yaml',
   'scripts/run-security-scanners.ts',
+  'scripts/prepare-security-target.ts',
+  'scripts/security-scan-root.ts',
   'scripts/security-scanner-config.ts',
   'scripts/security-scanner-summary.ts',
   'scripts/security-scanner.test.ts',

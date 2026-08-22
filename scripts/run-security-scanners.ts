@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { finished } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-
+import { securityScanRoot } from './security-scan-root.ts';
 import {
   readScannerConfig,
   type ScannerName,
@@ -14,7 +14,9 @@ import {
 } from './security-scanner-config.ts';
 import { summarizeScannerResult } from './security-scanner-summary.ts';
 
-const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const root = securityScanRoot(
+  path.dirname(path.dirname(fileURLToPath(import.meta.url))),
+);
 const outputRoot = path.join(
   process.env.RUNNER_TEMP ?? os.tmpdir(),
   `cocolo-security-scanners-${process.pid}`,
