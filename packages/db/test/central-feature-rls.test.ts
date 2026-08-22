@@ -549,6 +549,25 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
     );
   });
 
+  await rejects(() =>
+    execute(
+      direct,
+      `INSERT INTO line_webhook_receipts
+         (tenant_id, group_id, webhook_event_id, received_at)
+       VALUES ($1::uuid, 'CcentralA', 'webhook-fixture', now())`,
+      tenantA,
+    ),
+  );
+  await rejects(() =>
+    execute(
+      direct,
+      `UPDATE line_connections
+          SET group_id = 'CcentralA'
+        WHERE tenant_id = $1::uuid`,
+      tenantB,
+    ),
+  );
+
   await withContext(app, tenantB, 'owner-b', 'owner', async (tx) => {
     assert.equal(await count(tx, 'events'), 1);
     assert.equal(await count(tx, 'attachments'), 1);
@@ -699,6 +718,34 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
   assert.equal(queuedOutboxes.length, 2);
   assert.ok(queuedOutboxes.every((row) => row.status === 'delivered'));
   assert.ok(queuedOutboxes.every((row) => row.queue_id));
+
+  await withContext(app, tenantA, 'owner-a', 'owner', async (tx) => {
+    await enqueueOutbox(
+      tx,
+      tenantA,
+      'owner-a',
+      outboxSourceA,
+      '送信済み後の更新試行',
+      '2099-09-01T00:00:00Z',
+    );
+  });
+  const deliveredOutbox = await rows<{
+    title: string;
+    deliver_at: string;
+    status: string;
+  }>(
+    direct,
+    `SELECT title,
+            to_char(deliver_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deliver_at,
+            status
+       FROM line_notification_outbox
+      WHERE tenant_id = $1::uuid AND source_id = $2`,
+    tenantA,
+    outboxSourceA,
+  );
+  assert.equal(deliveredOutbox[0]?.status, 'delivered');
+  assert.equal(deliveredOutbox[0]?.title, '予定通知A（更新）');
+  assert.equal(deliveredOutbox[0]?.deliver_at, '2099-07-02T00:00:00Z');
 
   await execute(
     direct,
