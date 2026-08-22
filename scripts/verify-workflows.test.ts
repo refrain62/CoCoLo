@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validateQualityWorkflow } from './verify-workflows.ts';
 
+function githubExpression(body: string) {
+  return ['$', '{', '{ ', body, ' }}'].join('');
+}
+
 const validWorkflow = [
   'on:',
   '  pull_request:',
@@ -11,8 +15,16 @@ const validWorkflow = [
   'permissions:',
   '  contents: read',
   'concurrency:',
-  '  group: quality-${{ github.workflow }}-${{ github.ref }}',
-  "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+  [
+    '  group: quality-',
+    githubExpression('github.workflow'),
+    '-',
+    githubExpression('github.ref'),
+  ].join(''),
+  [
+    '  cancel-in-progress: ',
+    githubExpression("github.event_name == 'pull_request'"),
+  ].join(''),
   'jobs:',
   '  quality:',
   '    runs-on: ubuntu-24.04',
@@ -35,12 +47,57 @@ test('pull_request_targetを含むworkflowを拒否する', () => {
   );
 });
 
+test('コメントでpull_requestを偽装するworkflowを拒否する', () => {
+  assert.throws(() =>
+    validateQualityWorkflow(
+      validWorkflow.replace('  pull_request:', '  # pull_request:'),
+    ),
+  );
+});
+
+test('job単位のwrite権限を拒否する', () => {
+  assert.throws(() =>
+    validateQualityWorkflow(
+      validWorkflow.replace(
+        '    timeout-minutes: 10',
+        '    timeout-minutes: 10\n    permissions:\n      contents: write',
+      ),
+    ),
+  );
+});
+
 test('checkout credentialを保持するworkflowを拒否する', () => {
   assert.throws(() =>
     validateQualityWorkflow(
       validWorkflow.replace(
         'persist-credentials: false',
         'persist-credentials: true',
+      ),
+    ),
+  );
+});
+
+test('checkout以外のstepにcredential設定を置く改変を拒否する', () => {
+  assert.throws(() =>
+    validateQualityWorkflow(
+      validWorkflow.replace(
+        '          persist-credentials: false',
+        '      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020\n        with:\n          persist-credentials: false',
+      ),
+    ),
+  );
+});
+
+test('runへのGitHub context直接展開を拒否する', () => {
+  assert.throws(() =>
+    validateQualityWorkflow(
+      validWorkflow.replace(
+        '    steps:',
+        [
+          '    steps:\n      - run: echo "',
+          githubExpression('github.sha'),
+          '"',
+        ].join(''),
       ),
     ),
   );
