@@ -66,6 +66,28 @@ function createTestApp() {
         createdAt: '2026-08-22T00:00:00.000Z',
         actorUserId,
       }),
+      update: async ({ tenantId, memberId, member: input }) => ({
+        id: memberId,
+        tenantId,
+        name: input.name,
+        kana: input.kana ?? null,
+        category: input.category,
+        gradeLevel: input.gradeLevel ?? null,
+        ageGroup: input.ageGroup ?? null,
+        status: input.status,
+        createdAt: members[0]?.createdAt ?? '2026-08-22T00:00:00.000Z',
+      }),
+      retire: async ({ tenantId, memberId }) => ({
+        id: memberId,
+        tenantId,
+        name: members[0]?.name ?? 'テスト部員',
+        kana: members[0]?.kana ?? null,
+        category: members[0]?.category ?? 'student',
+        gradeLevel: members[0]?.gradeLevel ?? null,
+        ageGroup: members[0]?.ageGroup ?? null,
+        status: 'retired',
+        createdAt: members[0]?.createdAt ?? '2026-08-22T00:00:00.000Z',
+      }),
     },
   });
 }
@@ -239,6 +261,100 @@ test('owner の登録は所属情報のテナントで作成し、note を永続
   assert.equal(payload.data.note, undefined);
 });
 
+test('staff 権限による部員編集と退部は403で拒否する', async () => {
+  const updateResponse = await createTestApp().request(
+    `/api/v1/members/${MEMBER_A}`,
+    {
+      method: 'PATCH',
+      headers: {
+        authorization: 'Bearer staff-a',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: '編集不可',
+        category: 'student',
+        gradeLevel: 10,
+        status: 'active',
+      }),
+    },
+  );
+  const retireResponse = await createTestApp().request(
+    `/api/v1/members/${MEMBER_A}/retire`,
+    { method: 'POST', headers: { authorization: 'Bearer staff-a' } },
+  );
+
+  assert.equal(updateResponse.status, 403);
+  assertError(await readJson(updateResponse), 'FORBIDDEN');
+  assert.equal(retireResponse.status, 403);
+  assertError(await readJson(retireResponse), 'FORBIDDEN');
+});
+
+test('owner の編集は認証コンテキストのテナントで実行する', async () => {
+  const response = await createTestApp().request(
+    `/api/v1/members/${MEMBER_A}`,
+    {
+      method: 'PATCH',
+      headers: {
+        authorization: 'Bearer owner-a',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: '更新後の部員',
+        kana: 'こうしんごのぶいん',
+        category: 'student',
+        gradeLevel: 10,
+        ageGroup: null,
+        status: 'suspended',
+      }),
+    },
+  );
+  const payload = await readJson<Record<string, unknown>>(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.data.name, '更新後の部員');
+  assert.equal(payload.data.status, 'suspended');
+  assert.equal(payload.data.tenantId, undefined);
+});
+
+test('不正な部員IDと退部入力は400で拒否する', async () => {
+  const invalidIdResponse = await createTestApp().request(
+    '/api/v1/members/not-a-uuid/retire',
+    { method: 'POST', headers: { authorization: 'Bearer owner-a' } },
+  );
+  const invalidBodyResponse = await createTestApp().request(
+    `/api/v1/members/${MEMBER_A}`,
+    {
+      method: 'PATCH',
+      headers: {
+        authorization: 'Bearer owner-a',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: '区分不整合',
+        category: 'adult',
+        gradeLevel: 1,
+        status: 'active',
+      }),
+    },
+  );
+
+  assert.equal(invalidIdResponse.status, 400);
+  assertError(await readJson(invalidIdResponse), 'VALIDATION_ERROR');
+  assert.equal(invalidBodyResponse.status, 400);
+  assertError(await readJson(invalidBodyResponse), 'VALIDATION_ERROR');
+});
+
+test('owner の退部操作は退部結果を返す', async () => {
+  const response = await createTestApp().request(
+    `/api/v1/members/${MEMBER_A}/retire`,
+    { method: 'POST', headers: { authorization: 'Bearer owner-a' } },
+  );
+  const payload = await readJson<Record<string, unknown>>(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.data.status, 'retired');
+});
+
 test('リポジトリの予期しない失敗は requestId 付きの500へ収束する', async () => {
   const app = createApp({
     verifyToken: async () => ({
@@ -255,6 +371,8 @@ test('リポジトリの予期しない失敗は requestId 付きの500へ収束
       create: async () => {
         throw new Error('database failure');
       },
+      update: async () => null,
+      retire: async () => null,
     },
   });
   const response = await app.request('/api/v1/members', {

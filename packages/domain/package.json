@@ -4,7 +4,19 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./line": "./dist/line-domain.js"
+    "./line": "./dist/line-domain.js",
+    "./auth-team-selection": "./dist/auth-team-selection-domain.js",
+    "./ride": {
+      "types": "./dist/ride-domain.d.ts",
+      "import": "./dist/ride-domain.js"
+    },
+    "./orders": {
+      "types": "./dist/orders-domain.d.ts",
+      "import": "./dist/orders-domain.js"
+    },
+    "./bulletin-board": "./dist/bulletin-board-domain.js",
+    "./attachment": "./dist/attachment-domain.js",
+    "./event": "./dist/event-domain.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
