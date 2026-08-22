@@ -11,6 +11,8 @@
 | Supabase Auth | Phase 1 で利用中 | ログイン、JWT 発行、ユーザー停止・資格情報管理 |
 | Supabase PostgreSQL | Phase 1 で利用中 | アプリケーションデータ、RLS、監査ログ、マイグレーション |
 | Cloudflare R2 | Phase 4 でadapter導入中 | 非公開の添付ファイル保存・配信 |
+| Cloudflare R2 | Phase 4 でadapter導入中 | 非公開の添付ファイル保存・配信 |
+| LINE Messaging API | Phase 4 の通知機能で利用 | 接続済みチームへの予定、締切、回覧の通知と Webhook |
 | Cloudflare の配置先 | 環境固有の配置アダプターで接続 | Web/API の配置と HTTPS 公開 |
 | GitHub Actions | CI/CD で利用中 | 品質検査、staging 配置、production 昇格、証跡保存 |
 
@@ -25,6 +27,7 @@ Cloudflare R2 のように段階導入中のサービスは、導入前にこの
        ├─ Supabase Auth の JWT を検証
        ├─ Supabase PostgreSQL（現行。将来は分離先 PostgreSQL）へアプリケーションデータを保存
        ├─ Cloudflare R2 へ署名付きアップロードを発行（Phase 4）
+       ├─ LINE Messaging API へ通知を送信（Phase 4）
        └─ Cloudflare の配置先へ配置アダプター経由で公開
 
 GitHub Actions
@@ -149,7 +152,7 @@ R2 の実接続adapterを有効化する前に、次を完了させます。
 
 ### 6.2 添付ファイルの契約
 
-- DB にはテナント、所有者、MIME、サイズ、オブジェクトキー、SHA-256、状態、削除時刻だけを記録します。
+- DB にはテナント、所有者、MIME、サイズ、オブジェクトキー、SHA-256、状態、期限、完了試行回数、cleanup試行回数を記録します。オブジェクト本体は記録しません。
 - オブジェクトキーへ利用者入力のファイル名をそのまま使用しません。テナント ID と添付 ID を基礎にしたサーバー生成キーを使用します。
 - API は所属、権限、セッション所有者、テナント、期限、未使用、上書き不可、実体サイズ、マジックバイト、SHA-256 を再検証します。
 - 状態は `uploaded → available → deleted` または `uploaded → rejected` のみを許可します。
@@ -157,6 +160,9 @@ R2 の実接続adapterを有効化する前に、次を完了させます。
 - R2 の管理画面 URL、公開 URL、アクセスキーを利用者向けレスポンスやログへ出力しません。
 - R2 実接続adapterは、署名前に対象 object の存在と metadata を確認します。PUT は既存 object に署名せず、GET は存在しない object に署名せず、DELETE は短期署名 URL で実行します。
 - 外部資格情報を使えない検証環境では、HTTP stub を S3 互換 endpoint として使い、secret のログ出力や公開 URL 化を伴わずに署名・metadata・削除の挙動を確認します。
+- 実装では`uploaded`の完了検証を3回まで再試行し、検証不能または形式不正を`rejected`へ遷移させます。
+- `rejected`本体の削除に失敗した場合は`cleanup_completed_at`を空のまま残し、利用者または運用ジョブがcleanupを再試行します。
+- 完了操作が届かない期限切れセッションは、管理者または運用ジョブが期限切れcleanup APIを実行して24時間以内の削除対象へ回収します。
 
 ### 6.3 R2 障害時
 
@@ -165,24 +171,69 @@ R2 の実接続adapterを有効化する前に、次を完了させます。
 - R2 の読み取り障害中に、公開バケットへの切り替えや長期間有効な署名 URL の発行を行いません。
 - 復旧後は、アップロード、完了検証、認可済みダウンロード、別テナント拒否、期限切れ削除を staging で確認します。
 
-## 7. GitHub Actions と配置サービスの運用
+## 7. LINE Messaging API の運用
 
-### 7.1 Secret と Variable
+### 7.1 設定と責務
+
+LINE の channel secret と channel access token は環境ごとに分離し、API 専用の Secret として管理します。
+
+`LINE_WEBHOOK_DESTINATION` は署名検証後の送信先検証に使い、別 channel の payload を受け付けないための環境固定値です。
+
+`LINE_LIFF_ID` は LIFF を使う環境だけへ設定し、state へ任意 URL や tenant ID を渡しません。
+
+ブラウザは channel secret、channel access token、Webhook の受信処理を参照しません。
+
+予定、締切、回覧の各機能は通知 DTO と queue 境界だけを利用し、LINE SDK や provider のレスポンス形式へ依存しません。
+
+### 7.2 グループ紐付けと配信
+
+group ID は `line_connections` で一つの tenant にだけ紐付け、接続解除時は webhook の対象から外します。
+
+queue は作成時の送信対象 group ID を保持し、接続解除後に別 group へ再接続しても古い通知を新 group へ送りません。
+
+未接続のチームは画面へ「未接続」と表示し、通知登録を成功扱いにしません。
+
+送信処理は `pending`、`sending`、`sent`、`failed` の状態を queue へ記録し、失敗時は上限付き指数バックオフで再試行します。
+
+全 tenant を処理する配信 worker は内部 job だけから起動し、owner や admin が呼び出せる HTTP endpoint を公開しません。
+
+provider の本文、token、個人情報をエラー記録や監視ラベルへ保存しません。
+
+### 7.3 Webhook
+
+Webhook は raw body の HMAC-SHA256 署名、destination、group ID の接続状態を順に検証します。
+
+`group_id + webhook_event_id` の重複排除キーを保存し、同じイベントを二度処理しません。
+
+未知の group や解除済み group のイベントは、LINE へ再送を要求せず安全に無視します。
+
+### 7.4 障害と復旧
+
+- LINE API の送信失敗は queue の `failed` として保存し、次回実行時刻と試行回数を表示します。
+- channel secret の検証失敗は `401` とし、署名検証を省略した受信経路へ切り替えません。
+- LINE の障害中に group ID の別 tenant への付け替え、公開 URL の配布、無制限再試行を行いません。
+- 復旧後は接続、未接続、送信、失敗、再試行、Webhook 重複、別 tenant 拒否を staging で確認します。
+
+LINE 機能の API、Web、DB、LIFF の統合手順は [Phase 4 LINE 通知統合手順](integration/phase4-line-notifications.md) を参照します。
+
+## 8. GitHub Actions と配置サービスの運用
+
+### 8.1 Secret と Variable
 
 - Secret には DB URL、Service Role Key、R2 秘密鍵、配置アダプター、E2E パスワードを登録します。
 - Variable には Supabase URL、JWKS URL、公開 URL、許可リスト、保持日数など、漏えいしても認証情報にならない値を登録します。
 - `staging` と `production` の Environment を分け、production の Secret は protected Environment の承認後だけ読み出します。
 - Secret の値を workflow の `echo`、artifact、配置記録、スクリーンショットへ出力しません。
 
-### 7.2 配置アダプター
+### 8.2 配置アダプター
 
 配置先のサービス固有処理は `STAGING_DEPLOY_ADAPTER` または `PRODUCTION_DEPLOY_ADAPTER` で指定した配置アダプターに閉じ込めます。アダプターは [デプロイ配置アダプター契約](deployment-adapter.md) を満たし、検証済み成果物と環境を受け取り、HTTPS の配置 URL と配置時刻を含む記録を作成します。
 
 配置記録が検証できない場合、staging E2E と production 昇格を続行しません。配置アダプターの変更は、サービス固有の認証、ロール、ネットワーク、ロールバック方法をこの文書へ追記してから行います。
 
-## 8. バックアップ・復旧
+## 9. バックアップ・復旧
 
-### 8.1 必須のバックアップ対象
+### 9.1 必須のバックアップ対象
 
 - PostgreSQL のアプリケーションデータ、監査ログ、マイグレーション履歴
 - Supabase Auth のユーザー・設定情報（提供機能と契約プランの範囲で取得）
@@ -191,7 +242,7 @@ R2 の実接続adapterを有効化する前に、次を完了させます。
 
 Auth と R2 は PostgreSQL のダンプだけでは復旧できません。サービスごとに復旧手順を持ち、DB の復旧時は Auth subject と添付メタデータの対応を確認します。
 
-### 8.2 復旧後の確認
+### 9.2 復旧後の確認
 
 1. 対象環境と復旧時点を記録する。
 2. PostgreSQL のスキーマ、RLS、ロール属性、マイグレーション履歴を確認する。
@@ -202,12 +253,13 @@ Auth と R2 は PostgreSQL のダンプだけでは復旧できません。サ�
 
 RPO、RTO、バックアップ保持期間は契約プランとチームの業務要件を確認して確定します。未確定のまま production を開始してはいけません。
 
-## 9. 変更・障害対応チェックリスト
+## 10. 変更・障害対応チェックリスト
 
 ### 外部サービスを追加・変更するとき
 
 - [ ] データを保存するサービスと、保存しないサービスを明記した。
 - [ ] `local`、`staging`、`production` のプロジェクト・バケット・URLを分離した。
+- [ ] LINE channel、group ID、Webhook destination、LIFF IDを環境ごとに分離した。
 - [ ] Secret と Variable の分類、登録者、ローテーション方法を記録した。
 - [ ] 権限最小化、TLS、公開アクセス無効化、監査ログを確認した。
 - [ ] 障害時に安全側へ倒れる状態と、復旧後の検証手順を追加した。
@@ -217,7 +269,7 @@ RPO、RTO、バックアップ保持期間は契約プランとチームの業�
 ### 障害が発生したとき
 
 - [ ] 環境、サービス、発生時刻、影響範囲を確定した。
-- [ ] 認証、DB、R2、配置先のどこが失敗しているかを分離した。
+- [ ] 認証、DB、R2、LINE、配置先のどこが失敗しているかを分離した。
 - [ ] 認証省略、公開バケット化、別環境接続などの危険な回避策を使っていない。
 - [ ] 書き込み再試行による二重登録・二重実行を防止した。
 - [ ] 復旧後のデータ整合性、テナント境界、監査ログを確認した。

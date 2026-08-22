@@ -18,7 +18,6 @@ export type AttachmentObjectMetadata = {
   contentType: string;
   metadata: Readonly<Record<string, string>>;
 };
-
 export type AttachmentStorage = {
   createSignedUpload: (input: {
     objectKey: string;
