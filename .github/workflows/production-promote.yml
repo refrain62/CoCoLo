@@ -14,7 +14,12 @@ jobs:
     environment: production
     concurrency: production-migration
     steps:
-      - name: staging環境の証跡と成果物をcheckout前に検証
+      - name: Workflow正本を取得
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: staging環境の証跡と成果物を検証
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_SHA: ${{ inputs.artifact_sha }}
@@ -29,10 +34,6 @@ jobs:
           jq -e --arg sha "$ARTIFACT_SHA" '(.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success")' .evidence/evidence.json
           test "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)" = "$(cut -d' ' -f1 .release/artifact.sha256)"
           gh attestation verify .release/release.tar.gz --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/staging-deploy.yml" --source-digest "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)"
-      - name: 検証済みSHAのリポジトリをcheckout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          ref: ${{ inputs.artifact_sha }}
       - name: pnpmを準備
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
@@ -44,6 +45,8 @@ jobs:
           cache: pnpm
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
+      - name: owner bootstrap済みのtrust rootを検証
+        run: pnpm verify:trust-root
       - name: リリース成果物を展開
         run: mkdir -p .release/extracted && tar -xzf .release/release.tar.gz -C .release/extracted
       - name: production環境の設定を検証
