@@ -30,10 +30,22 @@ export const memberCreateSchema = z
         path: ['gradeLevel'],
         message: 'studentにはgradeLevelが必要です',
       });
+    if (value.category === 'student' && value.ageGroup != null)
+      context.addIssue({
+        code: 'custom',
+        path: ['ageGroup'],
+        message: 'studentにはageGroupを指定できません',
+      });
     if (value.category === 'adult' && value.ageGroup == null)
       context.addIssue({
         code: 'custom',
         path: ['ageGroup'],
         message: 'adultにはageGroupが必要です',
+      });
+    if (value.category === 'adult' && value.gradeLevel != null)
+      context.addIssue({
+        code: 'custom',
+        path: ['gradeLevel'],
+        message: 'adultにはgradeLevelを指定できません',
       });
   });

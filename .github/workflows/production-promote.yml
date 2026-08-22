@@ -69,4 +69,6 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: 本番artifactを配置
-        run: echo '検証済みrelease artifactを本番へ配置しました。'
+        run: pnpm deploy:production --artifact-sha "${{ inputs.artifact_sha }}" --release-dir .release
+        env:
+          PRODUCTION_DEPLOY_ADAPTER: ${{ secrets.PRODUCTION_DEPLOY_ADAPTER }}

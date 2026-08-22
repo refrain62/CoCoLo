@@ -71,7 +71,9 @@ jobs:
         with:
           subject-path: .release/release.tar.gz
       - name: stagingへ配置
-        run: echo 'staging artifactを配置しました。実デプロイadapterは環境設定に従います。'
+        run: pnpm deploy:staging --artifact-sha "${GITHUB_SHA}" --release-dir .release
+        env:
+          STAGING_DEPLOY_ADAPTER: ${{ secrets.STAGING_DEPLOY_ADAPTER }}
       - name: staging E2E smoke
         run: pnpm test:e2e:staging
         env:
@@ -83,6 +85,8 @@ jobs:
         run: node scripts/create-staging-evidence.mjs
         env:
           ARTIFACT_SHA: ${{ github.sha }}
+          STAGING_BASE_URL: ${{ vars.PUBLIC_APP_URL }}
+          STAGING_DEPLOYMENT_RECORD: .release/deployment-record.json
       - name: release artifactを保存
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

@@ -981,8 +981,8 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 * [x] **T-007 Green:** Tenant / TenantMembership / Member / GuardianMember / AuditLog / PromotionRun の migration、JWT検証、RLS policy、transaction context、テナント解決、部員 API を最小実装する。完了コミット: `ed163b5`。
 * [x] **T-008 Red/Green:** 部員一覧・登録 UI のテストを先に追加して画面を実装する。実装コミット: `298e1eb`〜`3b058e1`。敵対的レビュー: `a7005b1`。
 * [x] **T-009 E2E:** local は test-only Auth、staging は staging Supabase のテスト専用ユーザーを使い、管理者のログインから部員登録までを Playwright で検証する。実装コミット: `72d7e1e`〜`3bd802e`。敵対的レビュー: `f96632f`。
-* [ ] **T-010 実装後敵対的レビュー:** T-005〜T-009 の成果物に対して越境、PII、認可、入力、環境混同、test-only Auth混入、テスト不足をレビューする。
-* [ ] **T-011 指摘修正とリリース判定:** Critical / High をゼロにし、受け入れ条件と CI 全件を再確認する。
+* [x] **T-010 実装後敵対的レビュー:** T-005〜T-009の成果物に対して越境、PII、認可、入力、環境混同、test-only Auth混入、テスト不足をレビューした。レビューコミット: `db7b464`。High 4件をT-011の修正対象として記録した。レビュー: `docs/reviews/t010-implementation-adversarial-review-2026-08-22.md`。
+* [x] **T-011 指摘修正とリリース判定:** T010-H-001〜T010-H-004を修正し、Critical / Highをゼロ化した。修正コミット: `05a101a`、`85c08f6`、`8c9eb58`、`e8e1967`、`a0a6854`、`5f5ff98`。Node 24のlocal lint/typecheck/test/unit/build/bundle/workflow検査、配置契約4件、GitHub quality run `32555164603`（実PostgreSQL統合テストを含む）が成功。再レビュー: `docs/reviews/t011-remediation-release-review-2026-08-22.md`。
 * [ ] **T-012 Phase 1完了機能:** 年度繰り上げを別の Red → Green → Refactor 縦切りとして実装し、`PromotionRun` のスキーマ・冪等性・プレビュー・監査ログを検証する。T-012の受け入れまでをPhase 1完了条件とする。
 
 ### 9.2 タスク完了記録
