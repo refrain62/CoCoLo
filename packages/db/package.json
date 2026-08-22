@@ -5,11 +5,16 @@
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/index.js",
-    "./events": "./dist/event-repository.js"
+    "./events": "./dist/event-repository.js",
+    "./orders": {
+      "types": "./dist/orders-repository.d.ts",
+      "import": "./dist/orders-repository.js"
+    }
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
-    "test": "pnpm build && node --test test/*.test.mjs",
+    "test": "pnpm build && node --test test/*.test.ts test/*.test.mjs",
+    "test:unit": "pnpm build && node --test test/*.test.ts",
     "lint": "node ../../scripts/prisma-validate.ts",
     "typecheck": "node ../../scripts/prisma-validate.ts",
     "prisma:validate": "prisma validate",

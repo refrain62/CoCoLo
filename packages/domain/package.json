@@ -4,7 +4,11 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./event": "./dist/event-domain.js"
+    "./event": "./dist/event-domain.js",
+    "./orders": {
+      "types": "./dist/orders-domain.d.ts",
+      "import": "./dist/orders-domain.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
