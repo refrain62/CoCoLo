@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { assertDeploymentRecord } from './deployment-contract.ts';
+import { verifyReleaseArtifact } from './verify-release.ts';
 
 // stagingで実行済みのmigration・smoke・E2Eと、配置したartifact SHAをproduction昇格用証跡へ束ねる。
 const artifactSha = process.env.ARTIFACT_SHA;
@@ -9,6 +10,14 @@ if (typeof artifactSha !== 'string' || !/^[0-9a-f]{40}$/.test(artifactSha))
 const deploymentRecordPath =
   process.env.STAGING_DEPLOYMENT_RECORD ??
   path.join('.release', 'deployment-record.json');
+const releaseDir =
+  process.env.RELEASE_DIR ?? path.dirname(deploymentRecordPath);
+const releaseManifest = await verifyReleaseArtifact(releaseDir, artifactSha);
+const artifactChecksum = (
+  await readFile(path.join(releaseDir, 'artifact.sha256'), 'utf8')
+)
+  .trim()
+  .split(/\s+/)[0];
 const deploymentRecord = assertDeploymentRecord(
   JSON.parse(await readFile(deploymentRecordPath, 'utf8')),
   { artifactSha, environment: 'staging' },
@@ -28,6 +37,8 @@ const evidence = {
   headBranch: 'main',
   headSha: artifactSha,
   artifactSha,
+  artifactSha256: artifactChecksum,
+  migrationChecksumSha256: releaseManifest.migrationChecksumSha256,
   deployment: {
     deployedUrl: deploymentRecord.deployedUrl,
     deployedAt: deploymentRecord.deployedAt,
