@@ -3,6 +3,7 @@ on:
   pull_request_target:
 permissions:
   contents: read
+  pull-requests: read
 jobs:
   trusted-validation:
     runs-on: ubuntu-24.04
@@ -12,12 +13,13 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.event.pull_request.base.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
       - name: Node.js環境を準備
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 24
+          node-version: 24.12.0
+          check-latest: false
       - name: baseのtrust rootでPR差分を検査
         run: node scripts/verify-trusted-pr.ts
         env:

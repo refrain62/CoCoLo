@@ -1,34 +1,14 @@
 {
+  "protected_paths": [
+    ".gitleaks.toml",
+    ".semgrep/ci.yml",
+    ".trivy-secret.yaml"
+  ],
   "files": {
-    ".github/CODEOWNERS": "b93322d7f42865376ca966a35925a2989bff26b35a399d4d6edff4255680be13",
-    ".github/security/trust-root.json": "ac3baf9e128e84e9ce3bf97929bb4c8cb3bf399898af9e7a4192e5c87ae1256e",
-    ".github/workflows/pr-trust-gate.yml": "86a5f87226bfef8cab712eb37cf86d90859467b420d286dc34d299c28ec2969d",
-    ".github/workflows/production-promote.yml": "3b97d25c21cdb1b5477926f64ef762f58e6d4e135b89fd0b3f8c53d3a8606510",
-    ".github/workflows/quality.yml": "9387b8031e81a5750f78cfdc90f5a5afade0a2b4de1091b76bc3b94ba0fa4b5e",
-    ".github/workflows/staging-deploy.yml": "aad257c6344417df9a045202f5a412e51775b36af8991a78387f06382432384f",
-    "package.json": "004c509b5390171851583deb19994c656a4429aa49c0294f7af0821bb97fc854",
-    "pnpm-lock.yaml": "877d1afae3a60ab098324ff72e3378cf93bcc11899c7c99ffbba11e80fb1cf5f",
-    "packages/db/prisma/schema.prisma": "2d8402441a253d12160670171c37ff927a306531998ea1e0fcd33d77cd612358",
-    "scripts/create-staging-evidence.ts": "b933b06dab6d15797527ebad0d0e67999754186f30ff5a70658eb942cfee70f4",
-    "scripts/db-prepare-test.ts": "24fe86fec96bc405bc77dbdc32293b4e0344c3ba51690d642a7bc1be45117c0d",
-    "scripts/db-seed-test.ts": "a087522c2196ed2dc1afef01fa971bb87c6c7d286cfc2c1ae35b43462ff44e95",
-    "scripts/deploy-artifact.ts": "4e77e13a3ce8f6c0bf2e959d19bd6a472b8ec302ca9f1656ce099bd20d39e75c",
-    "scripts/deployment-contract.test.ts": "972eaa4576ccc0ee1d79d5b9af9b8c18c775d6a042e2b40208d06e1d6201a228",
-    "scripts/deployment-contract.ts": "2e4b21b595e27c7a0191c011d60b1e662ba1d7760459683aa2cbc586a0d0858b",
-    "scripts/generate-openapi.ts": "dd4bc5ee9b828550c02853da6e422f0c4e1aaa56dd815604692cedc50bf2257e",
-    "scripts/package-release.ts": "be8512acb5774527fe1b4b05567ca5fc01e96ade46a85c0342c9977bf64fa599",
-    "scripts/prisma-validate.ts": "d6873d328345f8cf888ae74f99678796c18f6d583d149b02d6b92914182dcc20",
-    "scripts/run-e2e.ts": "f9849820eec90a1e1cf124903193ef396d8e369081f40361c5c1131011124d9f",
-    "scripts/trust-root.ts": "a523dd7cac23afac09d17d31fe984a7f95e261743412bb2b9e3ca73cc6e88f00",
-    "scripts/verify-database-version.ts": "98ccc1f3512ae4c87a21752b5e4eefbcc30caf1c118eb6f4d72290d1703beb40",
-    "scripts/verify-environment.ts": "f99671899c4523ffbe8d4d59f41ad014d25aa6942f9a5cfd27a544b57c0b884d",
-    "scripts/verify-migration-sql.ts": "f5b1f9804d44ecbdb41749ecfdb12e283e3dedf8c014e5d526634ba1d50acda0",
-    "scripts/verify-openapi.ts": "e8e175ef0880c9a879cfbddfebb979c1d6862da9f8d28bbb58fcfd3cb69819f0",
-    "scripts/verify-pnpm-config.ts": "de5fcbea207a36553e6bc3e82c6ffe94e18fdf2568db8eda89e31ba3077ec263",
-    "scripts/verify-production-bundle.ts": "52e34aa58f5e08326a8ea1a3fced4b840d371d113a6f707114a1e847e228fc3d",
-    "scripts/verify-release.ts": "ace5e625feb9388e8c155b26de934fa0b17465b77e25d14cd613462933cfa1b1",
-    "scripts/verify-trusted-pr.ts": "0c6b7bdc7be7e479865919d0ec0f03bbec5f2403c18ecfb113fc4420521550bf",
-    "scripts/verify-workflows.ts": "0d6e9929214915c533da954e7c34bc0cf7c3cd929baa66f792297d5331628731",
-    "scripts/verify-workspace-boundaries.ts": "142ae19436873fc254f91c6351b9c3354a1675f392fc5183a4c669febc0efa74"
+    ".github/CODEOWNERS": "d315e4b4dc32a8433d02431b32b2856ab92dc90bfa42b044bb78880a59c9edf8",
+    ".github/security/trust-root.json": "57b66d21d9558a4ecc423259ef97a3e31b6b57b5db25def01db363e94729a918",
+    ".github/workflows/pr-trust-gate.yml": "2ceac57c4586f633f02cc1363821b1218c2b94e9b15775422807907839870e3c",
+    "scripts/trust-root.ts": "7e7e79ba79a1d9d162c231b771f20162fe5890cb4f255fc71be2568b94e0c214",
+    "scripts/verify-trusted-pr.ts": "5a8491a37c5a3366435d007d2dddde339c8e7360a39ac7378f9ae53091049962"
   }
 }
