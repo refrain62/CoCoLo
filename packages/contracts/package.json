@@ -7,6 +7,7 @@
     "./upload": "./src/upload-contract.ts",
     "./member": "./src/member-contract.ts",
     "./orders": "./src/orders-contract.ts",
+    "./bulletin-board": "./src/bulletin-board-contract.ts",
     "./events": "./src/event-contract.ts"
   },
   "scripts": {

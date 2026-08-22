@@ -9,6 +9,7 @@
       "types": "./dist/orders-repository.d.ts",
       "import": "./dist/orders-repository.js"
     },
+    "./bulletin-board": "./dist/bulletin-board-repository.js",
     "./attachment": "./dist/attachment-repository.js",
     "./events": "./dist/event-repository.js"
   },
