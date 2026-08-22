@@ -13,6 +13,8 @@
       "!**/dist",
       "!coverage",
       "!**/coverage",
+      "!.worktrees",
+      "!**/.worktrees",
       "!test-results",
       "!**/test-results",
       "!packages/contracts/openapi.yaml"

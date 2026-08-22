@@ -1,0 +1,21 @@
+.event-card {
+  border-left: 0.35rem solid #59636e;
+  margin-block: 1rem;
+  padding: 1rem;
+}
+
+.event-card-practice {
+  border-left-color: #2563eb;
+}
+
+.event-card-match {
+  border-left-color: #dc2626;
+}
+
+.event-card-event {
+  border-left-color: #9333ea;
+}
+
+.event-type {
+  font-weight: 700;
+}

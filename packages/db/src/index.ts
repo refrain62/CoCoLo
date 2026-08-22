@@ -32,6 +32,15 @@ export class PromotionConflictError extends Error {
   }
 }
 
+export class MemberConflictError extends Error {
+  readonly status = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'MemberConflictError';
+  }
+}
+
 export type MemberListQuery = {
   q?: string;
   status?: 'active' | 'suspended' | 'retired';
@@ -40,6 +49,14 @@ export type MemberListQuery = {
   pageSize: number;
 };
 export type MemberCreateInput = {
+  name: string;
+  kana?: string | null;
+  category: 'student' | 'adult';
+  gradeLevel?: number | null;
+  ageGroup?: string | null;
+  status: 'active' | 'suspended';
+};
+export type MemberUpdateInput = {
   name: string;
   kana?: string | null;
   category: 'student' | 'adult';
@@ -134,6 +151,29 @@ async function assertActiveMembership(
     membership?.role !== (input.role as Role)
   )
     throw new Error('有効な所属情報が処理中に変更されました。');
+}
+
+// 更新前の行をロックし、同じ部員への退部と編集の競合を直列化する。
+async function lockMember(
+  client: Prisma.TransactionClient,
+  input: { tenantId: string; memberId: string },
+) {
+  await client.$queryRaw`
+    SELECT id
+    FROM members
+    WHERE tenant_id = ${input.tenantId}::uuid
+      AND id = ${input.memberId}::uuid
+    FOR UPDATE
+  `;
+  return client.member.findUnique({
+    where: {
+      tenantId_id: {
+        tenantId: input.tenantId,
+        id: input.memberId,
+      },
+    },
+    select: memberSelect,
+  });
 }
 
 function promotionRequestHash(input: {
@@ -375,6 +415,123 @@ export function createMemberRepositories(client: PrismaClient) {
             ],
           });
           return toRecord(created);
+        }),
+      update: async (input: {
+        tenantId: string;
+        actorUserId: string;
+        role: MemberRole;
+        memberId: string;
+        member: MemberUpdateInput;
+      }) =>
+        client.$transaction(async (tx) => {
+          // 所属確認、対象行のロック、更新、監査を同じtransactionで実行する。
+          await setRlsContext(tx, {
+            tenantId: input.tenantId,
+            userId: input.actorUserId,
+            role: input.role,
+          });
+          await assertActiveMembership(tx, {
+            tenantId: input.tenantId,
+            userId: input.actorUserId,
+            role: input.role,
+          });
+          const before = await lockMember(tx, {
+            tenantId: input.tenantId,
+            memberId: input.memberId,
+          });
+          if (!before) return null;
+          if (before.status === 'retired')
+            throw new MemberConflictError(
+              '退部済みの部員は通常編集できません。',
+            );
+          const updated = await tx.member.update({
+            where: {
+              tenantId_id: {
+                tenantId: input.tenantId,
+                id: input.memberId,
+              },
+            },
+            data: {
+              name: input.member.name,
+              kana: input.member.kana ?? null,
+              category: input.member.category,
+              gradeLevel: input.member.gradeLevel ?? null,
+              ageGroup: input.member.ageGroup ?? null,
+              status: input.member.status,
+            },
+            select: memberSelect,
+          });
+          await tx.auditLog.create({
+            data: {
+              tenantId: input.tenantId,
+              actorUserId: input.actorUserId,
+              action: 'member.update',
+              resourceType: 'member',
+              resourceId: updated.id,
+              metadata: {
+                before: {
+                  category: before.category,
+                  status: before.status,
+                },
+                after: {
+                  category: updated.category,
+                  status: updated.status,
+                },
+              },
+            },
+          });
+          return toRecord(updated);
+        }),
+      retire: async (input: {
+        tenantId: string;
+        actorUserId: string;
+        role: MemberRole;
+        memberId: string;
+      }) =>
+        client.$transaction(async (tx) => {
+          // 退部処理は行ロックで一度だけ状態を遷移させ、再送時は同じ結果を返す。
+          await setRlsContext(tx, {
+            tenantId: input.tenantId,
+            userId: input.actorUserId,
+            role: input.role,
+          });
+          await assertActiveMembership(tx, {
+            tenantId: input.tenantId,
+            userId: input.actorUserId,
+            role: input.role,
+          });
+          const before = await lockMember(tx, {
+            tenantId: input.tenantId,
+            memberId: input.memberId,
+          });
+          if (!before) return null;
+          const updated =
+            before.status === 'retired'
+              ? before
+              : await tx.member.update({
+                  where: {
+                    tenantId_id: {
+                      tenantId: input.tenantId,
+                      id: input.memberId,
+                    },
+                  },
+                  data: { status: 'retired' },
+                  select: memberSelect,
+                });
+          await tx.auditLog.create({
+            data: {
+              tenantId: input.tenantId,
+              actorUserId: input.actorUserId,
+              action: 'member.retire',
+              resourceType: 'member',
+              resourceId: updated.id,
+              metadata: {
+                beforeStatus: before.status,
+                afterStatus: updated.status,
+              },
+            },
+          });
+          return toRecord(updated);
         }),
     },
     promotionRepository: {
