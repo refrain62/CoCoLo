@@ -148,3 +148,37 @@ test('年度繰り上げの不正な年度とmodeを拒否する', async () => {
   assert.equal(response.status, 400);
   assertError(await readJson(response), 'VALIDATION_ERROR');
 });
+
+test('年度繰り上げのrequest競合は409で返す', async () => {
+  const app = createApp({
+    verifyToken: async () => ({
+      userId: 'owner-a',
+      issuer: 'https://example.supabase.co/auth/v1',
+      audience: 'authenticated',
+      expiresAt: Math.floor(Date.now() / 1000) + 300,
+    }),
+    membershipRepository: {
+      findActiveByUserId: async () => ({ tenantId: TENANT_A, role: 'owner' }),
+    },
+    promotionRepository: {
+      run: async () => {
+        const error = new Error('request conflict');
+        Object.assign(error, { status: 409 });
+        throw error;
+      },
+    },
+  });
+
+  const response = await app.request('/api/v1/members/promote', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer test-token',
+      'content-type': 'application/json',
+      'idempotency-key': 'promotion-conflict',
+    },
+    body: JSON.stringify({ mode: 'execute', fiscalYear: 2026 }),
+  });
+
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error.code, 'PROMOTION_CONFLICT');
+});
