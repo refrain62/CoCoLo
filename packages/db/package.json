@@ -16,7 +16,8 @@
       "types": "./dist/ride-repository.d.ts",
       "import": "./dist/ride-repository.js"
     },
-    "./bulletin-board": "./dist/bulletin-board-repository.js"
+    "./bulletin-board": "./dist/bulletin-board-repository.js",
+    "./auth-team-selection": "./dist/auth-team-selection-repository.js"
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",

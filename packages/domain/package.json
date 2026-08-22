@@ -15,7 +15,8 @@
       "types": "./dist/ride-domain.d.ts",
       "import": "./dist/ride-domain.js"
     },
-    "./bulletin-board": "./dist/bulletin-board-domain.js"
+    "./bulletin-board": "./dist/bulletin-board-domain.js",
+    "./auth-team-selection": "./dist/auth-team-selection-domain.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
