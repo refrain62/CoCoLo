@@ -62,6 +62,8 @@ jobs:
         run: pnpm build && pnpm package:release --artifact-sha "${GITHUB_SHA}" --output .release
         env:
           ARTIFACT_SHA: ${{ github.sha }}
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       - name: release artifactを検証
         run: pnpm verify:release --release-dir .release --artifact-sha "${GITHUB_SHA}"
       - name: release provenanceを生成

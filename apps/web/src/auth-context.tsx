@@ -39,7 +39,13 @@ export function AuthProvider({
         setIsSigningIn(true);
         setError(null);
         try {
-          setSession(await client.signInWithPassword(email, password));
+          const nextSession = await client.signInWithPassword(email, password);
+          if (typeof window !== 'undefined')
+            window.localStorage.setItem(
+              'cocolo.accessToken',
+              nextSession.accessToken,
+            );
+          setSession(nextSession);
         } catch (requestError) {
           setError(
             requestError instanceof Error
