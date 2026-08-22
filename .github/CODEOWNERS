@@ -1,4 +1,7 @@
 # WorkflowとDB検証スクリプトは、品質ゲートの信頼境界を変更するためownerレビューを必須とする。
 /.github/workflows/* @refrain62
+/.github/CODEOWNERS @refrain62
+/package.json @refrain62
+/pnpm-lock.yaml @refrain62
 /scripts/verify-migration-*.ts @refrain62
 /scripts/verify-workflows.ts @refrain62

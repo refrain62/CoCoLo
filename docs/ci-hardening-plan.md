@@ -116,6 +116,10 @@ schema drift、RLS、role属性、policyの実DB検査は別のCI-003実装単�
 既存migrationの変更禁止は、同じPRでmanifestだけを更新して検査を回避できないよう、Workflowが受け取ったbase SHAとの差分でも確認します。
 base SHAは40桁のcommit SHAとして扱い、既存migrationの編集、削除、改名を拒否し、新規migrationの追加だけを許可します。
 
+Workflowと検証スクリプトはPRの変更対象になり得るため、検査結果だけを信頼境界にしません。
+.github/CODEOWNERSでWorkflow、検証スクリプト、package設定、lockfileのownerレビューを要求し、GitHub側でbranch protectionを利用できる環境では当該レビューと品質ゲートを必須条件にします。
+GitHub Freeの非公開リポジトリで必須レビューを技術的に強制できない期間は、ownerが差分を確認してからDraft PRを更新し、CIへ秘密情報を渡しません。
+
 ## 7. セキュリティと供給網
 
 runtime依存だけでなく、buildとCIで実行される開発用依存もCriticalとHighで失敗させます。
