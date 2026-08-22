@@ -31,6 +31,7 @@ jobs:
       - name: リポジトリを取得
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: pnpmを準備
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
@@ -43,7 +44,9 @@ jobs:
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
       - name: migrationの正本とSQLを検証
-        run: pnpm verify:migration-checksum && pnpm verify:migration-sql
+        run: pnpm verify:migration-baseline && pnpm verify:migration-checksum && pnpm verify:migration-sql
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
       - name: checksum検証のfixtureを実行
         run: pnpm test:database-integrity
       - name: PostgreSQLのバージョンを検証
