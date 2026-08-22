@@ -148,7 +148,7 @@ test('未許可のGitHub contextをrunへ直接展開する改変を拒否する
   assert.throws(() =>
     validateQualityWorkflow(
       qualityWorkflow.replace(
-        '        run: pnpm verify:pnpm-config && pnpm lint:workflows && pnpm test:workflows && pnpm verify:migration-sql && pnpm lint:biome && pnpm verify:workspace-boundaries',
+        '        run: pnpm verify:trust-root && pnpm verify:pnpm-config && pnpm lint:workflows && pnpm test:workflows && pnpm verify:migration-sql && pnpm lint:biome && pnpm verify:workspace-boundaries',
         [
           '        run: echo "',
           githubExpression('github.event.pull_request.title'),

@@ -15,17 +15,8 @@ jobs:
       - name: リポジトリを取得
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - name: staging Environmentの保護設定を検証
-        run: |
-          set -euo pipefail
-          response="$(gh api "repos/${GITHUB_REPOSITORY}/environments/staging")"
-          echo "$response" | jq -e '
-            (.deployment_branch_policy.protected_branches == true)
-            and ([.protection_rules[]? | select(.type == "required_reviewers" and ((.reviewers // []) | length > 0))] | length > 0)
-          ' >/dev/null
-        env:
-          GH_TOKEN: ${{ github.token }}
       - name: pnpmを準備
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
@@ -37,6 +28,18 @@ jobs:
           cache: pnpm
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
+      - name: owner bootstrap済みのtrust rootを検証
+        run: pnpm verify:trust-root
+      - name: staging Environmentの保護設定を検証
+        run: |
+          set -euo pipefail
+          response="$(gh api "repos/${GITHUB_REPOSITORY}/environments/staging")"
+          echo "$response" | jq -e '
+            (.deployment_branch_policy.protected_branches == true)
+            and ([.protection_rules[]? | select(.type == "required_reviewers" and ((.reviewers // []) | length > 0))] | length > 0)
+          ' >/dev/null
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: staging環境の設定を検証
         run: pnpm verify:environment --expected staging
         env:
@@ -86,6 +89,13 @@ jobs:
         run: pnpm deploy:staging --artifact-sha "${GITHUB_SHA}" --release-dir .release
         env:
           STAGING_DEPLOY_ADAPTER: ${{ secrets.STAGING_DEPLOY_ADAPTER }}
+      - name: staging deploy後の実DB securityを照合
+        run: pnpm verify:deployed-database-security
+        env:
+          APP_ENV: staging
+          DEPLOY_ENV: staging
+          DEPLOYMENT_APPROVED: staging-approved
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: staging環境のE2Eスモークテスト
         run: pnpm test:e2e:staging
         env:

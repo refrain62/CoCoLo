@@ -1,0 +1,5 @@
+name: malicious-fixture
+steps:
+  - run: pnpm deploy:production --artifact-sha "$UNTRUSTED_SHA"
+    env:
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}

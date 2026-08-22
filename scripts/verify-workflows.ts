@@ -40,7 +40,7 @@ const qualitySteps: readonly StepPolicy[] = [
   {
     kind: 'uses',
     action: `actions/checkout@${actionAllowlist['actions/checkout']}`,
-    withValues: { 'persist-credentials': false },
+    withValues: { 'fetch-depth': 0, 'persist-credentials': false },
   },
   {
     kind: 'uses',
@@ -85,11 +85,7 @@ const stagingSteps: readonly StepPolicy[] = [
   {
     kind: 'uses',
     action: `actions/checkout@${actionAllowlist['actions/checkout']}`,
-    withValues: { 'persist-credentials': false },
-  },
-  {
-    kind: 'run',
-    envValues: { GH_TOKEN: githubExpression('github.token') },
+    withValues: { 'fetch-depth': 0, 'persist-credentials': false },
   },
   {
     kind: 'uses',
@@ -102,6 +98,11 @@ const stagingSteps: readonly StepPolicy[] = [
     withValues: { 'node-version': 24, cache: 'pnpm' },
   },
   { kind: 'run' },
+  { kind: 'run' },
+  {
+    kind: 'run',
+    envValues: { GH_TOKEN: githubExpression('github.token') },
+  },
   {
     kind: 'run',
     envValues: {
@@ -171,6 +172,15 @@ const stagingSteps: readonly StepPolicy[] = [
     kind: 'run',
     envValues: {
       APP_ENV: 'staging',
+      DEPLOY_ENV: 'staging',
+      DEPLOYMENT_APPROVED: 'staging-approved',
+      DIRECT_URL: githubExpression('secrets.DIRECT_URL'),
+    },
+  },
+  {
+    kind: 'run',
+    envValues: {
+      APP_ENV: 'staging',
       STAGING_BASE_URL: githubExpression('vars.PUBLIC_APP_URL'),
       E2E_TEST_EMAIL: githubExpression('secrets.STAGING_E2E_TEST_EMAIL'),
       E2E_TEST_PASSWORD: githubExpression('secrets.STAGING_E2E_TEST_PASSWORD'),
@@ -208,23 +218,9 @@ const stagingSteps: readonly StepPolicy[] = [
 
 const productionSteps: readonly StepPolicy[] = [
   {
-    kind: 'run',
-    envValues: { GH_TOKEN: githubExpression('github.token') },
-  },
-  {
     kind: 'uses',
     action: `actions/checkout@${actionAllowlist['actions/checkout']}`,
-    withValues: {
-      'persist-credentials': false,
-      ref: githubExpression('inputs.artifact_sha'),
-    },
-  },
-  {
-    kind: 'run',
-    envValues: {
-      GH_TOKEN: githubExpression('github.token'),
-      ARTIFACT_SHA: githubExpression('inputs.artifact_sha'),
-    },
+    withValues: { 'fetch-depth': 0, 'persist-credentials': false },
   },
   {
     kind: 'uses',
@@ -237,6 +233,18 @@ const productionSteps: readonly StepPolicy[] = [
     withValues: { 'node-version': 24, cache: 'pnpm' },
   },
   { kind: 'run' },
+  { kind: 'run' },
+  {
+    kind: 'run',
+    envValues: { GH_TOKEN: githubExpression('github.token') },
+  },
+  {
+    kind: 'run',
+    envValues: {
+      GH_TOKEN: githubExpression('github.token'),
+      ARTIFACT_SHA: githubExpression('inputs.artifact_sha'),
+    },
+  },
   { kind: 'run' },
   {
     kind: 'run',
@@ -281,6 +289,15 @@ const productionSteps: readonly StepPolicy[] = [
       ),
     },
   },
+  {
+    kind: 'run',
+    envValues: {
+      APP_ENV: 'production',
+      DEPLOY_ENV: 'production',
+      DEPLOYMENT_APPROVED: 'production-approved',
+      DIRECT_URL: githubExpression('secrets.DIRECT_URL'),
+    },
+  },
 ];
 
 const trustedPrSteps: readonly StepPolicy[] = [
@@ -289,14 +306,14 @@ const trustedPrSteps: readonly StepPolicy[] = [
     action: `actions/checkout@${actionAllowlist['actions/checkout']}`,
     withValues: {
       ref: githubExpression('github.event.pull_request.base.sha'),
-      'fetch-depth': 1,
+      'fetch-depth': 0,
       'persist-credentials': false,
     },
   },
   {
     kind: 'uses',
     action: `actions/setup-node@${actionAllowlist['actions/setup-node']}`,
-    withValues: { 'node-version': 24 },
+    withValues: { 'node-version': '24.12.0', 'check-latest': false },
   },
   {
     kind: 'run',
@@ -545,11 +562,11 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
       if (body === 'github.token')
         assert.ok(
           location ===
-            'production-promote.yml.jobs.production.steps[0].env.GH_TOKEN' ||
+            'production-promote.yml.jobs.production.steps[5].env.GH_TOKEN' ||
             location ===
-              'production-promote.yml.jobs.production.steps[2].env.GH_TOKEN' ||
+              'production-promote.yml.jobs.production.steps[6].env.GH_TOKEN' ||
             location ===
-              'staging-deploy.yml.jobs.staging.steps[1].env.GH_TOKEN' ||
+              'staging-deploy.yml.jobs.staging.steps[5].env.GH_TOKEN' ||
             location ===
               'pr-trust-gate.yml.jobs.trusted-validation.steps[2].env.GH_TOKEN',
           `${location}: github.tokenはEnvironment保護の読み取り専用CLI用途だけに限定します`,
@@ -563,13 +580,9 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
       if (body === 'inputs.artifact_sha')
         assert.ok(
           location ===
-            'production-promote.yml.jobs.production.steps[2].env.ARTIFACT_SHA' ||
+            'production-promote.yml.jobs.production.steps[6].env.ARTIFACT_SHA' ||
             location ===
-              'production-promote.yml.jobs.production.steps[9].env.ARTIFACT_SHA' ||
-            location ===
-              'production-promote.yml.jobs.production.steps[10].env.ARTIFACT_SHA' ||
-            location ===
-              'production-promote.yml.jobs.production.steps[1].with.ref',
+              'production-promote.yml.jobs.production.steps[10].env.ARTIFACT_SHA',
           `${location}: 手動入力を許可されたproductionのSHA用途以外へ渡せません`,
         );
       if (body.startsWith('secrets.') || body.startsWith('vars.'))
@@ -905,7 +918,7 @@ function validateStagingWorkflowDocument(workflow: WorkflowRecord): void {
   assert.equal(staging['timeout-minutes'], 15);
   assert.equal(staging.environment, 'staging');
   validateSteps('staging-deploy.yml', staging, stagingSteps);
-  assertEnvironmentProtectionStep('staging-deploy.yml', staging, 1, 'staging');
+  assertEnvironmentProtectionStep('staging-deploy.yml', staging, 5, 'staging');
 }
 
 function validateProductionWorkflowDocument(workflow: WorkflowRecord): void {
@@ -956,7 +969,7 @@ function validateProductionWorkflowDocument(workflow: WorkflowRecord): void {
   assertEnvironmentProtectionStep(
     'production-promote.yml',
     production,
-    0,
+    5,
     'production',
   );
 }
@@ -973,7 +986,7 @@ function validateTrustedPrWorkflowDocument(workflow: WorkflowRecord): void {
   assert.equal(triggers.pull_request_target, null);
   assertExactRecord(
     workflow.permissions,
-    { contents: 'read' },
+    { contents: 'read', 'pull-requests': 'read' },
     'pr-trust-gate.yml.permissions',
   );
   const jobs = asRecord(workflow.jobs, 'pr-trust-gate.yml.jobs');
@@ -1054,15 +1067,15 @@ function validateDatabaseIntegrityWorkflowDocument(
   validateDatabaseIntegrityServices(job);
   validateSteps('database-integrity.yml', job, databaseIntegritySteps);
   const steps = asArray(job.steps, 'database-integrity.yml.jobs.steps');
-  const staticStep = asRecord(steps[5], 'database-integrity.yml.jobs.steps[5]');
+  const staticStep = asRecord(steps[6], 'database-integrity.yml.jobs.steps[6]');
   assert.match(
     String(staticStep.run ?? ''),
     /verify:migration-baseline[\s\S]+verify:migration-checksum[\s\S]+verify:migration-sql[\s\S]+test:database-integrity/,
     'database-integrity.yml: migration・DB fixture検査を必須接続してください',
   );
   const historyStep = asRecord(
-    steps[10],
-    'database-integrity.yml.jobs.steps[10]',
+    steps[11],
+    'database-integrity.yml.jobs.steps[11]',
   );
   assert.equal(
     historyStep.run,
@@ -1070,8 +1083,8 @@ function validateDatabaseIntegrityWorkflowDocument(
     'database-integrity.yml: DIRECT_URL履歴照合が必要です',
   );
   const driftStep = asRecord(
-    steps[11],
-    'database-integrity.yml.jobs.steps[11]',
+    steps[12],
+    'database-integrity.yml.jobs.steps[12]',
   );
   assert.equal(
     driftStep.run,
@@ -1079,8 +1092,8 @@ function validateDatabaseIntegrityWorkflowDocument(
     'database-integrity.yml: schema drift検査が必要です',
   );
   const securityStep = asRecord(
-    steps[12],
-    'database-integrity.yml.jobs.steps[12]',
+    steps[13],
+    'database-integrity.yml.jobs.steps[13]',
   );
   assert.equal(
     securityStep.run,

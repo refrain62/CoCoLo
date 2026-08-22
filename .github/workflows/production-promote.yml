@@ -15,6 +15,24 @@ jobs:
     environment: production
     concurrency: production-migration
     steps:
+      - name: Workflow正本を取得
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: pnpmを準備
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.26.0
+      - name: Node.js環境を準備
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: 依存関係を固定インストール
+        run: pnpm install --frozen-lockfile
+      - name: owner bootstrap済みのtrust rootを検証
+        run: pnpm verify:trust-root
       - name: production Environmentの保護設定を検証
         run: |
           set -euo pipefail
@@ -25,11 +43,6 @@ jobs:
           ' >/dev/null
         env:
           GH_TOKEN: ${{ github.token }}
-      - name: 検証済みSHAのリポジトリをcheckout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          persist-credentials: false
-          ref: ${{ inputs.artifact_sha }}
       - name: staging環境の証跡と成果物を検証
         env:
           GH_TOKEN: ${{ github.token }}
@@ -45,17 +58,6 @@ jobs:
           jq -e --arg sha "$ARTIFACT_SHA" '(.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success")' .evidence/evidence.json
           test "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)" = "$(cut -d' ' -f1 .release/artifact.sha256)"
           gh attestation verify .release/release.tar.gz --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/staging-deploy.yml" --source-digest "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)"
-      - name: pnpmを準備
-        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
-        with:
-          version: 10.26.0
-      - name: Node.js環境を準備
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 24
-          cache: pnpm
-      - name: 依存関係を固定インストール
-        run: pnpm install --frozen-lockfile
       - name: リリース成果物を展開
         run: mkdir -p .release/extracted && tar -xzf .release/release.tar.gz -C .release/extracted
       - name: production環境の設定を検証
@@ -85,3 +87,10 @@ jobs:
         env:
           ARTIFACT_SHA: ${{ inputs.artifact_sha }}
           PRODUCTION_DEPLOY_ADAPTER: ${{ secrets.PRODUCTION_DEPLOY_ADAPTER }}
+      - name: production deploy後の実DB securityを照合
+        run: pnpm verify:deployed-database-security
+        env:
+          APP_ENV: production
+          DEPLOY_ENV: production
+          DEPLOYMENT_APPROVED: production-approved
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
