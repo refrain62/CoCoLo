@@ -26,6 +26,15 @@ export type PromotionMember = {
   status: 'active' | 'suspended' | 'retired';
 };
 
+export class PromotionPlanningError extends Error {
+  readonly code = 'PROMOTION_GRADE_LIMIT';
+
+  constructor() {
+    super('学年の上限を超える部員が含まれています');
+    this.name = 'PromotionPlanningError';
+  }
+}
+
 export type PromotionCandidate = PromotionMember & {
   category: 'student';
   gradeLevel: number;
@@ -51,7 +60,7 @@ export type PromotionChange = {
 export function planPromotion(members: PromotionMember[]) {
   const candidates = members.filter(isPromotionCandidate);
   if (candidates.some((member) => member.gradeLevel >= 99))
-    throw new Error('学年の上限を超える部員が含まれています');
+    throw new PromotionPlanningError();
   return {
     previewCount: candidates.length,
     changes: candidates.map((member) => ({

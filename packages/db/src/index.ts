@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
-import { type PromotionMember, planPromotion } from '@cocolo/domain';
+import {
+  type PromotionMember,
+  PromotionPlanningError,
+  planPromotion,
+} from '@cocolo/domain';
 import {
   type MemberCategory,
   type MemberStatus,
@@ -136,6 +140,10 @@ function promotionResultPayload(
   };
 }
 
+function promotionFailurePayload(): Prisma.InputJsonValue {
+  return { errorCode: 'PROMOTION_GRADE_LIMIT' };
+}
+
 function toPromotionRecord(
   run: {
     status: 'preview' | 'completed' | 'failed';
@@ -208,6 +216,31 @@ async function createPromotionPlan(
     select: { id: true, category: true, gradeLevel: true, status: true },
   });
   return planPromotion(members as PromotionMember[]);
+}
+
+async function markPromotionFailed(
+  client: Prisma.TransactionClient,
+  input: { tenantId: string; actorUserId: string; fiscalYear: number },
+  runId: string,
+) {
+  const run = await client.promotionRun.update({
+    where: { id: runId },
+    data: { status: 'failed', result: promotionFailurePayload() },
+  });
+  await client.auditLog.create({
+    data: {
+      tenantId: input.tenantId,
+      actorUserId: input.actorUserId,
+      action: 'member.promote.failed',
+      resourceType: 'promotion_run',
+      resourceId: run.id,
+      metadata: {
+        fiscalYear: input.fiscalYear,
+        errorCode: 'PROMOTION_GRADE_LIMIT',
+      },
+    },
+  });
+  return run;
 }
 
 export function createPrismaClient() {
@@ -372,6 +405,19 @@ export function createMemberRepositories(client: PrismaClient) {
             throw new PromotionConflictError(
               '同じ年度の年度繰り上げを別の実行者へ変更できません',
             );
+          if (run?.status !== 'completed') {
+            if (
+              run?.idempotencyKey &&
+              run.idempotencyKey !== input.idempotencyKey
+            )
+              throw new PromotionConflictError(
+                '同じ年度のIdempotency-Keyは変更できません',
+              );
+            if (run?.requestHash && run.requestHash !== requestHash)
+              throw new PromotionConflictError(
+                '同じ年度のrequest hashは変更できません',
+              );
+          }
           if (input.mode === 'preview') {
             if (run?.status === 'failed')
               throw new PromotionConflictError(
@@ -379,18 +425,13 @@ export function createMemberRepositories(client: PrismaClient) {
               );
             if (run?.status === 'completed')
               return toPromotionRecord(run, input.mode);
-            const plan = await createPromotionPlan(tx, input.tenantId);
-            const result = promotionResultPayload(plan);
             run = run
               ? await tx.promotionRun.update({
                   where: { id: run.id },
                   data: {
                     status: 'preview',
-                    previewCount: plan.previewCount,
-                    actorUserId: input.actorUserId,
                     idempotencyKey: input.idempotencyKey,
                     requestHash: input.idempotencyKey ? requestHash : null,
-                    result,
                   },
                 })
               : await tx.promotionRun.create({
@@ -398,13 +439,37 @@ export function createMemberRepositories(client: PrismaClient) {
                     tenantId: input.tenantId,
                     fiscalYear: input.fiscalYear,
                     status: 'preview',
-                    previewCount: plan.previewCount,
+                    previewCount: 0,
                     actorUserId: input.actorUserId,
                     idempotencyKey: input.idempotencyKey,
                     requestHash: input.idempotencyKey ? requestHash : null,
-                    result,
                   },
                 });
+            let plan;
+            try {
+              plan = await createPromotionPlan(tx, input.tenantId);
+            } catch (error) {
+              if (!(error instanceof PromotionPlanningError)) throw error;
+              run = await markPromotionFailed(
+                tx,
+                {
+                  tenantId: input.tenantId,
+                  actorUserId: input.actorUserId,
+                  fiscalYear: input.fiscalYear,
+                },
+                run.id,
+              );
+              return toPromotionRecord(run, input.mode);
+            }
+            const result = promotionResultPayload(plan);
+            run = await tx.promotionRun.update({
+              where: { id: run.id },
+              data: {
+                status: 'preview',
+                previewCount: plan.previewCount,
+                result,
+              },
+            });
             await tx.auditLog.create({
               data: {
                 tenantId: input.tenantId,
@@ -423,17 +488,12 @@ export function createMemberRepositories(client: PrismaClient) {
 
           if (run?.status === 'completed')
             return toPromotionRecord(run, input.mode);
-          const plan = await createPromotionPlan(tx, input.tenantId);
-          const result = promotionResultPayload(plan);
           run = run
             ? await tx.promotionRun.update({
                 where: { id: run.id },
                 data: {
-                  previewCount: plan.previewCount,
-                  actorUserId: input.actorUserId,
                   idempotencyKey: input.idempotencyKey,
                   requestHash,
-                  result,
                 },
               })
             : await tx.promotionRun.create({
@@ -441,13 +501,36 @@ export function createMemberRepositories(client: PrismaClient) {
                   tenantId: input.tenantId,
                   fiscalYear: input.fiscalYear,
                   status: 'preview',
-                  previewCount: plan.previewCount,
+                  previewCount: 0,
                   actorUserId: input.actorUserId,
                   idempotencyKey: input.idempotencyKey,
                   requestHash,
-                  result,
                 },
               });
+          let plan;
+          try {
+            plan = await createPromotionPlan(tx, input.tenantId);
+          } catch (error) {
+            if (!(error instanceof PromotionPlanningError)) throw error;
+            run = await markPromotionFailed(
+              tx,
+              {
+                tenantId: input.tenantId,
+                actorUserId: input.actorUserId,
+                fiscalYear: input.fiscalYear,
+              },
+              run.id,
+            );
+            return toPromotionRecord(run, input.mode);
+          }
+          const result = promotionResultPayload(plan);
+          run = await tx.promotionRun.update({
+            where: { id: run.id },
+            data: {
+              previewCount: plan.previewCount,
+              result,
+            },
+          });
           for (const change of plan.changes)
             await tx.member.update({
               where: {

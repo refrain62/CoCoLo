@@ -8,11 +8,27 @@ const MEMBER_A = '00000000-0000-7000-8000-000000000201';
 const MEMBER_A2 = '00000000-0000-7000-8000-000000000202';
 const MEMBER_B = '00000000-0000-7000-8000-000000000203';
 const FISCAL_YEAR = 2000 + (Date.now() % 101);
+const FAILED_FISCAL_YEAR = 2000 + ((Date.now() + 1) % 101);
 
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URLが必要です');
 
 const prisma = createPrismaClient();
 const repositories = createMemberRepositories(prisma);
+
+async function setMemberGrade(tenantId, userId, memberId, gradeLevel) {
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT
+        set_config('app.tenant_id', ${tenantId}, true),
+        set_config('app.user_id', ${userId}, true),
+        set_config('app.role', 'owner', true)
+    `;
+    await tx.member.update({
+      where: { tenantId_id: { tenantId, id: memberId } },
+      data: { gradeLevel },
+    });
+  });
+}
 
 test('年度繰り上げpreviewはactiveなstudentだけを同一tenantで計画する', async () => {
   const result = await repositories.promotionRepository.run({
@@ -148,6 +164,38 @@ test('completedのPromotionRunをpreviewへ戻す遷移はDB triggerで拒否す
     }),
     /completedからの状態変更はできません/,
   );
+});
+
+test('学年上限超過はfailedに記録し、修正後の同一key再試行でcompletedにできる', async () => {
+  await setMemberGrade(TENANT_A, 'owner-a', MEMBER_A2, 99);
+  try {
+    const failed = await repositories.promotionRepository.run({
+      tenantId: TENANT_A,
+      actorUserId: 'owner-a',
+      role: 'owner',
+      mode: 'execute',
+      fiscalYear: FAILED_FISCAL_YEAR,
+      idempotencyKey: `promotion-${FAILED_FISCAL_YEAR}-failed`,
+    });
+
+    assert.equal(failed.status, 'failed');
+    assert.deepEqual(failed.result, { errorCode: 'PROMOTION_GRADE_LIMIT' });
+
+    await setMemberGrade(TENANT_A, 'owner-a', MEMBER_A2, 9);
+    const completed = await repositories.promotionRepository.run({
+      tenantId: TENANT_A,
+      actorUserId: 'owner-a',
+      role: 'owner',
+      mode: 'execute',
+      fiscalYear: FAILED_FISCAL_YEAR,
+      idempotencyKey: `promotion-${FAILED_FISCAL_YEAR}-failed`,
+    });
+    assert.equal(completed.status, 'completed');
+  } finally {
+    await setMemberGrade(TENANT_A, 'owner-a', MEMBER_A, 9);
+    await setMemberGrade(TENANT_A, 'owner-a', MEMBER_A2, 8);
+    await setMemberGrade(TENANT_B, 'owner-b', MEMBER_B, 9);
+  }
 });
 
 test.after(async () => {
