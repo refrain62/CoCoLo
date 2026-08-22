@@ -22,6 +22,18 @@ for (const file of files.filter(
   (name) => name.endsWith('.yml') || name.endsWith('.yaml'),
 )) {
   const content = await readFile(path.join(directory, file), 'utf8');
+  for (const image of content.matchAll(/image:\s*postgres:[^\s]+/g))
+    assert.match(
+      image[0],
+      /@sha256:[0-9a-f]{64}$/,
+      `${file}: PostgreSQL service image digest が必要です`,
+    );
+  for (const nodeVersion of content.matchAll(/node-version:\s*([^\s#]+)/g))
+    assert.equal(
+      nodeVersion[1],
+      '24.12.0',
+      `${file}: Node.jsは24.12.0へ固定してください`,
+    );
   for (const match of content.matchAll(/uses:\s*([^\s#]+)@([^\s#]+)/g)) {
     const actionSha = match[2];
     assert.ok(actionSha, `${file}: Action SHA が必要です`);
@@ -31,6 +43,19 @@ for (const file of files.filter(
       `${file}: Action は SHA 固定が必要です: ${match[1]}`,
     );
   }
+}
+for (const file of ['staging-deploy.yml', 'production-promote.yml']) {
+  const content = await readFile(path.join(directory, file), 'utf8');
+  assert.match(
+    content,
+    /if:\s*\$\{\{\s*false\s*\}\}/,
+    `${file}: GitHub Free期間のdeploy無効化がfail-closedではありません。`,
+  );
+  assert.doesNotMatch(content, /secrets\.|environment:\s*(staging|production)/);
+  assert.doesNotMatch(
+    content,
+    /deploy:(?:staging|production)|prisma\s+migrate\s+deploy/,
+  );
 }
 const qualityContent = await readFile(
   path.join(directory, 'quality.yml'),

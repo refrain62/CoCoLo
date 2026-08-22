@@ -1,103 +1,13 @@
-name: ステージングへデプロイ
+name: staging deploy（Free期間は無効）
 on:
   push:
     branches: [main]
 permissions:
   contents: read
-  id-token: write
-  attestations: write
-  actions: write
 jobs:
-  staging:
-    runs-on: ubuntu-latest
-    environment: staging
+  deployment-disabled:
+    # GitHub Free期間はsecret、environment、deployへ到達させない。
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
     steps:
-      - name: リポジトリを取得
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: pnpmを準備
-        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
-        with:
-          version: 10.26.0
-      - name: Node.js環境を準備
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 24
-          cache: pnpm
-      - name: 依存関係を固定インストール
-        run: pnpm install --frozen-lockfile
-      - name: staging環境の設定を検証
-        run: pnpm verify:environment --expected staging
-        env:
-          APP_ENV: staging
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_JWKS_URL: ${{ vars.SUPABASE_JWKS_URL }}
-          SUPABASE_ALLOWED_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_ALLOWED_JWKS_URL: ${{ vars.SUPABASE_JWKS_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          R2_BUCKET: cocolo-staging-private
-          PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
-          PUBLIC_APP_URL_ALLOWLIST: ${{ vars.PUBLIC_APP_URL_ALLOWLIST }}
-      - name: staging環境のRLS用ロールを準備
-        run: pnpm db:prepare:test
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
-      - name: staging環境へマイグレーションを適用
-        run: pnpm --filter @cocolo/db exec prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
-      - name: PostgreSQLのメジャーバージョンを検証
-        run: pnpm verify:database-version --expected-major 17
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - name: staging環境へテストデータを投入
-        run: pnpm db:seed:test
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
-      - name: アプリとマイグレーションの固定リリース成果物を作成
-        run: pnpm build && pnpm package:release --artifact-sha "${GITHUB_SHA}" --output .release
-        env:
-          ARTIFACT_SHA: ${{ github.sha }}
-          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      - name: リリース成果物を検証
-        run: pnpm verify:release --release-dir .release --artifact-sha "${GITHUB_SHA}"
-      - name: リリースの出所証明を生成
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
-        with:
-          subject-path: .release/release.tar.gz
-      - name: staging環境へ配置
-        run: pnpm deploy:staging --artifact-sha "${GITHUB_SHA}" --release-dir .release
-        env:
-          STAGING_DEPLOY_ADAPTER: ${{ secrets.STAGING_DEPLOY_ADAPTER }}
-      - name: staging環境のE2Eスモークテスト
-        run: pnpm test:e2e:staging
-        env:
-          APP_ENV: staging
-          STAGING_BASE_URL: ${{ vars.PUBLIC_APP_URL }}
-          E2E_TEST_EMAIL: ${{ secrets.STAGING_E2E_TEST_EMAIL }}
-          E2E_TEST_PASSWORD: ${{ secrets.STAGING_E2E_TEST_PASSWORD }}
-      - name: staging環境の配置証跡を作成
-        run: node scripts/create-staging-evidence.ts
-        env:
-          ARTIFACT_SHA: ${{ github.sha }}
-          STAGING_BASE_URL: ${{ vars.PUBLIC_APP_URL }}
-          STAGING_DEPLOYMENT_RECORD: .release/deployment-record.json
-      - name: リリース成果物を保存
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: release-${{ github.sha }}
-          path: .release
-          if-no-files-found: error
-          retention-days: 14
-      - name: staging環境の配置証跡を保存
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: staging-evidence-${{ github.sha }}
-          path: .evidence
-          if-no-files-found: error
-          retention-days: 14
+      - run: exit 1
