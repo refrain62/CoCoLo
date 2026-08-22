@@ -1,6 +1,9 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { AuthSession } from './auth-client.js';
 import {
+  CentralNavigation,
   createCentralIdentityApi,
   isUuidV7,
   matchCentralRoute,
@@ -20,6 +23,25 @@ describe('中央Webのroute境界', () => {
     expect(resolveCentralAuthState('/events', null)).toEqual({
       status: 'unauthenticated',
     });
+  });
+
+  it('未認証と所属API未接続を画面上で成功状態にしない', () => {
+    const unauthenticated = renderToStaticMarkup(
+      createElement(CentralNavigation, { session: null }),
+    );
+    expect(unauthenticated).toContain('ログインが必要です');
+
+    const unavailable = renderToStaticMarkup(
+      createElement(CentralNavigation, {
+        identityState: {
+          status: 'unavailable',
+          message: '所属情報の中央APIが未接続です。',
+        },
+        session,
+      }),
+    );
+    expect(unavailable).toContain('所属情報の中央APIが未接続です。');
+    expect(unavailable).not.toContain('現在の権限');
   });
 
   it('認証済みの直接URLを既知routeへ解決する', () => {
