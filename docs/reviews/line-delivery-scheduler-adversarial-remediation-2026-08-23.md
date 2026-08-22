@@ -59,7 +59,7 @@ H-2には、owner/admin向け`POST /api/v1/notifications/line`とDB producerを�
 - 変更対象Biome lint / API lint: 成功
 - `pnpm verify:migration-sql`: 成功
 - クリーンPostgreSQL 17 migration deploy: 成功
-- API integration（実DB）: 16件成功予定。公開API経路、retry・unknown・lease切れ、unknown確定競合、別source冪等キー競合を含む
+- API integration（実DB）: 18件成功。公開API経路、retry・unknown・lease切れ、unknown確定競合、別source冪等キー競合を含む
 - release artifact: `apps/api/dist/line-delivery-worker.js`、runtime workspace packageのdist/package.json、hardening migrationを含むことを確認
 
 workspace全体の`pnpm lint`は、今回の変更対象外にある既存CRLFファイルをBiomeが検出したため失敗した。対象ファイルはLFへ統一し、無関係な全体フォーマット変更は行っていない。
