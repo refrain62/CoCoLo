@@ -116,10 +116,7 @@ test('deploy Workflowのtriggerとenvironment改変を拒否する', () => {
   assert.throws(() =>
     validateWorkflow(
       'staging-deploy.yml',
-      stagingWorkflow.replace(
-        ' | sub("@refs/heads/[^/]+$"; "")',
-        '',
-      ),
+      stagingWorkflow.replace(' | sub("@refs/heads/[^/]+$"; "")', ''),
     ),
   );
 });
@@ -170,7 +167,7 @@ test('未許可のGitHub contextをrunへ直接展開する改変を拒否する
   assert.throws(() =>
     validateQualityWorkflow(
       qualityWorkflow.replace(
-        '        run: pnpm verify:pnpm-config && pnpm lint:workflows && pnpm test:workflows && pnpm verify:migration-sql && pnpm lint:biome && pnpm verify:workspace-boundaries && pnpm audit --prod --audit-level high && pnpm security:verify && pnpm test:security',
+        '        run: pnpm verify:pnpm-config && pnpm lint:workflows && pnpm test:workflows && pnpm verify:migration-sql && pnpm lint:biome && pnpm verify:workspace-boundaries && pnpm audit --prod --audit-level high && pnpm audit --audit-level moderate && pnpm security:verify && pnpm test:security',
         [
           '        run: echo "',
           githubExpression('github.event.pull_request.title'),
@@ -276,7 +273,9 @@ test('CODEOWNERSの信頼境界削除を拒否する', async () => {
     validateCodeowners(codeowners.replace('/package.json @refrain62', '')),
   );
   assert.throws(() =>
-    validateCodeowners(codeowners.replace('/.github/CODEOWNERS @refrain62', '')),
+    validateCodeowners(
+      codeowners.replace('/.github/CODEOWNERS @refrain62', ''),
+    ),
   );
   assert.throws(() =>
     validateCodeowners(codeowners.replace('/.gitleaks.toml @refrain62', '')),

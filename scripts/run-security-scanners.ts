@@ -17,7 +17,7 @@ import { summarizeScannerResult } from './security-scanner-summary.ts';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const outputRoot = path.join(
   process.env.RUNNER_TEMP ?? os.tmpdir(),
-  'cocolo-security-scanners',
+  `cocolo-security-scanners-${process.pid}`,
 );
 const runUrl = process.env.SECURITY_RUN_URL ?? 'local';
 const summaryPath = process.env.GITHUB_STEP_SUMMARY;

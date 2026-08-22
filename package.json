@@ -31,6 +31,7 @@
     "verify:release": "node scripts/verify-release.ts",
     "lint:workflows": "node scripts/verify-workflows.ts",
     "test:workflows": "node --test scripts/verify-workflows.test.ts",
+    "security:trust": "node scripts/verify-security-trust.ts",
     "security:verify": "node scripts/verify-security-scanners.ts",
     "security:scan": "node scripts/run-security-scanners.ts",
     "test:security": "node --test scripts/security-scanner.test.ts",
@@ -43,11 +44,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.9",
-    "@playwright/test": "1.54.2",
+    "@playwright/test": "1.55.1",
     "@types/node": "24.3.0",
     "dependency-cruiser": "16.10.4",
     "typescript": "5.9.2",
-    "vitest": "3.2.4",
-    "yaml": "2.8.1"
+    "vitest": "3.2.6",
+    "yaml": "2.8.3"
   }
 }

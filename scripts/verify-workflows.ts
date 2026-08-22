@@ -368,7 +368,13 @@ const safeExpressionBodies = new Set([
   'always()',
   'needs.config.result',
   'needs.scanners.result',
+  'needs.trust.result',
+  'needs.quality.result',
+  'needs.security.result',
   'github.sha',
+  'github.event.pull_request.base.sha || github.sha',
+  'github.event.pull_request.head.sha || github.sha',
+  "vars.DEPLOYMENT_PROTECTION_ENABLED == 'true'",
   'github.token',
   'inputs.artifact_sha',
   'secrets.DATABASE_URL',
@@ -426,8 +432,20 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
       if (body === 'github.sha')
         assert.ok(
           location.endsWith('.env.ARTIFACT_SHA') ||
-            location.endsWith('.with.name'),
+            location.endsWith('.with.name') ||
+            location.endsWith('.env.TRUST_BASE_SHA') ||
+            location.endsWith('.env.TRUST_HEAD_SHA'),
           `${location}: github.shaの用途を許可していません`,
+        );
+      if (
+        body === 'github.event.pull_request.base.sha || github.sha' ||
+        body === 'github.event.pull_request.head.sha || github.sha'
+      )
+        assert.ok(
+          location.endsWith('.env.TRUST_BASE_SHA') ||
+            location.endsWith('.env.TRUST_HEAD_SHA') ||
+            location.endsWith('.with.ref'),
+          `${location}: base/head SHAの用途を許可していません`,
         );
       if (body === 'github.token')
         assert.ok(
@@ -438,9 +456,10 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
         );
       if (body === 'always()')
         assert.equal(
-          location,
-          'security-scanners.yml.jobs.gate.if',
-          `${location}: always()はsecurity gateのjob条件だけで許可します`,
+          location === 'security-scanners.yml.jobs.gate.if' ||
+            location === 'quality.yml.jobs.gate.if',
+          true,
+          `${location}: always()はaggregate gateのjob条件だけで許可します`,
         );
       if (body === 'inputs.artifact_sha')
         assert.ok(
@@ -454,7 +473,9 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
         );
       if (body.startsWith('secrets.') || body.startsWith('vars.'))
         assert.ok(
-          location.includes('.env.'),
+          location.includes('.env.') ||
+            location === 'staging-deploy.yml.jobs.staging.if' ||
+            location === 'production-promote.yml.jobs.production.if',
           `${location}: secretとvariableは許可されたstepのenvだけで参照します`,
         );
     }
@@ -545,7 +566,11 @@ function assertWorkflowPathNormalization(
   location: string,
 ): void {
   const step = asRecord(stepValue, `${location}: stepはobjectが必要です`);
-  assert.equal(typeof step.run, 'string', `${location}.run: shell commandが必要です`);
+  assert.equal(
+    typeof step.run,
+    'string',
+    `${location}.run: shell commandが必要です`,
+  );
   const run = step.run as string;
   assert.ok(
     run.includes(
@@ -636,7 +661,7 @@ function validateQualityWorkflowDocument(workflow: WorkflowRecord): void {
     'quality.yml.concurrency',
   );
   const jobs = asRecord(workflow.jobs, 'quality.yml.jobs: objectが必要です');
-  assertExactKeys(jobs, ['quality', 'security'], 'quality.yml.jobs');
+  assertExactKeys(jobs, ['quality', 'security', 'gate'], 'quality.yml.jobs');
   const quality = asRecord(
     jobs.quality,
     'quality.yml.jobs.quality: objectが必要です',
@@ -665,6 +690,50 @@ function validateQualityWorkflowDocument(workflow: WorkflowRecord): void {
     security.permissions,
     { contents: 'read' },
     'quality.yml.jobs.security.permissions',
+  );
+  const gate = asRecord(jobs.gate, 'quality.yml.jobs.gate');
+  assertExactKeys(
+    gate,
+    [
+      'name',
+      'if',
+      'needs',
+      'runs-on',
+      'timeout-minutes',
+      'permissions',
+      'env',
+      'steps',
+    ],
+    'quality.yml.jobs.gate',
+  );
+  assert.equal(gate.name, 'quality aggregate gate');
+  assert.equal(gate.if, githubExpression('always()'));
+  assert.deepEqual(gate.needs, ['quality', 'security']);
+  assert.equal(gate['runs-on'], 'ubuntu-24.04');
+  assert.equal(gate['timeout-minutes'], 2);
+  assertExactRecord(
+    gate.permissions,
+    { contents: 'read' },
+    'quality.yml.jobs.gate.permissions',
+  );
+  assertExactRecord(
+    gate.env,
+    {
+      QUALITY_RESULT: githubExpression('needs.quality.result'),
+      SECURITY_RESULT: githubExpression('needs.security.result'),
+    },
+    'quality.yml.jobs.gate.env',
+  );
+  const gateSteps = asArray(gate.steps, 'quality.yml.jobs.gate.steps');
+  assert.equal(gateSteps.length, 1);
+  validateSecurityRunStep(
+    gateSteps[0],
+    'qualityとsecurityをfail-closedで集約',
+    `if [ "$QUALITY_RESULT" != "success" ] || [ "$SECURITY_RESULT" != "success" ]; then
+  echo "quality aggregate gate: FAIL"
+  exit 1
+fi
+echo "quality aggregate gate: PASS"`,
   );
 }
 
@@ -706,8 +775,12 @@ function validateStagingWorkflowDocument(workflow: WorkflowRecord): void {
   );
   assertExactKeys(
     staging,
-    ['runs-on', 'timeout-minutes', 'environment', 'steps'],
+    ['if', 'runs-on', 'timeout-minutes', 'environment', 'steps'],
     'staging-deploy.yml.jobs.staging',
+  );
+  assert.equal(
+    staging.if,
+    githubExpression("vars.DEPLOYMENT_PROTECTION_ENABLED == 'true'"),
   );
   assert.equal(staging['runs-on'], 'ubuntu-24.04');
   assert.equal(staging['timeout-minutes'], 15);
@@ -756,8 +829,12 @@ function validateProductionWorkflowDocument(workflow: WorkflowRecord): void {
   );
   assertExactKeys(
     production,
-    ['runs-on', 'timeout-minutes', 'environment', 'concurrency', 'steps'],
+    ['if', 'runs-on', 'timeout-minutes', 'environment', 'concurrency', 'steps'],
     'production-promote.yml.jobs.production',
+  );
+  assert.equal(
+    production.if,
+    githubExpression("vars.DEPLOYMENT_PROTECTION_ENABLED == 'true'"),
   );
   assert.equal(production['runs-on'], 'ubuntu-24.04');
   assert.equal(production['timeout-minutes'], 15);
@@ -871,16 +948,67 @@ function validateSecurityWorkflowDocument(workflow: WorkflowRecord): void {
   );
   assertExactKeys(
     jobs,
-    ['config', 'scanners', 'gate'],
+    ['trust', 'config', 'scanners', 'gate'],
     'security-scanners.yml.jobs',
+  );
+  const trust = asRecord(jobs.trust, 'security-scanners.yml.jobs.trust');
+  assertExactKeys(
+    trust,
+    ['name', 'runs-on', 'timeout-minutes', 'permissions', 'env', 'steps'],
+    'security-scanners.yml.jobs.trust',
+  );
+  assert.equal(trust.name, 'scanner trust gate');
+  assert.equal(trust['runs-on'], 'ubuntu-24.04');
+  assert.equal(trust['timeout-minutes'], 5);
+  assertExactRecord(
+    trust.permissions,
+    { contents: 'read' },
+    'security-scanners.yml.jobs.trust.permissions',
+  );
+  assertExactRecord(
+    trust.env,
+    {
+      TRUST_BASE_SHA: githubExpression(
+        'github.event.pull_request.base.sha || github.sha',
+      ),
+      TRUST_HEAD_SHA: githubExpression(
+        'github.event.pull_request.head.sha || github.sha',
+      ),
+    },
+    'security-scanners.yml.jobs.trust.env',
+  );
+  const trustSteps = asArray(
+    trust.steps,
+    'security-scanners.yml.jobs.trust.steps',
+  );
+  assert.equal(trustSteps.length, 2);
+  validateSecurityActionStep(
+    trustSteps[0],
+    'base側のtrust checkerを取得',
+    `actions/checkout@${actionAllowlist['actions/checkout']}`,
+    {
+      'persist-credentials': false,
+      ref: githubExpression('github.event.pull_request.base.sha || github.sha'),
+      'fetch-depth': 1,
+    },
+  );
+  validateSecurityRunStep(
+    trustSteps[1],
+    'head SHAを取得してbase側参照を比較',
+    `set -euo pipefail
+[[ "$TRUST_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+[[ "$TRUST_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+git fetch --no-tags --depth=1 origin "$TRUST_HEAD_SHA"
+node scripts/verify-security-trust.ts`,
   );
   const config = asRecord(jobs.config, 'security-scanners.yml.jobs.config');
   assertExactKeys(
     config,
-    ['name', 'runs-on', 'timeout-minutes', 'permissions', 'steps'],
+    ['name', 'needs', 'runs-on', 'timeout-minutes', 'permissions', 'steps'],
     'security-scanners.yml.jobs.config',
   );
   assert.equal(config.name, 'scanner設定');
+  assert.equal(config.needs, 'trust');
   assert.equal(config['runs-on'], 'ubuntu-24.04');
   assert.equal(config['timeout-minutes'], 5);
   assertExactRecord(
@@ -1011,7 +1139,7 @@ function validateSecurityWorkflowDocument(workflow: WorkflowRecord): void {
   );
   assert.equal(gate.name, 'security gate');
   assert.equal(gate.if, githubExpression('always()'));
-  assert.deepEqual(gate.needs, ['config', 'scanners']);
+  assert.deepEqual(gate.needs, ['trust', 'config', 'scanners']);
   assert.equal(gate['runs-on'], 'ubuntu-24.04');
   assert.equal(gate['timeout-minutes'], 2);
   assertExactRecord(
@@ -1022,6 +1150,7 @@ function validateSecurityWorkflowDocument(workflow: WorkflowRecord): void {
   assertExactRecord(
     gate.env,
     {
+      TRUST_RESULT: githubExpression('needs.trust.result'),
       CONFIG_RESULT: githubExpression('needs.config.result'),
       SCANNERS_RESULT: githubExpression('needs.scanners.result'),
       SECURITY_RUN_URL: `${githubExpression('github.server_url')}/${githubExpression('github.repository')}/actions/runs/${githubExpression('github.run_id')}`,
@@ -1036,7 +1165,7 @@ function validateSecurityWorkflowDocument(workflow: WorkflowRecord): void {
   validateSecurityRunStep(
     gateSteps[0],
     'scanner結果をfail-closedで集約',
-    `if [ "$CONFIG_RESULT" != "success" ] || [ "$SCANNERS_RESULT" != "success" ]; then
+    `if [ "$TRUST_RESULT" != "success" ] || [ "$CONFIG_RESULT" != "success" ] || [ "$SCANNERS_RESULT" != "success" ]; then
   line="tool=security-gate critical=0 high=0 medium=0 low=0 unknown=1 verdict=FAIL run_url=$SECURITY_RUN_URL"
   echo "$line"
   echo "$line" >> "$GITHUB_STEP_SUMMARY"
@@ -1076,6 +1205,7 @@ export function validatePackageScripts(value: unknown): void {
     {
       'lint:workflows': scripts['lint:workflows'],
       'test:workflows': scripts['test:workflows'],
+      'security:trust': scripts['security:trust'],
       'security:verify': scripts['security:verify'],
       'security:scan': scripts['security:scan'],
       'test:security': scripts['test:security'],
@@ -1083,6 +1213,7 @@ export function validatePackageScripts(value: unknown): void {
     {
       'lint:workflows': 'node scripts/verify-workflows.ts',
       'test:workflows': 'node --test scripts/verify-workflows.test.ts',
+      'security:trust': 'node scripts/verify-security-trust.ts',
       'security:verify': 'node scripts/verify-security-scanners.ts',
       'security:scan': 'node scripts/run-security-scanners.ts',
       'test:security': 'node --test scripts/security-scanner.test.ts',
@@ -1100,8 +1231,9 @@ export function validateCodeowners(content: string): void {
     '/scripts/verify-security-scanners.ts @refrain62',
     '/scripts/security-scanner-config.ts @refrain62',
     '/scripts/security-scanner-summary.ts @refrain62',
-    '/scripts/run-security-scanners.ts @refrain62',
     '/scripts/security-scanner.test.ts @refrain62',
+    '/scripts/run-security-scanners.ts @refrain62',
+    '/scripts/verify-security-trust.ts @refrain62',
     '/.github/security/* @refrain62',
     '/.github/CODEOWNERS @refrain62',
     '/.gitleaks.toml @refrain62',

@@ -5,8 +5,9 @@
 /scripts/verify-security-scanners.ts @refrain62
 /scripts/security-scanner-config.ts @refrain62
 /scripts/security-scanner-summary.ts @refrain62
-/scripts/run-security-scanners.ts @refrain62
 /scripts/security-scanner.test.ts @refrain62
+/scripts/run-security-scanners.ts @refrain62
+/scripts/verify-security-trust.ts @refrain62
 /.github/security/* @refrain62
 /.github/CODEOWNERS @refrain62
 /.gitleaks.toml @refrain62

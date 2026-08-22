@@ -39,6 +39,10 @@ assert.equal(
   'node scripts/verify-security-scanners.ts',
 );
 assert.equal(
+  packageJson.scripts?.['security:trust'],
+  'node scripts/verify-security-trust.ts',
+);
+assert.equal(
   packageJson.scripts?.['security:scan'],
   'node scripts/run-security-scanners.ts',
 );
@@ -65,6 +69,7 @@ assert.match(workflow, /timeout-minutes:/);
 assert.match(workflow, /node-version:\s*24\.12\.0/);
 assert.match(workflow, /pnpm security:verify/);
 assert.match(workflow, /pnpm security:scan/);
+assert.match(workflow, /node scripts\/verify-security-trust\.ts/);
 assert.match(workflow, /if:\s*\$\{\{\s*always\(\)/);
 assert.match(workflow, /needs\.config\.result/);
 assert.match(workflow, /needs\.scanners\.result/);

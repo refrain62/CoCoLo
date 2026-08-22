@@ -11,6 +11,10 @@ import {
   validateScannerConfig,
 } from './security-scanner-config.ts';
 import { summarizeScannerResult } from './security-scanner-summary.ts';
+import {
+  assertTrustedFileHashes,
+  trustedScannerFiles,
+} from './verify-security-trust.ts';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -143,4 +147,46 @@ test('SemgrepとTrivyのreport schemaは不正時にfail-closedになる', async
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('固定malicious fixtureのscanner信頼対象改変を拒否する', async () => {
+  const fixture = JSON.parse(
+    await readFile(
+      path.join(
+        root,
+        '.github',
+        'security',
+        'fixtures',
+        'malicious-scanner-pr.json',
+      ),
+      'utf8',
+    ),
+  ) as { tamperedFile: string; changedFiles: string[] };
+  assert.deepEqual(fixture.changedFiles, [...trustedScannerFiles]);
+  const baseHashes = Object.fromEntries(
+    trustedScannerFiles.map((file) => [file, 'a'.repeat(64)]),
+  );
+  const headHashes = { ...baseHashes, [fixture.tamperedFile]: 'b'.repeat(64) };
+  assert.throws(
+    () =>
+      assertTrustedFileHashes(
+        'a'.repeat(40),
+        'b'.repeat(40),
+        baseHashes,
+        headHashes,
+      ),
+    /改変されています/,
+  );
+  const missingHashes = { ...baseHashes };
+  delete missingHashes[fixture.tamperedFile];
+  assert.throws(
+    () =>
+      assertTrustedFileHashes(
+        'a'.repeat(40),
+        'b'.repeat(40),
+        baseHashes,
+        missingHashes,
+      ),
+    /hashが欠落しています/,
+  );
 });

@@ -1,0 +1,27 @@
+{
+  "description": "固定malicious fixture: scannerの設定・parser・validator・CODEOWNERSを同時改変するPR",
+  "tamperedFile": "scripts/security-scanner-summary.ts",
+  "changedFiles": [
+    ".github/CODEOWNERS",
+    ".github/security/scanner-exceptions.json",
+    ".github/security/security-scanners.json",
+    ".github/workflows/quality.yml",
+    ".github/workflows/security-scanners.yml",
+    ".github/workflows/staging-deploy.yml",
+    ".github/workflows/production-promote.yml",
+    ".gitleaks.toml",
+    ".semgrep/ci.yml",
+    ".trivy-secret.yaml",
+    "package.json",
+    "pnpm-lock.yaml",
+    "scripts/run-security-scanners.ts",
+    "scripts/security-scanner-config.ts",
+    "scripts/security-scanner-summary.ts",
+    "scripts/security-scanner.test.ts",
+    "scripts/verify-security-scanners.ts",
+    "scripts/verify-security-trust.ts",
+    "scripts/verify-workflows.ts",
+    "scripts/verify-workflows.test.ts",
+    ".github/security/fixtures/malicious-scanner-pr.json"
+  ]
+}

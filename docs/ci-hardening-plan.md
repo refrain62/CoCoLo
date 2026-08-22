@@ -141,7 +141,9 @@ Workflowは`actionlint`と単体テストを持つ独自validatorで検査しま
 
 WorkflowとvalidatorはPRの変更対象になり得るため、検査結果だけを信頼境界にしません。
 `.github/CODEOWNERS`でWorkflowとvalidatorのownerレビューを要求し、GitHub側でbranch protectionを利用できる環境では当該レビューと品質ゲートを必須条件にします。
-GitHub Freeの非公開リポジトリで必須レビューを技術的に強制できない期間は、ownerが差分を確認してからDraft PRを更新し、品質ゲートには秘密情報を渡しません。
+`pull_request`ではbase SHAをcheckoutしたtrust gateが、scanner設定・parser・summary・validator・Workflow・CODEOWNERS・依存固定ファイルの存在とSHA-256をheadと比較します。base側参照の取得不能、対象ファイルの欠落、hash不一致はfail-closedとし、固定malicious fixtureで同時改変を拒否します。
+このPRで新規追加するtrust checkerを同一PRの`pull_request`からbase側の信頼済みコードとして実行することはできないため、baseにcheckerまたは対象ファイルがない初回導入はtrust gateを成功させません。ownerがbase側へtrust checkerを先行配置できるまで、security gate・quality aggregate gate・deployを停止します。
+GitHub Freeの非公開リポジトリではrequired checksとownerレビューを技術的に強制できないことを運用残余として記録します。ownerがbase側hashと差分を確認してからDraft PRを更新し、品質ゲートには秘密情報を渡しません。
 
 ## 9. 定期検査
 
@@ -166,7 +168,8 @@ GitHub Freeの非公開リポジトリを使う期間は、`admin`と`write`をr
 ownerアカウントはMFAとpasskeyを有効にし、回復コードとログイン履歴を定期確認します。
 
 実行可能なstagingとproduction Workflowは`.github/workflows`から非実行の設計資料へ移します。
-Free期間はflag、手動dispatch、repository secretのいずれでもデプロイできない状態を維持します。
+Free期間はflag、手動dispatch、repository secretのいずれでも実deployできない状態を維持します。保護されたEnvironmentと実配置adapterが未設定または検証不能な場合はdeployを停止し、repository secretを代替の承認機構にしません。
+staging/production Workflowは`vars.DEPLOYMENT_PROTECTION_ENABLED == 'true'`を満たさない限りjob自体を開始しません。このvariableは保護されたEnvironment、required reviewer、実配置adapterをGitHub側で確認できた場合だけownerが設定し、Free private期間は未設定のままにします。
 
 GitHub Proへ移行した場合もproductionを直ちに有効化しません。
 `develop`と`main`のPR必須、`品質ゲート / gate`必須、force pushと削除禁止、conversation解決、管理者bypass禁止をAPIで検証してから、CIを強制ゲートへ変更します。
