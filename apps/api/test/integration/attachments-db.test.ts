@@ -72,7 +72,10 @@ test('実PostgreSQLの添付repositoryはowner・tenant・状態遷移を同時�
           byteSize: 10,
         }),
       ),
-    (error) => error?.status === 404,
+    (error: unknown) =>
+      error instanceof Error &&
+      'status' in error &&
+      (error as { status?: unknown }).status === 404,
   );
 });
 

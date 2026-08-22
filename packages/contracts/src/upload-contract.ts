@@ -33,7 +33,6 @@ export function parseUploadSessionInput(
 ): UploadSessionRequest {
   return uploadSessionInputSchema.parse(input);
 }
-}
 
 // 後方互換の名前は残すが、所有者は認証コンテキストから決めるため入力へ含めない。
 export const uploadSessionInputSchema = uploadSessionRequestSchema;

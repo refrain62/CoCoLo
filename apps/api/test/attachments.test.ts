@@ -1,12 +1,26 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
+import type {
+  AttachmentRecord,
+  AttachmentRepository,
+  AttachmentVerification,
+  CompleteAttachmentInput,
+  CreateAttachmentSessionInput,
+  ExpiredAttachmentCleanupInput,
+} from '@cocolo/domain/attachment';
 import { createAttachmentApp } from '../dist/features/attachments/attachment-app.js';
 import { createFakeAttachmentStorage } from '../dist/features/attachments/fake-attachment-storage.js';
+import type { FakeAttachmentStorage } from '../dist/features/attachments/fake-attachment-storage.js';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
-const USERS = {
+type TestUser = {
+  tenantId: string;
+  role: CreateAttachmentSessionInput['role'];
+};
+
+const USERS: Record<string, TestUser> = {
   'owner-a': { tenantId: TENANT_A, role: 'owner' },
   'staff-a': { tenantId: TENANT_A, role: 'staff' },
   'guardian-a': { tenantId: TENANT_A, role: 'guardian' },
@@ -17,14 +31,25 @@ const PNG = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01, 0x02,
 ]);
 
-function createMemoryRepository() {
-  const records = new Map();
-  const cleanupAttempts = [];
+type TestRepository = AttachmentRepository & {
+  records: Map<string, AttachmentRecord>;
+  cleanupAttempts: Array<{
+    id: string;
+    tenantId: string;
+    ownerUserId: string;
+    role: CreateAttachmentSessionInput['role'];
+    completed: boolean;
+  }>;
+};
+
+function createMemoryRepository(): TestRepository {
+  const records = new Map<string, AttachmentRecord>();
+  const cleanupAttempts: TestRepository['cleanupAttempts'] = [];
   return {
     records,
     cleanupAttempts,
-    async createSession(input) {
-      const record = {
+    async createSession(input: CreateAttachmentSessionInput) {
+      const record: AttachmentRecord = {
         id: input.id,
         tenantId: input.tenantId,
         ownerUserId: input.ownerUserId,
@@ -44,7 +69,10 @@ function createMemoryRepository() {
       records.set(record.id, record);
       return record;
     },
-    async complete(input, verify) {
+    async complete(
+      input: CompleteAttachmentInput,
+      verify: Parameters<AttachmentRepository['complete']>[1],
+    ) {
       const record = records.get(input.id);
       if (
         !record ||
@@ -52,16 +80,16 @@ function createMemoryRepository() {
         record.ownerUserId !== input.ownerUserId
       ) {
         const error = new Error('not found');
-        error.status = 404;
+        Object.assign(error, { status: 404 });
         throw error;
       }
       if (record.status !== 'uploaded') {
         const error = new Error('conflict');
-        error.status = 409;
+        Object.assign(error, { status: 409 });
         throw error;
       }
       const attempt = record.completeAttempts + 1;
-      const verification =
+      const verification: AttachmentVerification =
         record.expiresAt <= input.now
           ? { kind: 'rejected', reason: 'UPLOAD_EXPIRED' }
           : await verify(record);
@@ -114,7 +142,7 @@ function createMemoryRepository() {
         return null;
       return record;
     },
-    async listExpiredUploaded(input) {
+    async listExpiredUploaded(input: ExpiredAttachmentCleanupInput) {
       return [...records.values()].filter(
         (record) =>
           record.tenantId === input.tenantId &&
@@ -144,7 +172,14 @@ function createMemoryRepository() {
   };
 }
 
-function createTestApp(options = {}) {
+type TestOptions = {
+  repository?: TestRepository;
+  storage?: FakeAttachmentStorage;
+  now?: () => Date;
+  createId?: () => string;
+};
+
+function createTestApp(options: TestOptions = {}) {
   const repository = options.repository ?? createMemoryRepository();
   const clock = options.now ?? (() => new Date('2026-08-22T00:00:00.000Z'));
   const storage = options.storage ?? createFakeAttachmentStorage(clock);
@@ -171,14 +206,14 @@ function createTestApp(options = {}) {
   return { app, repository, storage };
 }
 
-function auth(token) {
+function auth(token: string) {
   return { authorization: `Bearer ${token}` };
 }
 
 async function startUpload(
-  app,
+  app: ReturnType<typeof createAttachmentApp>,
   token = 'owner-a',
-  input = { mediaType: 'image/png', byteSize: PNG.length },
+  input: unknown = { mediaType: 'image/png', byteSize: PNG.length },
 ) {
   return app.request('/api/v1/uploads', {
     method: 'POST',
@@ -187,7 +222,7 @@ async function startUpload(
   });
 }
 
-function sha256(bytes) {
+function sha256(bytes: Uint8Array) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
@@ -285,16 +320,18 @@ test('ストレージ未反映は2回再試行でき、3回目でrejectedにす�
     );
     assert.equal(response.status, expected);
   }
-  assert.equal(repository.records.get(session.attachmentId).status, 'rejected');
+  assert.equal(repository.records.get(session.attachmentId)?.status, 'rejected');
 });
 
 test('cleanup失敗は503で残し、cleanup endpointで再試行できる', async () => {
   const clock = () => new Date('2026-08-22T00:00:00.000Z');
   const base = createFakeAttachmentStorage(clock);
   let shouldFail = true;
-  const storage = {
+  const storage: FakeAttachmentStorage = {
     ...base,
-    async deleteObject(input) {
+    async deleteObject(
+      input: Parameters<FakeAttachmentStorage['deleteObject']>[0],
+    ) {
       if (shouldFail) {
         shouldFail = false;
         throw new Error('temporary cleanup failure');
