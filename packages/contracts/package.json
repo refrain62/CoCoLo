@@ -5,7 +5,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./upload": "./src/upload-contract.ts",
-    "./member": "./src/member-contract.ts"
+    "./member": "./src/member-contract.ts",
+    "./auth-team-selection": "./src/auth-team-selection-contract.ts"
   },
   "scripts": {
     "build": "node ../../scripts/generate-openapi.ts",

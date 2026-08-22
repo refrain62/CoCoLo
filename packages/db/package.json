@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./client": "./dist/index.js"
+    "./client": "./dist/index.js",
+    "./auth-team-selection": "./dist/auth-team-selection-repository.js"
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
