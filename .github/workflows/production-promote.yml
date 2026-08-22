@@ -10,7 +10,8 @@ permissions:
   actions: read
 jobs:
   production:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     environment: production
     concurrency: production-migration
     steps:
@@ -24,6 +25,7 @@ jobs:
           STAGING_RUN_ID="$(gh run list --workflow staging-deploy.yml --branch main --status success --limit 20 --json databaseId,headSha --jq ".[] | select(.headSha == \"$ARTIFACT_SHA\") | .databaseId" | head -n 1)"
           test -n "$STAGING_RUN_ID"
           test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID" --jq '.path')" = '.github/workflows/staging-deploy.yml'
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/security-scanners.yml/runs?head_sha=$ARTIFACT_SHA&event=push&status=success&per_page=100" | jq -e --arg sha "$ARTIFACT_SHA" '.workflow_runs | any(.[]; .head_sha == $sha and .head_branch == "main" and .event == "push" and .path == ".github/workflows/security-scanners.yml" and .conclusion == "success")')" = true
           gh run download "$STAGING_RUN_ID" --name "staging-evidence-$ARTIFACT_SHA" --dir .evidence
           gh run download "$STAGING_RUN_ID" --name "release-$ARTIFACT_SHA" --dir .release
           jq -e --arg sha "$ARTIFACT_SHA" '(.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success")' .evidence/evidence.json
@@ -32,6 +34,7 @@ jobs:
       - name: 検証済みSHAのリポジトリをcheckout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          persist-credentials: false
           ref: ${{ inputs.artifact_sha }}
       - name: pnpmを準備
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
@@ -69,6 +72,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: production環境へ成果物を配置
-        run: pnpm deploy:production --artifact-sha "${{ inputs.artifact_sha }}" --release-dir .release
+        run: pnpm deploy:production --artifact-sha "$ARTIFACT_SHA" --release-dir .release
         env:
+          ARTIFACT_SHA: ${{ inputs.artifact_sha }}
           PRODUCTION_DEPLOY_ADAPTER: ${{ secrets.PRODUCTION_DEPLOY_ADAPTER }}
