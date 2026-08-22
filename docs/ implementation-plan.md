@@ -28,6 +28,8 @@
 
 Supabase CLI はローカルのマイグレーション / seed / テスト環境操作に使用します。Supabase Service Role Key は Hono のサーバー専用環境変数としてのみ使用し、ブラウザへ渡しません。
 
+外部サービスの現行設定、責務境界、権限、監視、障害対応は [`docs/external-services-operations.md`](external-services-operations.md) を正本とします。Supabase PostgreSQL を将来別の PostgreSQL へ分離する場合の不変契約、移行対象、照合、切り戻しは [`docs/database-separation-plan.md`](database-separation-plan.md) に従います。R2は現時点で導入予定であり、実装済みの機能として扱いません。
+
 
 主要機能の設計案
 マルチテナント構造（例: cocolo.app/team-a やテナントID管理）を前提とし、各チームが独立して利用できる基本機能の構成案です。
@@ -77,8 +79,11 @@ cocolo/
 │   ├── ui/                      # Web専用の共有UI（APIから参照しない）
 │   └── test-fixtures/           # local / integration / E2E の共通テストデータ
 ├── docs/
-│   ├── implementation-plan.md   # 技術実装計画
-│   └── functional-specification.md # 機能・業務仕様の正本
+│   ├──  implementation-plan.md  # 技術実装計画（ファイル名の先頭に半角スペースあり）
+│   ├── functional-specification.md # 機能・業務仕様の正本
+│   ├── external-services-operations.md # 外部サービス運用の正本
+│   ├── database-separation-plan.md # DB分離の不変契約・移行・復旧
+│   └── deployment-adapter.md   # 配置アダプター契約
 ├── package.json                # private workspace root
 ├── pnpm-workspace.yaml
 └── tsconfig.base.json
