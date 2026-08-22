@@ -113,6 +113,9 @@ context未設定、tenant Aからtenant Bへの越境、各roleのCRUD、guardia
 `_prisma_migrations` のmigration名、checksum、完了時刻、rollback状態をmanifestと照合し、app roleや別の接続先へのフォールバックを認めません。
 schema drift、RLS、role属性、policyの実DB検査は別のCI-003実装単位で追加します。
 
+既存migrationの変更禁止は、同じPRでmanifestだけを更新して検査を回避できないよう、Workflowが受け取ったbase SHAとの差分でも確認します。
+base SHAは40桁のcommit SHAとして扱い、既存migrationの編集、削除、改名を拒否し、新規migrationの追加だけを許可します。
+
 ## 7. セキュリティと供給網
 
 runtime依存だけでなく、buildとCIで実行される開発用依存もCriticalとHighで失敗させます。

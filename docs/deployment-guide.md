@@ -155,14 +155,15 @@ pnpm verify:production-bundle
 2. `verify:environment --expected staging` で環境名、DB URL、Supabase URL/JWKS、R2 bucket、公開URL、allowlistを検証する。
 3. `db:prepare:test` をmigration owner接続で実行し、RLSを回避しない `cocolo_app` roleとtable grantを準備する。
 4. stagingへ Prisma migrationを適用する。
-5. PostgreSQL major version 17を検証する。
-6. `db:seed:test` でstaging専用のtenant / role / guardian fixtureを冪等投入する。
-7. API/Web/DB schema/migrationをビルドして `release.tar.gz`、manifest、SHA-256 checksumを作成する。
-8. artifact SHAとSHA-256を検証し、GitHub build provenance attestationを付与する。
-9. staging deploy adapterでartifactを配置し、配置記録を検証する。
-10. staging URLへPlaywright E2E smokeを実行する。ログイン、部員登録、Bearer token送信を確認する。
-11. migration、smoke、E2E、配置URL、artifact SHAを `.evidence/evidence.json` へ束ねる。
-12. release artifactとstaging evidenceをGitHub Actions artifactとして保存する。保存期間は14日である。
+5. `DIRECT_URL` で `pnpm verify:migration-history` を実行し、stagingの `_prisma_migrations` とmanifestのmigration名・checksum・完了状態を照合する。`DATABASE_URL` へフォールバックしない。
+6. PostgreSQL major version 17を検証する。
+7. `db:seed:test` でstaging専用のtenant / role / guardian fixtureを冪等投入する。
+8. API/Web/DB schema/migrationをビルドして `release.tar.gz`、manifest、SHA-256 checksumを作成する。
+9. artifact SHAとSHA-256を検証し、GitHub build provenance attestationを付与する。
+10. staging deploy adapterでartifactを配置し、配置記録を検証する。
+11. staging URLへPlaywright E2E smokeを実行する。ログイン、部員登録、Bearer token送信を確認する。
+12. migration、smoke、E2E、配置URL、artifact SHAを `.evidence/evidence.json` へ束ねる。
+13. release artifactとstaging evidenceをGitHub Actions artifactとして保存する。保存期間は14日である。
 
 配置後は、Workflowの全stepが成功し、次の値を記録します。
 
@@ -215,7 +216,8 @@ gh run watch <production-run-id>
 6. 検証済みSHAをcheckoutし、artifactを展開する。ここで再ビルドしない。
 7. production環境、DB URL、Supabase URL/JWKS、R2 bucket、公開URL、保持期間、Service Role Keyを検証する。
 8. artifactに同梱されたschema / migrationだけを使って `prisma migrate deploy` を実行する。
-9. production deploy adapterでartifactを配置し、production配置記録を検証する。
+9. `DIRECT_URL` で `pnpm verify:migration-history` を実行し、productionの `_prisma_migrations` と同梱manifestを照合する。失敗時は配置を成功扱いにしない。
+10. production deploy adapterでartifactを配置し、production配置記録を検証する。
 
 production Workflowには `concurrency: production-migration` が設定されているため、production migrationの同時実行は許可しません。既に別のproduction promoteが実行中の場合は、完了または停止理由を確認してから次を実行します。
 
@@ -260,6 +262,8 @@ adapterが途中まで配置した可能性がある場合は、providerの実�
 | Workflow定義を検証 | `pnpm lint:workflows` |
 | 環境値を検証 | `pnpm verify:environment --expected staging` または `production` |
 | migration SQLを検証 | `pnpm verify:migration-sql` |
+| migrationのchecksumを検証 | `pnpm verify:migration-checksum` |
+| 対象DBのmigration履歴を検証 | `DIRECT_URL=<migration owner URL> pnpm verify:migration-history` |
 | artifactを作成 | `pnpm build && pnpm package:release --artifact-sha <SHA> --output .release` |
 | artifactを検証 | `pnpm verify:release --release-dir .release --artifact-sha <SHA>` |
 | stagingへ配置 | `pnpm deploy:staging --artifact-sha <SHA> --release-dir .release` |
