@@ -134,6 +134,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
+#variable_conflict use_column
 DECLARE
   selected_outbox line_notification_outbox%ROWTYPE;
   connected_group varchar(128);
