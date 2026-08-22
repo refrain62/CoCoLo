@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { createEventRepository, createPrismaClient } from '@cocolo/db/events';
+import { createPrismaClient } from '@cocolo/db/client';
+import { createEventRepository } from '@cocolo/db/events';
 import { AttendancePolicyError } from '@cocolo/domain/event';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
@@ -113,6 +115,25 @@ test('実DBは締切後の管理者修正理由を要求する', async () => {
   });
   assert.equal(corrected.response, 'attending');
   assert.equal(corrected.correctionReason, '日程変更を反映');
+
+  await assert.rejects(
+    prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT
+          set_config('app.tenant_id', ${TENANT_A}, true),
+          set_config('app.user_id', 'owner-a', true),
+          set_config('app.role', 'owner', true)
+      `;
+      await tx.$executeRaw`
+        INSERT INTO attendance_responses
+          (id, tenant_id, event_id, user_id, member_id, response)
+        VALUES
+          (${randomUUID()}::uuid, ${TENANT_A}::uuid, ${created.id}::uuid,
+           'owner-a', ${MEMBER_A}::uuid, 'absent'::attendance_response)
+      `;
+    }),
+    /締切後の管理者修正には理由が必要です/,
+  );
 });
 
 test.after(async () => {
