@@ -3,13 +3,28 @@ import type {
   MemberCreateInput,
   MemberListQuery,
   MemberRole,
+  MemberUpdateInput,
   PromotionMode,
 } from '@cocolo/contracts/member';
 import {
   memberCreateSchema,
+  memberIdSchema,
   memberListQuerySchema,
+  memberUpdateSchema,
   promotionRequestSchema,
 } from '@cocolo/contracts/member';
+import {
+  createCentralAuthMiddleware,
+  createCentralCorsMiddleware,
+  createCentralPathValidationMiddleware,
+  createCentralRateLimitMiddleware,
+  createCentralRequestContextMiddleware,
+  createCentralRequestLoggerMiddleware,
+  createCentralResponseValidationMiddleware,
+  mountCentralFeatureRoutes,
+  type CentralApiEnv,
+  type CentralAppOptions,
+} from './central-dependencies.js';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
 
 export type MembershipContext = {
@@ -48,6 +63,19 @@ export type MemberRepository = {
     },
     member: MemberCreateInput,
   ) => Promise<MemberRecord>;
+  update?: (input: {
+    tenantId: string;
+    actorUserId: string;
+    role: MemberRole;
+    memberId: string;
+    member: MemberUpdateInput;
+  }) => Promise<MemberRecord | null>;
+  retire?: (input: {
+    tenantId: string;
+    actorUserId: string;
+    role: MemberRole;
+    memberId: string;
+  }) => Promise<MemberRecord | null>;
 };
 
 export type PromotionRecord = {
@@ -75,17 +103,10 @@ export type AppOptions = {
   membershipRepository?: MembershipRepository;
   memberRepository?: MemberRepository;
   promotionRepository?: PromotionRepository;
+  central?: CentralAppOptions;
 };
 
-export type ApiEnv = {
-  Variables: {
-    requestId: string;
-    auth: {
-      userId: string;
-      membership: MembershipContext;
-    };
-  };
-};
+export type ApiEnv = CentralApiEnv;
 
 const managerRoles = new Set<MemberRole>(['owner', 'admin']);
 
@@ -135,13 +156,41 @@ function projectMember(member: MemberRecord, role: MemberRole) {
 // APIの依存性と認証middlewareを組み立て、tenant/roleは認証後の所属解決結果だけを利用する。
 export function createApp(options: AppOptions = {}) {
   const app = new Hono<ApiEnv>();
+  const central = options.central ?? {};
 
-  app.use('*', async (c, next) => {
-    const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
-    c.set('requestId', requestId);
-    c.header('x-request-id', requestId);
-    await next();
-  });
+  app.use(
+    '*',
+    createCentralRequestLoggerMiddleware({
+      environment: central.environment ?? 'local',
+      sink: central.logSink,
+    }),
+  );
+  app.use(
+    '*',
+    createCentralCorsMiddleware(
+      central.corsOrigins ?? ['http://localhost:5173'],
+    ),
+  );
+  app.use('*', createCentralRequestContextMiddleware());
+  app.use(
+    '/api/v1/*',
+    createCentralAuthMiddleware(
+      options.verifyToken,
+      options.membershipRepository,
+      (context) =>
+        new URL(context.req.url).pathname === '/api/v1/line/webhook',
+    ),
+  );
+  app.use('/api/v1/*', createCentralPathValidationMiddleware());
+  app.use(
+    '/api/v1/*',
+    createCentralRateLimitMiddleware({
+      store: central.rateLimitStore,
+      requireDistributed: central.requireDistributedRateLimitStore,
+      clientIdentityResolver: central.clientIdentityResolver,
+    }),
+  );
+  app.use('*', createCentralResponseValidationMiddleware());
 
   // 予期せぬ例外は詳細を隠し、クライアントにはrequestId付きの共通500だけを返す。
   app.onError((error, c) => {
@@ -153,6 +202,10 @@ export function createApp(options: AppOptions = {}) {
       '予期しないエラーが発生しました。',
     );
   });
+
+  app.notFound((c) =>
+    errorResponse(c, 404, 'NOT_FOUND', '指定されたAPIが見つかりません。'),
+  );
 
   app.get('/health', (c) => c.json({ status: 'ok', service: 'api' }));
 
@@ -280,6 +333,112 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ data: projectMember(member, auth.membership.role) }, 201);
   });
 
+  app.patch('/api/v1/members/:memberId', async (c) => {
+    if (!options.memberRepository?.update)
+      return errorResponse(
+        c,
+        503,
+        'DEPENDENCY_UNAVAILABLE',
+        '部員データストアが設定されていません。',
+      );
+    const auth = c.get('auth');
+    if (!managerRoles.has(auth.membership.role))
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        '部員を編集する権限がありません。',
+      );
+    const memberId = memberIdSchema.safeParse(c.req.param('memberId'));
+    if (!memberId.success)
+      return errorResponse(c, 400, 'VALIDATION_ERROR', '部員IDが不正です。');
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return errorResponse(c, 400, 'VALIDATION_ERROR', 'JSON入力が不正です。');
+    }
+    const parsed = memberUpdateSchema.safeParse(body);
+    if (!parsed.success)
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        '入力値が不正です。',
+        parsed.error.flatten(),
+      );
+    try {
+      const member = await options.memberRepository.update({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        memberId: memberId.data,
+        member: parsed.data,
+      });
+      if (!member)
+        return errorResponse(c, 404, 'NOT_FOUND', '部員が見つかりません。');
+      return c.json({ data: projectMember(member, auth.membership.role) });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        'status' in error &&
+        error.status === 409
+      )
+        return errorResponse(
+          c,
+          409,
+          'MEMBER_CONFLICT',
+          '部員の状態が競合しました。',
+        );
+      throw error;
+    }
+  });
+
+  app.post('/api/v1/members/:memberId/retire', async (c) => {
+    if (!options.memberRepository?.retire)
+      return errorResponse(
+        c,
+        503,
+        'DEPENDENCY_UNAVAILABLE',
+        '部員データストアが設定されていません。',
+      );
+    const auth = c.get('auth');
+    if (!managerRoles.has(auth.membership.role))
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        '部員を退部させる権限がありません。',
+      );
+    const memberId = memberIdSchema.safeParse(c.req.param('memberId'));
+    if (!memberId.success)
+      return errorResponse(c, 400, 'VALIDATION_ERROR', '部員IDが不正です。');
+    try {
+      const member = await options.memberRepository.retire({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        memberId: memberId.data,
+      });
+      if (!member)
+        return errorResponse(c, 404, 'NOT_FOUND', '部員が見つかりません。');
+      return c.json({ data: projectMember(member, auth.membership.role) });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        'status' in error &&
+        error.status === 409
+      )
+        return errorResponse(
+          c,
+          409,
+          'MEMBER_CONFLICT',
+          '部員の状態が競合しました。',
+        );
+      throw error;
+    }
+  });
+
   app.post('/api/v1/members/promote', async (c) => {
     if (!options.promotionRepository)
       return errorResponse(
@@ -346,6 +505,12 @@ export function createApp(options: AppOptions = {}) {
         );
       throw error;
     }
+  });
+
+  mountCentralFeatureRoutes(app, {
+    verifyToken: options.verifyToken,
+    membershipRepository: options.membershipRepository,
+    features: central.features,
   });
 
   return app;
