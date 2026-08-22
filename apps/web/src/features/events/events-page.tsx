@@ -73,6 +73,11 @@ function EventCard({
   const [message, setMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
+    if (!memberOptions.some((member) => member.id === memberId))
+      setMemberId(memberOptions[0]?.id ?? '');
+  }, [memberId, memberOptions]);
+
   async function answer(eventSubmit: FormEvent<HTMLFormElement>) {
     eventSubmit.preventDefault();
     setIsSaving(true);
