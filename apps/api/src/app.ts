@@ -410,7 +410,7 @@ export function createApp(options: AppOptions = {}) {
           c,
           409,
           'LINE_DELIVERY_CONFLICT',
-          '同じ通知sourceへ異なる内容を登録できません。',
+          '同じtenant内で通知の冪等キーまたはpayloadが競合しました。',
         );
       throw error;
     }

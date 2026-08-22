@@ -48,6 +48,13 @@ const PROVIDER_RETRY_MIGRATION = readFileSync(
   ),
   'utf8',
 );
+const UNKNOWN_LEASE_MIGRATION = readFileSync(
+  new URL(
+    '../../../packages/db/prisma/migrations/20260823130000_line_delivery_unknown_lease_guard/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 function environment(
   overrides: Record<string, string | undefined> = {},
@@ -526,6 +533,32 @@ test('LINE送信は正式なX-Line-Retry-Keyだけをproviderへ渡す', async (
   }
 });
 
+test('LINE 409応答はprovider_failureとして再試行状態へ確定する', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 409 });
+  try {
+    const repository = repositoryFor();
+    const processor = createLineDeliveryProcessor({
+      repository,
+      transport: createLineMessagingTransport('channel-access-token'),
+      maxAttempts: 5,
+      leaseMs: 500,
+      sendTimeoutMs: 100,
+      retryBaseDelayMs: 1000,
+    });
+    assert.equal(
+      await processor.processOne({ signal: new AbortController().signal }),
+      'failed',
+    );
+    assert.equal(
+      (repository.failed[0] as { errorCode: string }).errorCode,
+      'provider_failure',
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('migrationはtenant・認可・監査・冪等性の境界をDB側で保証する', () => {
   assert.match(MIGRATION, /UNIQUE \(tenant_id, source_type, source_id\)/);
   assert.match(
@@ -580,6 +613,16 @@ test('provider retry key migrationはpayload冪等性と同じoutbox行へ固定
     /provider_retry_key, updated\.payload_hash/,
   );
   assert.match(PROVIDER_RETRY_MIGRATION, /status IN \('pending', 'failed'\)/);
+});
+
+test('unknown確定migrationはtokenと有効leaseを同じUPDATE条件で検証する', () => {
+  assert.match(UNKNOWN_LEASE_MIGRATION, /status = 'sending'/);
+  assert.match(UNKNOWN_LEASE_MIGRATION, /attempt_token = p_attempt_token/);
+  assert.match(
+    UNKNOWN_LEASE_MIGRATION,
+    /lease_expires_at > clock_timestamp\(\)/,
+  );
+  assert.match(UNKNOWN_LEASE_MIGRATION, /RETURN QUERY SELECT 'stale'/);
 });
 
 test('schedulerの実行失敗は指数backoffだけを返し、例外本文を返さない', async () => {

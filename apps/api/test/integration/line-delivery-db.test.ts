@@ -57,12 +57,12 @@ function workerDatabase(): LineDeliveryDatabase {
   };
 }
 
-async function publishViaProductionApi(input: {
+async function requestProductionApi(input: {
   sourceId: string;
   idempotencyKey: string;
   title?: string;
 }) {
-  const response = await api.request('/api/v1/notifications/line', {
+  return api.request('/api/v1/notifications/line', {
     method: 'POST',
     headers: {
       authorization: 'Bearer integration-owner-token',
@@ -77,6 +77,14 @@ async function publishViaProductionApi(input: {
       deepLink: 'https://app.example.test/integration',
     }),
   });
+}
+
+async function publishViaProductionApi(input: {
+  sourceId: string;
+  idempotencyKey: string;
+  title?: string;
+}) {
+  const response = await requestProductionApi(input);
   assert.equal(response.status, 202);
   const result = (await response.json()) as {
     data: { notificationId: string; status: string };
@@ -84,6 +92,32 @@ async function publishViaProductionApi(input: {
   assert.equal(result.data.status, 'pending');
   return result.data.notificationId;
 }
+
+test('同一tenantで別sourceがIdempotency-Keyを再利用しても500ではなく409になる', async () => {
+  const idempotencyKey = `cross-source-${randomUUID()}`;
+  const firstId = await publishViaProductionApi({
+    sourceId: `cross-source-a-${randomUUID()}`,
+    idempotencyKey,
+  });
+  const conflict = await requestProductionApi({
+    sourceId: `cross-source-b-${randomUUID()}`,
+    idempotencyKey,
+  });
+  assert.equal(conflict.status, 409);
+  const rows = await owner.$queryRaw<Array<{ count: bigint }>>`
+    SELECT count(*)::bigint AS count
+      FROM line_delivery_outbox
+     WHERE tenant_id = ${TENANT_B}::uuid
+       AND idempotency_key = ${idempotencyKey}
+  `;
+  assert.deepEqual(rows, [{ count: 1n }]);
+  await owner.$executeRaw`
+    DELETE FROM audit_logs WHERE resource_id = ${firstId}::uuid
+  `;
+  await owner.$executeRaw`
+    DELETE FROM line_delivery_outbox WHERE id = ${firstId}::uuid
+  `;
+});
 
 test('業務transactionのenqueueからworker claim・送信・sent確定まで実DBで完了する', async () => {
   const sourceId = `integration-${randomUUID()}`;
@@ -267,6 +301,64 @@ test('retry・unknown・lease切れは同じprovider retry keyで重複送信を
       DELETE FROM line_delivery_outbox WHERE id = ${notificationId}::uuid
     `;
   }
+});
+
+test('unknown確定は古いtokenまたは期限切れleaseでは状態を変更しない', async () => {
+  const notificationId = await publishViaProductionApi({
+    sourceId: `unknown-lease-guard-${randomUUID()}`,
+    idempotencyKey: `unknown-lease-guard-${randomUUID()}`,
+    title: 'unknown lease guard統合テスト',
+  });
+  const repository = createPostgresLineDeliveryRepository(workerDatabase());
+  const firstClaim = await repository.claimDue({
+    maxAttempts: 5,
+    leaseMs: 5000,
+  });
+  assert.ok(firstClaim);
+  assert.equal(firstClaim.notificationId, notificationId);
+
+  const staleTokenResult = await repository.markUnknown({
+    tenantId: firstClaim.tenantId,
+    notificationId,
+    attemptToken: randomUUID(),
+    errorCode: 'timeout',
+  });
+  assert.equal(staleTokenResult, 'stale');
+
+  await owner.$executeRaw`
+    UPDATE line_delivery_outbox
+       SET lease_expires_at = clock_timestamp() - interval '1 second'
+     WHERE id = ${notificationId}::uuid
+  `;
+  const expiredLeaseResult = await repository.markUnknown({
+    tenantId: firstClaim.tenantId,
+    notificationId,
+    attemptToken: firstClaim.attemptToken,
+    errorCode: 'timeout',
+  });
+  assert.equal(expiredLeaseResult, 'stale');
+
+  const rows = await owner.$queryRaw<
+    Array<{ status: string; last_error_code: string | null }>
+  >`
+    SELECT status, last_error_code
+      FROM line_delivery_outbox
+     WHERE id = ${notificationId}::uuid
+  `;
+  assert.deepEqual(rows, [{ status: 'sending', last_error_code: null }]);
+  const unknownAuditRows = await owner.$queryRaw<Array<{ action: string }>>`
+    SELECT action
+      FROM audit_logs
+     WHERE resource_id = ${notificationId}::uuid
+       AND action = 'line_delivery.unknown'
+  `;
+  assert.deepEqual(unknownAuditRows, []);
+  await owner.$executeRaw`
+    DELETE FROM audit_logs WHERE resource_id = ${notificationId}::uuid
+  `;
+  await owner.$executeRaw`
+    DELETE FROM line_delivery_outbox WHERE id = ${notificationId}::uuid
+  `;
 });
 
 test('enqueueはmembership変更とFOR UPDATEで直列化し、停止後の通知登録を拒否する', async () => {

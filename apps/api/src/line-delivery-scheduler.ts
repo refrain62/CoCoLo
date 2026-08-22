@@ -703,6 +703,11 @@ export function createLineMessagingTransport(
         }),
         signal,
       });
+      if (response.status === 409) {
+        const error = new Error('LINEプロバイダー409応答');
+        error.name = 'LineDeliveryProviderConflictError';
+        throw error;
+      }
       if (!response.ok) throw new Error('LINEプロバイダー送信失敗');
       const providerMessageId = response.headers
         .get('x-line-request-id')

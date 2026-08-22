@@ -100,6 +100,19 @@ export class LineDeliveryConflictError extends Error {
   }
 }
 
+// 同一tenant内の別sourceによる冪等キーunique競合も、業務APIの409契約へ変換する。
+function isLineDeliveryConflict(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (/冪等キー|payload/.test(error.message)) return true;
+  const code =
+    'code' in error && typeof error.code === 'string' ? error.code : undefined;
+  return (
+    code === 'P2002' ||
+    (code === 'P2010' && /23505|unique constraint/i.test(error.message)) ||
+    /line_delivery_outbox_idempotency_idx/i.test(error.message)
+  );
+}
+
 const memberSelect = {
   id: true,
   tenantId: true,
@@ -364,9 +377,9 @@ export function createLineDeliveryProducer(
             idempotencyKey: input.idempotencyKey,
           });
         } catch (error) {
-          if (error instanceof Error && /冪等キー|payload/.test(error.message))
+          if (isLineDeliveryConflict(error))
             throw new LineDeliveryConflictError(
-              '同じ通知sourceへ異なる内容を登録できません。',
+              '同じtenant内で通知の冪等キーが競合しました。',
             );
           throw error;
         }
