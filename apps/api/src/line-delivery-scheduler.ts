@@ -3,68 +3,107 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createPrismaClient } from '@cocolo/db';
 
 type SchedulerEnvironmentInput = Record<string, string | undefined>;
-
 type LineDeliveryAppEnvironment = 'staging' | 'production';
 
 export type LineDeliveryWorkerStatus = 'idle' | 'sent' | 'failed';
-
-export type LineDeliveryWorker = {
-  run: (input: {
-    maxItems: number;
-    signal: AbortSignal;
-  }) => Promise<LineDeliveryWorkerStatus>;
-};
+export type LineDeliveryItemStatus = LineDeliveryWorkerStatus | 'stale';
 
 export type LineDeliverySchedulerConfig = {
   appEnv: LineDeliveryAppEnvironment;
   transport: 'real';
   workerModule: string;
   maxItems: number;
-  lockKey: string;
   attempt: number;
   maxAttempts: number;
   retryBaseDelayMs: number;
+  notificationMaxAttempts: number;
+  sendTimeoutMs: number;
+  leaseMs: number;
+  database: { host: string; name: string; role: string };
 };
 
-type LineDeliveryLockResult<T> =
-  | { acquired: true; value: T }
-  | { acquired: false };
-
-export type LineDeliveryRunLock = {
-  withLock: <T>(
-    input: { key: string },
-    work: () => Promise<T>,
-  ) => Promise<LineDeliveryLockResult<T>>;
-};
-
-export type LineDeliverySchedulerResult = {
-  status: 'completed' | 'locked' | 'failed';
-  workerStatus: LineDeliveryWorkerStatus | null;
-  maxItems: number;
+export type LineDeliveryClaim = {
+  notificationId: string;
+  tenantId: string;
+  destination: string;
+  title: string;
+  body: string;
+  deepLink: string;
   attempt: number;
-  maxAttempts: number;
-  retryable: boolean;
-  retryAfterMs: number | null;
-  retryAt: string | null;
+  attemptToken: string;
+  leaseExpiresAt: Date;
 };
 
-export type LineDeliveryLockTransaction = {
-  queryRaw: <Row>(
-    strings: TemplateStringsArray,
-    ...values: unknown[]
-  ) => Promise<Row>;
+export type LineDeliveryClaimRepository = {
+  claimDue: (input: {
+    now: Date;
+    maxAttempts: number;
+    leaseMs: number;
+    signal: AbortSignal;
+  }) => Promise<LineDeliveryClaim | null>;
+  markSent: (input: {
+    tenantId: string;
+    notificationId: string;
+    attemptToken: string;
+    providerMessageId: string;
+    now: Date;
+  }) => Promise<'sent' | 'stale'>;
+  markFailed: (input: {
+    tenantId: string;
+    notificationId: string;
+    attemptToken: string;
+    errorCode: 'aborted' | 'timeout' | 'provider_failure';
+    nextRetryAt: Date | null;
+    now: Date;
+  }) => Promise<'failed' | 'stale'>;
 };
 
-export type LineDeliveryLockDatabase = {
+export type LineDeliveryTransport = {
+  send: (input: {
+    notification: Pick<
+      LineDeliveryClaim,
+      'notificationId' | 'destination' | 'title' | 'body' | 'deepLink'
+    >;
+    signal: AbortSignal;
+  }) => Promise<{ providerMessageId: string }>;
+};
+
+export type LineDeliveryProcessor = {
+  processOne: (input: {
+    signal: AbortSignal;
+  }) => Promise<LineDeliveryItemStatus>;
+};
+
+export type LineDeliveryWorker = {
+  run: (input: {
+    maxItems: number;
+    signal: AbortSignal;
+    processOne: LineDeliveryProcessor['processOne'];
+  }) => Promise<LineDeliveryWorkerStatus>;
+};
+
+export type LineDeliveryDatabase = {
   transaction: <T>(
-    work: (transaction: LineDeliveryLockTransaction) => Promise<T>,
+    work: (transaction: {
+      queryRaw: <Row>(
+        strings: TemplateStringsArray,
+        ...values: unknown[]
+      ) => Promise<Row>;
+    }) => Promise<T>,
   ) => Promise<T>;
 };
 
 const MAX_BATCH_SIZE = 100;
 const MAX_SCHEDULER_ATTEMPTS = 5;
+const MAX_NOTIFICATION_ATTEMPTS = 5;
 const MAX_RETRY_DELAY_MS = 60 * 60 * 1000;
-const LOCK_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const MAX_SEND_TIMEOUT_MS = 120_000;
+const MAX_LEASE_MS = 10 * 60 * 1000;
+
+type DatabaseAllowlist = Record<
+  LineDeliveryAppEnvironment,
+  { hosts: string[]; names: string[]; roles: string[] }
+>;
 
 function required(
   environment: SchedulerEnvironmentInput,
@@ -98,7 +137,89 @@ function assertSafeWorkerModulePath(modulePath: string): void {
     throw new Error('LINE_DELIVERY_WORKER_MODULE が不正です。');
 }
 
-// 実送信schedulerはlocalから起動できないようにし、環境値不足をworker実行前に拒否する。
+function parseDatabaseUrl(value: string): {
+  host: string;
+  name: string;
+  role: string;
+} {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error('DATABASE_URL が不正です。');
+  }
+  if (url.protocol !== 'postgresql:' && url.protocol !== 'postgres:')
+    throw new Error('DATABASE_URL のprotocolが不正です。');
+  const name = decodeURIComponent(url.pathname.replace(/^\//, ''));
+  const role = decodeURIComponent(url.username);
+  if (!url.hostname || !name || !role)
+    throw new Error('DATABASE_URL の接続先が不正です。');
+  return { host: url.hostname.toLowerCase(), name, role };
+}
+
+function parseDatabaseAllowlist(value: string): DatabaseAllowlist {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error('LINE_DELIVERY_DB_ALLOWLIST が不正です。');
+  }
+  if (!parsed || typeof parsed !== 'object')
+    throw new Error('LINE_DELIVERY_DB_ALLOWLIST が不正です。');
+  const allowlist = {} as DatabaseAllowlist;
+  for (const appEnv of ['staging', 'production'] as const) {
+    const candidate = (parsed as Record<string, unknown>)[appEnv];
+    if (!candidate || typeof candidate !== 'object')
+      throw new Error('LINE_DELIVERY_DB_ALLOWLIST が不正です。');
+    const record = candidate as Record<string, unknown>;
+    const values = ['hosts', 'names', 'roles'].map((key) => record[key]);
+    if (
+      values.some(
+        (items) =>
+          !Array.isArray(items) ||
+          items.length === 0 ||
+          items.some((item) => typeof item !== 'string' || !item.trim()),
+      )
+    )
+      throw new Error('LINE_DELIVERY_DB_ALLOWLIST が不正です。');
+    allowlist[appEnv] = {
+      hosts: (record.hosts as string[]).map((item) =>
+        item.trim().toLowerCase(),
+      ),
+      names: (record.names as string[]).map((item) => item.trim()),
+      roles: (record.roles as string[]).map((item) => item.trim()),
+    };
+  }
+  const stagingPairs = new Set(
+    allowlist.staging.hosts.flatMap((host) =>
+      allowlist.staging.names.map((name) => `${host}\0${name}`),
+    ),
+  );
+  const overlaps = allowlist.production.hosts.some((host) =>
+    allowlist.production.names.some((name) =>
+      stagingPairs.has(`${host}\0${name}`),
+    ),
+  );
+  if (overlaps)
+    throw new Error('stagingとproductionのDB許可値が重複しています。');
+  return allowlist;
+}
+
+function assertDatabaseAllowed(
+  database: { host: string; name: string; role: string },
+  appEnv: LineDeliveryAppEnvironment,
+  allowlist: DatabaseAllowlist,
+): void {
+  const allowed = allowlist[appEnv];
+  if (
+    !allowed.hosts.includes(database.host) ||
+    !allowed.names.includes(database.name) ||
+    !allowed.roles.includes(database.role)
+  )
+    throw new Error('DATABASE_URLがAPP_ENVのDB許可値と一致しません。');
+}
+
+// 実送信schedulerはAPP_ENVとDB host・DB名・roleを同時に照合し、環境混同を接続前に拒否する。
 export function readLineDeliverySchedulerConfig(
   environment: SchedulerEnvironmentInput,
 ): LineDeliverySchedulerConfig {
@@ -107,26 +228,22 @@ export function readLineDeliverySchedulerConfig(
     throw new Error(
       'LINE配信schedulerはstaging / productionでだけ実行できます。',
     );
-
-  required(environment, 'DATABASE_URL');
+  const database = parseDatabaseUrl(required(environment, 'DATABASE_URL'));
+  const allowlist = parseDatabaseAllowlist(
+    required(environment, 'LINE_DELIVERY_DB_ALLOWLIST'),
+  );
+  assertDatabaseAllowed(database, appEnv, allowlist);
   required(environment, 'LINE_CHANNEL_ACCESS_TOKEN');
-  const transport = required(environment, 'LINE_DELIVERY_TRANSPORT');
-  if (transport !== 'real')
+  if (required(environment, 'LINE_DELIVERY_TRANSPORT') !== 'real')
     throw new Error('LINE_DELIVERY_TRANSPORT は real が必要です。');
-
   const workerModule = required(environment, 'LINE_DELIVERY_WORKER_MODULE');
   assertSafeWorkerModulePath(workerModule);
-
   const maxItems = boundedInteger(
     environment,
     'LINE_DELIVERY_BATCH_SIZE',
     1,
     MAX_BATCH_SIZE,
   );
-  const lockKey = required(environment, 'LINE_DELIVERY_LOCK_KEY');
-  if (!LOCK_KEY_PATTERN.test(lockKey))
-    throw new Error('LINE_DELIVERY_LOCK_KEY が不正です。');
-
   const maxAttempts = boundedInteger(
     environment,
     'LINE_DELIVERY_SCHEDULER_MAX_ATTEMPTS',
@@ -145,32 +262,65 @@ export function readLineDeliverySchedulerConfig(
     1,
     60 * 60,
   );
-
+  const notificationMaxAttempts = boundedInteger(
+    environment,
+    'LINE_DELIVERY_NOTIFICATION_MAX_ATTEMPTS',
+    1,
+    MAX_NOTIFICATION_ATTEMPTS,
+  );
+  const sendTimeoutMs = boundedInteger(
+    environment,
+    'LINE_DELIVERY_SEND_TIMEOUT_MS',
+    1,
+    MAX_SEND_TIMEOUT_MS,
+  );
+  const leaseMs = boundedInteger(
+    environment,
+    'LINE_DELIVERY_LEASE_MS',
+    sendTimeoutMs * 2,
+    MAX_LEASE_MS,
+  );
   return {
     appEnv,
     transport: 'real',
     workerModule,
     maxItems,
-    lockKey: `cocolo:line-delivery:${appEnv}:${lockKey}`,
     attempt,
     maxAttempts,
     retryBaseDelayMs: retryBaseDelaySeconds * 1000,
+    notificationMaxAttempts,
+    sendTimeoutMs,
+    leaseMs,
+    database,
   };
 }
 
-function retryDelayMs(config: LineDeliverySchedulerConfig): number {
+function retryDelayMs(attempt: number, baseDelayMs: number): number {
   return Math.min(
-    config.retryBaseDelayMs * 2 ** (config.attempt - 1),
+    baseDelayMs * 2 ** Math.max(attempt - 1, 0),
     MAX_RETRY_DELAY_MS,
   );
 }
+
+export type LineDeliverySchedulerResult = {
+  status: 'completed' | 'failed';
+  workerStatus: LineDeliveryWorkerStatus | null;
+  maxItems: number;
+  attempt: number;
+  maxAttempts: number;
+  retryable: boolean;
+  retryAfterMs: number | null;
+  retryAt: string | null;
+};
 
 function failedResult(
   config: LineDeliverySchedulerConfig,
   now: Date,
 ): LineDeliverySchedulerResult {
   const retryable = config.attempt < config.maxAttempts;
-  const retryAfter = retryable ? retryDelayMs(config) : null;
+  const retryAfter = retryable
+    ? retryDelayMs(config.attempt, config.retryBaseDelayMs)
+    : null;
   return {
     status: 'failed',
     workerStatus: null,
@@ -186,52 +336,34 @@ function failedResult(
   };
 }
 
-// 一回のscheduler実行は一つのlock内で最大件数だけworkerへ委譲し、失敗時は外部schedulerへ再実行判断を返す。
+// 旧実装のadvisory transaction lock検証は廃止した。lock保持中の送信継続を許すため、
+// claim transactionの短時間確定とattempt token付きleaseを検証する契約へ置き換える。
+// workerへclaim処理だけを渡し、scheduler自身が長時間transactionを保持しない。
 export async function runLineDeliveryScheduler(input: {
   config: LineDeliverySchedulerConfig;
-  lock: LineDeliveryRunLock;
   worker: LineDeliveryWorker;
+  processor: LineDeliveryProcessor;
   now?: () => Date;
   signal?: AbortSignal;
 }): Promise<LineDeliverySchedulerResult> {
   const now = input.now ?? (() => new Date());
   const signal = input.signal ?? new AbortController().signal;
-
   try {
     if (signal.aborted) throw new Error('schedulerが中断されました。');
-    const locked = await input.lock.withLock(
-      { key: input.config.lockKey },
-      async () => {
-        if (signal.aborted) throw new Error('schedulerが中断されました。');
-        const workerStatus = await input.worker.run({
-          maxItems: input.config.maxItems,
-          signal,
-        });
-        if (
-          workerStatus !== 'idle' &&
-          workerStatus !== 'sent' &&
-          workerStatus !== 'failed'
-        )
-          throw new Error('workerの結果が不正です。');
-        return workerStatus;
-      },
-    );
-
-    if (!locked.acquired)
-      return {
-        status: 'locked',
-        workerStatus: null,
-        maxItems: input.config.maxItems,
-        attempt: input.config.attempt,
-        maxAttempts: input.config.maxAttempts,
-        retryable: false,
-        retryAfterMs: null,
-        retryAt: null,
-      };
-
+    const workerStatus = await input.worker.run({
+      maxItems: input.config.maxItems,
+      signal,
+      processOne: input.processor.processOne,
+    });
+    if (
+      workerStatus !== 'idle' &&
+      workerStatus !== 'sent' &&
+      workerStatus !== 'failed'
+    )
+      throw new Error('workerの結果が不正です。');
     return {
       status: 'completed',
-      workerStatus: locked.value,
+      workerStatus,
       maxItems: input.config.maxItems,
       attempt: input.config.attempt,
       maxAttempts: input.config.maxAttempts,
@@ -244,21 +376,205 @@ export async function runLineDeliveryScheduler(input: {
   }
 }
 
-// advisory lockはtransaction終了時に自動解放されるため、プロセス停止後に孤児ロックを残さない。
-export function createPostgresLineDeliveryLock(
-  database: LineDeliveryLockDatabase,
-): LineDeliveryRunLock {
+type ClaimRow = {
+  notification_id: string;
+  tenant_id: string;
+  destination: string;
+  title: string;
+  body: string;
+  deep_link: string;
+  attempt: number;
+  attempt_token: string;
+  lease_expires_at: Date;
+};
+
+function toClaim(row: ClaimRow | undefined): LineDeliveryClaim | null {
+  if (!row) return null;
+  if (
+    !row.notification_id ||
+    !row.tenant_id ||
+    !row.destination ||
+    !row.attempt_token ||
+    !(row.lease_expires_at instanceof Date)
+  )
+    throw new Error('LINE配信claimの応答が不正です。');
   return {
-    withLock: async ({ key }, work) =>
+    notificationId: row.notification_id,
+    tenantId: row.tenant_id,
+    destination: row.destination,
+    title: row.title,
+    body: row.body,
+    deepLink: row.deep_link,
+    attempt: row.attempt,
+    attemptToken: row.attempt_token,
+    leaseExpiresAt: row.lease_expires_at,
+  };
+}
+
+// claim/finalizeは各々短いtransactionで確定し、LINE送信はtransaction外で行う。
+export function createPostgresLineDeliveryRepository(
+  database: LineDeliveryDatabase,
+): LineDeliveryClaimRepository {
+  return {
+    claimDue: ({ now, maxAttempts, leaseMs }) =>
       database.transaction(async (transaction) => {
-        const rows = await transaction.queryRaw<Array<{ acquired: boolean }>>`
-          SELECT pg_try_advisory_xact_lock(hashtextextended(${key}, 0)) AS acquired
+        const rows = await transaction.queryRaw<ClaimRow[]>`
+          SELECT notification_id, tenant_id, destination, title, body, deep_link,
+                 attempt, attempt_token, lease_expires_at
+            FROM app_claim_line_delivery_outbox(${now}, ${maxAttempts}, ${leaseMs})
         `;
-        if (rows.length !== 1 || typeof rows[0]?.acquired !== 'boolean')
-          throw new Error('scheduler lockの応答が不正です。');
-        if (!rows[0].acquired) return { acquired: false as const };
-        return { acquired: true as const, value: await work() };
+        if (!Array.isArray(rows) || rows.length > 1)
+          throw new Error('LINE配信claimの応答が不正です。');
+        return toClaim(rows[0]);
       }),
+    markSent: ({
+      tenantId,
+      notificationId,
+      attemptToken,
+      providerMessageId,
+      now,
+    }) =>
+      database.transaction(async (transaction) => {
+        const rows = await transaction.queryRaw<Array<{ outcome: string }>>`
+          SELECT outcome FROM app_mark_line_delivery_sent(
+            ${tenantId}::uuid, ${notificationId}::uuid,
+            ${attemptToken}::uuid, ${providerMessageId}, ${now}
+          )
+        `;
+        const outcome = rows[0]?.outcome;
+        if (outcome !== 'sent' && outcome !== 'stale')
+          throw new Error('LINE配信sent確定の応答が不正です。');
+        return outcome;
+      }),
+    markFailed: ({
+      tenantId,
+      notificationId,
+      attemptToken,
+      errorCode,
+      nextRetryAt,
+      now,
+    }) =>
+      database.transaction(async (transaction) => {
+        const rows = await transaction.queryRaw<Array<{ outcome: string }>>`
+          SELECT outcome FROM app_mark_line_delivery_failed(
+            ${tenantId}::uuid, ${notificationId}::uuid,
+            ${attemptToken}::uuid, ${errorCode}, ${nextRetryAt}, ${now}
+          )
+        `;
+        const outcome = rows[0]?.outcome;
+        if (outcome !== 'failed' && outcome !== 'stale')
+          throw new Error('LINE配信failed確定の応答が不正です。');
+        return outcome;
+      }),
+  };
+}
+
+function getErrorCode(
+  error: unknown,
+  signal: AbortSignal,
+): 'aborted' | 'timeout' | 'provider_failure' {
+  if (signal.aborted) return 'aborted';
+  if (error instanceof Error && error.name === 'LineDeliveryTimeoutError')
+    return 'timeout';
+  return 'provider_failure';
+}
+
+async function sendWithTimeout(
+  transport: LineDeliveryTransport,
+  claim: LineDeliveryClaim,
+  parentSignal: AbortSignal,
+  timeoutMs: number,
+): Promise<{ providerMessageId: string }> {
+  if (parentSignal.aborted) throw new Error('schedulerが中断されました。');
+  const controller = new AbortController();
+  const abort = () => controller.abort(parentSignal.reason);
+  parentSignal.addEventListener('abort', abort, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort(new Error('LINE送信timeout'));
+      const error = new Error('LINE送信がtimeoutしました。');
+      error.name = 'LineDeliveryTimeoutError';
+      reject(error);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      transport.send({
+        notification: {
+          notificationId: claim.notificationId,
+          destination: claim.destination,
+          title: claim.title,
+          body: claim.body,
+          deepLink: claim.deepLink,
+        },
+        signal: controller.signal,
+      }),
+      timeout,
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    parentSignal.removeEventListener('abort', abort);
+  }
+}
+
+// lease期限を再試行時刻の下限にし、timeout後の遅延処理による即時再claimを防ぐ。
+export function createLineDeliveryProcessor(input: {
+  repository: LineDeliveryClaimRepository;
+  transport: LineDeliveryTransport;
+  maxAttempts: number;
+  leaseMs: number;
+  sendTimeoutMs: number;
+  retryBaseDelayMs: number;
+  now?: () => Date;
+}): LineDeliveryProcessor {
+  const now = input.now ?? (() => new Date());
+  return {
+    async processOne({ signal }) {
+      const claim = await input.repository.claimDue({
+        now: now(),
+        maxAttempts: input.maxAttempts,
+        leaseMs: input.leaseMs,
+        signal,
+      });
+      if (!claim) return 'idle';
+      let sent: { providerMessageId: string };
+      try {
+        sent = await sendWithTimeout(
+          input.transport,
+          claim,
+          signal,
+          input.sendTimeoutMs,
+        );
+      } catch (error) {
+        const currentTime = now();
+        const nextRetryAt =
+          claim.attempt < input.maxAttempts
+            ? new Date(
+                Math.max(
+                  currentTime.getTime() +
+                    retryDelayMs(claim.attempt, input.retryBaseDelayMs),
+                  claim.leaseExpiresAt.getTime(),
+                ),
+              )
+            : null;
+        return await input.repository.markFailed({
+          tenantId: claim.tenantId,
+          notificationId: claim.notificationId,
+          attemptToken: claim.attemptToken,
+          errorCode: getErrorCode(error, signal),
+          nextRetryAt,
+          now: currentTime,
+        });
+      }
+      return input.repository.markSent({
+        tenantId: claim.tenantId,
+        notificationId: claim.notificationId,
+        attemptToken: claim.attemptToken,
+        providerMessageId: sent.providerMessageId,
+        now: now(),
+      });
+    },
   };
 }
 
@@ -266,6 +582,7 @@ type WorkerModule = {
   runLineDeliveryWorker?: (input: {
     maxItems: number;
     signal: AbortSignal;
+    processOne: LineDeliveryProcessor['processOne'];
   }) => Promise<unknown>;
 };
 
@@ -274,7 +591,6 @@ function toWorkerStatus(value: unknown): LineDeliveryWorkerStatus {
   throw new Error('LINE delivery workerの結果が不正です。');
 }
 
-// 既存workerのLINE_DELIVERY_BATCH_SIZE契約を使い、scheduler側から実行件数を上書きしない。
 export async function loadLineDeliveryWorker(
   modulePath: string,
   baseDirectory = fileURLToPath(new URL('.', import.meta.url)),
@@ -289,24 +605,22 @@ export async function loadLineDeliveryWorker(
     isAbsolute(relativePath)
   )
     throw new Error('LINE_DELIVERY_WORKER_MODULE の配置が不正です。');
-
   const module = (await import(
     pathToFileURL(resolvedPath).href
   )) as WorkerModule;
   if (typeof module.runLineDeliveryWorker !== 'function')
     throw new Error('LINE_DELIVERY_WORKER_MODULE にworker入口がありません。');
-  const runLineDeliveryWorker = module.runLineDeliveryWorker;
-
   return {
-    async run(input) {
-      return toWorkerStatus(await runLineDeliveryWorker(input));
-    },
+    run: (input) =>
+      module
+        .runLineDeliveryWorker?.(input)
+        .then(toWorkerStatus) as Promise<LineDeliveryWorkerStatus>,
   };
 }
 
-function createPrismaLockDatabase(
+function createPrismaDatabase(
   client: ReturnType<typeof createPrismaClient>,
-): LineDeliveryLockDatabase {
+): LineDeliveryDatabase {
   return {
     transaction: (work) =>
       client.$transaction(async (transaction) =>
@@ -320,7 +634,34 @@ function createPrismaLockDatabase(
   };
 }
 
-// 外部schedulerの実行入口。設定不備は2、worker/DB失敗は1、ロック競合と正常終了は0で終了する。
+function createLineMessagingTransport(token: string): LineDeliveryTransport {
+  return {
+    async send({ notification, signal }) {
+      const text = `${notification.title}\n${notification.body}\n${notification.deepLink}`;
+      if (text.length > 5000) throw new Error('LINE通知本文が長すぎます。');
+      const response = await fetch('https://api.line.me/v2/bot/message/push', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: notification.destination,
+          messages: [{ type: 'text', text }],
+        }),
+        signal,
+      });
+      if (!response.ok) throw new Error('LINEプロバイダー送信失敗');
+      return {
+        providerMessageId:
+          response.headers.get('x-line-request-id') ??
+          `line-${notification.notificationId}`,
+      };
+    },
+  };
+}
+
 export async function runLineDeliverySchedulerEntry(
   environment: SchedulerEnvironmentInput = process.env,
 ): Promise<number> {
@@ -329,10 +670,22 @@ export async function runLineDeliverySchedulerEntry(
     const config = readLineDeliverySchedulerConfig(environment);
     const worker = await loadLineDeliveryWorker(config.workerModule);
     client = createPrismaClient();
+    const processor = createLineDeliveryProcessor({
+      repository: createPostgresLineDeliveryRepository(
+        createPrismaDatabase(client),
+      ),
+      transport: createLineMessagingTransport(
+        required(environment, 'LINE_CHANNEL_ACCESS_TOKEN'),
+      ),
+      maxAttempts: config.notificationMaxAttempts,
+      leaseMs: config.leaseMs,
+      sendTimeoutMs: config.sendTimeoutMs,
+      retryBaseDelayMs: config.retryBaseDelayMs,
+    });
     const result = await runLineDeliveryScheduler({
       config,
-      lock: createPostgresLineDeliveryLock(createPrismaLockDatabase(client)),
       worker,
+      processor,
     });
     console.log(JSON.stringify(result));
     return result.status === 'failed' ? 1 : 0;

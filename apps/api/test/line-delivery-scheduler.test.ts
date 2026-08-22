@@ -1,29 +1,56 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
-  createPostgresLineDeliveryLock,
-  type LineDeliveryLockDatabase,
+  createLineDeliveryProcessor,
+  createPostgresLineDeliveryRepository,
+  type LineDeliveryClaim,
+  type LineDeliveryClaimRepository,
+  type LineDeliveryDatabase,
   type LineDeliverySchedulerConfig,
   readLineDeliverySchedulerConfig,
   runLineDeliveryScheduler,
 } from '../dist/line-delivery-scheduler.js';
 
 const NOW = new Date('2026-08-23T00:00:00.000Z');
+const ALLOWLIST = JSON.stringify({
+  staging: {
+    hosts: ['staging-db.internal'],
+    names: ['cocolo_staging'],
+    roles: ['cocolo_app'],
+  },
+  production: {
+    hosts: ['production-db.internal'],
+    names: ['cocolo_production'],
+    roles: ['cocolo_app'],
+  },
+});
+const MIGRATION = readFileSync(
+  new URL(
+    '../../../packages/db/prisma/migrations/20260823100000_line_delivery_scheduler/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 function environment(
   overrides: Record<string, string | undefined> = {},
 ): Record<string, string | undefined> {
   return {
     APP_ENV: 'staging',
-    DATABASE_URL: 'postgresql://app:secret@localhost:5432/cocolo',
+    DATABASE_URL:
+      'postgresql://cocolo_app:secret@staging-db.internal:5432/cocolo_staging',
+    LINE_DELIVERY_DB_ALLOWLIST: ALLOWLIST,
     LINE_CHANNEL_ACCESS_TOKEN: 'channel-access-token',
     LINE_DELIVERY_TRANSPORT: 'real',
     LINE_DELIVERY_WORKER_MODULE: './line-delivery-worker.js',
     LINE_DELIVERY_BATCH_SIZE: '4',
-    LINE_DELIVERY_LOCK_KEY: 'periodic',
     LINE_DELIVERY_SCHEDULER_MAX_ATTEMPTS: '3',
     LINE_DELIVERY_SCHEDULER_ATTEMPT: '1',
     LINE_DELIVERY_RETRY_BASE_DELAY_SECONDS: '2',
+    LINE_DELIVERY_NOTIFICATION_MAX_ATTEMPTS: '5',
+    LINE_DELIVERY_SEND_TIMEOUT_MS: '100',
+    LINE_DELIVERY_LEASE_MS: '500',
     ...overrides,
   };
 }
@@ -36,28 +63,113 @@ function config(
     transport: 'real',
     workerModule: './line-delivery-worker.js',
     maxItems: 4,
-    lockKey: 'cocolo:line-delivery:staging:periodic',
     attempt: 1,
     maxAttempts: 3,
     retryBaseDelayMs: 2000,
+    notificationMaxAttempts: 5,
+    sendTimeoutMs: 100,
+    leaseMs: 500,
+    database: {
+      host: 'staging-db.internal',
+      name: 'cocolo_staging',
+      role: 'cocolo_app',
+    },
     ...overrides,
   };
 }
 
-function immediateLock() {
+function claim(overrides: Partial<LineDeliveryClaim> = {}): LineDeliveryClaim {
   return {
-    withLock: async <T>(_input: { key: string }, work: () => Promise<T>) => ({
-      acquired: true as const,
-      value: await work(),
-    }),
+    notificationId: '11111111-1111-4111-8111-111111111111',
+    tenantId: '22222222-2222-4222-8222-222222222222',
+    destination: 'line-group',
+    title: 'title',
+    body: 'private body',
+    deepLink: 'https://app.example.test/notification/1',
+    attempt: 1,
+    attemptToken: '33333333-3333-4333-8333-333333333333',
+    leaseExpiresAt: new Date(NOW.getTime() + 500),
+    ...overrides,
   };
 }
 
-test('schedulerの必須環境値を検証し、localと不正な件数を拒否する', () => {
+function repositoryFor(
+  currentClaim: LineDeliveryClaim | null = claim(),
+): LineDeliveryClaimRepository & {
+  sent: unknown[];
+  failed: unknown[];
+} {
+  const sent: unknown[] = [];
+  const failed: unknown[] = [];
+  return {
+    sent,
+    failed,
+    claimDue: async () => currentClaim,
+    markSent: async (input) => {
+      sent.push(input);
+      return 'sent';
+    },
+    markFailed: async (input) => {
+      failed.push(input);
+      return 'failed';
+    },
+  };
+}
+
+test('APP_ENVとDB host/name/roleの環境別allowlistをfail-closed検証する', () => {
+  const parsed = readLineDeliverySchedulerConfig(environment());
+  assert.deepEqual(parsed.database, {
+    host: 'staging-db.internal',
+    name: 'cocolo_staging',
+    role: 'cocolo_app',
+  });
   assert.throws(
     () => readLineDeliverySchedulerConfig(environment({ APP_ENV: 'local' })),
     /staging \/ production/,
   );
+  assert.throws(
+    () =>
+      readLineDeliverySchedulerConfig(
+        environment({
+          DATABASE_URL:
+            'postgresql://cocolo_app:x@production-db.internal/cocolo_production',
+        }),
+      ),
+    /APP_ENVのDB許可値/,
+  );
+  assert.throws(
+    () =>
+      readLineDeliverySchedulerConfig(
+        environment({
+          LINE_DELIVERY_DB_ALLOWLIST: JSON.stringify({
+            staging: {
+              hosts: ['same'],
+              names: ['same'],
+              roles: ['cocolo_app'],
+            },
+            production: {
+              hosts: ['same'],
+              names: ['same'],
+              roles: ['cocolo_app'],
+            },
+          }),
+        }),
+      ),
+    /重複/,
+  );
+});
+
+test('leaseMsは送信timeoutの2倍以上でない設定を拒否する', () => {
+  assert.throws(
+    () =>
+      readLineDeliverySchedulerConfig(
+        environment({ LINE_DELIVERY_LEASE_MS: '100' }),
+      ),
+    /LINE_DELIVERY_LEASE_MS/,
+  );
+});
+
+test('必須設定、件数、worker moduleをfail-closed検証する', () => {
   assert.throws(
     () =>
       readLineDeliverySchedulerConfig(
@@ -79,182 +191,282 @@ test('schedulerの必須環境値を検証し、localと不正な件数を拒否
       ),
     /LINE_DELIVERY_WORKER_MODULE/,
   );
-
   const parsed = readLineDeliverySchedulerConfig(environment());
   assert.equal(parsed.maxItems, 4);
-  assert.equal(parsed.lockKey, 'cocolo:line-delivery:staging:periodic');
-  assert.equal(parsed.retryBaseDelayMs, 2000);
+  assert.equal(parsed.sendTimeoutMs, 100);
+  assert.equal(parsed.leaseMs, 500);
 });
 
-test('schedulerはlock取得後にworkerへ最大処理件数を渡す', async () => {
-  let received: { maxItems: number; signal: AbortSignal } | undefined;
+test('schedulerは長時間transaction lockを使わずworkerへclaim処理を渡す', async () => {
+  let receivedMaxItems = 0;
+  let processed = 0;
   const result = await runLineDeliveryScheduler({
     config: config({ maxItems: 7 }),
-    lock: immediateLock(),
     worker: {
-      run: async (input) => {
-        received = input;
+      run: async ({ maxItems, processOne }) => {
+        receivedMaxItems = maxItems;
+        await processOne({ signal: new AbortController().signal });
+        processed += 1;
         return 'sent';
       },
     },
+    processor: { processOne: async () => 'sent' },
     now: () => NOW,
   });
-
   assert.equal(result.status, 'completed');
-  assert.equal(result.workerStatus, 'sent');
-  assert.equal(result.maxItems, 7);
-  assert.equal(received?.maxItems, 7);
-  assert.ok(received?.signal);
+  assert.equal(receivedMaxItems, 7);
+  assert.equal(processed, 1);
 });
 
-test('lock競合時はworkerを起動せず、外部schedulerの再試行対象にしない', async () => {
-  let workerCalls = 0;
-  const result = await runLineDeliveryScheduler({
-    config: config(),
-    lock: {
-      withLock: async () => ({ acquired: false as const }),
+test('同時workerのclaim競合はDB状態により一件だけ取得し、schedulerは重複実行しない', async () => {
+  let claimed = false;
+  const repository: LineDeliveryClaimRepository = {
+    claimDue: async () => {
+      if (claimed) return null;
+      claimed = true;
+      return claim();
     },
-    worker: {
-      run: async () => {
-        workerCalls += 1;
-        return 'sent';
-      },
-    },
+    markSent: async () => 'sent',
+    markFailed: async () => 'failed',
+  };
+  const processor = createLineDeliveryProcessor({
+    repository,
+    transport: { send: async () => ({ providerMessageId: 'provider-id' }) },
+    maxAttempts: 5,
+    leaseMs: 500,
+    sendTimeoutMs: 100,
+    retryBaseDelayMs: 1000,
     now: () => NOW,
   });
-
-  assert.equal(result.status, 'locked');
-  assert.equal(result.retryable, false);
-  assert.equal(workerCalls, 0);
+  const [first, second] = await Promise.all([
+    processor.processOne({ signal: new AbortController().signal }),
+    processor.processOne({ signal: new AbortController().signal }),
+  ]);
+  assert.deepEqual([first, second].sort(), ['idle', 'sent']);
 });
 
-test('同時起動はlockで一つだけworkerを実行する', async () => {
-  let held = false;
-  let releaseWorker: (() => void) | undefined;
-  let workerStarted: (() => void) | undefined;
-  const started = new Promise<void>((resolve) => {
-    workerStarted = resolve;
-  });
-  const lock = {
-    withLock: async <T>(_input: { key: string }, work: () => Promise<T>) => {
-      if (held) return { acquired: false as const };
-      held = true;
+test('claim transactionは外部LINE送信前に終了し、attempt token付きsent確定を行う', async () => {
+  let transactionActive = false;
+  let transactionCalls = 0;
+  const database: LineDeliveryDatabase = {
+    transaction: async (work) => {
+      transactionCalls += 1;
+      transactionActive = true;
       try {
-        return { acquired: true as const, value: await work() };
+        return await work({
+          queryRaw: async <Row>(
+            strings: TemplateStringsArray,
+            ..._values: unknown[]
+          ): Promise<Row> => {
+            const sql = Array.from(strings).join(' ');
+            if (sql.includes('app_claim_line_delivery_outbox'))
+              return [
+                {
+                  notification_id: claim().notificationId,
+                  tenant_id: claim().tenantId,
+                  destination: claim().destination,
+                  title: claim().title,
+                  body: claim().body,
+                  deep_link: claim().deepLink,
+                  attempt: 1,
+                  attempt_token: claim().attemptToken,
+                  lease_expires_at: claim().leaseExpiresAt,
+                },
+              ] as Row;
+            return [{ outcome: 'sent' }] as Row;
+          },
+        });
       } finally {
-        held = false;
+        transactionActive = false;
       }
     },
   };
-  const worker = {
-    run: async () => {
-      workerStarted?.();
-      await new Promise<void>((resolve) => {
-        releaseWorker = resolve;
-      });
-      return 'sent' as const;
+  const repository = createPostgresLineDeliveryRepository(database);
+  let sentWhileTransaction = true;
+  const processor = createLineDeliveryProcessor({
+    repository,
+    transport: {
+      send: async () => {
+        sentWhileTransaction = transactionActive;
+        return { providerMessageId: 'provider-request-id' };
+      },
     },
-  };
-
-  const first = runLineDeliveryScheduler({
-    config: config(),
-    lock,
-    worker,
+    maxAttempts: 5,
+    leaseMs: 500,
+    sendTimeoutMs: 100,
+    retryBaseDelayMs: 1000,
     now: () => NOW,
   });
-  await started;
-  const second = await runLineDeliveryScheduler({
-    config: config(),
-    lock,
-    worker,
-    now: () => NOW,
+  const result = await processor.processOne({
+    signal: new AbortController().signal,
   });
-  assert.equal(second.status, 'locked');
-
-  releaseWorker?.();
-  const firstResult = await first;
-  assert.equal(firstResult.status, 'completed');
+  assert.equal(result, 'sent');
+  assert.equal(sentWhileTransaction, false);
+  assert.equal(transactionCalls, 2);
 });
 
-test('worker例外は即時再試行せず、指数バックオフ契約を返す', async () => {
+test('timeoutはAbortSignalを実際にabortし、lease期限以降の再試行状態を保存する', async () => {
+  const repository = repositoryFor();
+  let observedSignal: AbortSignal | undefined;
+  const processor = createLineDeliveryProcessor({
+    repository,
+    transport: {
+      send: async ({ signal }) => {
+        observedSignal = signal;
+        await new Promise<void>(() => undefined);
+        return { providerMessageId: 'never' };
+      },
+    },
+    maxAttempts: 5,
+    leaseMs: 500,
+    sendTimeoutMs: 10,
+    retryBaseDelayMs: 1,
+    now: () => NOW,
+  });
+  const result = await processor.processOne({
+    signal: new AbortController().signal,
+  });
+  assert.equal(result, 'failed');
+  assert.equal(observedSignal?.aborted, true);
+  assert.equal(repository.failed.length, 1);
+  assert.deepEqual(repository.failed[0], {
+    tenantId: claim().tenantId,
+    notificationId: claim().notificationId,
+    attemptToken: claim().attemptToken,
+    errorCode: 'timeout',
+    nextRetryAt: claim().leaseExpiresAt,
+    now: NOW,
+  });
+});
+
+test('親schedulerのAbortSignal中断はaborted状態として再試行へ確定する', async () => {
+  const repository = repositoryFor();
+  const controller = new AbortController();
+  controller.abort();
+  const processor = createLineDeliveryProcessor({
+    repository,
+    transport: {
+      send: async () => ({ providerMessageId: 'must-not-send' }),
+    },
+    maxAttempts: 5,
+    leaseMs: 500,
+    sendTimeoutMs: 100,
+    retryBaseDelayMs: 1000,
+    now: () => NOW,
+  });
+  const result = await processor.processOne({ signal: controller.signal });
+  assert.equal(result, 'failed');
+  assert.equal(
+    (repository.failed[0] as { errorCode: string }).errorCode,
+    'aborted',
+  );
+});
+
+test('古いattempt tokenの確定はstaleとして無視し、別workerの状態を上書きしない', async () => {
+  const repository = repositoryFor();
+  repository.markSent = async () => 'stale';
+  const processor = createLineDeliveryProcessor({
+    repository,
+    transport: {
+      send: async () => ({ providerMessageId: 'provider-request-id' }),
+    },
+    maxAttempts: 5,
+    leaseMs: 500,
+    sendTimeoutMs: 100,
+    retryBaseDelayMs: 1000,
+    now: () => NOW,
+  });
+  assert.equal(
+    await processor.processOne({ signal: new AbortController().signal }),
+    'stale',
+  );
+  assert.equal(repository.failed.length, 0);
+});
+
+test('通知失敗は個人情報を結果へ出さず、再試行状態へ確定する', async () => {
+  const repository = repositoryFor();
+  const processor = createLineDeliveryProcessor({
+    repository,
+    transport: {
+      send: async () => {
+        throw new Error('private name and LINE response must not escape');
+      },
+    },
+    maxAttempts: 5,
+    leaseMs: 500,
+    sendTimeoutMs: 100,
+    retryBaseDelayMs: 1000,
+    now: () => NOW,
+  });
+  const result = await processor.processOne({
+    signal: new AbortController().signal,
+  });
+  assert.equal(result, 'failed');
+  assert.equal(JSON.stringify(result).includes('private'), false);
+  assert.equal(
+    (repository.failed[0] as { errorCode: string }).errorCode,
+    'provider_failure',
+  );
+});
+
+test('migrationはtenant・認可・監査・冪等性の境界をDB側で保証する', () => {
+  assert.match(MIGRATION, /UNIQUE \(tenant_id, source_type, source_id\)/);
+  assert.match(MIGRATION, /current_setting\('app\.user_id', true\)/);
+  assert.match(
+    MIGRATION,
+    /current_setting\('app\.role', true\).*owner.*admin/s,
+  );
+  assert.match(
+    MIGRATION,
+    /ALTER TABLE line_delivery_outbox FORCE ROW LEVEL SECURITY/,
+  );
+  assert.match(MIGRATION, /attempt_token = p_attempt_token/);
+  assert.match(MIGRATION, /INSERT INTO audit_logs/);
+  assert.match(MIGRATION, /error_code/);
+  assert.doesNotMatch(MIGRATION, /jsonb_build_object\([^)]*body/s);
+});
+
+test('schedulerの実行失敗は指数backoffだけを返し、例外本文を返さない', async () => {
   const result = await runLineDeliveryScheduler({
     config: config({ attempt: 2, retryBaseDelayMs: 5000 }),
-    lock: immediateLock(),
     worker: {
       run: async () => {
-        throw new Error('access token should not be returned');
+        throw new Error('token and PII must not be returned');
       },
     },
+    processor: { processOne: async () => 'idle' },
     now: () => NOW,
   });
-
   assert.equal(result.status, 'failed');
-  assert.equal(result.retryable, true);
   assert.equal(result.retryAfterMs, 10000);
-  assert.equal(result.retryAt, '2026-08-23T00:00:10.000Z');
-  assert.equal('error' in result, false);
+  assert.equal(JSON.stringify(result).includes('token'), false);
 });
 
-test('scheduler試行回数上限に達した失敗は自動再試行しない', async () => {
-  const result = await runLineDeliveryScheduler({
-    config: config({ attempt: 3, maxAttempts: 3 }),
-    lock: immediateLock(),
-    worker: {
-      run: async () => {
-        throw new Error('transient failure');
-      },
-    },
-    now: () => NOW,
-  });
-
-  assert.equal(result.status, 'failed');
-  assert.equal(result.retryable, false);
-  assert.equal(result.retryAfterMs, null);
-  assert.equal(result.retryAt, null);
-});
-
-test('workerが通知単位の失敗を記録した場合はscheduler実行成功として扱う', async () => {
+test('workerの通知単位failedはschedulerの実行成功として扱う', async () => {
   const result = await runLineDeliveryScheduler({
     config: config(),
-    lock: immediateLock(),
     worker: { run: async () => 'failed' },
+    processor: { processOne: async () => 'failed' },
     now: () => NOW,
   });
-
   assert.equal(result.status, 'completed');
   assert.equal(result.workerStatus, 'failed');
   assert.equal(result.retryable, false);
 });
 
-test('PostgreSQL advisory lockは取得できたtransactionの範囲でworkerを実行する', async () => {
-  const queries: Array<{ values: readonly unknown[] }> = [];
-  let transactionCalls = 0;
-  const database: LineDeliveryLockDatabase = {
-    transaction: async (work) => {
-      transactionCalls += 1;
-      return work({
-        queryRaw: async <Row>(
-          _strings: TemplateStringsArray,
-          ...values: unknown[]
-        ) => {
-          queries.push({ values });
-          return [{ acquired: true }] as Row;
-        },
-      });
+test('scheduler試行回数上限に達した失敗は自動再試行しない', async () => {
+  const result = await runLineDeliveryScheduler({
+    config: config({ attempt: 3, maxAttempts: 3 }),
+    worker: {
+      run: async () => {
+        throw new Error('transient failure');
+      },
     },
-  };
-  const lock = createPostgresLineDeliveryLock(database);
-  let workerCalls = 0;
-  const result = await lock.withLock(
-    { key: 'cocolo:line-delivery:test' },
-    async () => {
-      workerCalls += 1;
-      return 'done';
-    },
-  );
-
-  assert.deepEqual(result, { acquired: true, value: 'done' });
-  assert.equal(transactionCalls, 1);
-  assert.equal(workerCalls, 1);
-  assert.deepEqual(queries[0]?.values, ['cocolo:line-delivery:test']);
+    processor: { processOne: async () => 'idle' },
+    now: () => NOW,
+  });
+  assert.equal(result.status, 'failed');
+  assert.equal(result.retryable, false);
+  assert.equal(result.retryAfterMs, null);
+  assert.equal(result.retryAt, null);
 });
