@@ -48,6 +48,102 @@ enum PromotionRunStatus {
   @@map("promotion_run_status")
 }
 
+enum EventType {
+  practice
+  match
+  event
+
+  @@map("event_type")
+}
+
+enum AttendanceResponse {
+  attending
+  absent
+  pending
+
+  @@map("attendance_response")
+}
+
+enum AttachmentStatus {
+  uploaded
+  available
+  rejected
+  deleted
+
+  @@map("attachment_status")
+}
+
+enum AnnouncementStatus {
+  published
+  archived
+
+  @@map("announcement_status")
+}
+
+enum PurchaseOrderStatus {
+  open
+  closed
+  completed
+
+  @@map("purchase_order_status")
+}
+
+enum PaymentStatus {
+  unpaid
+  paid
+
+  @@map("payment_status")
+}
+
+enum LineConnectionStatus {
+  connected
+  disconnected
+
+  @@map("line_connection_status")
+}
+
+enum LineNotificationSource {
+  event
+  deadline
+  bulletin
+
+  @@map("line_notification_source")
+}
+
+enum LineNotificationStatus {
+  pending
+  sending
+  sent
+  failed
+
+  @@map("line_notification_status")
+}
+
+enum RidePlanStatus {
+  draft
+  open
+  closed
+  finalized
+
+  @@map("ride_plan_status")
+}
+
+enum RideOfferStatus {
+  open
+  cancelled
+
+  @@map("ride_offer_status")
+}
+
+enum RideRequestStatus {
+  pending
+  assigned
+  unassigned
+  cancelled
+
+  @@map("ride_request_status")
+}
+
 model Tenant {
   id           String             @id @default(uuid(7)) @db.Uuid
   name         String             @db.VarChar(200)
@@ -57,6 +153,24 @@ model Tenant {
   guardians    GuardianMember[]
   auditLogs    AuditLog[]
   promotionRuns PromotionRun[]
+  events        Event[]
+  attendanceResponses AttendanceResponseRecord[]
+  boardContacts BoardContact[]
+  attachments   Attachment[]
+  purchaseOrders PurchaseOrder[]
+  orderProducts OrderProduct[]
+  orderEntries  OrderEntry[]
+  orderLines    OrderLine[]
+  announcements Announcement[]
+  announcementAttachments AnnouncementAttachment[]
+  announcementReads AnnouncementRead[]
+  lineConnections LineConnection[]
+  lineNotificationQueue LineNotificationQueue[]
+  lineWebhookReceipts LineWebhookReceipt[]
+  ridePlans     RidePlan[]
+  rideOffers    RideOffer[]
+  rideRequests  RideRequest[]
+  rideAssignments RideAssignment[]
 
   @@map("tenants")
 }
@@ -88,6 +202,9 @@ model Member {
   createdAt     DateTime         @default(now()) @map("created_at")
   tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   guardianLinks GuardianMember[]
+  attendanceResponses AttendanceResponseRecord[]
+  orderEntries  OrderEntry[]
+  rideRequests  RideRequest[]
 
   @@unique([tenantId, id])
   @@index([tenantId, status, category])
@@ -144,4 +261,347 @@ model PromotionRun {
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, status])
   @@map("promotion_runs")
+}
+
+model Event {
+  id                         String   @id @default(uuid(7)) @db.Uuid
+  tenantId                   String   @map("tenant_id") @db.Uuid
+  title                      String   @db.VarChar(200)
+  type                       EventType @map("event_type")
+  startsAt                   DateTime @map("starts_at")
+  endsAt                     DateTime @map("ends_at")
+  location                   String?  @db.VarChar(500)
+  itemsToBring               String?  @map("items_to_bring") @db.VarChar(2000)
+  fee                        Int      @default(0)
+  announcementImageAttachmentId String? @map("announcement_image_attachment_id") @db.Uuid
+  opponent                   String?  @db.VarChar(200)
+  meetingTime                DateTime? @map("meeting_time")
+  transportationRequired     Boolean  @default(false) @map("transportation_required")
+  attendanceDeadline         DateTime @map("attendance_deadline")
+  createdByUserId            String   @map("created_by_user_id") @db.VarChar(128)
+  updatedByUserId            String   @map("updated_by_user_id") @db.VarChar(128)
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @default(now()) @map("updated_at")
+  tenant                     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  attachment                 Attachment? @relation("EventAnnouncementAttachment", fields: [tenantId, announcementImageAttachmentId], references: [tenantId, id], onDelete: Restrict)
+  attendanceResponses        AttendanceResponseRecord[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, startsAt, id])
+  @@map("events")
+}
+
+model AttendanceResponseRecord {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  eventId          String   @map("event_id") @db.Uuid
+  userId           String   @map("user_id") @db.VarChar(128)
+  memberId         String   @map("member_id") @db.Uuid
+  response         AttendanceResponse
+  correctionReason String?  @map("correction_reason") @db.VarChar(500)
+  respondedAt      DateTime @default(now()) @map("responded_at")
+  updatedAt        DateTime @default(now()) @map("updated_at")
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  event            Event    @relation(fields: [tenantId, eventId], references: [tenantId, id], onDelete: Restrict)
+  member           Member   @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, eventId, userId, memberId])
+  @@index([tenantId, eventId, memberId])
+  @@map("attendance_responses")
+}
+
+model BoardContact {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  fiscalYear        Int      @map("fiscal_year")
+  roleName          String   @map("role_name") @db.VarChar(100)
+  roleType          String   @map("role_type") @db.VarChar(16)
+  assigneeUserId    String?  @map("assignee_user_id") @db.VarChar(128)
+  lineContact       String?  @map("line_contact") @db.VarChar(200)
+  phone             String?  @db.VarChar(32)
+  contactPreference String   @map("contact_preference") @db.VarChar(8)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @default(now()) @map("updated_at")
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, fiscalYear, roleName])
+  @@index([tenantId, fiscalYear])
+  @@map("board_contacts")
+}
+
+model Attachment {
+  id                  String         @id @default(uuid(7)) @db.Uuid
+  tenantId            String         @map("tenant_id") @db.Uuid
+  ownerUserId         String         @map("owner_user_id") @db.VarChar(128)
+  objectKey           String         @map("object_key") @db.VarChar(512)
+  mediaType           String         @map("media_type") @db.VarChar(64)
+  byteSize            Int            @map("byte_size")
+  sha256              String?        @db.Char(64)
+  status              AttachmentStatus
+  expiresAt           DateTime       @map("expires_at")
+  completeAttempts    Int            @default(0) @map("complete_attempts")
+  cleanupAttempts     Int            @default(0) @map("cleanup_attempts")
+  cleanupCompletedAt  DateTime?      @map("cleanup_completed_at")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  availableAt         DateTime?      @map("available_at")
+  deletedAt           DateTime?      @map("deleted_at")
+  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  eventReferences     Event[]        @relation("EventAnnouncementAttachment")
+  announcementLinks   AnnouncementAttachment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, objectKey])
+  @@index([tenantId, status, expiresAt])
+  @@map("attachments")
+}
+
+model PurchaseOrder {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  tenantId       String             @map("tenant_id") @db.Uuid
+  title          String             @db.VarChar(200)
+  deadline       DateTime
+  status         PurchaseOrderStatus @default(open)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  products       OrderProduct[]
+  entries        OrderEntry[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status, deadline])
+  @@map("purchase_orders")
+}
+
+model OrderProduct {
+  id                 String       @id @default(uuid(7)) @db.Uuid
+  tenantId           String       @map("tenant_id") @db.Uuid
+  orderId            String       @map("order_id") @db.Uuid
+  name               String       @db.VarChar(200)
+  unitPrice          Int          @map("unit_price")
+  imageUrl           String?      @map("image_url") @db.VarChar(2000)
+  options            Json         @default("[]")
+  requiresBackNumber Boolean      @default(false) @map("requires_back_number")
+  requiresBackName   Boolean      @default(false) @map("requires_back_name")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  tenant             Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  order              PurchaseOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  lines              OrderLine[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, orderId, createdAt])
+  @@map("order_products")
+}
+
+model OrderEntry {
+  id                   String        @id @default(uuid(7)) @db.Uuid
+  tenantId             String        @map("tenant_id") @db.Uuid
+  orderId              String        @map("order_id") @db.Uuid
+  ordererUserId        String        @map("orderer_user_id") @db.VarChar(128)
+  ordererName          String        @map("orderer_name") @db.VarChar(200)
+  memberId             String        @map("member_id") @db.Uuid
+  totalAmount          Int           @map("total_amount")
+  paymentStatus        PaymentStatus @default(unpaid) @map("payment_status")
+  paymentConfirmedAt   DateTime?     @map("payment_confirmed_at")
+  paymentConfirmedBy   String?       @map("payment_confirmed_by") @db.VarChar(128)
+  createdAt            DateTime      @default(now()) @map("created_at")
+  tenant               Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  order                PurchaseOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  member               Member        @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict)
+  lines                OrderLine[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, orderId, paymentStatus, createdAt])
+  @@index([tenantId, ordererUserId])
+  @@map("order_entries")
+}
+
+model OrderLine {
+  id               String      @id @default(uuid(7)) @db.Uuid
+  tenantId         String      @map("tenant_id") @db.Uuid
+  orderEntryId     String      @map("order_entry_id") @db.Uuid
+  productId        String      @map("product_id") @db.Uuid
+  productName      String      @map("product_name") @db.VarChar(200)
+  unitPrice        Int         @map("unit_price")
+  quantity         Int
+  selectedOptions  Json        @map("selected_options")
+  backNumber       String?     @map("back_number") @db.VarChar(20)
+  backName         String?     @map("back_name") @db.VarChar(40)
+  amount           Int
+  tenant           Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  orderEntry       OrderEntry  @relation(fields: [tenantId, orderEntryId], references: [tenantId, id], onDelete: Restrict)
+  product          OrderProduct @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, orderEntryId])
+  @@index([tenantId, productId])
+  @@map("order_lines")
+}
+
+model Announcement {
+  id          String             @id @default(uuid(7)) @db.Uuid
+  tenantId    String             @map("tenant_id") @db.Uuid
+  authorUserId String            @map("author_user_id") @db.VarChar(128)
+  title       String             @db.VarChar(200)
+  body        String             @db.VarChar(20000)
+  status      AnnouncementStatus @default(published)
+  publishedAt DateTime           @map("published_at")
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  attachments AnnouncementAttachment[]
+  reads       AnnouncementRead[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status, publishedAt, id])
+  @@map("announcements")
+}
+
+model AnnouncementAttachment {
+  tenantId       String       @map("tenant_id") @db.Uuid
+  announcementId String       @map("announcement_id") @db.Uuid
+  attachmentId   String       @map("attachment_id") @db.Uuid
+  position       Int
+  mediaType      String       @map("media_type") @db.VarChar(64)
+  byteSize       Int          @map("byte_size")
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  announcement   Announcement @relation(fields: [tenantId, announcementId], references: [tenantId, id], onDelete: Restrict)
+  attachment     Attachment   @relation(fields: [tenantId, attachmentId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, announcementId, attachmentId])
+  @@unique([tenantId, announcementId, position])
+  @@map("announcement_attachments")
+}
+
+model AnnouncementRead {
+  tenantId       String       @map("tenant_id") @db.Uuid
+  announcementId String       @map("announcement_id") @db.Uuid
+  userId         String       @map("user_id") @db.VarChar(128)
+  readAt         DateTime     @map("read_at")
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  announcement   Announcement @relation(fields: [tenantId, announcementId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, announcementId, userId])
+  @@index([tenantId, userId, readAt])
+  @@map("announcement_reads")
+}
+
+model LineConnection {
+  tenantId    String               @id @map("tenant_id") @db.Uuid
+  groupId     String?              @unique @map("group_id") @db.VarChar(128)
+  status      LineConnectionStatus
+  connectedAt DateTime?            @map("connected_at")
+  updatedAt   DateTime             @default(now()) @map("updated_at")
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@map("line_connections")
+}
+
+model LineNotificationQueue {
+  id                String                 @id @default(uuid(7)) @db.Uuid
+  tenantId          String                 @map("tenant_id") @db.Uuid
+  groupId           String                 @map("group_id") @db.VarChar(128)
+  createdByUserId   String                 @map("created_by_user_id") @db.VarChar(128)
+  sourceType        LineNotificationSource @map("source_type")
+  sourceId          String                 @map("source_id") @db.VarChar(128)
+  title             String                 @db.VarChar(200)
+  body              String                 @db.VarChar(4000)
+  deepLink          String                 @map("deep_link") @db.VarChar(2048)
+  status            LineNotificationStatus
+  attempts          Int                    @default(0)
+  nextRetryAt      DateTime?              @map("next_retry_at")
+  providerMessageId String?                @map("provider_message_id") @db.VarChar(256)
+  lastError         String?                @map("last_error") @db.VarChar(500)
+  createdAt         DateTime               @default(now()) @map("created_at")
+  sentAt            DateTime?              @map("sent_at")
+  tenant            Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([status, nextRetryAt, createdAt, id])
+  @@index([tenantId, groupId, status])
+  @@map("line_notification_queue")
+}
+
+model LineWebhookReceipt {
+  tenantId      String   @map("tenant_id") @db.Uuid
+  groupId       String   @map("group_id") @db.VarChar(128)
+  webhookEventId String  @map("webhook_event_id") @db.VarChar(128)
+  receivedAt    DateTime @default(now()) @map("received_at")
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([groupId, webhookEventId])
+  @@index([tenantId, receivedAt])
+  @@map("line_webhook_receipts")
+}
+
+model RidePlan {
+  id                  String         @id @default(uuid(7)) @db.Uuid
+  tenantId            String         @map("tenant_id") @db.Uuid
+  title               String         @db.VarChar(200)
+  departureAt         DateTime       @map("departure_at")
+  pickupMapsUrl       String?        @map("pickup_maps_url") @db.VarChar(2048)
+  destinationMapsUrl String?        @map("destination_maps_url") @db.VarChar(2048)
+  status              RidePlanStatus @default(draft)
+  createdAt           DateTime       @default(now()) @map("created_at")
+  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  offers              RideOffer[]
+  requests            RideRequest[]
+  assignments         RideAssignment[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, departureAt, id])
+  @@map("ride_plans")
+}
+
+model RideOffer {
+  id            String          @id @default(uuid(7)) @db.Uuid
+  tenantId      String          @map("tenant_id") @db.Uuid
+  planId        String          @map("plan_id") @db.Uuid
+  driverUserId  String          @map("driver_user_id") @db.VarChar(128)
+  capacity      Int
+  status        RideOfferStatus @default(open)
+  createdAt     DateTime        @default(now()) @map("created_at")
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plan          RidePlan        @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict)
+  assignments   RideAssignment[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, planId, status, createdAt])
+  @@map("ride_offers")
+}
+
+model RideRequest {
+  id               String            @id @default(uuid(7)) @db.Uuid
+  tenantId         String            @map("tenant_id") @db.Uuid
+  planId           String            @map("plan_id") @db.Uuid
+  memberId         String            @map("member_id") @db.Uuid
+  requesterUserId  String            @map("requester_user_id") @db.VarChar(128)
+  passengerCount   Int               @map("passenger_count")
+  status           RideRequestStatus @default(pending)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plan             RidePlan          @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict)
+  member           Member            @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict)
+  assignments      RideAssignment[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, planId, status, createdAt])
+  @@index([tenantId, requesterUserId])
+  @@map("ride_requests")
+}
+
+model RideAssignment {
+  id             String      @id @default(uuid(7)) @db.Uuid
+  tenantId       String      @map("tenant_id") @db.Uuid
+  planId         String      @map("plan_id") @db.Uuid
+  requestId      String      @map("request_id") @db.Uuid
+  offerId        String      @map("offer_id") @db.Uuid
+  passengerCount Int         @map("passenger_count")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plan           RidePlan    @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict)
+  request        RideRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict)
+  offer          RideOffer   @relation(fields: [tenantId, offerId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, requestId])
+  @@index([tenantId, planId, offerId])
+  @@map("ride_assignments")
 }
