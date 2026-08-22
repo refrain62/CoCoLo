@@ -1,4 +1,6 @@
-type AppEnvironment = 'local' | 'staging' | 'production';
+import type { RateLimitStoreMode } from './security/rate-limit-adapter.js';
+
+export type AppEnvironment = 'local' | 'staging' | 'production';
 
 type RuntimeEnvironmentInput = Record<string, string | undefined>;
 
@@ -9,6 +11,9 @@ export type RuntimeEnvironment = {
   supabaseUrl: string;
   supabaseJwksUrl: string;
   supabaseIssuer: string;
+  rateLimitStoreMode: RateLimitStoreMode;
+  rateLimitFailClosed: true;
+  rateLimitAdapterModule?: string;
 };
 
 const allowedBuckets: Record<AppEnvironment, string> = {
@@ -33,6 +38,14 @@ function assertUrl(name: string, value: string) {
     );
 }
 
+function hasUnsafeControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code <= 31 || code === 127) return true;
+  }
+  return false;
+}
+
 // 環境、Supabase接続先、R2 bucket、公開URLを相互検証し、環境混同をfail-closedで防ぐ。
 export function readRuntimeEnvironment(
   environment: RuntimeEnvironmentInput,
@@ -50,6 +63,12 @@ export function readRuntimeEnvironment(
   required(environment, 'SUPABASE_ANON_KEY');
   const r2Bucket = required(environment, 'R2_BUCKET');
   const publicAppUrl = required(environment, 'PUBLIC_APP_URL');
+  const rateLimitStoreMode = required(
+    environment,
+    'RATE_LIMIT_STORE',
+  ) as RateLimitStoreMode;
+  const rateLimitFailClosed = required(environment, 'RATE_LIMIT_FAIL_CLOSED');
+  const rateLimitAdapterModule = environment.RATE_LIMIT_ADAPTER_MODULE?.trim();
   const supabaseIssuer = `${supabaseUrl}/auth/v1`;
 
   assertUrl('SUPABASE_URL', supabaseUrl);
@@ -59,6 +78,28 @@ export function readRuntimeEnvironment(
 
   if (appEnv === 'local' && publicAppUrl !== 'http://localhost:5173')
     throw new Error('PUBLIC_APP_URL が local 環境の許可値と一致しません。');
+
+  if (rateLimitFailClosed !== 'true')
+    throw new Error('RATE_LIMIT_FAIL_CLOSED は true に固定してください。');
+  if (appEnv === 'local') {
+    if (rateLimitStoreMode !== 'memory')
+      throw new Error(
+        'local環境のRATE_LIMIT_STOREは memoryに固定してください。',
+      );
+    if (rateLimitAdapterModule)
+      throw new Error(
+        'local環境ではRATE_LIMIT_ADAPTER_MODULEを設定できません。',
+      );
+  } else {
+    if (rateLimitStoreMode !== 'distributed')
+      throw new Error(
+        `${appEnv}環境のRATE_LIMIT_STOREは distributedに固定してください。`,
+      );
+    if (!rateLimitAdapterModule)
+      throw new Error(`${appEnv}環境ではRATE_LIMIT_ADAPTER_MODULEが必要です。`);
+    if (hasUnsafeControlCharacter(rateLimitAdapterModule))
+      throw new Error('RATE_LIMIT_ADAPTER_MODULEに制御文字を指定できません。');
+  }
 
   const allowedUrl = environment.SUPABASE_ALLOWED_URL?.trim();
   const allowedJwksUrl = environment.SUPABASE_ALLOWED_JWKS_URL?.trim();
@@ -98,5 +139,8 @@ export function readRuntimeEnvironment(
     supabaseUrl,
     supabaseJwksUrl,
     supabaseIssuer,
+    rateLimitStoreMode,
+    rateLimitFailClosed: true,
+    ...(rateLimitAdapterModule ? { rateLimitAdapterModule } : {}),
   };
 }

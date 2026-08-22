@@ -3,17 +3,26 @@ import { createMemberRepositories, createPrismaClient } from '@cocolo/db';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
 import { readRuntimeEnvironment } from './runtime-environment.js';
+import { loadDistributedRateLimitAdapter } from './security/rate-limit-adapter.js';
 
 // 起動時に環境境界を検証してから、JWT検証とRLS付きrepositoryを組み立てる。
 const runtime = readRuntimeEnvironment(process.env);
 const port = Number(process.env.PORT ?? 8787);
 const prisma = createPrismaClient();
 const repositories = createMemberRepositories(prisma);
+const distributedRateLimitAdapter = runtime.rateLimitAdapterModule
+  ? await loadDistributedRateLimitAdapter(runtime.rateLimitAdapterModule)
+  : undefined;
 const app = createApp({
   verifyToken: createSupabaseTokenVerifier({
     jwksUrl: runtime.supabaseJwksUrl,
     issuer: runtime.supabaseIssuer,
   }),
+  rateLimit: {
+    environment: runtime.appEnv,
+    mode: runtime.rateLimitStoreMode,
+    distributedAdapter: distributedRateLimitAdapter,
+  },
   ...repositories,
 });
 serve({ fetch: app.fetch, port });

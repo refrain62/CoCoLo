@@ -16,6 +16,9 @@ const validStagingEnvironment = {
   R2_BUCKET: 'cocolo-staging-private',
   PUBLIC_APP_URL: 'https://staging.example.test',
   PUBLIC_APP_URL_ALLOWLIST: 'https://staging.example.test',
+  RATE_LIMIT_STORE: 'distributed',
+  RATE_LIMIT_FAIL_CLOSED: 'true',
+  RATE_LIMIT_ADAPTER_MODULE: '@cocolo/rate-limit-redis-adapter',
 };
 
 test('API起動時に許可されたstaging環境を解決する', () => {
@@ -26,7 +29,41 @@ test('API起動時に許可されたstaging環境を解決する', () => {
     supabaseUrl: validStagingEnvironment.SUPABASE_URL,
     supabaseJwksUrl: validStagingEnvironment.SUPABASE_JWKS_URL,
     supabaseIssuer: 'https://staging.example.supabase.co/auth/v1',
+    rateLimitStoreMode: 'distributed',
+    rateLimitFailClosed: true,
+    rateLimitAdapterModule: validStagingEnvironment.RATE_LIMIT_ADAPTER_MODULE,
   });
+});
+
+test('stagingで分散storeとadapter moduleを省略した起動を拒否する', () => {
+  const environment: Record<string, string | undefined> = {
+    ...validStagingEnvironment,
+  };
+  delete environment.RATE_LIMIT_ADAPTER_MODULE;
+
+  assert.throws(
+    () => readRuntimeEnvironment(environment),
+    /staging環境ではRATE_LIMIT_ADAPTER_MODULEが必要です。/,
+  );
+});
+
+test('stagingでin-memoryとfail-open設定を拒否する', () => {
+  assert.throws(
+    () =>
+      readRuntimeEnvironment({
+        ...validStagingEnvironment,
+        RATE_LIMIT_STORE: 'memory',
+      }),
+    /staging環境のRATE_LIMIT_STOREは distributedに固定してください。/,
+  );
+  assert.throws(
+    () =>
+      readRuntimeEnvironment({
+        ...validStagingEnvironment,
+        RATE_LIMIT_FAIL_CLOSED: 'false',
+      }),
+    /RATE_LIMIT_FAIL_CLOSED は true に固定してください。/,
+  );
 });
 
 test('APP_ENV未設定でAPI起動を許可しない', () => {
