@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// API/Web、DB schema、migrationを同一artifactへ梱包し、SHA-256を後続環境でも再検証できる形にする。
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const output =
   process.argv[process.argv.indexOf('--output') + 1] ??

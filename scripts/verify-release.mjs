@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// productionでは再ビルドせず、stagingで検証したmanifest・artifact SHA・checksumだけを受け入れる。
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const output =
   process.argv[process.argv.indexOf('--release-dir') + 1] ??

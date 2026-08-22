@@ -73,10 +73,12 @@ const memberSelect = {
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
+// membership検索用のuser contextだけをtransaction内へ設定し、後続のRLS判定に利用する。
 async function setUserContext(client: DatabaseClient, userId: string) {
   await client.$queryRaw`SELECT set_config('app.user_id', ${userId}, true)`;
 }
 
+// tenant・user・roleをtransaction-local設定へまとめて入れ、同じtransaction内の全クエリへRLS境界を適用する。
 async function setRlsContext(
   client: DatabaseClient,
   input: { tenantId: string; userId: string; role: MemberRole },
@@ -89,6 +91,7 @@ async function setRlsContext(
   `;
 }
 
+// Prismaのenum型と日時をAPI/DB repositoryの共通recordへ変換する。
 function toRecord(member: {
   id: string;
   tenantId: string;
@@ -107,6 +110,7 @@ function toRecord(member: {
   };
 }
 
+// 認証時に解決した所属を同じtransactionで再確認し、呼び出し側が任意tenant/roleを注入できないようにする。
 async function assertActiveMembership(
   client: Prisma.TransactionClient,
   input: { tenantId: string; userId: string; role: MemberRole },
@@ -249,13 +253,16 @@ async function markPromotionFailed(
   return run;
 }
 
+// API serverが利用するPrisma clientを生成する。transaction境界は各repository操作で管理する。
 export function createPrismaClient() {
   return new PrismaClient();
 }
 
+// RLS context、入力条件、監査ログをrepositoryに閉じ込め、API handlerからDB境界を迂回させない。
 export function createMemberRepositories(client: PrismaClient) {
   return {
     membershipRepository: {
+      // active所属が複数ある場合はtenantを暗黙選択せず、API側で利用可能な所属なしとして扱う。
       findActiveByUserId: async (userId: string) =>
         client.$transaction(async (tx) => {
           await setUserContext(tx, userId);
@@ -274,6 +281,7 @@ export function createMemberRepositories(client: PrismaClient) {
         }),
     },
     memberRepository: {
+      // guardianは担当関係でさらに絞り、検索と監査を同じtransactionで完了させる。
       list: async (input: {
         tenantId: string;
         userId: string;
@@ -294,6 +302,7 @@ export function createMemberRepositories(client: PrismaClient) {
           if (input.query.status) where.status = input.query.status;
           if (input.query.category) where.category = input.query.category;
           if (input.role === 'guardian')
+            // membershipだけではなくguardian_membersの担当関係も境界条件にする。
             where.guardianLinks = {
               some: { tenantId: input.tenantId, userId: input.userId },
             };
@@ -304,6 +313,7 @@ export function createMemberRepositories(client: PrismaClient) {
             take: input.query.pageSize,
             select: memberSelect,
           });
+          // 検索語は個人情報になり得るため保存せず、再現に必要な絞り込み条件だけを監査する。
           await tx.auditLog.createMany({
             data: [
               {
@@ -329,6 +339,7 @@ export function createMemberRepositories(client: PrismaClient) {
         member: MemberCreateInput,
       ) =>
         client.$transaction(async (tx) => {
+          // 所属再確認、部員作成、監査を一つのtransactionに束ね、片方だけ成功する状態を防ぐ。
           await setRlsContext(tx, {
             tenantId: input.tenantId,
             userId: input.actorUserId,

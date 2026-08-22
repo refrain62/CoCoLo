@@ -1,5 +1,6 @@
 const environments = new Set(['staging', 'production']);
 
+// 配置adapterの自己申告を、artifact SHA・環境・HTTPS URL・時刻まで検証して昇格判断に使える記録へ限定する。
 export function assertDeploymentRecord(record, expected) {
   if (!record || typeof record !== 'object')
     throw new Error('配置記録がオブジェクトではありません');

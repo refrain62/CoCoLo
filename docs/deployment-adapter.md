@@ -1,6 +1,8 @@
 # デプロイ配置アダプター契約
 
-staging / production 環境への実配置は、環境固有のサービスに依存します。そのため、ワークフローへ直接プロバイダーの実装を埋め込みません。GitHub Environment の保護されたシークレットで、環境ごとに実行可能な配置アダプターを指定します。
+全体の手順、Environment設定、stagingからproductionへの昇格、障害対応は[デプロイ運用手順](deployment-guide.md)を参照してください。この文書では、provider固有の配置アダプターとの入出力契約だけを定義します。
+
+staging / production 環境への実配置は、環境固有のサービスに依存します。そのため、Workflowへ直接providerの実装を埋め込みません。GitHub Environmentの保護されたsecretで、環境ごとに実行可能な配置アダプターを指定します。
 
 配置アダプターは次の引数を受け取り、検証済みの成果物を配置した後、`--release-dir` 配下へ `deployment-record.json` を作成します。
 

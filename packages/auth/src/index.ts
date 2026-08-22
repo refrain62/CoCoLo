@@ -15,6 +15,7 @@ export type SupabaseVerifierOptions = {
   audience?: string;
 };
 
+// Supabase JWKSで署名・issuer・audience・有効期限を検証し、APIが信頼できる最小claimsだけを受け取る。
 export function createSupabaseTokenVerifier({
   jwksUrl,
   issuer,
@@ -41,6 +42,7 @@ export function createSupabaseTokenVerifier({
   };
 }
 
+// AuthorizationヘッダーからBearer形式だけを抽出し、他の認証方式を暗黙に受け入れない。
 export function extractBearerToken(header: string | null): string | null {
   if (!header) return null;
   const match = /^Bearer\s+([^\s]+)$/i.exec(header);

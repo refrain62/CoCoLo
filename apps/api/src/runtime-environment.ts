@@ -17,12 +17,14 @@ const allowedBuckets: Record<AppEnvironment, string> = {
   production: 'cocolo-production-private',
 };
 
+// 必須設定を起動直後に検証し、未設定値を下流の接続処理まで持ち込まない。
 function required(environment: RuntimeEnvironmentInput, name: string): string {
   const value = environment[name]?.trim();
   if (!value) throw new Error(`${name} が必要です。`);
   return value;
 }
 
+// 本番系はHTTPSだけを許可し、localだけloopback URLを例外として認める。
 function assertUrl(name: string, value: string) {
   const url = new URL(value);
   if (url.protocol !== 'https:' && url.hostname !== '127.0.0.1')
@@ -31,6 +33,7 @@ function assertUrl(name: string, value: string) {
     );
 }
 
+// 環境、Supabase接続先、R2 bucket、公開URLを相互検証し、環境混同をfail-closedで防ぐ。
 export function readRuntimeEnvironment(
   environment: RuntimeEnvironmentInput,
 ): RuntimeEnvironment {

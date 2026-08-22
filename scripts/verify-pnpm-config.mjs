@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// 依存取得時の待機・exotic subdependency禁止・build script allowlistを実設定から検査する。
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const packageJson = JSON.parse(
   await readFile(path.join(root, 'package.json'), 'utf8'),

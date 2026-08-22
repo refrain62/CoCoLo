@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
+// テナントA/Bとrole別fixtureを冪等に投入し、RLS・認可・guardian境界の統合テストを再現可能にする。
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URL が必要です');
 assert.ok(process.env.DIRECT_URL, 'DIRECT_URL が必要です');
 const sql = `

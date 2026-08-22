@@ -22,6 +22,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const defaultAuthClient = createAuthClient();
 
+// access tokenだけを復元し、refresh tokenを持たない現状では期限を推測して再認証を要求する。
 function getStoredSession(): AuthSession | null {
   if (typeof window === 'undefined') return null;
   const accessToken = window.localStorage.getItem('cocolo.accessToken');
@@ -30,6 +31,7 @@ function getStoredSession(): AuthSession | null {
     : null;
 }
 
+// 認証状態・送信中状態・利用者向けエラーを一箇所で管理し、画面へsessionだけを公開する。
 export function AuthProvider({
   children,
   client = defaultAuthClient,
@@ -71,12 +73,14 @@ export function AuthProvider({
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+// Provider外からの利用を設定漏れとして即時に検出する。
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error('AuthProviderが必要です。');
   return context;
 }
 
+// 入力値をtrimしてAuth clientへ渡し、認証成功時だけaccess tokenをlocalStorageへ保存する。
 export function LoginPage() {
   const { error, isSigningIn, signIn } = useAuth();
 
@@ -106,6 +110,9 @@ export function LoginPage() {
           {isSigningIn ? 'ログイン中…' : 'ログイン'}
         </button>
       </form>
+      <p>
+        <a href="/manual">操作マニュアルを確認</a>
+      </p>
     </main>
   );
 }

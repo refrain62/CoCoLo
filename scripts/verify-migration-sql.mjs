@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// migrationの文字コード・改行・日本語COMMENT・RLS・grant・tenant複合FKをCIで一括検査する。
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const migrationsRoot = path.join(
   root,

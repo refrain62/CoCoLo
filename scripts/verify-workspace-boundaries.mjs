@@ -6,6 +6,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const sourceExtensions = new Set(['.js', '.mjs', '.ts', '.tsx']);
 const ignored = new Set(['node_modules', 'dist', 'coverage', '.git']);
 
+// 依存境界検査の対象ファイルを再帰的に収集し、生成物や管理対象外のディレクトリは除外する。
 async function filesUnder(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
@@ -19,6 +20,7 @@ async function filesUnder(directory) {
   return files;
 }
 
+// Web/API/domain/contractsの依存方向と、production codeからtest fixtureへの参照禁止を宣言する。
 const rules = [
   {
     scope: 'apps/web',
