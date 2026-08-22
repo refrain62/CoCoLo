@@ -16,19 +16,61 @@ if (!artifactSha || !/^[0-9a-f]{40}$/.test(artifactSha))
   throw new Error('成果物の SHA は40桁の小文字 SHA-1 で指定してください。');
 
 await mkdir(output, { recursive: true });
-// schedulerが参照する実行可能workerをrelease成果物へ必ず含める。
-await access(path.join(root, 'apps/api/dist/line-delivery-worker.js'));
-const manifest = {
-  artifactSha,
-  workerEntrypoint: 'apps/api/dist/line-delivery-worker.js',
-  files: [
+const runtimePackages = [
+  {
+    name: '@cocolo/api',
+    directory: 'apps/api',
+    entrypoint: 'dist/server.js',
+  },
+  {
+    name: '@cocolo/auth',
+    directory: 'packages/auth',
+    entrypoint: 'dist/index.js',
+  },
+  {
+    name: '@cocolo/contracts',
+    directory: 'packages/contracts',
+    entrypoint: 'dist/index.js',
+  },
+  {
+    name: '@cocolo/db',
+    directory: 'packages/db',
+    entrypoint: 'dist/index.js',
+  },
+  {
+    name: '@cocolo/domain',
+    directory: 'packages/domain',
+    entrypoint: 'dist/index.js',
+  },
+] as const;
+const runtimeFiles = runtimePackages.flatMap(({ directory }) => [
+  `${directory}/dist`,
+  `${directory}/package.json`,
+]);
+// production promoteで再buildしないため、APIが実行時にimportするworkspace packageも梱包する。
+for (const file of [
+  'apps/api/dist/line-delivery-worker.js',
+  ...runtimeFiles,
+  'pnpm-workspace.yaml',
+])
+  await access(path.join(root, file));
+const files = [
+  ...new Set([
     'apps/api/dist',
     'apps/web/dist',
+    ...runtimeFiles,
     'packages/db/prisma/schema.prisma',
     'packages/db/prisma/migrations',
     'package.json',
     'pnpm-lock.yaml',
-  ],
+    'pnpm-workspace.yaml',
+  ]),
+];
+const manifest = {
+  artifactSha,
+  workerEntrypoint: 'apps/api/dist/line-delivery-worker.js',
+  runtimePackages,
+  files,
   generatedAt: new Date().toISOString(),
 };
 await writeFile(

@@ -6,6 +6,21 @@
 - branch: `feature/line-delivery-scheduler`
 - 修正対象: provider再送キー、公開通知API、`20260823120000_line_delivery_provider_retry_key`、worker・DB repository・統合テスト
 
+## 独立再レビュー追加対応
+
+H-1では、期限切れleaseまたは古いattempt tokenを持つworkerが`unknown`へ上書きできる競合が残っていた。
+`20260823130000_line_delivery_unknown_lease_guard`で、`status='sending'`、現行`attempt_token`、`lease_expires_at > clock_timestamp()`を同じUPDATE条件へ追加した。
+条件に一致しない場合は`stale`を返し、行と監査ログを変更しない。
+
+H-2では、release archiveにAPIのruntime workspace packageのdistとpackage metadataが不足していた。
+API、auth、contracts、db、domainのdistとpackage.json、`pnpm-workspace.yaml`をmanifestへ固定し、verifyでarchive内のentrypointとmetadataを検証する。
+contractsもsource TypeScriptではなくdistをNodeのruntime exportへ設定し、再buildなしのproduction promoteで起動できる形にした。
+
+M-1では、同一tenant内の別sourceによる冪等キーunique violationをAPIの409契約へ変換する。
+M-2では、LINE 409を明示的なprovider failureとして扱い、`failed`とDB時刻基準の再試行へ進める。
+M-3では、unknownのprovider照合に必要なretry keyとpayload hash、現行attempt条件を文書化する。
+照合API、CLI、自動reconcile workerは本PRの実装範囲外である。
+
 ## 独立レビュー再修正
 
 独立レビューのH-1は、LINE Messaging APIが認識する正式なヘッダーを`X-Line-Retry-Key`へ限定し、内部冪等キーとpayload hashだけではprovider側の重複抑止にならない点を指摘した。
@@ -30,9 +45,11 @@ H-2には、owner/admin向け`POST /api/v1/notifications/line`とDB producerを�
 - claim・確定・retry時刻を`clock_timestamp()`基準へ変更し、retry delayをDB側で検証。
 - `gen_random_uuid()`をattempt tokenと監査IDへ使用。
 - provider ID欠落を成功扱いせず、照合待ちへ遷移。
+- unknown確定を現行attempt tokenかつ有効leaseに限定し、期限切れ競合を`stale`として無変更扱い。
 - providerへ通知単位の冪等キーを渡し、payload hashの不一致再登録を拒否。
 - worker専用URLを`LINE_DELIVERY_WORKER_DATABASE_URL`として明示注入し、接続roleを検証。
 - 公開通知APIの`Idempotency-Key`、source、payloadを契約層で検証し、異なるpayloadの再利用を409で拒否。
+- 同一tenant内の別sourceによるIdempotency-Key重複を409へ変換し、LINE 409をprovider failureとして再試行。
 
 ## 検証結果
 
@@ -42,7 +59,7 @@ H-2には、owner/admin向け`POST /api/v1/notifications/line`とDB producerを�
 - 変更対象Biome lint / API lint: 成功
 - `pnpm verify:migration-sql`: 成功
 - クリーンPostgreSQL 17 migration deploy: 成功
-- API integration（実DB）: 14件成功。公開API経路、retry・unknown・lease切れ検証を含む
-- release artifact: `apps/api/dist/line-delivery-worker.js` とhardening migrationを含むことを確認
+- API integration（実DB）: 16件成功予定。公開API経路、retry・unknown・lease切れ、unknown確定競合、別source冪等キー競合を含む
+- release artifact: `apps/api/dist/line-delivery-worker.js`、runtime workspace packageのdist/package.json、hardening migrationを含むことを確認
 
 workspace全体の`pnpm lint`は、今回の変更対象外にある既存CRLFファイルをBiomeが検出したため失敗した。対象ファイルはLFへ統一し、無関係な全体フォーマット変更は行っていない。

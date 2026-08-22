@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -34,4 +35,58 @@ assert.equal(
   checksum,
   'リリース成果物の SHA-256 が一致しません。',
 );
-console.log('リリース成果物の SHA-256 と commit SHA を検証しました。');
+const runtimePackages = [
+  ['apps/api', 'dist/server.js'],
+  ['packages/auth', 'dist/index.js'],
+  ['packages/contracts', 'dist/index.js'],
+  ['packages/db', 'dist/index.js'],
+  ['packages/domain', 'dist/index.js'],
+] as const;
+assert.deepEqual(
+  manifest.runtimePackages?.map(
+    (runtimePackage: { directory: string; entrypoint: string }) => [
+      runtimePackage.directory,
+      runtimePackage.entrypoint,
+    ],
+  ),
+  runtimePackages,
+  'runtime workspace packageのmanifestが不足しています。',
+);
+const tarResult = spawnSync(
+  'tar',
+  ['-tzf', path.join(output, 'release.tar.gz')],
+  {
+    encoding: 'utf8',
+  },
+);
+assert.equal(tarResult.status, 0, 'release archiveの一覧取得に失敗しました。');
+const archiveEntries = new Set(
+  tarResult.stdout
+    .split(/\r?\n/)
+    .map((entry) => entry.replace(/\/$/, ''))
+    .filter(Boolean),
+);
+const hasArchivePath = (entry: string) =>
+  archiveEntries.has(entry) ||
+  [...archiveEntries].some((candidate) => candidate.startsWith(`${entry}/`));
+assert.ok(
+  hasArchivePath(manifest.workerEntrypoint),
+  'worker entrypointがrelease archiveにありません。',
+);
+for (const [directory, entrypoint] of runtimePackages) {
+  assert.ok(
+    hasArchivePath(`${directory}/${entrypoint}`),
+    `${directory}/${entrypoint}がrelease archiveにありません。`,
+  );
+  assert.ok(
+    archiveEntries.has(`${directory}/package.json`),
+    `${directory}/package.jsonがrelease archiveにありません。`,
+  );
+}
+assert.ok(
+  archiveEntries.has('pnpm-workspace.yaml'),
+  'pnpm-workspace.yamlがrelease archiveにありません。',
+);
+console.log(
+  'リリース成果物のSHA-256、commit SHA、runtime workspace packageを検証しました。',
+);

@@ -56,3 +56,8 @@ jobs:
           LINE_DELIVERY_WORKER_DATABASE_URL: postgresql://line_delivery_worker:line_delivery_worker@localhost:5432/cocolo_test
       - name: 型検査とビルド
         run: pnpm typecheck && pnpm build
+      - name: release artifactのruntime依存を検証
+        run: |
+          pnpm test:release
+          pnpm package:release --artifact-sha "$GITHUB_SHA" --output .release-ci
+          pnpm verify:release --artifact-sha "$GITHUB_SHA" --release-dir .release-ci

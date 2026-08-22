@@ -35,7 +35,7 @@ lease切れのclaimは再取得できますが、古いworkerの状態更新は`
 APIはJWTから解決したtenant・user・roleだけをproducerへ渡し、producerは業務監査イベントと`app_enqueue_line_delivery`を同じtransactionで実行します。
 
 同じ`sourceId`、冪等キー、payloadを再送すると既存outbox IDを返します。
-異なるpayloadや冪等キーの再利用は409で拒否します。
+異なるpayload、または同じtenant内で別sourceが同じ冪等キーを再利用した場合は409で拒否します。
 
 この入口はAPI serverの`createMemberRepositories`からproductionへ配線され、`@cocolo/db`のtransaction helperをテストだけで呼ぶ構成にはしません。
 
@@ -92,7 +92,10 @@ schedulerはこの値を実行中に書き換えず、設定値を検証して�
 
 providerから明確な失敗応答を得た通知は、`failed`、試行回数、DB時刻基準の再試行時刻、失敗コードを保存します。
 
-timeout、scheduler Abort、または2xx応答なのにprovider IDが欠落した場合は外部副作用を取り消せないため、`unknown`（照合待ち）へ遷移します。`unknown`は自動claimせず、providerへ通知行に固定した`X-Line-Retry-Key`で照合してから運用者が確定します。
+timeout、scheduler Abort、または2xx応答なのにprovider IDが欠落した場合は外部副作用を取り消せないため、`unknown`（照合待ち）へ遷移します。
+`unknown`は自動claimせず、providerへ通知行に固定した`X-Line-Retry-Key`で照合してから運用者が確定します。
+
+LINEの409応答はproviderの明示的な失敗として`failed`へ遷移し、DB時刻基準の`next_retry_at`を設定して同じ`X-Line-Retry-Key`で再試行します。
 
 明確なprovider失敗やlease切れで再送する場合も、同じpayload hashと内部冪等キーを持つoutbox行の`provider_retry_key`を使います。
 そのため、外部送信が成功した後に応答を失ったretryや、leaseを再取得したworkerは、provider側で同じretry keyとして照合できます。
@@ -112,7 +115,7 @@ min(LINE_DELIVERY_RETRY_BASE_DELAY_SECONDS * 2 ^ (attempt - 1), 3600秒)
 最大試行回数に達した失敗は`retryable=false`となるため、自動再実行を止めて運用者がDB状態とLINE providerの障害状況を確認します。
 
 送信timeoutまたはabort時はAbortSignalを実際にabortし、`unknown`へ遷移させて再claimを止めます。
-送信済み確定と失敗・unknown確定はtenant・通知ID・attempt token・lease期限を条件に行い、古いworkerは状態を変更できません。
+送信済み確定と失敗・unknown確定はtenant・通知ID・attempt token・有効なlease期限を同じUPDATE条件で検証し、古いworkerや期限切れattemptは状態を変更できません。
 
 この配信経路はat-least-once契約であり、schedulerの再実行だけで重複送信を解消できるとは扱いません。
 
@@ -136,5 +139,17 @@ min(LINE_DELIVERY_RETRY_BASE_DELAY_SECONDS * 2 ^ (attempt - 1), 3600秒)
 - schedulerの標準出力に出るJSONと終了コードだけを監視へ渡している。
 
 業務APIはproducerが`enqueueLineDelivery`を同一transaction clientから呼び、membership行を`FOR UPDATE`でロックしてactive確認とoutbox登録を原子化します。release成果物は`apps/api/dist/line-delivery-worker.js`の存在を梱包前に検証します。
+
+release成果物にはAPIとworkerが実行時にimportする`@cocolo/auth`、`@cocolo/contracts`、`@cocolo/db`、`@cocolo/domain`のdistとpackage.jsonを含めます。
+production promoteは成果物を再buildせず、manifest、checksum、workspace packageのruntime entrypointを検証してから起動します。
+
+## unknown照合の実装範囲
+
+このPRで実装するのは、外部副作用の有無を確定できないattemptを`unknown`へ遷移させ、自動claimを停止する経路です。
+`unknown`の確定には現行`attempt_token`と`lease_expires_at > clock_timestamp()`の両方が必要です。
+token不一致またはlease期限切れの確定要求は`stale`として扱い、行と監査ログを変更しません。
+
+provider APIで`X-Line-Retry-Key`とpayload hashを照合する運用手順は契約に含めますが、照合結果を反映する公開API、CLI、自動reconcile workerは本PRの実装範囲外です。
+自動再送を再開する場合は、provider側の結果を確認した後に別途認可済みの運用設計と変更を追加します。
 
 変更対象はscheduler adapter、実行可能worker、outbox enqueue/claim/状態遷移、専用DB role、実PostgreSQL統合テスト、release成果物、運用文書です。
