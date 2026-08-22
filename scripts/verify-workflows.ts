@@ -324,7 +324,6 @@ const databaseIntegritySteps: readonly StepPolicy[] = [
     withValues: { 'node-version': 24 },
   },
   { kind: 'run' },
-  { kind: 'run' },
   {
     kind: 'run',
     envValues: {
@@ -369,8 +368,6 @@ const databaseIntegritySteps: readonly StepPolicy[] = [
       DATABASE_URL:
         'postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test',
       DIRECT_URL: 'postgresql://postgres:postgres@localhost:5432/cocolo_test',
-      SHADOW_DATABASE_URL:
-        'postgresql://postgres:postgres@localhost:5432/cocolo_shadow',
     },
   },
   {
@@ -1054,15 +1051,15 @@ function validateDatabaseIntegrityWorkflowDocument(
   validateDatabaseIntegrityServices(job);
   validateSteps('database-integrity.yml', job, databaseIntegritySteps);
   const steps = asArray(job.steps, 'database-integrity.yml.jobs.steps');
-  const staticStep = asRecord(steps[5], 'database-integrity.yml.jobs.steps[5]');
+  const staticStep = asRecord(steps[4], 'database-integrity.yml.jobs.steps[4]');
   assert.match(
     String(staticStep.run ?? ''),
     /verify:migration-baseline[\s\S]+verify:migration-checksum[\s\S]+verify:migration-sql[\s\S]+test:database-integrity/,
     'database-integrity.yml: migration・DB fixture検査を必須接続してください',
   );
   const historyStep = asRecord(
-    steps[10],
-    'database-integrity.yml.jobs.steps[10]',
+    steps[9],
+    'database-integrity.yml.jobs.steps[9]',
   );
   assert.equal(
     historyStep.run,
@@ -1070,8 +1067,8 @@ function validateDatabaseIntegrityWorkflowDocument(
     'database-integrity.yml: DIRECT_URL履歴照合が必要です',
   );
   const driftStep = asRecord(
-    steps[11],
-    'database-integrity.yml.jobs.steps[11]',
+    steps[10],
+    'database-integrity.yml.jobs.steps[10]',
   );
   assert.equal(
     driftStep.run,
@@ -1079,8 +1076,8 @@ function validateDatabaseIntegrityWorkflowDocument(
     'database-integrity.yml: schema drift検査が必要です',
   );
   const securityStep = asRecord(
-    steps[12],
-    'database-integrity.yml.jobs.steps[12]',
+    steps[11],
+    'database-integrity.yml.jobs.steps[11]',
   );
   assert.equal(
     securityStep.run,

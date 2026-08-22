@@ -47,8 +47,6 @@ jobs:
           node-version: 24
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
-      - name: schema drift用DBを準備
-        run: psql --no-psqlrc --set=ON_ERROR_STOP=1 --dbname postgresql://postgres:postgres@localhost:5432/postgres --command "CREATE DATABASE cocolo_shadow"
       - name: migrationの正本とSQLを検証
         run: pnpm verify:migration-baseline && pnpm verify:migration-checksum && pnpm verify:migration-sql && pnpm test:database-integrity
         env:
@@ -79,7 +77,6 @@ jobs:
           APP_ENV: local
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
-          SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cocolo_shadow
       - name: DB security driftを検証
         run: pnpm verify:database-security
         env:

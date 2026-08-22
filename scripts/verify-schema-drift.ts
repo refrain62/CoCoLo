@@ -45,28 +45,22 @@ function requiredUrl(name: string): URL {
   return url;
 }
 
-export function assertLocalShadowConfiguration(): void {
+export function assertLocalDatabaseConfiguration(): void {
   assert.equal(
     process.env.APP_ENV,
     'local',
     'schema drift検査はlocal環境専用です。',
   );
   const direct = requiredUrl('DIRECT_URL');
-  const shadow = requiredUrl('SHADOW_DATABASE_URL');
   assert.equal(
-    shadow.hostname,
+    direct.hostname,
     'localhost',
-    'Shadow DB hostはlocalhostに固定します。',
+    'schema drift検査のDB hostはlocalhostに固定します。',
   );
   assert.equal(
-    shadow.port || '5432',
+    direct.port || '5432',
     '5432',
-    'Shadow DB portは5432に固定します。',
-  );
-  assert.notEqual(
-    shadow.pathname,
-    direct.pathname,
-    'Shadow DBをmigration DBと共有できません。',
+    'schema drift検査のDB portは5432に固定します。',
   );
 }
 
@@ -81,21 +75,18 @@ function run(): SchemaDriftResult {
       'prisma',
       'migrate',
       'diff',
-      '--from-migrations',
-      'prisma/migrations',
+      '--from-url',
+      process.env.DIRECT_URL ?? '',
       '--to-schema-datamodel',
       'prisma/schema.prisma',
-      '--shadow-database-url',
-      process.env.SHADOW_DATABASE_URL ?? '',
       '--script',
-      '--exit-code',
     ],
     { encoding: 'utf8', shell: false, windowsHide: true },
   ) as SchemaDriftResult;
 }
 
 async function main(): Promise<void> {
-  assertLocalShadowConfiguration();
+  assertLocalDatabaseConfiguration();
   assertSchemaDriftClean(run());
   console.log(
     'Prisma schemaとmigrationのschema driftがないことを検証しました。',
