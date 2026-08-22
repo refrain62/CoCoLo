@@ -7,12 +7,21 @@ import {
   createLineMessagingAdapter,
   createLineNotificationApp,
   createLineNotificationService,
+  type LineActor,
 } from '../dist/features/line-notifications/index.js';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
-const OWNER_A = { tenantId: TENANT_A, userId: 'owner-a', role: 'owner' };
-const OWNER_B = { tenantId: TENANT_B, userId: 'owner-b', role: 'owner' };
+const OWNER_A: LineActor = {
+  tenantId: TENANT_A,
+  userId: 'owner-a',
+  role: 'owner',
+};
+const OWNER_B: LineActor = {
+  tenantId: TENANT_B,
+  userId: 'owner-b',
+  role: 'owner',
+};
 const BASE_URL = 'https://staging.example.test';
 const CHANNEL_SECRET = 'channel-secret';
 
@@ -38,7 +47,7 @@ function createFixture() {
     repository,
     adapter,
     service,
-    setNow(value) {
+    setNow(value: string | Date) {
       current = new Date(value);
     },
   };
@@ -69,7 +78,7 @@ function webhookBody(groupId = 'Cgroup-a', webhookEventId = 'event-001') {
   });
 }
 
-function signature(body) {
+function signature(body: string) {
   return createHmac('sha256', CHANNEL_SECRET).update(body).digest('base64');
 }
 
@@ -141,6 +150,8 @@ test('未接続tenantの古いキューが接続済みtenantの配信を妨げ�
   await service.disconnect(OWNER_A);
 
   const sent = await service.deliverOne(new Date('2026-08-22T00:00:00.000Z'));
+  assert.ok(queuedB.notification);
+  assert.ok(adapter.sentMessages[0]);
   assert.equal(sent?.id, queuedB.notification.id);
   assert.equal(adapter.sentMessages[0].groupId, 'Cgroup-b');
   assert.equal(queuedA.status, 'queued');
@@ -241,19 +252,23 @@ test('最大試行回数を超えた通知は自動再試行しない', async ()
   await service.enqueue(OWNER_A, notificationInput());
   adapter.failNext(5);
   let current = new Date('2026-08-22T00:00:00.000Z');
-  let last;
+  let last: Awaited<ReturnType<typeof service.deliverOne>> = null;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     last = await service.deliverOne(current);
-    assert.equal(last?.status, 'failed');
+    assert.ok(last);
+    assert.equal(last.status, 'failed');
     if (last.nextRetryAt) current = last.nextRetryAt;
   }
-  assert.equal(last?.attempts, 5);
-  assert.equal(last?.nextRetryAt, null);
+  assert.ok(last);
+  assert.equal(last.attempts, 5);
+  assert.equal(last.nextRetryAt, null);
   assert.equal(await service.deliverOne(current), null);
 });
 
 test('実LINE adapterはchannel access tokenをAuthorizationだけへ設定する', async () => {
-  let request;
+  let request:
+    | { input: RequestInfo | URL; init: RequestInit | undefined }
+    | undefined;
   const adapter = createLineMessagingAdapter({
     channelAccessToken: 'secret-token',
     endpoint: 'https://line.test/push',
@@ -276,9 +291,14 @@ test('実LINE adapterはchannel access tokenをAuthorizationだけへ設定す�
     },
   });
   assert.equal(result.providerMessageId, 'provider-001');
+  assert.ok(request);
+  assert.ok(request.init);
   assert.equal(request.input, 'https://line.test/push');
-  assert.equal(request.init.headers.Authorization, 'Bearer secret-token');
-  assert.equal(request.init.body.includes('secret-token'), false);
+  assert.equal(
+    new Headers(request.init.headers).get('Authorization'),
+    'Bearer secret-token',
+  );
+  assert.equal(String(request.init.body).includes('secret-token'), false);
 });
 
 test('専用routeは未認証を拒否し、tenantId入力を受け付けず、staffの接続変更を拒否する', async () => {

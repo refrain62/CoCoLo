@@ -14,7 +14,7 @@ LINE の接続状態、グループ ID の tenant 紐付け、通知キュー、
 
 | 層 | 実装 | 責務 |
 | --- | --- | --- |
-| Contract | `packages/contracts/src/line-contract.mjs` | group ID、通知元、Webhook の入力形式を検証する |
+| Contract | `packages/contracts/src/line-contract.ts` | group ID、通知元、Webhook の入力形式を検証する |
 | Domain | `packages/domain/src/line-domain.ts` | 状態、再試行間隔、同一環境リンク、LIFF state を定義する |
 | DB repository | `packages/db/src/line-repository.ts` | tenant 条件付き SQL と local 用 in-memory 実装を提供する |
 | API | `apps/api/src/features/line-notifications/` | 認証、権限、署名、キュー、送信アダプターを統合する |

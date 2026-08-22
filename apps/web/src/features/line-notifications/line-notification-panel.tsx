@@ -63,7 +63,7 @@ export function LineNotificationPanel({
     try {
       const value = await api.connect(inputGroupId);
       setStatus(value.status);
-      setGroupId(value.groupId);
+      setGroupId(value.groupId ?? '');
       setMessage('LINEグループを接続しました。');
     } catch (requestError) {
       setError(errorMessage(requestError));

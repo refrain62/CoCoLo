@@ -29,5 +29,7 @@ test('LIFFリンクは許可されたstateだけを持つ', () => {
 test('local repository用UUIDv7はversion 7とvariantを持つ', () => {
   const id = createUuidV7(1724284800000);
   assert.equal(id[14], '7');
-  assert.ok(['8', '9', 'a', 'b'].includes(id[19].toLowerCase()));
+  const variant = id[19];
+  assert.ok(variant);
+  assert.ok(['8', '9', 'a', 'b'].includes(variant.toLowerCase()));
 });
