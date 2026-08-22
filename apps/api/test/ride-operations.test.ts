@@ -1,5 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type {
+  RideActor,
+  RideAssignmentInput,
+  RideOfferCreateInput,
+  RidePlanCreateInput,
+  RideRepository,
+  RideRequestCreateInput,
+} from '@cocolo/db/ride';
+import type {
+  RideAssignment,
+  RideHistoryEntry,
+  RideOffer,
+  RidePlan,
+  RideRequest,
+  RideSnapshot,
+} from '@cocolo/domain/ride';
 import {
   assertCapacity,
   matchRideRequests,
@@ -11,28 +27,37 @@ import { createRideService } from '../dist/features/ride-operations/ride-service
 
 const tenantId = '00000000-0000-7000-8000-000000000001';
 const memberId = '00000000-0000-7000-8000-000000000002';
-const manager = {
+const manager: RideActor = {
   tenantId,
   userId: 'manager-1',
   role: 'admin',
 };
-const guardian = {
+const guardian: RideActor = {
   tenantId,
   userId: 'guardian-1',
   role: 'guardian',
 };
 
-function createFakeRepository() {
-  const plans = [];
-  const offers = [];
-  const requests = [];
-  const assignments = [];
-  const audit = [];
+type AuditRecord = {
+  actorUserId: string;
+  action: string;
+  resourceId: string;
+  metadata: unknown;
+  createdAt: string;
+};
+type TestRepository = RideRepository & { audit: AuditRecord[] };
+
+function createFakeRepository(): TestRepository {
+  const plans: RidePlan[] = [];
+  const offers: RideOffer[] = [];
+  const requests: RideRequest[] = [];
+  const assignments: RideAssignment[] = [];
+  const audit: AuditRecord[] = [];
   let sequence = 0;
   const id = () =>
     `00000000-0000-7000-8000-${String(++sequence).padStart(12, '0')}`;
   const now = () => new Date().toISOString();
-  function getPlan(actor, planId) {
+  function getPlan(actor: RideActor, planId: string) {
     const plan = plans.find(
       (candidate) =>
         candidate.id === planId && candidate.tenantId === actor.tenantId,
@@ -44,7 +69,12 @@ function createFakeRepository() {
     }
     return plan;
   }
-  function append(actor, action, resourceId, metadata) {
+  function append(
+    actor: RideActor,
+    action: string,
+    resourceId: string,
+    metadata: unknown,
+  ) {
     audit.push({
       actorUserId: actor.userId,
       action,
@@ -53,7 +83,7 @@ function createFakeRepository() {
       createdAt: now(),
     });
   }
-  function snapshot(actor, planId) {
+  function snapshot(actor: RideActor, planId: string): RideSnapshot {
     const plan = getPlan(actor, planId);
     const managerRole = ['owner', 'admin', 'staff'].includes(actor.role);
     const visibleOffers = offers.filter(
@@ -77,18 +107,18 @@ function createFakeRepository() {
           ) ||
           visibleOffers.some((offer) => offer.id === assignment.offerId)),
     );
-    const history = audit
+    const historyActions: Record<string, RideHistoryEntry['action']> = {
+      'ride.plan.create': 'plan_created',
+      'ride.offer.create': 'offer_registered',
+      'ride.request.create': 'request_registered',
+      'ride.match.execute': 'matching_executed',
+      'ride.assignment.update': 'assignment_updated',
+    };
+    const history: RideHistoryEntry[] = audit
       .filter((entry) => entry.resourceId === plan.id)
       .map((entry, index) => ({
         id: `history-${index}`,
-        action:
-          {
-            'ride.plan.create': 'plan_created',
-            'ride.offer.create': 'offer_registered',
-            'ride.request.create': 'request_registered',
-            'ride.match.execute': 'matching_executed',
-            'ride.assignment.update': 'assignment_updated',
-          }[entry.action] ?? 'other',
+        action: historyActions[entry.action] ?? 'other',
         createdAt: entry.createdAt,
       }));
     return {
@@ -101,8 +131,8 @@ function createFakeRepository() {
   }
   return {
     audit,
-    async createPlan(actor, input) {
-      const plan = {
+    async createPlan(actor: RideActor, input: RidePlanCreateInput) {
+      const plan: RidePlan = {
         id: id(),
         tenantId: actor.tenantId,
         title: input.title,
@@ -116,9 +146,13 @@ function createFakeRepository() {
       append(actor, 'ride.plan.create', plan.id, { status: plan.status });
       return plan;
     },
-    async createOffer(actor, planId, input) {
+    async createOffer(
+      actor: RideActor,
+      planId: string,
+      input: RideOfferCreateInput,
+    ) {
       const plan = getPlan(actor, planId);
-      const offer = {
+      const offer: RideOffer = {
         id: id(),
         planId: plan.id,
         driverUserId: actor.userId,
@@ -133,14 +167,18 @@ function createFakeRepository() {
       });
       return offer;
     },
-    async createRequest(actor, planId, input) {
+    async createRequest(
+      actor: RideActor,
+      planId: string,
+      input: RideRequestCreateInput,
+    ) {
       const plan = getPlan(actor, planId);
       if (actor.role === 'guardian' && input.memberId !== memberId) {
         const error = new Error('送迎操作の権限がありません。');
         Object.assign(error, { status: 403 });
         throw error;
       }
-      const request = {
+      const request: RideRequest = {
         id: id(),
         planId: plan.id,
         memberId: input.memberId,
@@ -156,16 +194,17 @@ function createFakeRepository() {
       });
       return request;
     },
-    async getSnapshot(actor, planId) {
+    async getSnapshot(actor: RideActor, planId: string) {
       return snapshot(actor, planId);
     },
-    async autoMatch(actor, planId) {
+    async autoMatch(actor: RideActor, planId: string) {
       const current = snapshot(actor, planId);
       const decisions = matchRideRequests(current);
       const assignedRequestIds = new Set();
       for (const decision of decisions) {
         const request = requests.find((item) => item.id === decision.requestId);
-        const assignment = {
+        if (!request) throw new Error('テストデータの希望が見つかりません。');
+        const assignment: RideAssignment = {
           id: id(),
           planId,
           requestId: decision.requestId,
@@ -184,9 +223,10 @@ function createFakeRepository() {
             !assignedRequestIds.has(request.id),
         )
         .map((request) => request.id);
-      for (const requestId of unassignedRequestIds)
-        requests.find((request) => request.id === requestId).status =
-          'unassigned';
+      for (const requestId of unassignedRequestIds) {
+        const request = requests.find((item) => item.id === requestId);
+        if (request) request.status = 'unassigned';
+      }
       append(actor, 'ride.match.execute', planId, {
         assignedRequestCount: decisions.length,
         unassignedRequestCount: unassignedRequestIds.length,
@@ -198,10 +238,12 @@ function createFakeRepository() {
         unassignedRequestIds,
       };
     },
-    async assign(actor, planId, input) {
+    async assign(actor: RideActor, planId: string, input: RideAssignmentInput) {
       const plan = getPlan(actor, planId);
       const request = requests.find((item) => item.id === input.requestId);
       const offer = offers.find((item) => item.id === input.offerId);
+      if (!request || !offer)
+        throw new Error('テストデータの割当対象が見つかりません。');
       const assignedSeats = assignments
         .filter(
           (item) =>
@@ -214,7 +256,7 @@ function createFakeRepository() {
         assignedSeats,
         requestedSeats: request.passengerCount,
       });
-      const assignment = {
+      const assignment: RideAssignment = {
         id: id(),
         planId: plan.id,
         requestId: request.id,
@@ -233,7 +275,10 @@ function createFakeRepository() {
   };
 }
 
-function createTestApp(auth, repository = createFakeRepository()) {
+function createTestApp(
+  auth: RideActor | null,
+  repository: TestRepository = createFakeRepository(),
+) {
   const app = new Hono();
   registerRideRoutes(app, {
     service: createRideService(repository),
@@ -242,7 +287,7 @@ function createTestApp(auth, repository = createFakeRepository()) {
   return { app, repository };
 }
 
-async function request(app, path, init) {
+async function request(app: Hono, path: string, init?: RequestInit) {
   return app.request(path, init);
 }
 
