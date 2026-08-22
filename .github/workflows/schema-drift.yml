@@ -17,11 +17,24 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: cocolo_test
-          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U postgres -d cocolo_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      shadow:
+        image: postgres:17@sha256:a65e6a841f6c4dbc4abda3d67fa3bc21824e9611064fcd82e87ea67aad60a0c3
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cocolo_shadow
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cocolo_shadow"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -48,20 +61,25 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           CI: true
       - name: Shadow DB専用roleとDBを作成
-        env:
-          PGPASSWORD: postgres
         run: |
-          psql --no-psqlrc --host localhost --port 5432 --username postgres --dbname cocolo_test --command "CREATE ROLE cocolo_shadow LOGIN NOSUPERUSER NOBYPASSRLS"
-          psql --no-psqlrc --host localhost --port 5432 --username postgres --dbname cocolo_test --command "CREATE DATABASE cocolo_shadow OWNER cocolo_shadow"
+          PGPASSWORD=postgres psql --no-psqlrc --set=ON_ERROR_STOP=1 --host localhost --port 5433 --username postgres --dbname cocolo_shadow --command "CREATE ROLE cocolo_shadow LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION"
+          PGPASSWORD=postgres psql --no-psqlrc --set=ON_ERROR_STOP=1 --host localhost --port 5433 --username postgres --dbname cocolo_shadow --command "CREATE ROLE cocolo_app NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION"
+          PGPASSWORD=postgres psql --no-psqlrc --set=ON_ERROR_STOP=1 --host localhost --port 5433 --username postgres --dbname cocolo_shadow --command "ALTER DATABASE cocolo_shadow OWNER TO cocolo_shadow"
       - name: テストDBのroleを準備してmigrationを適用
         run: pnpm db:prepare:test && pnpm --filter @cocolo/db exec prisma migrate deploy && pnpm --filter @cocolo/db exec prisma generate
         env:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
-          SHADOW_DATABASE_URL: postgresql://cocolo_shadow@localhost:5432/cocolo_shadow
+          SHADOW_DATABASE_URL: postgresql://cocolo_shadow@localhost:5433/cocolo_shadow?sslmode=disable
           SHADOW_DATABASE_ROLE: cocolo_shadow
           SHADOW_DATABASE_ALLOWED_HOSTS: localhost
           SHADOW_DATABASE_ALLOWED_DATABASES: cocolo_shadow
+          SHADOW_DATABASE_ALLOWED_TARGETS: localhost:5433/cocolo_shadow
+      - name: Shadow DB role属性を検査
+        run: pnpm verify:shadow-role
+        env:
+          SHADOW_DATABASE_URL: postgresql://cocolo_shadow@localhost:5433/cocolo_shadow?sslmode=disable
+          SHADOW_DATABASE_ROLE: cocolo_shadow
       - name: schema drift・checksum・適用履歴を検査
         run: pnpm verify:schema-drift
         env:
@@ -70,7 +88,8 @@ jobs:
           CI: true
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
-          SHADOW_DATABASE_URL: postgresql://cocolo_shadow@localhost:5432/cocolo_shadow
+          SHADOW_DATABASE_URL: postgresql://cocolo_shadow@localhost:5433/cocolo_shadow?sslmode=disable
           SHADOW_DATABASE_ROLE: cocolo_shadow
           SHADOW_DATABASE_ALLOWED_HOSTS: localhost
           SHADOW_DATABASE_ALLOWED_DATABASES: cocolo_shadow
+          SHADOW_DATABASE_ALLOWED_TARGETS: localhost:5433/cocolo_shadow

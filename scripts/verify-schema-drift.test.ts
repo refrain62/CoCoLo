@@ -16,11 +16,11 @@ import {
 } from './verify-schema-drift.ts';
 
 const shadowDatabaseUrl =
-  'postgresql://cocolo_shadow@localhost:5432/cocolo_shadow';
+  'postgresql://cocolo_shadow@localhost:5432/cocolo_shadow?sslmode=disable';
 const shadowDatabaseUrlWithPassword =
-  'postgresql://cocolo_shadow:cocolo_shadow@localhost:5432/cocolo_shadow';
+  'postgresql://cocolo_shadow:cocolo_shadow@localhost:5432/cocolo_shadow?sslmode=disable';
 const shadowDatabaseArg =
-  'postgresql://cocolo_shadow@localhost:5432/cocolo_shadow';
+  'postgresql://cocolo_shadow@localhost:5432/cocolo_shadow?sslmode=disable';
 
 const shadowConfig = {
   environment: 'local',
@@ -30,6 +30,7 @@ const shadowConfig = {
   expectedRole: 'cocolo_shadow',
   allowedHosts: 'localhost',
   allowedDatabases: 'cocolo_shadow',
+  allowedTargets: 'localhost:5432/cocolo_shadow',
 };
 
 const cleanResult: PrismaDiffResult = {
@@ -115,6 +116,7 @@ test('shadow database URLの欠落を成功扱いにしない', () => {
         'cocolo_shadow',
         'localhost',
         'cocolo_shadow',
+        'localhost:5432/cocolo_shadow',
       ),
     /SHADOW_DATABASE_URLが必要です/,
   );
@@ -131,6 +133,7 @@ test('APP_ENVの欠落をlocal扱いで通過させない', () => {
         shadowConfig.expectedRole,
         shadowConfig.allowedHosts,
         shadowConfig.allowedDatabases,
+        shadowConfig.allowedTargets,
       ),
     /APP_ENVが必要です/,
   );
@@ -147,6 +150,7 @@ test('同じhost・port・DBのShadow URLを拒否する', () => {
         'cocolo_shadow',
         'localhost',
         'cocolo_shadow',
+        'localhost:5432/cocolo_shadow',
       ),
     /DATABASE_URLと同じhost・port・DB/,
   );
@@ -156,13 +160,14 @@ test('DIRECT_URLと同じhost・port・DBのShadow URLを拒否する', () => {
   assert.throws(
     () =>
       validateShadowDatabaseConfig(
-        'postgresql://cocolo_shadow@localhost:5432/cocolo_shadow',
+        'postgresql://cocolo_shadow:cocolo_shadow@localhost:5432/cocolo_shadow?sslmode=disable',
         'local',
         'postgresql://cocolo_app@localhost:5432/cocolo_local',
         'postgresql://cocolo_migration@localhost:5432/cocolo_shadow',
         'cocolo_shadow',
         'localhost',
         'cocolo_shadow',
+        'localhost:5432/cocolo_shadow',
       ),
     /DIRECT_URLと同じhost・port・DB/,
   );
@@ -179,6 +184,7 @@ test('アプリrole・migration owner roleの共有を拒否する', () => {
         'cocolo_app',
         'localhost',
         'cocolo_shadow',
+        'localhost:5432/cocolo_shadow',
       ),
     /アプリ接続roleと共有/,
   );
@@ -192,15 +198,22 @@ test('アプリrole・migration owner roleの共有を拒否する', () => {
         'cocolo_migration',
         'localhost',
         'cocolo_shadow',
+        'localhost:5432/cocolo_shadow',
       ),
     /migration ownerと共有/,
   );
 });
 
-test('Shadow DBのパスワードをargvから除去する', () => {
+test('Shadow DBの認証情報をargvへ渡さない', () => {
   const redacted = redactDatabaseUrl(shadowDatabaseUrlWithPassword);
   assert.equal(redacted.argvUrl, shadowDatabaseArg);
   assert.equal(redacted.password, 'cocolo_shadow');
+  assert.ok(
+    buildPrismaDiffArgs(
+      fixturePaths('C:\\schema-drift-fixture'),
+      shadowDatabaseArg,
+    ).includes(shadowDatabaseArg),
+  );
   assert.throws(
     () =>
       buildPrismaDiffArgs(
@@ -215,13 +228,14 @@ test('本番相当環境でprimaryと同じhostのShadow URLを拒否する', ()
   assert.throws(
     () =>
       validateShadowDatabaseConfig(
-        'postgresql://cocolo_shadow:cocolo_shadow@prod-db.example:5432/cocolo_shadow',
+        'postgresql://cocolo_shadow@prod-db.example:5432/cocolo_shadow?sslmode=require',
         'production',
         'postgresql://cocolo_app:cocolo_app@prod-db.example:5432/cocolo_prod',
         'postgresql://cocolo_migration:cocolo_migration@migration.example:5432/cocolo_prod',
         'cocolo_shadow',
         'prod-db.example',
         'cocolo_shadow',
+        'prod-db.example:5432/cocolo_shadow',
       ),
     /アプリDBと別host/,
   );
