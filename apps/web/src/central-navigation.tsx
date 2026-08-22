@@ -4,7 +4,9 @@ import {
 } from '@cocolo/contracts/auth-team-selection';
 import type { MemberRole } from '@cocolo/contracts/member';
 import {
+  lazy,
   type ReactNode,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -50,7 +52,13 @@ import {
   createRideOperationsApi,
   type RideOperationsApi,
 } from './features/ride-operations/ride-operations-api.js';
-import { RideOperationsPanel } from './features/ride-operations/ride-operations-panel.js';
+
+const RideOperationsPanel = lazy(() =>
+  import('./features/ride-operations/ride-operations-panel.js').then(
+    ({ RideOperationsPanel: panel }) => ({ default: panel }),
+  ),
+);
+
 import { createMemberApi, type MemberApi } from './member-api.js';
 import { MemberManagementPage } from './member-management-page.js';
 import { UserManualPage } from './user-manual-page.js';
@@ -649,12 +657,23 @@ function renderCentralRoute(
     case 'ride':
       return (
         <IntegrationNotice>
-          <RideOperationsPanel
-            api={apis.ride}
-            isManager={rideManagerRoles.has(role)}
-            members={memberOptions.map(({ id, name }) => ({ id, label: name }))}
-            planId={route.planId}
-          />
+          <Suspense
+            fallback={
+              <p className="central-state" role="status">
+                送迎画面を読み込み中…
+              </p>
+            }
+          >
+            <RideOperationsPanel
+              api={apis.ride}
+              isManager={rideManagerRoles.has(role)}
+              members={memberOptions.map(({ id, name }) => ({
+                id,
+                label: name,
+              }))}
+              planId={route.planId}
+            />
+          </Suspense>
         </IntegrationNotice>
       );
     case 'ride-missing':
