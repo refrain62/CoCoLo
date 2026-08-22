@@ -81,3 +81,66 @@ test('不正JSONはunknown fail-closedになる', async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('SemgrepとTrivyのreport schemaは不正時にfail-closedになる', async () => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), 'cocolo-scanner-schema-test-'),
+  );
+  try {
+    const semgrepPath = path.join(directory, 'semgrep.json');
+    const trivyPath = path.join(directory, 'trivy.json');
+    await writeFile(
+      semgrepPath,
+      JSON.stringify({ results: [{}], errors: [] }),
+      'utf8',
+    );
+    await writeFile(
+      trivyPath,
+      JSON.stringify({ Results: [{ Target: 'src', Class: 'lang-pkgs' }] }),
+      'utf8',
+    );
+    assert.equal(
+      await summarizeScannerResult('semgrep', semgrepPath, 0, 'local'),
+      false,
+    );
+    assert.equal(
+      await summarizeScannerResult('trivy', trivyPath, 0, 'local'),
+      false,
+    );
+
+    await writeFile(
+      semgrepPath,
+      JSON.stringify({
+        results: [],
+        errors: [],
+      }),
+      'utf8',
+    );
+    await writeFile(
+      trivyPath,
+      JSON.stringify({
+        Results: [
+          {
+            Target: 'src',
+            Class: 'lang-pkgs',
+            Type: 'npm',
+            Vulnerabilities: [
+              { VulnerabilityID: 'CVE-test', Severity: 'HIGH' },
+            ],
+          },
+        ],
+      }),
+      'utf8',
+    );
+    assert.equal(
+      await summarizeScannerResult('semgrep', semgrepPath, 0, 'local'),
+      true,
+    );
+    assert.equal(
+      await summarizeScannerResult('trivy', trivyPath, 1, 'local'),
+      false,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

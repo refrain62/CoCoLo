@@ -24,6 +24,16 @@ const createEmptyCounts = (): SeverityCounts => ({
   unknown: 0,
 });
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isPosition = (value: unknown): boolean =>
+  isRecord(value) &&
+  Number.isInteger(value.line) &&
+  Number.isInteger(value.col) &&
+  (value.line as number) > 0 &&
+  (value.col as number) > 0;
+
 const severityKey = (value: unknown): keyof SeverityCounts => {
   if (typeof value !== 'string') return 'unknown';
   switch (value.toUpperCase()) {
@@ -61,49 +71,71 @@ function parseGitleaks(value: unknown): SeverityCounts {
 
 function parseSemgrep(value: unknown): SeverityCounts {
   if (
-    typeof value !== 'object' ||
-    value === null ||
-    !Array.isArray((value as { results?: unknown }).results)
+    !isRecord(value) ||
+    !Array.isArray(value.results) ||
+    !Array.isArray(value.errors)
   )
     throw new Error('invalid semgrep report');
   const counts = createEmptyCounts();
+  for (const entry of value.results) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.check_id !== 'string' ||
+      typeof entry.path !== 'string' ||
+      !isPosition(entry.start) ||
+      !isPosition(entry.end) ||
+      !isRecord(entry.extra) ||
+      typeof entry.extra.severity !== 'string'
+    )
+      throw new Error('invalid semgrep finding');
+  }
+  for (const error of value.errors) {
+    if (!isRecord(error) || typeof error.message !== 'string')
+      throw new Error('invalid semgrep error');
+  }
   countArray(
     counts,
-    (value as { results: unknown[] }).results,
-    (entry) => (entry as { extra?: { severity?: unknown } }).extra?.severity,
+    value.results,
+    (entry) => (entry as { extra: { severity: unknown } }).extra.severity,
   );
+  counts.unknown += value.errors.length;
   return counts;
 }
 
 function parseTrivy(value: unknown): SeverityCounts {
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    !Array.isArray((value as { Results?: unknown }).Results)
-  )
+  if (!isRecord(value) || !Array.isArray(value.Results))
     throw new Error('invalid trivy report');
   const counts = createEmptyCounts();
-  for (const result of (value as { Results: unknown[] }).Results) {
-    if (typeof result !== 'object' || result === null) {
-      counts.unknown += 1;
-      continue;
-    }
-    const record = result as {
-      Vulnerabilities?: unknown;
-      Misconfigurations?: unknown;
-      Secrets?: unknown;
-    };
-    for (const field of [
-      record.Vulnerabilities,
-      record.Misconfigurations,
-      record.Secrets,
-    ]) {
-      if (Array.isArray(field))
-        countArray(
-          counts,
-          field,
-          (entry) => (entry as { Severity?: unknown }).Severity,
-        );
+  for (const result of value.Results) {
+    if (
+      !isRecord(result) ||
+      typeof result.Target !== 'string' ||
+      typeof result.Class !== 'string' ||
+      typeof result.Type !== 'string'
+    )
+      throw new Error('invalid trivy result');
+
+    for (const [field, idKey] of [
+      ['Vulnerabilities', 'VulnerabilityID'],
+      ['Misconfigurations', 'ID'],
+      ['Secrets', 'RuleID'],
+    ] as const) {
+      const findings = result[field];
+      if (findings === undefined || findings === null) continue;
+      if (!Array.isArray(findings)) throw new Error(`invalid trivy ${field}`);
+      for (const finding of findings) {
+        if (
+          !isRecord(finding) ||
+          typeof finding[idKey] !== 'string' ||
+          typeof finding.Severity !== 'string'
+        )
+          throw new Error(`invalid trivy ${field} finding`);
+      }
+      countArray(
+        counts,
+        findings,
+        (entry) => (entry as { Severity: unknown }).Severity,
+      );
     }
   }
   return counts;
