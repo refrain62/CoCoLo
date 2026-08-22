@@ -126,10 +126,7 @@ export async function enqueueLineDelivery(
        AND user_id = ${input.actorUserId}
   `;
   const membership = memberships[0];
-  if (
-    membership?.status !== 'active' ||
-    membership?.role !== input.role
-  )
+  if (membership?.status !== 'active' || membership?.role !== input.role)
     throw new Error('有効な所属情報が処理中に変更されました。');
   const rows = await client.$queryRaw<Array<{ id: string }>>`
     SELECT app_enqueue_line_delivery(
