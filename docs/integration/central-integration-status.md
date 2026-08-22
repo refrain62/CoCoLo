@@ -22,8 +22,7 @@
 2. staging / productionで利用する分散rate-limit storeの実adapter。
 3. Supabase、Cloudflare R2、LINE Messaging API、配置先の実資格情報を使った疎通・E2E。
 4. 外部schedulerから`pnpm line:deliver`を定期実行する運用設定。
-5. Dockerまたはstaging PostgreSQLへ接続したfresh migration、RLS越境、worker関数、outbox関数の実DB検証。
-6. `docs/ci-hardening-plan.md`に記載されたT-014のCI強化。
+5. `docs/ci-hardening-plan.md`に記載されたT-014のCI強化。
 
 ## 自動LINE通知の接続範囲
 
@@ -55,6 +54,9 @@ R2のsecretやprivate bucketが環境境界に一致しない場合は、署名U
 Node.js 24、pnpm、API・DBのbuild、unit test、対象ファイルのBiome検査は実行済みです。
 
 ローカル環境にはDockerと接続可能な`DATABASE_URL` / `DIRECT_URL`がないため、実PostgreSQLのintegration testはskipされています。
+
+PR #40の品質ゲートではPostgreSQL 17へfresh migrationを適用し、中央RLS、状態遷移trigger、LINE outboxの認可・冪等性・worker競合・未接続tenantを実DBで確認済みです。
+stagingの実資格情報を使うE2Eと外部schedulerの定期実行は未検証のまま残っています。
 
 worktreeが`.worktrees`配下にあるため、ルートからの`pnpm lint:biome`はBiomeの除外規則により0ファイル検査になります。
 CIまたは通常のリポジトリルートで全体検査を実施してください。

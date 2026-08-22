@@ -12,8 +12,9 @@ Criticalは0件です。
 
 Highは0件です。
 
-実PostgreSQLへ接続していないため、migration適用後のRLS、grant、trigger、`SECURITY DEFINER`関数の実行結果は未確定です。
-stagingまたはDocker PostgreSQLでの確認が完了するまで、productionで自動LINE通知を有効化してはいけません。
+PR #40の品質ゲートでPostgreSQL 17へ全migrationを適用し、RLS、状態遷移trigger、`SECURITY DEFINER`関数を実行しました。
+active membership、staff、別tenant拒否、pendingの冪等更新、2 worker同時処理、未接続tenantの`ignored`遷移を確認済みです。
+これはCI用PostgreSQLでの検証であり、stagingまたはproductionの実資格情報によるE2E完了までは、自動LINE通知をproductionで有効化してはいけません。
 
 ## 攻撃観点と確認結果
 
@@ -51,10 +52,12 @@ repositoryへ`now`関数を注入できるようにし、締切まで24時間未
 
 ## 残る検証条件
 
-- [ ] fresh PostgreSQLへmigrationを順番に適用し、`app_enqueue_line_notification_outbox`をactive membership、staff、別tenantで確認する。
-- [ ] outboxの重複登録、pending更新、delivered後の不変性を確認する。
-- [ ] 2 worker同時起動でoutboxとqueueが二重作成されないことを確認する。
+- [x] fresh PostgreSQLへmigrationを順番に適用し、`app_enqueue_line_notification_outbox`をactive membership、staff、別tenantで確認した（PR #40品質ゲート）。
+- [x] outboxの重複登録とpending更新を確認した（PR #40品質ゲート）。
+- [ ] delivered後に同じ通知元を再登録しても更新されないことを確認する。
+- [x] 2 worker同時起動でoutboxとqueueが二重作成されないことを確認した（PR #40品質ゲート）。
 - [ ] 接続前の保存、接続後の保存、接続解除後の古いqueue、LINE送信失敗をstaging専用channelで確認する。
 - [ ] Supabase、Cloudflare R2、LINE Messaging API、配置先の実資格情報を使ったE2Eを実施する。
 
-ローカルではDB接続情報とDockerが利用できないため、上記の実DB検証は未実施です。
+ローカルではDB接続情報とDockerが利用できないため、同じ統合テストはskipされます。
+CIの品質ゲート実行結果は[PR #40](https://github.com/refrain62/CoCoLo/pull/40)と[品質ゲートrun](https://github.com/refrain62/CoCoLo/actions/runs/32580017314)に記録しています。

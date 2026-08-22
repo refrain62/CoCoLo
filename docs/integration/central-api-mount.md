@@ -75,7 +75,9 @@ Redisなどのstoreを接続する場合も、keyはtenantとuserまたはWebhoo
 
 ## 未完了の後続接続条件
 
-中央DB schemaのfresh DB適用、RLSの実PostgreSQL再検証、tenant A/Bの越境テストは、Dockerまたはstaging DBを接続できる環境で実施します。
+中央DB schemaのfresh DB適用、RLS、tenant A/Bの越境テストは、PR品質ゲートのPostgreSQL 17で確認済みです。
+
+staging DBでの実資格情報を使ったE2Eと、外部サービスを含む運用確認は別途実施します。
 
 本番の分散rate-limit storeは、RedisまたはCloudflare Durable Objectsなどの原子的なadapterを注入してください。
 
