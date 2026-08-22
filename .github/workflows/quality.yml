@@ -41,15 +41,18 @@ jobs:
         env:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+          LINE_DELIVERY_WORKER_DATABASE_URL: postgresql://line_delivery_worker:line_delivery_worker@localhost:5432/cocolo_test
       - name: テストDBへマイグレーションとテストデータを投入
         run: pnpm --filter @cocolo/db exec prisma migrate deploy && pnpm db:seed:test
         env:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+          LINE_DELIVERY_WORKER_DATABASE_URL: postgresql://line_delivery_worker:line_delivery_worker@localhost:5432/cocolo_test
       - name: 契約検証とテスト
         run: pnpm generate:openapi && git diff --exit-code -- packages/contracts/openapi.yaml && pnpm test:unit && pnpm test:integration
         env:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+          LINE_DELIVERY_WORKER_DATABASE_URL: postgresql://line_delivery_worker:line_delivery_worker@localhost:5432/cocolo_test
       - name: 型検査とビルド
         run: pnpm typecheck && pnpm build

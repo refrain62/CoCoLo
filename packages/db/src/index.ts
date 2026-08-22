@@ -59,6 +59,20 @@ export type MemberRecord = {
   createdAt: Date;
 };
 
+export type LineDeliveryEnqueueInput = {
+  id: string;
+  tenantId: string;
+  actorUserId: string;
+  role: MemberRole;
+  sourceType: string;
+  sourceId: string;
+  destination: string;
+  title: string;
+  body: string;
+  deepLink: string;
+  idempotencyKey: string;
+};
+
 const memberSelect = {
   id: true,
   tenantId: true,
@@ -89,6 +103,44 @@ async function setRlsContext(
       set_config('app.user_id', ${input.userId}, true),
       set_config('app.role', ${input.role}, true)
   `;
+}
+
+// 業務transaction内でmembershipをロックしてからoutboxへ登録し、業務更新と通知依頼を原子化する。
+export async function enqueueLineDelivery(
+  client: Prisma.TransactionClient,
+  input: LineDeliveryEnqueueInput,
+): Promise<string> {
+  await setRlsContext(client, {
+    tenantId: input.tenantId,
+    userId: input.actorUserId,
+    role: input.role,
+  });
+  // SECURITY DEFINER側のapp_enqueue_line_deliveryが同じmembership行をFOR UPDATEでロックする。
+  // cocolo_appへmembership UPDATE policyを与えず、ロックのための権限拡大を防ぐ。
+  const memberships = await client.$queryRaw<
+    Array<{ role: Role; status: string }>
+  >`
+    SELECT role, status
+      FROM tenant_memberships
+     WHERE tenant_id = ${input.tenantId}::uuid
+       AND user_id = ${input.actorUserId}
+  `;
+  const membership = memberships[0];
+  if (
+    membership?.status !== 'active' ||
+    membership?.role !== input.role
+  )
+    throw new Error('有効な所属情報が処理中に変更されました。');
+  const rows = await client.$queryRaw<Array<{ id: string }>>`
+    SELECT app_enqueue_line_delivery(
+      ${input.id}::uuid, ${input.tenantId}::uuid, ${input.actorUserId},
+      ${input.sourceType}, ${input.sourceId}, ${input.destination},
+      ${input.title}, ${input.body}, ${input.deepLink}, ${input.idempotencyKey}
+    ) AS id
+  `;
+  const id = rows[0]?.id;
+  if (!id) throw new Error('LINE通知outboxへの登録に失敗しました。');
+  return id;
 }
 
 // Prismaのenum型と日時をAPI/DB repositoryの共通recordへ変換する。
@@ -254,13 +306,23 @@ async function markPromotionFailed(
 }
 
 // API serverが利用するPrisma clientを生成する。transaction境界は各repository操作で管理する。
-export function createPrismaClient() {
-  return new PrismaClient();
+export function createPrismaClient(databaseUrl?: string) {
+  return databaseUrl
+    ? new PrismaClient({ datasources: { db: { url: databaseUrl } } })
+    : new PrismaClient();
 }
 
 // RLS context、入力条件、監査ログをrepositoryに閉じ込め、API handlerからDB境界を迂回させない。
 export function createMemberRepositories(client: PrismaClient) {
   return {
+    lineDeliveryRepository: {
+      // 呼び出し側が開始した業務transactionへenqueueを組み込むための境界。
+      enqueueInTransaction: enqueueLineDelivery,
+      enqueue: (input: LineDeliveryEnqueueInput) =>
+        client.$transaction(async (tx) => {
+          return enqueueLineDelivery(tx, input);
+        }),
+    },
     membershipRepository: {
       // active所属が複数ある場合はtenantを暗黙選択せず、API側で利用可能な所属なしとして扱う。
       findActiveByUserId: async (userId: string) =>
