@@ -64,7 +64,7 @@ test('中央の未接続応答はPIIを含まない共通error契約である', 
   assert.equal(typeof body.error?.requestId, 'string');
 });
 
-test('DB adapterはschema未統合を明示し、本番rate limit未接続は起動時に停止する', () => {
+test('DB adapterはschema統合済みを反映し、本番rate limit未接続は起動時に停止する', () => {
   const database = createCentralDatabaseAdapter({});
   assert.equal(database.featureSchemaReady, true);
   assert.equal(database.unavailableReason, '');

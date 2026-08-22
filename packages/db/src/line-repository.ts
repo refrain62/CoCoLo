@@ -50,6 +50,12 @@ export type LineNotificationRepository = {
   recordWebhookReceipt: (
     receipt: LineWebhookReceipt & Partial<Pick<LineActor, 'userId' | 'role'>>,
   ) => Promise<boolean>;
+  // 外部Webhookは利用者の所属を持たないため、専用のDB関数で接続先解決と重複排除を一体化する。
+  claimWebhookReceipt?: (input: {
+    groupId: string;
+    webhookEventId: string;
+    receivedAt: Date;
+  }) => Promise<'accepted' | 'duplicate' | 'ignored'>;
   enqueue: (
     input: EnqueueLineNotificationInput &
       Partial<Pick<LineActor, 'userId' | 'role'>>,
@@ -163,6 +169,17 @@ export function createInMemoryLineRepository(
       if (webhookReceipts.has(key)) return false;
       webhookReceipts.add(key);
       return true;
+    },
+    async claimWebhookReceipt({ groupId, webhookEventId }) {
+      const connection = [...connections.values()].find(
+        (candidate) =>
+          candidate.status === 'connected' && candidate.groupId === groupId,
+      );
+      if (!connection) return 'ignored';
+      const key = `${groupId}:${webhookEventId}`;
+      if (webhookReceipts.has(key)) return 'duplicate';
+      webhookReceipts.add(key);
+      return 'accepted';
     },
     async enqueue(input, now) {
       const notification: LineNotification = {
@@ -554,6 +571,21 @@ export function createSqlLineRepository(
           ],
         );
         return result.rows.length === 1;
+      });
+    },
+    async claimWebhookReceipt(input) {
+      return client.transaction(async (transaction) => {
+        const result = await transaction.query<{
+          accepted: boolean;
+          duplicate: boolean;
+        }>(
+          `SELECT accepted, duplicate
+             FROM app_claim_line_webhook($1, $2, $3)`,
+          [input.groupId, input.webhookEventId, input.receivedAt],
+        );
+        const row = result.rows[0];
+        if (!row) return 'ignored';
+        return row.accepted ? 'accepted' : row.duplicate ? 'duplicate' : 'ignored';
       });
     },
     async enqueue(input, now) {

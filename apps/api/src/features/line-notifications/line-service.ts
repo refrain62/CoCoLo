@@ -142,7 +142,7 @@ export function createLineNotificationService({
 }: CreateLineNotificationServiceOptions): LineNotificationService {
   return {
     async status(actor) {
-      const connection = await repository.getConnection(actor.tenantId);
+      const connection = await repository.getConnection(actor);
       return {
         status: connection?.status ?? 'disconnected',
         groupId: connection?.groupId ?? null,
@@ -154,6 +154,8 @@ export function createLineNotificationService({
       const parsed = parseLineConnectInput(input);
       const connection = await repository.connect({
         tenantId: actor.tenantId,
+        userId: actor.userId,
+        role: actor.role,
         groupId: parsed.groupId,
         now: now(),
       });
@@ -162,7 +164,12 @@ export function createLineNotificationService({
     async disconnect(actor) {
       if (!canManageLineConnection(actor.role))
         throw new Error('LINE接続を管理する権限がありません。');
-      await repository.disconnect({ tenantId: actor.tenantId, now: now() });
+      await repository.disconnect({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        role: actor.role,
+        now: now(),
+      });
     },
     async enqueue(actor, input) {
       if (!canEnqueueLineNotification(actor.role))
@@ -183,11 +190,15 @@ export function createLineNotificationService({
         MAX_LINE_TEXT_LENGTH
       )
         throw new Error('LINE通知本文が長すぎます。');
-      const connection = await repository.getConnection(actor.tenantId);
+      const connection = await repository.getConnection(actor);
       if (connection?.status !== 'connected' || !connection?.groupId)
         return { status: 'not_connected', notification: null };
       const notification = await repository.enqueue(
-        toEnqueueInput(actor, connection.groupId, parsed),
+        {
+          ...toEnqueueInput(actor, connection.groupId, parsed),
+          userId: actor.userId,
+          role: actor.role,
+        },
         now(),
       );
       if (!notification) return { status: 'not_connected', notification: null };
@@ -199,12 +210,15 @@ export function createLineNotificationService({
       const notification = await repository.getNotification({
         tenantId: actor.tenantId,
         userId: actor.userId,
+        role: actor.role,
         notificationId,
       });
       if (!notification || !canRetryLineNotification(notification, maxAttempts))
         throw new Error('再試行できるLINE通知がありません。');
       return repository.requeue({
         tenantId: actor.tenantId,
+        userId: actor.userId,
+        role: actor.role,
         notificationId,
         now: now(),
       });
@@ -262,6 +276,17 @@ export function createLineNotificationService({
         const groupId = event.source.groupId;
         if (!groupId) {
           ignored += 1;
+          continue;
+        }
+        if (repository.claimWebhookReceipt) {
+          const result = await repository.claimWebhookReceipt({
+            groupId,
+            webhookEventId: event.webhookEventId,
+            receivedAt: now(),
+          });
+          if (result === 'accepted') accepted += 1;
+          else if (result === 'duplicate') duplicates += 1;
+          else ignored += 1;
           continue;
         }
         const binding = await repository.findTenantByConnectedGroupId(groupId);
