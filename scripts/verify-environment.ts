@@ -12,9 +12,13 @@ import {
 const lockfilePackages = readPnpmLockfilePackageNames();
 
 // 環境名・接続先・公開URL・bucket・production保持期間をallowlistと照合し、環境混同を起動前に拒否する。
-const allowed: Record<AppEnvironment, { R2_BUCKET: string }> = {
+const allowed: Record<
+  AppEnvironment,
+  { R2_BUCKET: string; PUBLIC_APP_URL?: string }
+> = {
   local: {
     R2_BUCKET: 'cocolo-local',
+    PUBLIC_APP_URL: 'http://localhost:5173',
   },
   staging: {
     R2_BUCKET: 'cocolo-staging-private',
@@ -45,6 +49,9 @@ assert.ok(supabaseUrl, 'SUPABASE_URL が必要です');
 assert.ok(supabaseJwksUrl, 'SUPABASE_JWKS_URL が必要です');
 assert.ok(process.env.SUPABASE_ANON_KEY, 'SUPABASE_ANON_KEY が必要です');
 assert.ok(process.env.R2_BUCKET, 'R2_BUCKET が必要です');
+assert.ok(process.env.R2_ENDPOINT, 'R2_ENDPOINT が必要です');
+assert.ok(process.env.R2_ACCESS_KEY_ID, 'R2_ACCESS_KEY_ID が必要です');
+assert.ok(process.env.R2_SECRET_ACCESS_KEY, 'R2_SECRET_ACCESS_KEY が必要です');
 assert.ok(publicAppUrl, 'PUBLIC_APP_URL が必要です');
 assert.ok(process.env.RATE_LIMIT_STORE, 'RATE_LIMIT_STORE が必要です');
 assert.equal(
@@ -74,6 +81,16 @@ else {
 }
 if (allowed[appEnv].R2_BUCKET)
   assert.equal(process.env.R2_BUCKET, allowed[appEnv].R2_BUCKET);
+if (
+  appEnv !== 'local' &&
+  process.env.R2_ENDPOINT &&
+  !process.env.R2_ENDPOINT.startsWith('https://')
+)
+  throw new Error(
+    'staging / production の R2_ENDPOINT には HTTPS が必要です。',
+  );
+if (allowed[appEnv].PUBLIC_APP_URL)
+  assert.equal(process.env.PUBLIC_APP_URL, allowed[appEnv].PUBLIC_APP_URL);
 if (appEnv !== 'local') {
   assert.ok(
     process.env.SUPABASE_ALLOWED_URL,
