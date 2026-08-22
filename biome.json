@@ -11,6 +11,8 @@
       "!**/dist",
       "!coverage",
       "!**/coverage",
+      "!.pnpm-store",
+      "!**/.pnpm-store",
       "!test-results",
       "!**/test-results",
       "!packages/contracts/openapi.yaml"

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { withPostgresClient } from './postgres-client.ts';
 import {
   type MigrationChecksum,
   migrationPaths,
@@ -64,49 +64,20 @@ export function verifyMigrationHistory(
   }
 }
 
-type PrismaClientLike = Readonly<{
-  $queryRawUnsafe: <T>(query: string) => Promise<T>;
-  $disconnect: () => Promise<void>;
-}>;
-
-type PrismaClientConstructor = new (options: {
-  datasources: { db: { url: string } };
-}) => PrismaClientLike;
-
 export async function readMigrationHistory(
   directDatabaseUrl: string,
 ): Promise<readonly MigrationHistory[]> {
   assert.ok(directDatabaseUrl, 'migration履歴検証にはDIRECT_URLが必要です。');
-  const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-  const require = createRequire(
-    path.join(root, 'packages', 'db', 'package.json'),
-  );
-  let PrismaClient: PrismaClientConstructor;
-  try {
-    ({ PrismaClient } = require('@prisma/client') as {
-      PrismaClient: PrismaClientConstructor;
-    });
-  } catch (error) {
-    throw new Error('migration履歴照合用のPrisma Clientを読み込めません。', {
-      cause: error,
-    });
-  }
-
-  const prisma = new PrismaClient({
-    datasources: { db: { url: directDatabaseUrl } },
-  });
-  try {
-    return await prisma.$queryRawUnsafe<MigrationHistory[]>(
+  return withPostgresClient(directDatabaseUrl, (client) =>
+    client.$queryRawUnsafe<MigrationHistory[]>(
       `SELECT migration_name AS "migrationName",
               checksum,
               finished_at AS "finishedAt",
               rolled_back_at AS "rolledBackAt"
-         FROM "_prisma_migrations"
-        ORDER BY started_at ASC, migration_name ASC`,
-    );
-  } finally {
-    await prisma.$disconnect();
-  }
+        FROM "_prisma_migrations"
+       ORDER BY started_at ASC, migration_name ASC`,
+    ),
+  );
 }
 
 export async function verifyMigrationHistoryAtDatabase(
