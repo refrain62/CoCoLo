@@ -24,8 +24,8 @@ jobs:
           [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{40}$ ]]
           STAGING_RUN_ID="$(gh run list --workflow staging-deploy.yml --branch main --status success --limit 20 --json databaseId,headSha --jq ".[] | select(.headSha == \"$ARTIFACT_SHA\") | .databaseId" | head -n 1)"
           test -n "$STAGING_RUN_ID"
-          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID" --jq '.path')" = '.github/workflows/staging-deploy.yml'
-          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/security-scanners.yml/runs?head_sha=$ARTIFACT_SHA&event=push&status=success&per_page=100" | jq -e --arg sha "$ARTIFACT_SHA" '.workflow_runs | any(.[]; .head_sha == $sha and .head_branch == "main" and .event == "push" and .path == ".github/workflows/security-scanners.yml" and .conclusion == "success")')" = true
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID" --jq '(.path // "" | sub("^\\./"; "") | sub("^/"; "") | sub("@refs/heads/[^/]+$"; ""))')" = '.github/workflows/staging-deploy.yml'
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/security-scanners.yml/runs?head_sha=$ARTIFACT_SHA&event=push&status=success&per_page=100" | jq -e --arg sha "$ARTIFACT_SHA" '.workflow_runs | any(.[]; .head_sha == $sha and .head_branch == "main" and .event == "push" and ((.path // "" | sub("^\\./"; "") | sub("^/"; "") | sub("@refs/heads/[^/]+$"; "")) == ".github/workflows/security-scanners.yml") and .conclusion == "success")')" = true
           gh run download "$STAGING_RUN_ID" --name "staging-evidence-$ARTIFACT_SHA" --dir .evidence
           gh run download "$STAGING_RUN_ID" --name "release-$ARTIFACT_SHA" --dir .release
           jq -e --arg sha "$ARTIFACT_SHA" '(.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success")' .evidence/evidence.json

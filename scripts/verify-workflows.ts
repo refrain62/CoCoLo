@@ -540,6 +540,26 @@ function validateSteps(
   });
 }
 
+function assertWorkflowPathNormalization(
+  stepValue: unknown,
+  location: string,
+): void {
+  const step = asRecord(stepValue, `${location}: stepはobjectが必要です`);
+  assert.equal(typeof step.run, 'string', `${location}.run: shell commandが必要です`);
+  const run = step.run as string;
+  assert.ok(
+    run.includes(
+      String.raw`sub("^\\./"; "") | sub("^/"; "") | sub("@refs/heads/[^/]+$"; "")`,
+    ),
+    `${location}.run: Workflow pathの@ref正規化が必要です`,
+  );
+  assert.doesNotMatch(
+    run,
+    /\.path\s*==\s*["']\.github\/workflows\//,
+    `${location}.run: 正規化前のpath比較を残せません`,
+  );
+}
+
 function validateQualityServices(job: WorkflowRecord): void {
   const services = asRecord(
     job.services,
@@ -555,7 +575,10 @@ function validateQualityServices(job: WorkflowRecord): void {
     ['image', 'env', 'ports', 'options'],
     'quality.yml.jobs.quality.services.postgres',
   );
-  assert.equal(postgres.image, 'postgres:17');
+  assert.equal(
+    postgres.image,
+    'postgres:17@sha256:7958605b474b3d264a969cb3a123d6aa00ad1e1fe9da8a69984dabb704d93317',
+  );
   assertExactRecord(
     postgres.env,
     {
@@ -613,7 +636,7 @@ function validateQualityWorkflowDocument(workflow: WorkflowRecord): void {
     'quality.yml.concurrency',
   );
   const jobs = asRecord(workflow.jobs, 'quality.yml.jobs: objectが必要です');
-  assertExactKeys(jobs, ['quality'], 'quality.yml.jobs');
+  assertExactKeys(jobs, ['quality', 'security'], 'quality.yml.jobs');
   const quality = asRecord(
     jobs.quality,
     'quality.yml.jobs.quality: objectが必要です',
@@ -627,6 +650,22 @@ function validateQualityWorkflowDocument(workflow: WorkflowRecord): void {
   assert.equal(quality['timeout-minutes'], 10);
   validateQualityServices(quality);
   validateSteps('quality.yml', quality, qualitySteps);
+  const security = asRecord(
+    jobs.security,
+    'quality.yml.jobs.security: objectが必要です',
+  );
+  assertExactKeys(
+    security,
+    ['name', 'uses', 'permissions'],
+    'quality.yml.jobs.security',
+  );
+  assert.equal(security.name, 'セキュリティ検査');
+  assert.equal(security.uses, './.github/workflows/security-scanners.yml');
+  assertExactRecord(
+    security.permissions,
+    { contents: 'read' },
+    'quality.yml.jobs.security.permissions',
+  );
 }
 
 function validateStagingWorkflowDocument(workflow: WorkflowRecord): void {
@@ -674,6 +713,10 @@ function validateStagingWorkflowDocument(workflow: WorkflowRecord): void {
   assert.equal(staging['timeout-minutes'], 15);
   assert.equal(staging.environment, 'staging');
   validateSteps('staging-deploy.yml', staging, stagingSteps);
+  assertWorkflowPathNormalization(
+    asArray(staging.steps, 'staging-deploy.yml.jobs.staging.steps')[0],
+    'staging-deploy.yml.jobs.staging.steps[0]',
+  );
 }
 
 function validateProductionWorkflowDocument(workflow: WorkflowRecord): void {
@@ -721,6 +764,14 @@ function validateProductionWorkflowDocument(workflow: WorkflowRecord): void {
   assert.equal(production.environment, 'production');
   assert.equal(production.concurrency, 'production-migration');
   validateSteps('production-promote.yml', production, productionSteps);
+  const productionStepValues = asArray(
+    production.steps,
+    'production-promote.yml.jobs.production.steps',
+  );
+  assertWorkflowPathNormalization(
+    productionStepValues[0],
+    'production-promote.yml.jobs.production.steps[0]',
+  );
 }
 
 function validateSecurityRunStep(
@@ -775,7 +826,7 @@ function validateSecurityWorkflowDocument(workflow: WorkflowRecord): void {
   );
   assertExactKeys(
     triggers,
-    ['pull_request', 'push', 'schedule', 'workflow_dispatch'],
+    ['pull_request', 'push', 'schedule', 'workflow_dispatch', 'workflow_call'],
     'security-scanners.yml.on',
   );
   assert.equal(triggers.pull_request, null);
@@ -790,6 +841,7 @@ function validateSecurityWorkflowDocument(workflow: WorkflowRecord): void {
     'security-scanners.yml.on.schedule',
   );
   assert.equal(triggers.workflow_dispatch, null);
+  assert.equal(triggers.workflow_call, null);
   assertExactRecord(
     workflow.permissions,
     { contents: 'read' },
@@ -840,7 +892,7 @@ function validateSecurityWorkflowDocument(workflow: WorkflowRecord): void {
     config.steps,
     'security-scanners.yml.jobs.config.steps',
   );
-  assert.equal(configSteps.length, 6);
+  assert.equal(configSteps.length, 7);
   validateSecurityActionStep(
     configSteps[0],
     'リポジトリを取得',
@@ -861,16 +913,21 @@ function validateSecurityWorkflowDocument(workflow: WorkflowRecord): void {
   );
   validateSecurityRunStep(
     configSteps[3],
+    '依存関係を固定インストール',
+    'pnpm install --frozen-lockfile',
+  );
+  validateSecurityRunStep(
+    configSteps[4],
     'scanner設定を静的検証',
     'pnpm security:verify',
   );
   validateSecurityRunStep(
-    configSteps[4],
+    configSteps[5],
     'WorkflowのAction SHAを検証',
     'pnpm lint:workflows',
   );
   validateSecurityRunStep(
-    configSteps[5],
+    configSteps[6],
     'scanner悪性fixtureを検証',
     'pnpm test:security',
   );

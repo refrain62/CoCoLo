@@ -45,11 +45,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/domain
       '@hono/node-server':
-        specifier: 1.19.3
-        version: 1.19.3(hono@4.9.7)
+        specifier: 1.19.10
+        version: 1.19.10(hono@4.12.25)
       hono:
-        specifier: 4.9.7
-        version: 4.9.7
+        specifier: 4.12.25
+        version: 4.12.25
     devDependencies:
       '@types/node':
         specifier: 24.3.0
@@ -363,8 +363,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@hono/node-server@1.19.3':
-    resolution: {integrity: sha512-Fjyxfux0rMPXMSob79OmddfpK5ArJa2xLkLCV+zamHkbeXQtSNKOi0keiBKyHZ/hCRKjigjmKGp4AJnDFq8PUw==}
+  '@hono/node-server@1.19.10':
+    resolution: {integrity: sha512-hZ7nOssGqRgyV3FVVQdfi+U4q02uB23bpnYpdvNXkYTRRyWx84b7yf1ans+dnJ/7h41sGL3CeQTfO+ZGxuO+Iw==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -739,8 +739,8 @@ packages:
     resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
     engines: {node: '>= 0.4'}
 
-  hono@4.9.7:
-    resolution: {integrity: sha512-t4Te6ERzIaC48W3x4hJmBwgNlLhmiEdEE5ViYb02ffw4ignHNHa5IBtPjmbKstmtKa8X6C35iWwK4HaqvrzG9w==}
+  hono@4.12.25:
+    resolution: {integrity: sha512-2NFaIyNVgJmBs/ecmtGzlmluTFs5cHEWGTdu0t1HBwYzoGXOL5nUQBRMXsXWla5i4KkG//QMzVP88m1+I3fdAQ==}
     engines: {node: '>=16.9.0'}
 
   ignore@7.0.6:
@@ -1191,9 +1191,9 @@ snapshots:
   '@esbuild/win32-x64@0.25.12':
     optional: true
 
-  '@hono/node-server@1.19.3(hono@4.9.7)':
+  '@hono/node-server@1.19.10(hono@4.12.25)':
     dependencies:
-      hono: 4.9.7
+      hono: 4.12.25
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
@@ -1539,7 +1539,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hono@4.9.7: {}
+  hono@4.12.25: {}
 
   ignore@7.0.6: {}
 
