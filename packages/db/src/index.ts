@@ -113,7 +113,7 @@ async function assertActiveMembership(
 ) {
   // 所属変更と同一ユーザーの処理を直列化し、RLSのSELECT policyに従って確認する。
   const membershipLockKey = `${input.tenantId}:${input.userId}`;
-  await client.$queryRaw`
+  await client.$executeRaw`
     SELECT pg_advisory_xact_lock(hashtextextended(${membershipLockKey}, 0))
   `;
   const membership = await client.tenantMembership.findUnique({
@@ -198,7 +198,7 @@ async function lockPromotionTenant(
   tenantId: string,
 ) {
   // tenantsはアプリroleに更新policyを与えないため、tenant単位の直列化はtransaction lockで行う。
-  await client.$queryRaw`
+  await client.$executeRaw`
     SELECT pg_advisory_xact_lock(hashtextextended(${tenantId}, 0))
   `;
 }

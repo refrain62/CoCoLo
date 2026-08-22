@@ -6,6 +6,7 @@ test('部員一覧の監査metadataへ検索語を保存しない', async () => 
   const auditEntries = [];
   const transaction = {
     $queryRaw: async () => [],
+    $executeRaw: async () => 1,
     tenantMembership: {
       findUnique: async () => ({ role: 'owner', status: 'active' }),
     },
