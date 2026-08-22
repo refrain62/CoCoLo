@@ -1,0 +1,43 @@
+{
+  "name": "cocolo",
+  "private": true,
+  "packageManager": "pnpm@10.26.0",
+  "engines": {
+    "node": ">=20 <21"
+  },
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "test:contracts": "node --test packages/contracts/test/*.test.mjs",
+    "test:unit": "pnpm -r --if-present test:unit",
+    "test:integration": "pnpm -r --if-present test:integration",
+    "test:e2e:local": "node scripts/run-e2e.mjs local",
+    "test:e2e:staging": "node scripts/run-e2e.mjs staging",
+    "build": "pnpm -r --if-present build",
+    "lint": "pnpm lint:biome && pnpm -r --if-present lint && node scripts/verify-workspace-boundaries.mjs",
+    "lint:biome": "biome check .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "generate:openapi": "node scripts/generate-openapi.mjs",
+    "lint:openapi": "node scripts/verify-openapi.mjs",
+    "test:contract": "node --test packages/contracts/test/*.test.mjs",
+    "verify:workspace-boundaries": "depcruise --config .dependency-cruiser.cjs apps packages --output-type err-long && node scripts/verify-workspace-boundaries.mjs",
+    "verify:migration-sql": "node scripts/verify-migration-sql.mjs",
+    "verify:pnpm-config": "node scripts/verify-pnpm-config.mjs",
+    "verify:database-version": "node scripts/verify-database-version.mjs",
+    "verify:environment": "node scripts/verify-environment.mjs",
+    "verify:production-bundle": "node scripts/verify-production-bundle.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
+    "lint:workflows": "node scripts/verify-workflows.mjs",
+    "db:prepare:test": "node scripts/db-prepare-test.mjs",
+    "db:seed:test": "node scripts/db-seed-test.mjs",
+    "dev:test": "pnpm --filter @cocolo/api dev:test",
+    "package:release": "node scripts/package-release.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.9",
+    "@playwright/test": "1.54.2",
+    "dependency-cruiser": "16.10.4",
+    "typescript": "5.9.2"
+  }
+}
