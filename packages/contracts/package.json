@@ -11,7 +11,8 @@
     "./events": "./src/event-contract.ts",
     "./orders": "./src/orders-contract.ts",
     "./line": "./src/line-contract.ts",
-    "./ride": "./src/ride-contract.ts"
+    "./ride": "./src/ride-contract.ts",
+    "./bulletin-board": "./src/bulletin-board-contract.ts"
   },
   "scripts": {
     "build": "node ../../scripts/generate-openapi.ts",

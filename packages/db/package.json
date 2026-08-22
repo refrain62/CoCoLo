@@ -15,7 +15,8 @@
     "./ride": {
       "types": "./dist/ride-repository.d.ts",
       "import": "./dist/ride-repository.js"
-    }
+    },
+    "./bulletin-board": "./dist/bulletin-board-repository.js"
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
