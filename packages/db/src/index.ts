@@ -164,7 +164,14 @@ export function createMemberRepositories(client: PrismaClient) {
                 actorUserId: input.userId,
                 action: 'member.list',
                 resourceType: 'member',
-                metadata: { query: input.query },
+                metadata: {
+                  filters: {
+                    category: input.query.category ?? null,
+                    status: input.query.status ?? null,
+                    page: input.query.page,
+                    pageSize: input.query.pageSize,
+                  },
+                },
               },
             ],
           });
