@@ -5,6 +5,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/index.js",
+    "./attachment": "./dist/attachment-repository.js",
     "./events": "./dist/event-repository.js"
   },
   "scripts": {

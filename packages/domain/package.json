@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
+    "./attachment": "./dist/attachment-domain.js",
     "./event": "./dist/event-domain.js"
   },
   "scripts": {
