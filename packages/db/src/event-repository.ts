@@ -227,16 +227,15 @@ async function audit(
   resourceId: string,
   metadata: Prisma.InputJsonValue,
 ) {
-  await client.auditLog.create({
-    data: {
-      tenantId: input.tenantId,
-      actorUserId: input.actorUserId,
-      action,
-      resourceType,
-      resourceId,
-      metadata,
-    },
-  });
+  await client.$executeRaw`
+    INSERT INTO audit_logs (
+      id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata
+    ) VALUES (
+      ${uuidV7()}::uuid, ${input.tenantId}::uuid, ${input.actorUserId},
+      ${action}, ${resourceType}, ${resourceId}::uuid,
+      ${JSON.stringify(metadata)}::jsonb
+    )
+  `;
 }
 
 async function findAssignedMember(
@@ -406,7 +405,6 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           SELECT attendance_deadline
           FROM events
           WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
-          FOR SHARE
         `;
         const event = eventRows[0];
         if (!event) throw new EventNotFoundError();
@@ -414,7 +412,6 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           SELECT status
           FROM members
           WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.memberId}::uuid
-          FOR SHARE
         `;
         if (!memberRows[0] || memberRows[0].status === 'retired')
           throw new EventNotFoundError('対象部員が見つかりません。');
