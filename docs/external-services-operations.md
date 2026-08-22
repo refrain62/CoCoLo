@@ -10,11 +10,11 @@
 | --- | --- | --- |
 | Supabase Auth | Phase 1 で利用中 | ログイン、JWT 発行、ユーザー停止・資格情報管理 |
 | Supabase PostgreSQL | Phase 1 で利用中 | アプリケーションデータ、RLS、監査ログ、マイグレーション |
-| Cloudflare R2 | Phase 4 で導入予定 | 非公開の添付ファイル保存・配信 |
+| Cloudflare R2 | Phase 4 でadapter導入中 | 非公開の添付ファイル保存・配信 |
 | Cloudflare の配置先 | 環境固有の配置アダプターで接続 | Web/API の配置と HTTPS 公開 |
 | GitHub Actions | CI/CD で利用中 | 品質検査、staging 配置、production 昇格、証跡保存 |
 
-Cloudflare R2 のように未実装のサービスは、導入前にこの文書の「導入前チェック」を完了させます。未設定のサービスを画面や API から利用可能に見せてはいけません。
+Cloudflare R2 のように段階導入中のサービスは、導入前にこの文書の「導入前チェック」を完了させます。未設定のサービスを画面や API から利用可能に見せてはいけません。
 
 ## 2. 構成と責務の境界
 
@@ -56,7 +56,7 @@ GitHub Actions
 - R2 バケット、アクセスキー、署名 URL の秘密鍵
 - 配置アダプターと配置先の認証情報
 
-API 起動時は `APP_ENV`、Supabase URL/JWKS URL、R2 バケット名、公開 URL の許可値を検証します。環境値が一致しない場合は fail-closed とし、起動や配置を継続しません。
+API 起動時は `APP_ENV`、Supabase URL/JWKS URL、R2 endpoint、R2 バケット名、R2 access key、R2 secret key、公開 URL の許可値を検証します。環境値が不足または一致しない場合は fail-closed とし、起動や配置を継続しません。
 
 ## 4. Supabase Auth の運用
 
@@ -137,12 +137,13 @@ Supabase PostgreSQL を将来別の PostgreSQL へ分離する場合は、接続
 
 ### 6.1 導入前チェック
 
-R2 の実装を開始する前に、次を完了させます。
+R2 の実接続adapterを有効化する前に、次を完了させます。
 
 - `local`、`staging`、`production` で非公開バケットを作成し、バケット名を環境ガードへ登録する。
 - バケットの公開アクセスを無効化し、一覧・匿名 GET・推測可能な公開 URL を許可しない。
 - ブラウザの直接 PUT に必要な CORS を環境ごとの公開 URL に限定する。許可メソッド、許可ヘッダー、公開ヘッダー、有効期間をレビューする。
 - API だけが署名 URL を発行できるよう、R2 のアクセスキーを API または配置環境の Secret として保管する。
+- `R2_ENDPOINT`、`R2_BUCKET`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY` を `APP_ENV` ごとに分離し、未設定時は fail-closed とする。
 - アップロード開始、完了、期限切れ、再利用、別テナント、形式不正、サイズ超過のテストを追加する。
 - 失敗した添付本体を24時間以内に削除するクリーンアップ手順と、削除失敗の監視を用意する。
 
@@ -154,6 +155,8 @@ R2 の実装を開始する前に、次を完了させます。
 - 状態は `uploaded → available → deleted` または `uploaded → rejected` のみを許可します。
 - `rejected`、期限切れ、再利用済み、別テナントのオブジェクトに署名 URL を発行しません。
 - R2 の管理画面 URL、公開 URL、アクセスキーを利用者向けレスポンスやログへ出力しません。
+- R2 実接続adapterは、署名前に対象 object の存在と metadata を確認します。PUT は既存 object に署名せず、GET は存在しない object に署名せず、DELETE は短期署名 URL で実行します。
+- 外部資格情報を使えない検証環境では、HTTP stub を S3 互換 endpoint として使い、secret のログ出力や公開 URL 化を伴わずに署名・metadata・削除の挙動を確認します。
 
 ### 6.3 R2 障害時
 

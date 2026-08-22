@@ -36,9 +36,20 @@ assert.ok(process.env.SUPABASE_URL, 'SUPABASE_URL が必要です');
 assert.ok(process.env.SUPABASE_JWKS_URL, 'SUPABASE_JWKS_URL が必要です');
 assert.ok(process.env.SUPABASE_ANON_KEY, 'SUPABASE_ANON_KEY が必要です');
 assert.ok(process.env.R2_BUCKET, 'R2_BUCKET が必要です');
+assert.ok(process.env.R2_ENDPOINT, 'R2_ENDPOINT が必要です');
+assert.ok(process.env.R2_ACCESS_KEY_ID, 'R2_ACCESS_KEY_ID が必要です');
+assert.ok(process.env.R2_SECRET_ACCESS_KEY, 'R2_SECRET_ACCESS_KEY が必要です');
 assert.ok(process.env.PUBLIC_APP_URL, 'PUBLIC_APP_URL が必要です');
 if (allowed[appEnv].R2_BUCKET)
   assert.equal(process.env.R2_BUCKET, allowed[appEnv].R2_BUCKET);
+if (
+  appEnv !== 'local' &&
+  process.env.R2_ENDPOINT &&
+  !process.env.R2_ENDPOINT.startsWith('https://')
+)
+  throw new Error(
+    'staging / production の R2_ENDPOINT には HTTPS が必要です。',
+  );
 if (allowed[appEnv].PUBLIC_APP_URL)
   assert.equal(process.env.PUBLIC_APP_URL, allowed[appEnv].PUBLIC_APP_URL);
 if (appEnv !== 'local') {
