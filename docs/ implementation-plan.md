@@ -980,7 +980,7 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 * [x] **T-006 Red:** 部員 API の未認証、別テナント、権限不足、入力不正、一覧・登録の失敗テストを先に追加する。完了コミット: `c709852`。
 * [x] **T-007 Green:** Tenant / TenantMembership / Member / GuardianMember / AuditLog / PromotionRun の migration、JWT検証、RLS policy、transaction context、テナント解決、部員 API を最小実装する。完了コミット: `ed163b5`。
 * [x] **T-008 Red/Green:** 部員一覧・登録 UI のテストを先に追加して画面を実装する。実装コミット: `298e1eb`〜`3b058e1`。敵対的レビュー: `a7005b1`。
-* [ ] **T-009 E2E:** local は test-only Auth、staging は staging Supabase のテスト専用ユーザーを使い、管理者のログインから部員登録までを Playwright で検証する。
+* [x] **T-009 E2E:** local は test-only Auth、staging は staging Supabase のテスト専用ユーザーを使い、管理者のログインから部員登録までを Playwright で検証する。実装コミット: `72d7e1e`〜`3bd802e`。敵対的レビュー: `f96632f`。
 * [x] **T-010 実装後敵対的レビュー:** T-005〜T-009の成果物に対して越境、PII、認可、入力、環境混同、test-only Auth混入、テスト不足をレビューした。レビューコミット: `db7b464`。High 4件をT-011の修正対象として記録した。レビュー: `docs/reviews/t010-implementation-adversarial-review-2026-08-22.md`。
 * [x] **T-011 指摘修正とリリース判定:** T010-H-001〜T010-H-004を修正し、Critical / Highをゼロ化した。修正コミット: `05a101a`、`85c08f6`、`8c9eb58`、`e8e1967`、`a0a6854`、`5f5ff98`。Node 24のlocal lint/typecheck/test/unit/build/bundle/workflow検査、配置契約4件、GitHub quality run `32555164603`（実PostgreSQL統合テストを含む）が成功。再レビュー: `docs/reviews/t011-remediation-release-review-2026-08-22.md`。
 * [ ] **T-012 Phase 1完了機能:** 年度繰り上げを別の Red → Green → Refactor 縦切りとして実装し、`PromotionRun` のスキーマ・冪等性・プレビュー・監査ログを検証する。T-012の受け入れまでをPhase 1完了条件とする。
@@ -996,6 +996,7 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 * **T-005敵対的レビュー再レビュー（2026-08-22、`fb36532`）:** Critical 0件、High 0件、Medium 2件。production secret投入前のstaging証跡・artifact checksum・attestation検証、実DB/Playwright実行、環境別URL/R2許可値、Biome/Vitest/依存境界を確認し、T-005完了・T-006 Redへの移行可と判定。Mediumは実staging接続とdeploy adapterの環境固有作業としてT-009〜T-011で確認する。
 * **T-006/T-007部員API敵対的再レビュー（2026-08-22、`ed163b5`）:** Critical 0件、High 0件。Supabase JWT署名検証、production依存性構成、同一transaction内のRLS context・membership再確認・監査、guardianの担当部員限定、PostgreSQL 17統合テスト3件を確認し、T-007完了・T-008 Red/Greenへの移行可と判定。Mediumは実Supabase staging接続、staging専用テストユーザー、deploy adapterの環境固有作業としてT-009〜T-011で確認する。
 * **T-008部員UI完了記録（2026-08-22、実装`298e1eb`〜`3b058e1`、レビュー`a7005b1`）:** FS-MEM-001/002/004に対応する部員一覧・検索・登録・学年表示を実装し、公開DTO、tenant非入力、PII非表示、401/403、入力検証、loading/empty/error/success状態をE2Eで確認した。`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm test:unit`、`pnpm test:integration`（実PostgreSQL 3件）、`pnpm build`、`pnpm test:e2e:local`（4件）、`pnpm verify:production-bundle`が成功。敵対的レビューはCritical 0件 / High 0件でT-009へ移行可。MediumはSupabase Auth実接続、staging実E2E、API冪等性・response runtime検証として後続タスクに記録した。レビュー成果物: `docs/reviews/t008-member-ui-adversarial-review-2026-08-22.md`。
+* **T-009認証・E2E完了記録（2026-08-22、実装`72d7e1e`〜`3bd802e`、レビュー`f96632f`）:** Supabase password grantのログイン画面、local test-only Auth、`APP_ENV` fail-closed、staging Supabase設定・専用資格情報、管理者ログインから実API部員登録までのPlaywrightを追加した。`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm test:unit`、`pnpm test:integration`（実PostgreSQL 4件）、`pnpm build`、`pnpm verify:production-bundle`（12ファイル）、`pnpm test:e2e:local`（5件）、`pnpm lint:workflows`が成功。敵対的レビューはCritical 0件 / High 0件でT-010へ移行可。Mediumはaccess tokenのrefresh/logout、staging実接続・実デプロイadapterとしてT-010/T-011で再確認する。レビュー成果物: `docs/reviews/t009-auth-e2e-adversarial-review-2026-08-22.md`。
 
 ### 9.3 中断後の再開手順
 
