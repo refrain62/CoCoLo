@@ -10,7 +10,8 @@ permissions:
   actions: read
 jobs:
   production:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     environment: production
     concurrency: production-migration
     steps:
@@ -32,6 +33,7 @@ jobs:
       - name: 検証済みSHAのリポジトリをcheckout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          persist-credentials: false
           ref: ${{ inputs.artifact_sha }}
       - name: pnpmを準備
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
@@ -69,6 +71,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: production環境へ成果物を配置
-        run: pnpm deploy:production --artifact-sha "${{ inputs.artifact_sha }}" --release-dir .release
+        run: pnpm deploy:production --artifact-sha "$ARTIFACT_SHA" --release-dir .release
         env:
+          ARTIFACT_SHA: ${{ inputs.artifact_sha }}
           PRODUCTION_DEPLOY_ADAPTER: ${{ secrets.PRODUCTION_DEPLOY_ADAPTER }}
