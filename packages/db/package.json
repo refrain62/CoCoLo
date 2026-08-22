@@ -10,6 +10,7 @@
     "build": "prisma generate && tsc -p tsconfig.json",
     "lint": "node ../../scripts/prisma-validate.ts",
     "typecheck": "node ../../scripts/prisma-validate.ts",
+    "test:integration": "prisma generate && node --test test/central-feature-rls.test.ts",
     "prisma:validate": "prisma validate",
     "migrate:deploy": "prisma migrate deploy"
   },
