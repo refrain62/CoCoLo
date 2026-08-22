@@ -5,6 +5,10 @@
   "exports": {
     ".": "./dist/index.js",
     "./auth-team-selection": "./dist/auth-team-selection-domain.js",
+    "./ride": {
+      "types": "./dist/ride-domain.d.ts",
+      "import": "./dist/ride-domain.js"
+    },
     "./orders": {
       "types": "./dist/orders-domain.d.ts",
       "import": "./dist/orders-domain.js"

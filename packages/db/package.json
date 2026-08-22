@@ -6,6 +6,10 @@
     ".": "./dist/index.js",
     "./client": "./dist/index.js",
     "./auth-team-selection": "./dist/auth-team-selection-repository.js",
+    "./ride": {
+      "types": "./dist/ride-repository.d.ts",
+      "import": "./dist/ride-repository.js"
+    },
     "./orders": {
       "types": "./dist/orders-repository.d.ts",
       "import": "./dist/orders-repository.js"
