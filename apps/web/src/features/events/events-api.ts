@@ -46,6 +46,13 @@ export type AttendanceSummary = {
   unansweredMemberIds: string[];
 };
 
+export type AttendanceResult = {
+  eventId: string;
+  memberId: string;
+  response: AttendanceResponse;
+  updatedAt: string;
+};
+
 export class EventsApiError extends Error {
   constructor(
     readonly status: number,
@@ -69,12 +76,8 @@ export type EventsApi = {
       response: AttendanceResponse;
       correctionReason?: string;
     },
-  ) => Promise<{
-    eventId: string;
-    memberId: string;
-    response: AttendanceResponse;
-    updatedAt: string;
-  }>;
+  ) => Promise<AttendanceResult>;
+  currentAttendance: (eventId: string) => Promise<AttendanceResult[]>;
   summary: (eventId: string) => Promise<AttendanceSummary>;
 };
 
@@ -144,6 +147,15 @@ function isAttendanceResult(value: unknown): value is {
     isAttendanceResponse(value.response) &&
     isDateString(value.updatedAt)
   );
+}
+
+const uuidV7Pattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function eventPathId(eventId: string) {
+  if (!uuidV7Pattern.test(eventId))
+    throw new EventsApiError(400, 'VALIDATION_ERROR', '予定IDが不正です。');
+  return encodeURIComponent(eventId);
 }
 
 function isAttendanceSummary(value: unknown): value is AttendanceSummary {
@@ -221,7 +233,7 @@ export function createEventsApi({
       );
     },
     async get(eventId) {
-      const result = await request<unknown>(`/${eventId}`);
+      const result = await request<unknown>(`/${eventPathId(eventId)}`);
       return readData(result, isEventSummary, '予定詳細の応答形式が不正です。');
     },
     async create(input) {
@@ -232,25 +244,41 @@ export function createEventsApi({
       return readData(result, isEventSummary, '予定登録の応答形式が不正です。');
     },
     async update(eventId, input) {
-      const result = await request<unknown>(`/${eventId}`, {
+      const result = await request<unknown>(`/${eventPathId(eventId)}`, {
         method: 'PATCH',
         body: JSON.stringify(input),
       });
       return readData(result, isEventSummary, '予定更新の応答形式が不正です。');
     },
     async answer(eventId, input) {
-      const result = await request<unknown>(`/${eventId}/attendance`, {
-        method: 'PUT',
-        body: JSON.stringify(input),
-      });
+      const result = await request<unknown>(
+        `/${eventPathId(eventId)}/attendance`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(input),
+        },
+      );
       return readData(
         result,
         isAttendanceResult,
         '出欠回答の応答形式が不正です。',
       );
     },
+    async currentAttendance(eventId) {
+      const result = await request<unknown>(
+        `/${eventPathId(eventId)}/attendance`,
+      );
+      return readData(
+        result,
+        (value): value is AttendanceResult[] =>
+          Array.isArray(value) && value.every(isAttendanceResult),
+        '現在の出欠回答の応答形式が不正です。',
+      );
+    },
     async summary(eventId) {
-      const result = await request<unknown>(`/${eventId}/attendance/summary`);
+      const result = await request<unknown>(
+        `/${eventPathId(eventId)}/attendance/summary`,
+      );
       return readData(
         result,
         isAttendanceSummary,

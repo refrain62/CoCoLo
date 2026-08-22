@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import {
   type AttendanceResponse,
+  type AttendanceResult,
   type AttendanceSummary,
   type EventRole,
   type EventSummary,
@@ -97,20 +98,29 @@ export function EventDetailView({
   role,
   memberOptions,
   onEventUpdated,
+  currentAttendance = [],
 }: {
   api: EventsApi;
   event: EventSummary;
   role: EventRole;
   memberOptions: MemberOption[];
   onEventUpdated?: (event: EventSummary) => void;
+  currentAttendance?: AttendanceResult[];
 }) {
   const [displayEvent, setDisplayEvent] = useState(event);
   const [memberId, setMemberId] = useState(memberOptions[0]?.id ?? '');
-  const [response, setResponse] = useState<AttendanceResponse>('pending');
-  const [savedResponse, setSavedResponse] = useState<AttendanceResponse | null>(
-    null,
+  const initialAnswer = currentAttendance.find(
+    (answer) => answer.memberId === memberOptions[0]?.id,
   );
-  const [answerState, setAnswerState] = useState<AnswerState>('unanswered');
+  const [response, setResponse] = useState<AttendanceResponse>(
+    initialAnswer?.response ?? 'pending',
+  );
+  const [savedResponse, setSavedResponse] = useState<AttendanceResponse | null>(
+    initialAnswer?.response ?? null,
+  );
+  const [answerState, setAnswerState] = useState<AnswerState>(
+    initialAnswer ? 'saved' : 'unanswered',
+  );
   const [answerError, setAnswerError] = useState<string | null>(null);
   const [correctionReason, setCorrectionReason] = useState('');
   const [summary, setSummary] = useState<AttendanceSummary | null>(null);
@@ -142,6 +152,16 @@ export function EventDetailView({
     if (!memberOptions.some((member) => member.id === memberId))
       setMemberId(memberOptions[0]?.id ?? '');
   }, [memberId, memberOptions]);
+
+  useEffect(() => {
+    const current = currentAttendance.find(
+      (answer) => answer.memberId === memberId,
+    );
+    setResponse(current?.response ?? 'pending');
+    setSavedResponse(current?.response ?? null);
+    setAnswerState(current ? 'saved' : 'unanswered');
+    setAnswerError(null);
+  }, [currentAttendance, memberId]);
 
   const deadlinePassed = isDeadlinePassed(displayEvent);
   const isAnswerSaving = answerState === 'saving';
@@ -399,16 +419,21 @@ export function EventDetailPage({
   memberOptions: MemberOption[];
 }) {
   const [event, setEvent] = useState<EventSummary | null>(null);
+  const [currentAttendance, setCurrentAttendance] = useState<
+    AttendanceResult[]
+  >([]);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     setEvent(null);
     setMessage(null);
-    void api
-      .get(eventId)
-      .then((result) => {
-        if (active) setEvent(result);
+    void Promise.all([api.get(eventId), api.currentAttendance(eventId)])
+      .then(([result, attendance]) => {
+        if (active) {
+          setEvent(result);
+          setCurrentAttendance(attendance);
+        }
       })
       .catch((error: unknown) => {
         if (active)
@@ -438,6 +463,7 @@ export function EventDetailPage({
     <EventDetailView
       api={api}
       event={event}
+      currentAttendance={currentAttendance}
       memberOptions={memberOptions}
       onEventUpdated={setEvent}
       role={role}

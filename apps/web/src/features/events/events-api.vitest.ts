@@ -6,7 +6,7 @@ import {
 } from './events-api.js';
 
 const validEvent: EventSummary = {
-  id: 'event-a',
+  id: '00000000-0000-7000-8000-000000000101',
   title: '中央APIの予定',
   type: 'practice',
   startsAt: '2026-09-01T10:00:00.000Z',
@@ -51,9 +51,9 @@ describe('createEventsApi', () => {
     );
     const api = createEventsApi({ getAccessToken: () => 'token-a' });
 
-    await expect(api.get('event-a')).resolves.toEqual(validEvent);
+    await expect(api.get(validEvent.id)).resolves.toEqual(validEvent);
     expect(fetcher).toHaveBeenCalledWith(
-      '/api/v1/events/event-a',
+      `/api/v1/events/${validEvent.id}`,
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer token-a' }),
       }),
@@ -63,13 +63,13 @@ describe('createEventsApi', () => {
 
   it('予定詳細の不正な応答を画面へ渡さない', async () => {
     const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ data: { id: 'event-a' } }), {
+      new Response(JSON.stringify({ data: { id: validEvent.id } }), {
         status: 200,
       }),
     );
     const api = createEventsApi({ getAccessToken: () => 'token-a' });
 
-    await expect(api.get('event-a')).rejects.toEqual(
+    await expect(api.get(validEvent.id)).rejects.toEqual(
       new EventsApiError(
         502,
         'INVALID_RESPONSE',
@@ -83,7 +83,7 @@ describe('createEventsApi', () => {
     const fetcher = vi.spyOn(globalThis, 'fetch');
     const api = createEventsApi({ getAccessToken: () => null });
 
-    await expect(api.summary('event-a')).rejects.toEqual(
+    await expect(api.summary(validEvent.id)).rejects.toEqual(
       new EventsApiError(401, 'UNAUTHENTICATED', 'ログインが必要です。'),
     );
     expect(fetcher).not.toHaveBeenCalled();
@@ -105,9 +105,56 @@ describe('createEventsApi', () => {
     const api = createEventsApi({ getAccessToken: () => 'token-a' });
 
     await expect(
-      api.answer('event-a', { memberId: 'member-a', response: 'absent' }),
+      api.answer(validEvent.id, {
+        memberId: '00000000-0000-7000-8000-000000000201',
+        response: 'absent',
+      }),
     ).rejects.toEqual(
       new EventsApiError(409, 'ATTENDANCE_DEADLINE_PASSED', '締切後です。'),
+    );
+    fetcher.mockRestore();
+  });
+
+  it('不正な予定IDはURLへ渡さずUUIDv7として拒否する', async () => {
+    const fetcher = vi.spyOn(globalThis, 'fetch');
+    const api = createEventsApi({ getAccessToken: () => 'token-a' });
+
+    await expect(api.get('event-a')).rejects.toEqual(
+      new EventsApiError(400, 'VALIDATION_ERROR', '予定IDが不正です。'),
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+    fetcher.mockRestore();
+  });
+
+  it('現在回答を取得し、締切延長をPATCHへ渡す', async () => {
+    const attendance = {
+      eventId: validEvent.id,
+      memberId: '00000000-0000-7000-8000-000000000201',
+      response: 'attending' as const,
+      updatedAt: validEvent.updatedAt,
+    };
+    const fetcher = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        if (String(input).endsWith('/attendance'))
+          return new Response(JSON.stringify({ data: [attendance] }), {
+            status: 200,
+          });
+        return new Response(JSON.stringify({ data: validEvent }), {
+          status: 200,
+        });
+      });
+    const api = createEventsApi({ getAccessToken: () => 'token-a' });
+
+    await expect(api.currentAttendance(validEvent.id)).resolves.toEqual([
+      attendance,
+    ]);
+    await api.update(validEvent.id, {
+      attendanceDeadline: '2026-09-01T09:00:00.000Z',
+    });
+    expect(fetcher).toHaveBeenLastCalledWith(
+      `/api/v1/events/${validEvent.id}`,
+      expect.objectContaining({ method: 'PATCH' }),
     );
     fetcher.mockRestore();
   });

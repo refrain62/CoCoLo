@@ -23,7 +23,7 @@ tenant IDをURL、query、body、画面のチーム選択値へ渡しません�
 | `/` | トップ | 中央ナビゲーションを表示 |
 | `/members` | 部員管理 | ownerまたはadminだけに表示 |
 | `/events` | 予定と出欠 | `EventsPage`を接続 |
-| `/events/:eventId` | 予定詳細 | UUIDv7を検証し、`EventDetailPage`を接続 |
+| `/events/:eventId` | 予定詳細 | UUIDv7を検証し、現在回答の復元・出欠操作・`EventDetailPage`を接続 |
 | `/board-contacts` | 役員と連絡先 | ownerまたはadminだけに表示 |
 | `/orders` | 共同購買と集金 | `OrdersPaymentsPage`を接続 |
 | `/attachments` | 添付 | `AttachmentUploader`を接続 |

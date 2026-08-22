@@ -42,6 +42,27 @@ describe('EventDetailView', () => {
     expect(markup).not.toContain('予定を編集');
   });
 
+  it('詳細表示時に現在の出欠回答を復元する', () => {
+    const markup = renderToStaticMarkup(
+      createElement(EventDetailView, {
+        api,
+        event,
+        memberOptions: [{ id: 'member-a', name: '部員A' }],
+        currentAttendance: [
+          {
+            eventId: event.id,
+            memberId: 'member-a',
+            response: 'attending',
+            updatedAt: event.updatedAt,
+          },
+        ],
+        role: 'guardian',
+      }),
+    );
+
+    expect(markup).toContain('回答状態: 保存済み（参加）');
+  });
+
   it('managerへ締切後の修正理由欄と集計・予定管理を表示する', () => {
     const markup = renderToStaticMarkup(
       createElement(EventDetailView, {
