@@ -16,6 +16,22 @@ export class EventScheduleError extends Error {
   }
 }
 
+export type AttendancePolicyCode =
+  | 'NOT_ASSIGNED'
+  | 'DEADLINE_PASSED'
+  | 'CORRECTION_REASON_REQUIRED'
+  | 'FORBIDDEN';
+
+export class AttendancePolicyError extends Error {
+  constructor(
+    readonly code: AttendancePolicyCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'AttendancePolicyError';
+  }
+}
+
 // 保存前に予定の時間関係を検証し、締切後の出欠判定が曖昧にならない値だけを受け入れる。
 export function assertValidEventSchedule(
   schedule: EventSchedule,
@@ -53,15 +69,27 @@ export function assertAttendanceChangeAllowed(input: {
   correctionReason?: string | null;
 }) {
   if (input.role === 'guardian' && !input.isAssignedMember)
-    throw new Error('担当部員の出欠だけを変更できます。');
+    throw new AttendancePolicyError(
+      'NOT_ASSIGNED',
+      '担当部員の出欠だけを変更できます。',
+    );
   if (input.role === 'guardian' && input.deadlinePassed)
-    throw new Error('出欠締切後は回答を変更できません。');
+    throw new AttendancePolicyError(
+      'DEADLINE_PASSED',
+      '出欠締切後は回答を変更できません。',
+    );
   if (canManageAttendance(input.role) && input.deadlinePassed) {
     if (!input.correctionReason?.trim())
-      throw new Error('締切後の管理者修正には理由が必要です。');
+      throw new AttendancePolicyError(
+        'CORRECTION_REASON_REQUIRED',
+        '締切後の管理者修正には理由が必要です。',
+      );
   }
   if (!canManageAttendance(input.role) && input.role !== 'guardian')
-    throw new Error('出欠を変更する権限がありません。');
+    throw new AttendancePolicyError(
+      'FORBIDDEN',
+      '出欠を変更する権限がありません。',
+    );
 }
 
 export type AttendanceCount = {

@@ -19,6 +19,21 @@ const eventFields = {
   attendanceDeadline: dateTime,
 };
 
+const eventUpdateFields = {
+  title: eventFields.title,
+  type: eventFields.type,
+  startsAt: eventFields.startsAt,
+  endsAt: eventFields.endsAt,
+  location: optionalText(500),
+  itemsToBring: optionalText(2000),
+  fee: z.number().int().min(0).max(1_000_000),
+  announcementImageAttachmentId: uuid.nullable().optional(),
+  opponent: optionalText(200),
+  meetingTime: dateTime.nullable().optional(),
+  transportationRequired: z.boolean(),
+  attendanceDeadline: dateTime,
+};
+
 function validateEventTimes(value, context) {
   const startsAt = Date.parse(value.startsAt);
   const endsAt = Date.parse(value.endsAt);
@@ -58,7 +73,7 @@ export const eventCreateSchema = z
 export const eventUpdateSchema = z
   .object(
     Object.fromEntries(
-      Object.entries(eventFields).map(([key, schema]) => [key, schema.optional()]),
+      Object.entries(eventUpdateFields).map(([key, schema]) => [key, schema.optional()]),
     ),
   )
   .strict()
