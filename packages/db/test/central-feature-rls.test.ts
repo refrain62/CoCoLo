@@ -21,6 +21,9 @@ const entryA = '00000000-0000-7000-8000-000000000703';
 const lineA = '00000000-0000-7000-8000-000000000704';
 const idempotencyA = '00000000-0000-7000-8000-000000000705';
 const announcementA = '00000000-0000-7000-8000-000000000801';
+const outboxSourceA = 'line-outbox-fixture-a';
+const outboxSourceStaff = 'line-outbox-fixture-staff';
+const outboxSourceB = 'line-outbox-fixture-b';
 let notificationA = '';
 const ridePlanA = '00000000-0000-7000-8000-000000001001';
 const rideOfferA = '00000000-0000-7000-8000-000000001002';
@@ -82,6 +85,30 @@ async function withContext<T>(
 
 async function rejects(work: () => Promise<unknown>) {
   await assert.rejects(work);
+}
+
+// outbox表への直接書込みを避け、業務APIと同じ認可付きDB関数を通す。
+async function enqueueOutbox(
+  client: PrismaClient,
+  tenantId: string,
+  actorUserId: string,
+  sourceId: string,
+  title: string,
+  deliverAt: string,
+) {
+  await execute(
+    client,
+    `SELECT app_enqueue_line_notification_outbox(
+       $1::uuid, $2, 'event'::line_notification_source, $3,
+       $4, '予定の詳細を確認してください。',
+       'http://localhost:5173/events/fixture', $5::timestamptz
+     )`,
+    tenantId,
+    actorUserId,
+    sourceId,
+    title,
+    deliverAt,
+  );
 }
 
 async function seedFixture(client: PrismaClient) {
@@ -333,6 +360,23 @@ async function cleanupFixture(client: PrismaClient) {
     }
     await execute(
       tx,
+      `DELETE FROM line_notification_queue
+        WHERE outbox_id IN (
+          SELECT id FROM line_notification_outbox
+           WHERE tenant_id IN ($1::uuid, $2::uuid)
+        )`,
+      tenantA,
+      tenantB,
+    );
+    await execute(
+      tx,
+      `DELETE FROM line_notification_outbox
+        WHERE tenant_id IN ($1::uuid, $2::uuid)`,
+      tenantA,
+      tenantB,
+    );
+    await execute(
+      tx,
       `DELETE FROM line_webhook_receipts WHERE group_id = 'CcentralA'`,
     );
     await execute(
@@ -537,6 +581,160 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
     assert.equal(await count(tx, 'events'), 1);
     assert.equal(await count(tx, 'purchase_orders'), 0);
   });
+
+  await withContext(app, tenantA, 'owner-a', 'owner', async (tx) => {
+    await enqueueOutbox(
+      tx,
+      tenantA,
+      'owner-a',
+      outboxSourceA,
+      '予定通知A',
+      '2099-07-01T00:00:00Z',
+    );
+    await enqueueOutbox(
+      tx,
+      tenantA,
+      'owner-a',
+      outboxSourceA,
+      '予定通知A（更新）',
+      '2099-07-02T00:00:00Z',
+    );
+    await rejects(() =>
+      enqueueOutbox(
+        tx,
+        tenantB,
+        'owner-a',
+        'line-outbox-cross-tenant',
+        '越境通知',
+        '2099-07-01T00:00:00Z',
+      ),
+    );
+  });
+
+  await withContext(app, tenantA, 'guardian-a', 'guardian', async (tx) => {
+    await rejects(() =>
+      enqueueOutbox(
+        tx,
+        tenantA,
+        'guardian-a',
+        'line-outbox-guardian',
+        '権限外通知',
+        '2099-07-01T00:00:00Z',
+      ),
+    );
+  });
+
+  await withContext(app, tenantA, 'staff-a', 'staff', async (tx) => {
+    await enqueueOutbox(
+      tx,
+      tenantA,
+      'staff-a',
+      outboxSourceStaff,
+      '予定通知staff',
+      '2099-07-01T00:00:00Z',
+    );
+  });
+
+  const pendingOutboxes = await rows<{
+    id: string;
+    source_id: string;
+    title: string;
+    status: string;
+  }>(
+    direct,
+    `SELECT id, source_id, title, status
+       FROM line_notification_outbox
+      WHERE tenant_id = $1::uuid
+        AND source_id IN ($2, $3)
+      ORDER BY source_id`,
+    tenantA,
+    outboxSourceA,
+    outboxSourceStaff,
+  );
+  assert.equal(pendingOutboxes.length, 2);
+  assert.equal(pendingOutboxes[0]?.status, 'pending');
+  assert.equal(pendingOutboxes[0]?.title, '予定通知A（更新）');
+
+  // 同じdue通知を二つのworkerが同時に処理しても、SKIP LOCKEDで一件ずつ確定する。
+  const workerResults = await Promise.all([
+    rows<{ outcome: string; outbox_id: string | null }>(
+      app,
+      `SELECT outcome, outbox_id
+         FROM app_process_line_notification_outbox($1::timestamptz, $2)`,
+      '2099-08-01T00:00:00Z',
+      5,
+    ),
+    rows<{ outcome: string; outbox_id: string | null }>(
+      app,
+      `SELECT outcome, outbox_id
+         FROM app_process_line_notification_outbox($1::timestamptz, $2)`,
+      '2099-08-01T00:00:00Z',
+      5,
+    ),
+  ]);
+  assert.deepEqual(workerResults.map((result) => result[0]?.outcome).sort(), [
+    'queued',
+    'queued',
+  ]);
+  const queuedOutboxes = await rows<{
+    id: string;
+    status: string;
+    queue_id: string | null;
+  }>(
+    direct,
+    `SELECT o.id, o.status, q.id AS queue_id
+       FROM line_notification_outbox o
+       LEFT JOIN line_notification_queue q ON q.outbox_id = o.id
+      WHERE o.tenant_id = $1::uuid
+        AND o.source_id IN ($2, $3)
+      ORDER BY o.source_id`,
+    tenantA,
+    outboxSourceA,
+    outboxSourceStaff,
+  );
+  assert.equal(queuedOutboxes.length, 2);
+  assert.ok(queuedOutboxes.every((row) => row.status === 'delivered'));
+  assert.ok(queuedOutboxes.every((row) => row.queue_id));
+
+  await execute(
+    direct,
+    `UPDATE line_connections SET status = 'disconnected'
+      WHERE tenant_id = $1::uuid`,
+    tenantB,
+  );
+  await withContext(app, tenantB, 'owner-b', 'owner', async (tx) => {
+    await enqueueOutbox(
+      tx,
+      tenantB,
+      'owner-b',
+      outboxSourceB,
+      '未接続通知',
+      '2099-07-01T00:00:00Z',
+    );
+  });
+  const ignoredResult = await rows<{
+    outcome: string;
+    outbox_id: string | null;
+  }>(
+    app,
+    `SELECT outcome, outbox_id
+       FROM app_process_line_notification_outbox($1::timestamptz, $2)`,
+    '2099-08-01T00:00:00Z',
+    5,
+  );
+  assert.equal(ignoredResult[0]?.outcome, 'ignored');
+  const ignoredOutbox = await rows<{ status: string; queue_count: bigint }>(
+    direct,
+    `SELECT o.status, count(q.id)::bigint AS queue_count
+       FROM line_notification_outbox o
+       LEFT JOIN line_notification_queue q ON q.outbox_id = o.id
+      WHERE o.tenant_id = $1::uuid AND o.source_id = $2
+      GROUP BY o.status`,
+    tenantB,
+    outboxSourceB,
+  );
+  assert.equal(ignoredOutbox[0]?.status, 'ignored');
+  assert.equal(Number(ignoredOutbox[0]?.queue_count ?? 0n), 0);
 
   await withContext(app, tenantA, 'guardian-a', 'guardian', async (tx) => {
     await execute(
