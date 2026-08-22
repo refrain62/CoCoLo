@@ -61,6 +61,10 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      - name: staging環境のmigration履歴を照合
+        run: pnpm verify:migration-history
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: PostgreSQLのメジャーバージョンを検証
         run: pnpm verify:database-version --expected-major 17
         env:

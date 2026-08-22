@@ -29,5 +29,6 @@ AS $$
   ORDER BY tm.created_at
 $$;
 
+REVOKE ALL ON FUNCTION public.app_resolve_active_membership(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.app_resolve_active_membership(text) TO cocolo_app;
 COMMENT ON FUNCTION public.app_resolve_active_membership(text) IS 'tenant context設定前の所属解決専用。引数のuser_idとactive所属だけを返す';

@@ -221,6 +221,7 @@ test('必須tableのtenant_id欠落を拒否する', () => {
 test('RLS policyのUSINGとWITH CHECKにtenant境界を要求する', () => {
   for (const content of [
     'CREATE POLICY members_select ON members FOR SELECT USING (true);',
+    'CREATE POLICY members_select ON members FOR SELECT USING (tenant_id = tenant_id);',
     "CREATE POLICY members_select ON members FOR SELECT USING (true OR tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);",
     "CREATE POLICY members_write ON members FOR ALL USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid) WITH CHECK (true);",
     "CREATE POLICY members_select ON members FOR SELECT USING (tenant_id IS NOT NULL AND current_setting('app.tenant_id', true) IS NOT NULL);",

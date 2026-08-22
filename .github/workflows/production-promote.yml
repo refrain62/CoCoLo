@@ -80,6 +80,10 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      - name: production環境のmigration履歴を照合
+        run: pnpm verify:migration-history
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: production環境へ成果物を配置
         run: pnpm deploy:production --artifact-sha "$ARTIFACT_SHA" --release-dir .release
         env:

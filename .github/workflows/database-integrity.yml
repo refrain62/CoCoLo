@@ -16,7 +16,7 @@ concurrency:
 jobs:
   database-integrity:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17@sha256:a65e6a841f6c4dbc4abda3d67fa3bc21824e9611064fcd82e87ea67aad60a0c3
@@ -47,12 +47,12 @@ jobs:
           node-version: 24
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
+      - name: schema drift用DBを準備
+        run: psql --no-psqlrc --set=ON_ERROR_STOP=1 --dbname postgresql://postgres:postgres@localhost:5432/postgres --command "CREATE DATABASE cocolo_shadow"
       - name: migrationの正本とSQLを検証
-        run: pnpm verify:migration-baseline && pnpm verify:migration-checksum && pnpm verify:migration-sql
+        run: pnpm verify:migration-baseline && pnpm verify:migration-checksum && pnpm verify:migration-sql && pnpm test:database-integrity
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_sha || '' }}
-      - name: checksum検証のfixtureを実行
-        run: pnpm test:database-integrity
       - name: PostgreSQLのバージョンを検証
         run: pnpm verify:database-version
         env:
@@ -71,6 +71,17 @@ jobs:
         run: pnpm --filter @cocolo/db exec prisma generate
       - name: DB migration履歴をchecksumと照合
         run: pnpm verify:migration-history
+        env:
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+      - name: schema driftを検証
+        run: pnpm verify:schema-drift
+        env:
+          APP_ENV: local
+          DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+          SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cocolo_shadow
+      - name: DB security driftを検証
+        run: pnpm verify:database-security
         env:
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
       - name: schemaとfixtureを検証

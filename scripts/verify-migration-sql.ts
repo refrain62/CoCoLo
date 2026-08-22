@@ -369,6 +369,11 @@ function assertTenantBoundary(
   );
 
   const rowColumn = tableName === 'tenants' ? 'id' : 'tenant_id';
+  assert.doesNotMatch(
+    normalized,
+    new RegExp(`\\b${rowColumn}\\b\\s*=\\s*\\b${rowColumn}\\b`, 'i'),
+    `${file.path}: ${tableName}の${clause}式にtenant tautologyがあります。`,
+  );
   assert.match(
     normalized,
     new RegExp(
@@ -428,7 +433,7 @@ function assertEffectivePolicyFailClosed(
       /\bis\s+null\s+or\b|\bor\s+true\b|\btrue\s+or\b|\b1\s*=\s*1\b/i,
       `${file.path}: ${tableName}.${name}のpolicyはfail-closedでなければなりません。`,
     );
-  if (command !== 'SELECT' && tableName !== 'tenant_memberships')
+  if (command !== 'SELECT')
     assert.match(
       statement,
       /current_setting\s*\(\s*'app\.role'/i,
@@ -473,14 +478,28 @@ function assertAllowedStatement(file: MigrationSqlFile, statement: string) {
   assert.doesNotMatch(
     compact,
     new RegExp(
-      `\\b(?:${isMembershipResolver ? '' : 'SECURITY\\s+DEFINER|'}CREATE\\s+(?:OR\\s+REPLACE\\s+)?VIEW|CREATE\\s+MATERIALIZED\\s+VIEW|SET\\s+(?:LOCAL\\s+)?row_security\\s*=\\s*off|ALTER\\s+TABLE\\b[^;]*\\b(?:DROP\\s+CONSTRAINT|DISABLE\\s+TRIGGER|DROP\\s+COLUMN|NO\\s+FORCE\\s+ROW\\s+LEVEL\\s+SECURITY|DISABLE\\s+ROW\\s+LEVEL\\s+SECURITY)|\\b(?:CREATE|ALTER|DROP)\\s+ROLE\\b|\\bDROP\\s+(?:TABLE|SCHEMA|DATABASE|SEQUENCE|TYPE|VIEW|FUNCTION)|\\b(?:TRUNCATE|DELETE\\s+FROM|REVOKE)\\b)`,
+      `\\b(?:${isMembershipResolver ? '' : 'SECURITY\\s+DEFINER|'}CREATE\\s+(?:OR\\s+REPLACE\\s+)?VIEW|CREATE\\s+MATERIALIZED\\s+VIEW|SET\\s+(?:LOCAL\\s+)?row_security\\s*=\\s*off|ALTER\\s+TABLE\\b[^;]*\\b(?:DROP\\s+CONSTRAINT|DISABLE\\s+TRIGGER|DROP\\s+COLUMN|NO\\s+FORCE\\s+ROW\\s+LEVEL\\s+SECURITY|DISABLE\\s+ROW\\s+LEVEL\\s+SECURITY)|\\b(?:CREATE|ALTER|DROP)\\s+ROLE\\b|\\bDROP\\s+(?:TABLE|SCHEMA|DATABASE|SEQUENCE|TYPE|VIEW|FUNCTION)|\\b(?:TRUNCATE|DELETE\\s+FROM)\\b)`,
       'i',
     ),
     `${file.path}: 危険なDDLまたは権限操作は禁止です。`,
   );
 
   if (/^GRANT\b/i.test(compact)) {
+    if (/\bON\s+FUNCTION\b/i.test(compact))
+      assert.match(
+        compact,
+        /^GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.app_resolve_active_membership\(text\)\s+TO\s+cocolo_app$/i,
+        `${file.path}: SECURITY DEFINER関数のGRANTはcocolo_appへのEXECUTEだけを許可します。`,
+      );
     assertGrantTarget(file, compact);
+    return;
+  }
+  if (/^REVOKE\b/i.test(compact)) {
+    assert.match(
+      compact,
+      /^REVOKE\s+ALL\s+ON\s+FUNCTION\s+public\.app_resolve_active_membership\(text\)\s+FROM\s+PUBLIC$/i,
+      `${file.path}: SECURITY DEFINER関数はPUBLICからALLをREVOKEしてください。`,
+    );
     return;
   }
   if (/^CREATE\s+TABLE\b/i.test(compact)) {
@@ -629,6 +648,45 @@ function assertDroppedObjectsAreRecreated(
   }
 }
 
+function assertSecurityDefinerPrivileges(
+  files: readonly MigrationSqlFile[],
+  statements: readonly SqlStatement[],
+) {
+  const securityDefiners = statements.filter((statement) =>
+    /\bCREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b[\s\S]*\bSECURITY\s+DEFINER\b/i.test(
+      compactSql(statement.text),
+    ),
+  );
+  for (const statement of securityDefiners) {
+    assert.match(
+      compactSql(statement.text),
+      /app_resolve_active_membership\s*\(\s*p_user_id\s+text\s*\)/i,
+      '許可されたSECURITY DEFINER関数以外は禁止です。',
+    );
+    assert.ok(
+      statements.some((candidate) =>
+        /^REVOKE\s+ALL\s+ON\s+FUNCTION\s+public\.app_resolve_active_membership\(text\)\s+FROM\s+PUBLIC$/i.test(
+          compactSql(candidate.text),
+        ),
+      ),
+      'SECURITY DEFINER関数にはPUBLICからのREVOKE ALLが必要です。',
+    );
+    assert.ok(
+      statements.some((candidate) =>
+        /^GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.app_resolve_active_membership\(text\)\s+TO\s+cocolo_app$/i.test(
+          compactSql(candidate.text),
+        ),
+      ),
+      'SECURITY DEFINER関数にはcocolo_appへの最小EXECUTEが必要です。',
+    );
+  }
+  if (securityDefiners.length > 0)
+    assert.ok(
+      files.some((file) => /SECURITY\s+DEFINER/i.test(file.content)),
+      'SECURITY DEFINER関数の正本が検出できません。',
+    );
+}
+
 function statementsForFile(file: MigrationSqlFile) {
   return splitSqlStatements(stripSqlComments(file.content));
 }
@@ -657,6 +715,7 @@ export function validateMigrationSql(files: readonly MigrationSqlFile[]) {
     assertCreatedTablesAreProtected(file, statements);
     assertDroppedObjectsAreRecreated(file, statements);
   }
+  assertSecurityDefinerPrivileges(files, allStatements);
 
   const effectivePolicies = new Map<
     string,

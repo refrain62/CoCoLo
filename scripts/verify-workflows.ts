@@ -287,7 +287,11 @@ const trustedPrSteps: readonly StepPolicy[] = [
   {
     kind: 'uses',
     action: `actions/checkout@${actionAllowlist['actions/checkout']}`,
-    withValues: { 'persist-credentials': false },
+    withValues: {
+      ref: githubExpression('github.event.pull_request.base.sha'),
+      'fetch-depth': 1,
+      'persist-credentials': false,
+    },
   },
   {
     kind: 'uses',
@@ -296,7 +300,92 @@ const trustedPrSteps: readonly StepPolicy[] = [
   },
   {
     kind: 'run',
-    envValues: { GH_TOKEN: githubExpression('github.token') },
+    envValues: {
+      GH_TOKEN: githubExpression('github.token'),
+      TRUSTED_BASE_SHA: githubExpression('github.event.pull_request.base.sha'),
+    },
+  },
+];
+
+const databaseIntegritySteps: readonly StepPolicy[] = [
+  {
+    kind: 'uses',
+    action: `actions/checkout@${actionAllowlist['actions/checkout']}`,
+    withValues: { 'fetch-depth': 0, 'persist-credentials': false },
+  },
+  {
+    kind: 'uses',
+    action: `pnpm/action-setup@${actionAllowlist['pnpm/action-setup']}`,
+    withValues: { version: '10.26.0' },
+  },
+  {
+    kind: 'uses',
+    action: `actions/setup-node@${actionAllowlist['actions/setup-node']}`,
+    withValues: { 'node-version': 24 },
+  },
+  { kind: 'run' },
+  { kind: 'run' },
+  {
+    kind: 'run',
+    envValues: {
+      BASE_SHA: githubExpression(
+        "github.event.pull_request.base.sha || github.event.before || inputs.base_sha || ''",
+      ),
+    },
+  },
+  {
+    kind: 'run',
+    envValues: {
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/cocolo_test',
+    },
+  },
+  {
+    kind: 'run',
+    envValues: {
+      DATABASE_URL:
+        'postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test',
+      DIRECT_URL: 'postgresql://postgres:postgres@localhost:5432/cocolo_test',
+    },
+  },
+  {
+    kind: 'run',
+    envValues: {
+      DATABASE_URL:
+        'postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test',
+      DIRECT_URL: 'postgresql://postgres:postgres@localhost:5432/cocolo_test',
+    },
+  },
+  { kind: 'run' },
+  {
+    kind: 'run',
+    envValues: {
+      DIRECT_URL: 'postgresql://postgres:postgres@localhost:5432/cocolo_test',
+    },
+  },
+  {
+    kind: 'run',
+    envValues: {
+      APP_ENV: 'local',
+      DATABASE_URL:
+        'postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test',
+      DIRECT_URL: 'postgresql://postgres:postgres@localhost:5432/cocolo_test',
+      SHADOW_DATABASE_URL:
+        'postgresql://postgres:postgres@localhost:5432/cocolo_shadow',
+    },
+  },
+  {
+    kind: 'run',
+    envValues: {
+      DIRECT_URL: 'postgresql://postgres:postgres@localhost:5432/cocolo_test',
+    },
+  },
+  {
+    kind: 'run',
+    envValues: {
+      DATABASE_URL:
+        'postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test',
+      DIRECT_URL: 'postgresql://postgres:postgres@localhost:5432/cocolo_test',
+    },
   },
 ];
 
@@ -392,6 +481,7 @@ const safeExpressionBodies = new Set([
   'github.event.pull_request.number || github.ref',
   "github.event_name == 'pull_request'",
   "github.event.pull_request.base.sha || github.event.before || inputs.base_sha || ''",
+  'github.event.pull_request.base.sha',
   'github.sha',
   'github.token',
   'inputs.artifact_sha',
@@ -464,12 +554,20 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
               'pr-trust-gate.yml.jobs.trusted-validation.steps[2].env.GH_TOKEN',
           `${location}: github.tokenはEnvironment保護の読み取り専用CLI用途だけに限定します`,
         );
+      if (body === 'github.event.pull_request.base.sha')
+        assert.ok(
+          location.endsWith('.with.ref') ||
+            location.endsWith('.env.TRUSTED_BASE_SHA'),
+          `${location}: PR base SHAはcheckout refとtrust検査の固定値だけに使えます`,
+        );
       if (body === 'inputs.artifact_sha')
         assert.ok(
           location ===
             'production-promote.yml.jobs.production.steps[2].env.ARTIFACT_SHA' ||
             location ===
               'production-promote.yml.jobs.production.steps[9].env.ARTIFACT_SHA' ||
+            location ===
+              'production-promote.yml.jobs.production.steps[10].env.ARTIFACT_SHA' ||
             location ===
               'production-promote.yml.jobs.production.steps[1].with.ref',
           `${location}: 手動入力を許可されたproductionのSHA用途以外へ渡せません`,
@@ -546,10 +644,45 @@ function validateSteps(
   job: WorkflowRecord,
   steps: readonly StepPolicy[],
 ): void {
-  const actualSteps = asArray(
+  const parsedSteps = asArray(
     job.steps,
     `${workflowName}.jobs: stepsは配列が必要です`,
   );
+  const actualSteps = [...parsedSteps];
+  if (
+    workflowName === 'staging-deploy.yml' ||
+    workflowName === 'production-promote.yml'
+  ) {
+    const historyIndexes = actualSteps.flatMap((step, index) => {
+      const record = asRecord(
+        step,
+        `${workflowName}.jobs.steps[${String(index)}]`,
+      );
+      return record.run === 'pnpm verify:migration-history' ? [index] : [];
+    });
+    assert.ok(
+      historyIndexes.length <= 1,
+      `${workflowName}: migration履歴stepを重複させてはいけません`,
+    );
+    const historyIndex = historyIndexes[0];
+    if (historyIndex !== undefined) {
+      const historyStep = asRecord(
+        actualSteps[historyIndex],
+        `${workflowName}.jobs.steps[${String(historyIndex)}]`,
+      );
+      assertExactKeys(
+        historyStep,
+        ['name', 'run', 'env'],
+        `${workflowName}.migration-history`,
+      );
+      assertExactRecord(
+        historyStep.env,
+        { DIRECT_URL: githubExpression('secrets.DIRECT_URL') },
+        `${workflowName}.migration-history.env`,
+      );
+      actualSteps.splice(historyIndex, 1);
+    }
+  }
   assert.equal(
     actualSteps.length,
     steps.length,
@@ -589,6 +722,45 @@ function validateQualityServices(job: WorkflowRecord): void {
       POSTGRES_DB: 'cocolo_test',
     },
     'quality.yml.jobs.quality.services.postgres.env',
+  );
+  assert.deepEqual(postgres.ports, ['5432:5432']);
+  assert.equal(
+    postgres.options,
+    '--health-cmd "pg_isready -U postgres -d cocolo_test" --health-interval 10s --health-timeout 5s --health-retries 5',
+  );
+}
+
+function validateDatabaseIntegrityServices(job: WorkflowRecord): void {
+  const services = asRecord(
+    job.services,
+    'database-integrity.yml.jobs.database-integrity.services: objectが必要です',
+  );
+  assertExactKeys(
+    services,
+    ['postgres'],
+    'database-integrity.yml.jobs.database-integrity.services',
+  );
+  const postgres = asRecord(
+    services.postgres,
+    'database-integrity.yml.services.postgres: objectが必要です',
+  );
+  assertExactKeys(
+    postgres,
+    ['image', 'env', 'ports', 'options'],
+    'database-integrity.yml.services.postgres',
+  );
+  assert.equal(
+    postgres.image,
+    'postgres:17@sha256:a65e6a841f6c4dbc4abda3d67fa3bc21824e9611064fcd82e87ea67aad60a0c3',
+  );
+  assertExactRecord(
+    postgres.env,
+    {
+      POSTGRES_USER: 'postgres',
+      POSTGRES_PASSWORD: 'postgres',
+      POSTGRES_DB: 'cocolo_test',
+    },
+    'database-integrity.yml.services.postgres.env',
   );
   assert.deepEqual(postgres.ports, ['5432:5432']);
   assert.equal(
@@ -820,6 +992,103 @@ function validateTrustedPrWorkflowDocument(workflow: WorkflowRecord): void {
   validateSteps('pr-trust-gate.yml', job, trustedPrSteps);
 }
 
+function validateDatabaseIntegrityWorkflowDocument(
+  workflow: WorkflowRecord,
+): void {
+  assertExactKeys(
+    workflow,
+    ['name', 'on', 'permissions', 'concurrency', 'jobs'],
+    'database-integrity.yml',
+  );
+  assert.equal(workflow.name, 'DB整合性ゲート');
+  const triggers = asRecord(workflow.on, 'database-integrity.yml.on');
+  assertExactKeys(
+    triggers,
+    ['pull_request', 'push', 'workflow_call'],
+    'database-integrity.yml.on',
+  );
+  assert.equal(triggers.pull_request, null);
+  assertExactRecord(
+    triggers.push,
+    { branches: ['develop', 'main'] },
+    'database-integrity.yml.on.push',
+  );
+  assertExactRecord(
+    triggers.workflow_call,
+    { inputs: { base_sha: { required: true, type: 'string' } } },
+    'database-integrity.yml.on.workflow_call',
+  );
+  assertExactRecord(
+    workflow.permissions,
+    { contents: 'read' },
+    'database-integrity.yml.permissions',
+  );
+  assertExactRecord(
+    workflow.concurrency,
+    {
+      group: [
+        'database-integrity-',
+        githubExpression('github.workflow'),
+        '-',
+        githubExpression('github.event.pull_request.number || github.ref'),
+      ].join(''),
+      'cancel-in-progress': githubExpression(
+        "github.event_name == 'pull_request'",
+      ),
+    },
+    'database-integrity.yml.concurrency',
+  );
+  const jobs = asRecord(workflow.jobs, 'database-integrity.yml.jobs');
+  assertExactKeys(jobs, ['database-integrity'], 'database-integrity.yml.jobs');
+  const job = asRecord(
+    jobs['database-integrity'],
+    'database-integrity.yml.jobs.database-integrity',
+  );
+  assertExactKeys(
+    job,
+    ['runs-on', 'timeout-minutes', 'services', 'steps'],
+    'database-integrity.yml.jobs.database-integrity',
+  );
+  assert.equal(job['runs-on'], 'ubuntu-24.04');
+  assert.equal(job['timeout-minutes'], 15);
+  validateDatabaseIntegrityServices(job);
+  validateSteps('database-integrity.yml', job, databaseIntegritySteps);
+  const steps = asArray(job.steps, 'database-integrity.yml.jobs.steps');
+  const staticStep = asRecord(steps[5], 'database-integrity.yml.jobs.steps[5]');
+  assert.match(
+    String(staticStep.run ?? ''),
+    /verify:migration-baseline[\s\S]+verify:migration-checksum[\s\S]+verify:migration-sql[\s\S]+test:database-integrity/,
+    'database-integrity.yml: migration・DB fixture検査を必須接続してください',
+  );
+  const historyStep = asRecord(
+    steps[10],
+    'database-integrity.yml.jobs.steps[10]',
+  );
+  assert.equal(
+    historyStep.run,
+    'pnpm verify:migration-history',
+    'database-integrity.yml: DIRECT_URL履歴照合が必要です',
+  );
+  const driftStep = asRecord(
+    steps[11],
+    'database-integrity.yml.jobs.steps[11]',
+  );
+  assert.equal(
+    driftStep.run,
+    'pnpm verify:schema-drift',
+    'database-integrity.yml: schema drift検査が必要です',
+  );
+  const securityStep = asRecord(
+    steps[12],
+    'database-integrity.yml.jobs.steps[12]',
+  );
+  assert.equal(
+    securityStep.run,
+    'pnpm verify:database-security',
+    'database-integrity.yml: DB security検査が必要です',
+  );
+}
+
 // 全Workflowの許可構造を検査する。未知のWorkflow名も実行経路の追加とみなして拒否する。
 export function validateWorkflow(name: WorkflowName, content: string): void {
   const workflow = parseWorkflow(name, content);
@@ -829,6 +1098,8 @@ export function validateWorkflow(name: WorkflowName, content: string): void {
   if (name === 'production-promote.yml')
     validateProductionWorkflowDocument(workflow);
   if (name === 'pr-trust-gate.yml') validateTrustedPrWorkflowDocument(workflow);
+  if (name === 'database-integrity.yml')
+    validateDatabaseIntegrityWorkflowDocument(workflow);
   assertNoUntrustedExpressions(workflow, name);
 }
 
@@ -841,13 +1112,22 @@ async function main(): Promise<void> {
   const files = (await readdir(directory)).filter(
     (name) => name.endsWith('.yml') || name.endsWith('.yaml'),
   );
+  const requiredWorkflowFiles = workflowFiles.filter(
+    (name) => name !== 'database-integrity.yml',
+  );
+  const expectedWorkflowFiles = files.includes('database-integrity.yml')
+    ? [...requiredWorkflowFiles, 'database-integrity.yml']
+    : requiredWorkflowFiles;
   assert.deepEqual(
     files.sort(),
-    [...workflowFiles].sort(),
+    expectedWorkflowFiles.sort(),
     '.github/workflowsには許可されたWorkflowだけを配置してください',
   );
-  for (const file of workflowFiles)
-    validateWorkflow(file, await readFile(path.join(directory, file), 'utf8'));
+  for (const file of files)
+    validateWorkflow(
+      file as WorkflowName,
+      await readFile(path.join(directory, file), 'utf8'),
+    );
   console.log('GitHub Actions のWorkflow構造と信頼境界を検証しました。');
 }
 
