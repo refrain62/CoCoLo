@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 
+// 環境変数未設定のlocalでも既定接続先を使ってschemaを検証し、migration URL不備を早期検出する。
 const command = process.platform === 'win32' ? 'prisma.cmd' : 'prisma';
 const result = spawnSync(command, ['validate'], {
   stdio: 'inherit',

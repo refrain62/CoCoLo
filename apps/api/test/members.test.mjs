@@ -75,7 +75,7 @@ test('未認証の部員一覧は401で拒否する', async () => {
   assertError(await readJson(response), 'UNAUTHENTICATED');
 });
 
-test('JWTの所属テナントを無視したtenantId指定は400で拒否する', async () => {
+test('JWT の所属テナントを無視した tenantId の指定は400で拒否する', async () => {
   const response = await createTestApp().request('/api/v1/members', {
     method: 'POST',
     headers: {
@@ -94,7 +94,7 @@ test('JWTの所属テナントを無視したtenantId指定は400で拒否する
   assertError(await readJson(response), 'VALIDATION_ERROR');
 });
 
-test('staffによる部員登録は403で拒否する', async () => {
+test('staff 権限による部員登録は403で拒否する', async () => {
   const response = await createTestApp().request('/api/v1/members', {
     method: 'POST',
     headers: {
@@ -131,7 +131,7 @@ test('不正な学年と特記事項を含む登録は400で拒否する', async
   assertError(await readJson(response), 'VALIDATION_ERROR');
 });
 
-test('studentに年代を指定した登録は400で拒否する', async () => {
+test('学生に年代を指定した登録は400で拒否する', async () => {
   const response = await createTestApp().request('/api/v1/members', {
     method: 'POST',
     headers: {
@@ -150,7 +150,7 @@ test('studentに年代を指定した登録は400で拒否する', async () => {
   assertError(await readJson(response), 'VALIDATION_ERROR');
 });
 
-test('adultに学年を指定した登録は400で拒否する', async () => {
+test('一般に学年を指定した登録は400で拒否する', async () => {
   const response = await createTestApp().request('/api/v1/members', {
     method: 'POST',
     headers: {
@@ -169,7 +169,7 @@ test('adultに学年を指定した登録は400で拒否する', async () => {
   assertError(await readJson(response), 'VALIDATION_ERROR');
 });
 
-test('ownerの一覧はmembershipで解決したtenant内だけを返す', async () => {
+test('owner の一覧は所属情報で解決したテナント内だけを返す', async () => {
   const response = await createTestApp().request('/api/v1/members', {
     headers: { authorization: 'Bearer owner-a' },
   });
@@ -181,7 +181,7 @@ test('ownerの一覧はmembershipで解決したtenant内だけを返す', async
   assert.equal(payload.data[0].id, MEMBER_A);
 });
 
-test('guardianの一覧は担当部員の最小項目だけを返す', async () => {
+test('guardian の一覧は担当部員の最小項目だけを返す', async () => {
   const response = await createTestApp().request('/api/v1/members', {
     headers: { authorization: 'Bearer guardian-a' },
   });
@@ -198,7 +198,7 @@ test('guardianの一覧は担当部員の最小項目だけを返す', async () 
   ]);
 });
 
-test('ownerの登録はmembershipのtenantで作成し、noteを永続化しない', async () => {
+test('owner の登録は所属情報のテナントで作成し、note を永続化しない', async () => {
   const response = await createTestApp().request('/api/v1/members', {
     method: 'POST',
     headers: {
@@ -221,7 +221,7 @@ test('ownerの登録はmembershipのtenantで作成し、noteを永続化しな�
   assert.equal(payload.data.note, undefined);
 });
 
-test('repositoryの予期せぬ失敗はrequestId付きの500へ収束する', async () => {
+test('リポジトリの予期しない失敗は requestId 付きの500へ収束する', async () => {
   const app = createApp({
     verifyToken: async () => ({
       userId: 'owner-a',

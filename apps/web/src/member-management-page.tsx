@@ -59,14 +59,15 @@ function formatMemberStatus(status: MemberStatus) {
   return statusLabels[status];
 }
 
+// UI入力をAPI契約と同じ区分排他・範囲条件へ正規化し、送信前に利用者へ即時通知する。
 function validateForm(form: MemberFormState): MemberCreateInput {
   const name = form.name.trim();
-  if (!name) throw new Error('氏名を入力してください');
+  if (!name) throw new Error('氏名を入力してください。');
   if (form.category === 'student') {
-    if (!form.gradeLevel) throw new Error('学年を入力してください');
+    if (!form.gradeLevel) throw new Error('学年を入力してください。');
     const gradeLevel = Number(form.gradeLevel);
     if (!Number.isInteger(gradeLevel) || gradeLevel < 1 || gradeLevel > 16)
-      throw new Error('学年は1〜16で入力してください');
+      throw new Error('学年は1〜16で入力してください。');
     return {
       name,
       kana: form.kana.trim() || null,
@@ -78,7 +79,7 @@ function validateForm(form: MemberFormState): MemberCreateInput {
   }
 
   const ageGroup = form.ageGroup.trim();
-  if (!ageGroup) throw new Error('年代を入力してください');
+  if (!ageGroup) throw new Error('年代を入力してください。');
   return {
     name,
     kana: form.kana.trim() || null,
@@ -139,6 +140,7 @@ function MemberForm({
   api: MemberApi;
   onCreated: (member: MemberSummary) => void;
 }) {
+  // 入力中の状態はフォーム内に閉じ込め、API成功時だけ親の一覧へ新しい部員を反映する。
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -170,7 +172,7 @@ function MemberForm({
       const created = await api.create(input);
       onCreated(created);
       setForm(initialForm);
-      setSuccess('登録しました');
+      setSuccess('登録しました。');
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     } finally {
@@ -321,7 +323,7 @@ function PromotionPanel({ api }: { api: MemberApi }) {
         crypto.randomUUID(),
       );
       setPreview(result);
-      setSuccess(`${result.promotedCount}名の年度繰り上げを完了しました`);
+      setSuccess(`${result.promotedCount}名の年度繰り上げを完了しました。`);
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     } finally {
@@ -333,10 +335,10 @@ function PromotionPanel({ api }: { api: MemberApi }) {
     <section aria-labelledby="promotion-heading">
       <h2 id="promotion-heading">年度繰り上げ</h2>
       <p>
-        管理者向け操作です。在籍中の学生だけを対象にし、一般・停止・退部・学年未設定は対象外です。
+        オーナーまたは管理者向けの操作です。在籍中の学生だけを対象にし、一般・停止・退部・学年未設定は対象外です。
       </p>
       <p>
-        17以上は「OB /
+        学年が17以上の場合は「OB /
         院生」と表示します。卒業・留年は自動判定せず、退部者も変更しません。
       </p>
       <form onSubmit={previewPromotion}>
@@ -378,6 +380,7 @@ function PromotionPanel({ api }: { api: MemberApi }) {
   );
 }
 
+// 部員一覧・検索・登録の画面状態を管理し、データ取得の認可はMemberApi/APIへ委譲する。
 export function MemberManagementPage({
   api = defaultMemberApi,
 }: {
@@ -389,6 +392,7 @@ export function MemberManagementPage({
   const [listError, setListError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
 
+  // 初回表示と検索を同じ経路にし、loading/error状態を必ずリクエスト単位で更新する。
   const loadMembers = useCallback(
     async (nextFilters: MemberListFilters) => {
       setIsLoading(true);
@@ -420,7 +424,7 @@ export function MemberManagementPage({
   return (
     <>
       <header>
-        <p>環境: {environment}</p>
+        <p>接続環境: {environment}</p>
         <h1>部員一覧</h1>
         <p>所属チームの部員を確認・登録できます。</p>
       </header>

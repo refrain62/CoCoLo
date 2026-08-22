@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// API/Web、DB schema、migrationを同一artifactへ梱包し、SHA-256を後続環境でも再検証できる形にする。
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const output =
   process.argv[process.argv.indexOf('--output') + 1] ??
@@ -12,7 +13,7 @@ const artifactSha =
   process.argv[process.argv.indexOf('--artifact-sha') + 1] ??
   process.env.ARTIFACT_SHA;
 if (!artifactSha || !/^[0-9a-f]{40}$/.test(artifactSha))
-  throw new Error('artifact SHAは40桁の小文字SHA-1で指定してください');
+  throw new Error('成果物の SHA は40桁の小文字 SHA-1 で指定してください。');
 
 await mkdir(output, { recursive: true });
 const manifest = {
@@ -43,7 +44,7 @@ const tarResult = spawnSync(
 );
 if (tarResult.error) throw tarResult.error;
 if (tarResult.status !== 0)
-  throw new Error('release artifactの作成に失敗しました');
+  throw new Error('リリース成果物の作成に失敗しました。');
 const digest = createHash('sha256')
   .update(await readFile(archive))
   .digest('hex');
@@ -52,4 +53,4 @@ await writeFile(
   `${digest}  release.tar.gz\n`,
   'utf8',
 );
-console.log(`immutable release artifactを ${output} に作成しました。`);
+console.log(`固定したリリース成果物を ${output} に作成しました。`);

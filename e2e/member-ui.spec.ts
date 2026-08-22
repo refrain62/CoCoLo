@@ -53,7 +53,7 @@ test('部員一覧は検索条件を送り、公開項目だけを表示する',
   expect(requests.at(-1)?.authorization).toBe('Bearer test-access-token');
 });
 
-test('部員登録はstudentの必須項目を検証し、tenant情報を送らない', async ({
+test('部員登録は学生の必須項目を検証し、テナント情報を送らない', async ({
   page,
 }) => {
   let postBody: Record<string, unknown> | undefined;

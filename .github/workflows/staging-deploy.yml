@@ -25,7 +25,7 @@ jobs:
           cache: pnpm
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
-      - name: staging環境を検証
+      - name: staging環境の設定を検証
         run: pnpm verify:environment --expected staging
         env:
           APP_ENV: staging
@@ -39,12 +39,12 @@ jobs:
           R2_BUCKET: cocolo-staging-private
           PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
           PUBLIC_APP_URL_ALLOWLIST: ${{ vars.PUBLIC_APP_URL_ALLOWLIST }}
-      - name: staging RLS用roleを準備
+      - name: staging環境のRLS用ロールを準備
         run: pnpm db:prepare:test
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-      - name: staging migrationを適用
+      - name: staging環境へマイグレーションを適用
         run: pnpm --filter @cocolo/db exec prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -53,48 +53,48 @@ jobs:
         run: pnpm verify:database-version --expected-major 17
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - name: staging fixtureを投入
+      - name: staging環境へテストデータを投入
         run: pnpm db:seed:test
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-      - name: アプリとmigrationのimmutable artifactを作成
+      - name: アプリとマイグレーションの固定リリース成果物を作成
         run: pnpm build && pnpm package:release --artifact-sha "${GITHUB_SHA}" --output .release
         env:
           ARTIFACT_SHA: ${{ github.sha }}
           VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      - name: release artifactを検証
+      - name: リリース成果物を検証
         run: pnpm verify:release --release-dir .release --artifact-sha "${GITHUB_SHA}"
-      - name: release provenanceを生成
+      - name: リリースの出所証明を生成
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
           subject-path: .release/release.tar.gz
-      - name: stagingへ配置
+      - name: staging環境へ配置
         run: pnpm deploy:staging --artifact-sha "${GITHUB_SHA}" --release-dir .release
         env:
           STAGING_DEPLOY_ADAPTER: ${{ secrets.STAGING_DEPLOY_ADAPTER }}
-      - name: staging E2E smoke
+      - name: staging環境のE2Eスモークテスト
         run: pnpm test:e2e:staging
         env:
           APP_ENV: staging
           STAGING_BASE_URL: ${{ vars.PUBLIC_APP_URL }}
           E2E_TEST_EMAIL: ${{ secrets.STAGING_E2E_TEST_EMAIL }}
           E2E_TEST_PASSWORD: ${{ secrets.STAGING_E2E_TEST_PASSWORD }}
-      - name: staging evidenceを作成
+      - name: staging環境の配置証跡を作成
         run: node scripts/create-staging-evidence.mjs
         env:
           ARTIFACT_SHA: ${{ github.sha }}
           STAGING_BASE_URL: ${{ vars.PUBLIC_APP_URL }}
           STAGING_DEPLOYMENT_RECORD: .release/deployment-record.json
-      - name: release artifactを保存
+      - name: リリース成果物を保存
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: release-${{ github.sha }}
           path: .release
           if-no-files-found: error
           retention-days: 14
-      - name: staging evidenceを保存
+      - name: staging環境の配置証跡を保存
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: staging-evidence-${{ github.sha }}

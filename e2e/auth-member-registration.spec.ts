@@ -11,7 +11,7 @@ test('管理者はログイン後に部員を登録でき、APIへBearer token�
 }) => {
   if (!email || !password)
     throw new Error(
-      'staging E2EにはE2E_TEST_EMAILとE2E_TEST_PASSWORDが必要です。',
+      'staging 環境の E2E テストには E2E_TEST_EMAIL と E2E_TEST_PASSWORD が必要です。',
     );
 
   const memberRequests: string[] = [];

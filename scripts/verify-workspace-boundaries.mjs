@@ -6,6 +6,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const sourceExtensions = new Set(['.js', '.mjs', '.ts', '.tsx']);
 const ignored = new Set(['node_modules', 'dist', 'coverage', '.git']);
 
+// 依存境界検査の対象ファイルを再帰的に収集し、生成物や管理対象外のディレクトリは除外する。
 async function filesUnder(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
@@ -19,6 +20,7 @@ async function filesUnder(directory) {
   return files;
 }
 
+// Web/API/domain/contractsの依存方向と、production codeからtest fixtureへの参照禁止を宣言する。
 const rules = [
   {
     scope: 'apps/web',
@@ -59,7 +61,7 @@ for (const file of await filesUnder(root)) {
     content.includes('@cocolo/test-fixtures')
   ) {
     violations.push(
-      `${relative}: production code から test-fixtures を参照しています`,
+      `${relative}: 本番コードから test-fixtures を参照しています`,
     );
   }
   if (
@@ -74,4 +76,4 @@ if (violations.length) {
   console.error(violations.join('\n'));
   process.exit(1);
 }
-console.log('workspace依存境界を検証しました。');
+console.log('ワークスペースの依存境界を検証しました。');

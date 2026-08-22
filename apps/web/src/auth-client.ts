@@ -36,6 +36,7 @@ type AuthClientOptions = {
   fetcher?: typeof fetch;
 };
 
+// Auth providerのエラー形式を画面で扱えるAuthApiErrorへ変換し、内部レスポンスを直接表示しない。
 async function readError(response: Response) {
   const body = (await response.json().catch(() => ({}))) as AuthErrorResponse;
   return new AuthApiError(
@@ -47,6 +48,8 @@ async function readError(response: Response) {
   );
 }
 
+// localでは相対URLをVite proxyへ送り、staging/productionではSupabase Authへ接続する。
+// anon keyは公開値だが、access token以外のserver-only secretはこのclientへ渡さない。
 export function createAuthClient({
   baseUrl = import.meta.env.VITE_SUPABASE_URL ?? '',
   anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
@@ -59,7 +62,7 @@ export function createAuthClient({
       if (baseUrl && !anonKey)
         throw new AuthApiError(
           503,
-          'Supabase Authの公開キーが設定されていません。',
+          'Supabase Auth の公開鍵が設定されていません。',
         );
       const response = await fetcher(endpoint, {
         method: 'POST',

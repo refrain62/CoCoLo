@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 
+// local開発時だけAPI/Authを同一origin風に見せ、ブラウザへserver-only設定を公開しない。
 export default defineConfig({
   server: {
     port: 5173,

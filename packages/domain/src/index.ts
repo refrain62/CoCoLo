@@ -1,5 +1,6 @@
 export type MemberCategory = 'student' | 'adult';
 
+// 業務仕様の学年表示を一元化し、studentは学年、adultは年代、17以上はOB表示に変換する。
 export function formatGrade(
   category: MemberCategory,
   gradeLevel: number | null,
@@ -41,6 +42,7 @@ export type PromotionCandidate = PromotionMember & {
   status: 'active';
 };
 
+// 年度繰り上げの対象条件（student・active・学年あり）だけを判定する。
 export function isPromotionCandidate(
   input: PromotionMember,
 ): input is PromotionCandidate {

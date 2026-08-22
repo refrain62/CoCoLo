@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// migrationの文字コード・改行・日本語COMMENT・RLS・grant・tenant複合FKをCIで一括検査する。
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const migrationsRoot = path.join(
   root,
@@ -17,7 +18,7 @@ const migrations = await readdir(migrationsRoot, { withFileTypes: true }).catch(
 const sqlFiles = migrations
   .filter((entry) => entry.isDirectory())
   .map((entry) => path.join(migrationsRoot, entry.name, 'migration.sql'));
-assert.ok(sqlFiles.length > 0, 'migration.sql が1件以上必要です');
+assert.ok(sqlFiles.length > 0, 'migration.sql が1件以上必要です。');
 
 const sqlContents = [];
 for (const file of sqlFiles) {
@@ -33,4 +34,4 @@ assert.match(allSql, /ALTER TABLE\s+[a-z_]+\s+ENABLE ROW LEVEL SECURITY/);
 assert.match(allSql, /ALTER TABLE\s+[a-z_]+\s+FORCE ROW LEVEL SECURITY/);
 assert.match(allSql, /GRANT\s+.*\s+TO\s+cocolo_app/);
 assert.match(allSql, /FOREIGN KEY\s*\([^)]*tenant_id[^)]*\)/i);
-console.log(`migration SQL ${sqlFiles.length}件を検証しました。`);
+console.log(`マイグレーション SQL ${sqlFiles.length} 件を検証しました。`);

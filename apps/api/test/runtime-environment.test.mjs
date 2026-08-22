@@ -35,7 +35,7 @@ test('APP_ENV未設定でAPI起動を許可しない', () => {
 
   assert.throws(
     () => readRuntimeEnvironment(environment),
-    /APP_ENV は local \/ staging \/ production のいずれかが必要です/,
+    /APP_ENV には local \/ staging \/ production のいずれかを指定してください。/,
   );
 });
 
@@ -46,7 +46,7 @@ test('SUPABASE_ISSUERの環境上書きが正本と異なる場合は拒否す�
         ...validStagingEnvironment,
         SUPABASE_ISSUER: 'https://another-project.supabase.co/auth/v1',
       }),
-    /SUPABASE_ISSUERがSUPABASE_URLから解決したissuerと一致しません/,
+    /SUPABASE_ISSUER が SUPABASE_URL から生成した発行者 URL と一致しません。/,
   );
 });
 
@@ -57,6 +57,6 @@ test('stagingのSupabase許可値が実値と異なる場合は拒否する', ()
         ...validStagingEnvironment,
         SUPABASE_ALLOWED_URL: 'https://production.example.supabase.co',
       }),
-    /SUPABASE_URLが許可された環境値と一致しません/,
+    /SUPABASE_URL が許可された環境値と一致しません。/,
   );
 });

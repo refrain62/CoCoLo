@@ -1,5 +1,7 @@
 # デプロイ配置アダプター契約
 
+全体の手順、GitHub Environment設定、stagingからproductionへの昇格、障害対応は [デプロイ運用手順](deployment-guide.md) を参照してください。この文書では、外部サービス固有の配置アダプターとの入出力契約を定義します。
+
 ## 1. 目的
 
 staging / production の実配置先は環境固有の外部サービスへ依存するため、GitHub Actions の workflow にサービス固有の実装を埋め込みません。workflow は検証済み成果物、対象環境、配置結果だけを扱い、実際の配置処理は環境ごとの配置アダプターへ委譲します。
@@ -8,11 +10,11 @@ staging / production の実配置先は環境固有の外部サービスへ依�
 
 ## 2. 入力契約
 
-GitHub Environment の protected secret または承認済みの実行環境から、環境ごとに実行可能なアダプターを指定します。アダプターは次の引数を受け取ります。
+GitHub Environment の保護されたsecretまたは承認済みの実行環境から、環境ごとに実行可能な配置アダプターを指定します。アダプターは次の引数を受け取ります。
 
 ```text
---artifact-sha <40桁のcommit SHA>
---release-dir <release directory>
+--artifact-sha <40桁の commit SHA>
+--release-dir <リリースディレクトリ>
 --environment staging|production
 ```
 
@@ -30,10 +32,10 @@ GitHub Environment の protected secret または承認済みの実行環境か�
 ```json
 {
   "status": "success",
-  "artifactSha": "配置したcommit SHA",
+  "artifactSha": "配置した commit SHA",
   "environment": "stagingまたはproduction",
-  "deployedUrl": "httpsの公開URL",
-  "deployedAt": "ISO 8601の配置時刻"
+  "deployedUrl": "HTTPS の公開 URL",
+  "deployedAt": "ISO 8601 形式の配置時刻"
 }
 ```
 

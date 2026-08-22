@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// 必須workflowの存在と、Actions参照が40桁SHA固定であることを検査する。
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const directory = path.join(root, '.github', 'workflows');
 const files = await readdir(directory).catch(() => []);
@@ -23,8 +24,8 @@ for (const file of files.filter(
     assert.match(
       match[2],
       /^[0-9a-f]{40}$/,
-      `${file}: ActionはSHA固定が必要です: ${match[1]}`,
+      `${file}: Action は SHA 固定が必要です: ${match[1]}`,
     );
   }
 }
-console.log('GitHub Actions workflowを検証しました。');
+console.log('GitHub Actions のワークフローを検証しました。');
