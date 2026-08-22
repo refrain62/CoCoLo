@@ -267,6 +267,25 @@ test('security scannerのrun block、権限、Action改変を拒否する', () =
   });
 });
 
+test('pushのscanner trustはevent.beforeと現在SHAを分離する', () => {
+  assert.match(
+    securityWorkflow,
+    /TRUST_BASE_SHA: \$\{\{ github\.event_name == 'push' && github\.event\.before/,
+  );
+  assert.match(
+    securityWorkflow,
+    /TRUST_HEAD_SHA: \$\{\{ github\.event_name == 'push' && github\.sha/,
+  );
+  assert.match(
+    securityWorkflow,
+    /TRUST_BASE_SHA.*0000000000000000000000000000000000000000/s,
+  );
+  assert.doesNotMatch(
+    securityWorkflow,
+    /TRUST_BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.sha \}\}/,
+  );
+});
+
 test('検査用package scriptの差し替えを拒否する', () => {
   assert.throws(() =>
     validatePackageScripts({

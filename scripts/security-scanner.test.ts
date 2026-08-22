@@ -284,4 +284,14 @@ test('固定malicious fixtureのscanner信頼対象改変を拒否する', async
       ),
     /hashが欠落しています/,
   );
+  assert.throws(
+    () =>
+      assertTrustedFileHashes(
+        '0'.repeat(40),
+        'b'.repeat(40),
+        baseHashes,
+        baseHashes,
+      ),
+    /ゼロSHA/,
+  );
 });
