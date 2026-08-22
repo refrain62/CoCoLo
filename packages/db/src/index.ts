@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   type PromotionMember,
   PromotionPlanningError,
@@ -32,6 +32,15 @@ export class PromotionConflictError extends Error {
   }
 }
 
+export class MemberConflictError extends Error {
+  readonly status = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'MemberConflictError';
+  }
+}
+
 export type MemberListQuery = {
   q?: string;
   status?: 'active' | 'suspended' | 'retired';
@@ -40,6 +49,14 @@ export type MemberListQuery = {
   pageSize: number;
 };
 export type MemberCreateInput = {
+  name: string;
+  kana?: string | null;
+  category: 'student' | 'adult';
+  gradeLevel?: number | null;
+  ageGroup?: string | null;
+  status: 'active' | 'suspended';
+};
+export type MemberUpdateInput = {
   name: string;
   kana?: string | null;
   category: 'student' | 'adult';
@@ -58,6 +75,60 @@ export type MemberRecord = {
   status: 'active' | 'suspended' | 'retired';
   createdAt: Date;
 };
+
+export type LineDeliveryEnqueueInput = {
+  id: string;
+  tenantId: string;
+  actorUserId: string;
+  role: MemberRole;
+  sourceType: string;
+  sourceId: string;
+  destination: string;
+  title: string;
+  body: string;
+  deepLink: string;
+  idempotencyKey: string;
+};
+
+export type LineDeliveryProducerInput = {
+  tenantId: string;
+  actorUserId: string;
+  role: MemberRole;
+  sourceId: string;
+  destination: string;
+  title: string;
+  body: string;
+  deepLink: string;
+  idempotencyKey: string;
+};
+
+export type LineDeliveryProducer = {
+  publish: (
+    input: LineDeliveryProducerInput,
+  ) => Promise<{ notificationId: string }>;
+};
+
+export class LineDeliveryConflictError extends Error {
+  readonly status = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'LineDeliveryConflictError';
+  }
+}
+
+// 同一tenant内の別sourceによる冪等キーunique競合も、業務APIの409契約へ変換する。
+function isLineDeliveryConflict(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (/冪等キー|payload/.test(error.message)) return true;
+  const code =
+    'code' in error && typeof error.code === 'string' ? error.code : undefined;
+  return (
+    code === 'P2002' ||
+    (code === 'P2010' && /23505|unique constraint/i.test(error.message)) ||
+    /line_delivery_outbox_idempotency_idx/i.test(error.message)
+  );
+}
 
 const memberSelect = {
   id: true,
@@ -89,6 +160,41 @@ async function setRlsContext(
       set_config('app.user_id', ${input.userId}, true),
       set_config('app.role', ${input.role}, true)
   `;
+}
+
+// 業務transaction内でmembershipをロックしてからoutboxへ登録し、業務更新と通知依頼を原子化する。
+export async function enqueueLineDelivery(
+  client: Prisma.TransactionClient,
+  input: LineDeliveryEnqueueInput,
+): Promise<string> {
+  await setRlsContext(client, {
+    tenantId: input.tenantId,
+    userId: input.actorUserId,
+    role: input.role,
+  });
+  // SECURITY DEFINER側のapp_enqueue_line_deliveryが同じmembership行をFOR UPDATEでロックする。
+  // cocolo_appへmembership UPDATE policyを与えず、ロックのための権限拡大を防ぐ。
+  const memberships = await client.$queryRaw<
+    Array<{ role: Role; status: string }>
+  >`
+    SELECT role, status
+      FROM tenant_memberships
+     WHERE tenant_id = ${input.tenantId}::uuid
+       AND user_id = ${input.actorUserId}
+  `;
+  const membership = memberships[0];
+  if (membership?.status !== 'active' || membership?.role !== input.role)
+    throw new Error('有効な所属情報が処理中に変更されました。');
+  const rows = await client.$queryRaw<Array<{ id: string }>>`
+    SELECT app_enqueue_line_delivery(
+      ${input.id}::uuid, ${input.tenantId}::uuid, ${input.actorUserId},
+      ${input.sourceType}, ${input.sourceId}, ${input.destination},
+      ${input.title}, ${input.body}, ${input.deepLink}, ${input.idempotencyKey}
+    ) AS id
+  `;
+  const id = rows[0]?.id;
+  if (!id) throw new Error('LINE通知outboxへの登録に失敗しました。');
+  return id;
 }
 
 // Prismaのenum型と日時をAPI/DB repositoryの共通recordへ変換する。
@@ -134,6 +240,29 @@ async function assertActiveMembership(
     membership?.role !== (input.role as Role)
   )
     throw new Error('有効な所属情報が処理中に変更されました。');
+}
+
+// 更新前の行をロックし、同じ部員への退部と編集の競合を直列化する。
+async function lockMember(
+  client: Prisma.TransactionClient,
+  input: { tenantId: string; memberId: string },
+) {
+  await client.$queryRaw`
+    SELECT id
+    FROM members
+    WHERE tenant_id = ${input.tenantId}::uuid
+      AND id = ${input.memberId}::uuid
+    FOR UPDATE
+  `;
+  return client.member.findUnique({
+    where: {
+      tenantId_id: {
+        tenantId: input.tenantId,
+        id: input.memberId,
+      },
+    },
+    select: memberSelect,
+  });
 }
 
 function promotionRequestHash(input: {
@@ -254,13 +383,77 @@ async function markPromotionFailed(
 }
 
 // API serverが利用するPrisma clientを生成する。transaction境界は各repository操作で管理する。
-export function createPrismaClient() {
-  return new PrismaClient();
+export function createPrismaClient(databaseUrl?: string) {
+  return databaseUrl
+    ? new PrismaClient({ datasources: { db: { url: databaseUrl } } })
+    : new PrismaClient();
+}
+
+// 公開通知APIの業務イベントとoutbox登録を同一transactionへ束ね、片方だけの成功を防ぐ。
+export function createLineDeliveryProducer(
+  client: PrismaClient,
+): LineDeliveryProducer {
+  return {
+    publish: (input) =>
+      client.$transaction(async (tx) => {
+        await setRlsContext(tx, {
+          tenantId: input.tenantId,
+          userId: input.actorUserId,
+          role: input.role,
+        });
+        let notificationId: string;
+        try {
+          notificationId = await enqueueLineDelivery(tx, {
+            id: randomUUID(),
+            tenantId: input.tenantId,
+            actorUserId: input.actorUserId,
+            role: input.role,
+            sourceType: 'api_notification',
+            sourceId: input.sourceId,
+            destination: input.destination,
+            title: input.title,
+            body: input.body,
+            deepLink: input.deepLink,
+            idempotencyKey: input.idempotencyKey,
+          });
+        } catch (error) {
+          if (isLineDeliveryConflict(error))
+            throw new LineDeliveryConflictError(
+              '同じtenant内で通知の冪等キーが競合しました。',
+            );
+          throw error;
+        }
+        await tx.auditLog.create({
+          data: {
+            tenantId: input.tenantId,
+            actorUserId: input.actorUserId,
+            action: 'line_delivery.requested',
+            resourceType: 'line_delivery',
+            resourceId: notificationId,
+            metadata: {
+              sourceType: 'api_notification',
+              sourceId: input.sourceId,
+              idempotencyKey: input.idempotencyKey,
+            },
+          },
+        });
+        return { notificationId };
+      }),
+  };
 }
 
 // RLS context、入力条件、監査ログをrepositoryに閉じ込め、API handlerからDB境界を迂回させない。
 export function createMemberRepositories(client: PrismaClient) {
   return {
+    lineDeliveryProducer: createLineDeliveryProducer(client),
+    lineDeliveryRepository: {
+      // 呼び出し側が開始した業務transactionへenqueueを組み込むための境界。
+      enqueueInTransaction: enqueueLineDelivery,
+      enqueue: (input: LineDeliveryEnqueueInput) =>
+        client.$transaction(async (tx) => {
+          return enqueueLineDelivery(tx, input);
+        }),
+    },
     membershipRepository: {
       // active所属が複数ある場合はtenantを暗黙選択せず、API側で利用可能な所属なしとして扱う。
       findActiveByUserId: async (userId: string) =>
@@ -375,6 +568,123 @@ export function createMemberRepositories(client: PrismaClient) {
             ],
           });
           return toRecord(created);
+        }),
+      update: async (input: {
+        tenantId: string;
+        actorUserId: string;
+        role: MemberRole;
+        memberId: string;
+        member: MemberUpdateInput;
+      }) =>
+        client.$transaction(async (tx) => {
+          // 所属確認、対象行のロック、更新、監査を同じtransactionで実行する。
+          await setRlsContext(tx, {
+            tenantId: input.tenantId,
+            userId: input.actorUserId,
+            role: input.role,
+          });
+          await assertActiveMembership(tx, {
+            tenantId: input.tenantId,
+            userId: input.actorUserId,
+            role: input.role,
+          });
+          const before = await lockMember(tx, {
+            tenantId: input.tenantId,
+            memberId: input.memberId,
+          });
+          if (!before) return null;
+          if (before.status === 'retired')
+            throw new MemberConflictError(
+              '退部済みの部員は通常編集できません。',
+            );
+          const updated = await tx.member.update({
+            where: {
+              tenantId_id: {
+                tenantId: input.tenantId,
+                id: input.memberId,
+              },
+            },
+            data: {
+              name: input.member.name,
+              kana: input.member.kana ?? null,
+              category: input.member.category,
+              gradeLevel: input.member.gradeLevel ?? null,
+              ageGroup: input.member.ageGroup ?? null,
+              status: input.member.status,
+            },
+            select: memberSelect,
+          });
+          await tx.auditLog.create({
+            data: {
+              tenantId: input.tenantId,
+              actorUserId: input.actorUserId,
+              action: 'member.update',
+              resourceType: 'member',
+              resourceId: updated.id,
+              metadata: {
+                before: {
+                  category: before.category,
+                  status: before.status,
+                },
+                after: {
+                  category: updated.category,
+                  status: updated.status,
+                },
+              },
+            },
+          });
+          return toRecord(updated);
+        }),
+      retire: async (input: {
+        tenantId: string;
+        actorUserId: string;
+        role: MemberRole;
+        memberId: string;
+      }) =>
+        client.$transaction(async (tx) => {
+          // 退部処理は行ロックで一度だけ状態を遷移させ、再送時は同じ結果を返す。
+          await setRlsContext(tx, {
+            tenantId: input.tenantId,
+            userId: input.actorUserId,
+            role: input.role,
+          });
+          await assertActiveMembership(tx, {
+            tenantId: input.tenantId,
+            userId: input.actorUserId,
+            role: input.role,
+          });
+          const before = await lockMember(tx, {
+            tenantId: input.tenantId,
+            memberId: input.memberId,
+          });
+          if (!before) return null;
+          const updated =
+            before.status === 'retired'
+              ? before
+              : await tx.member.update({
+                  where: {
+                    tenantId_id: {
+                      tenantId: input.tenantId,
+                      id: input.memberId,
+                    },
+                  },
+                  data: { status: 'retired' },
+                  select: memberSelect,
+                });
+          await tx.auditLog.create({
+            data: {
+              tenantId: input.tenantId,
+              actorUserId: input.actorUserId,
+              action: 'member.retire',
+              resourceType: 'member',
+              resourceId: updated.id,
+              metadata: {
+                beforeStatus: before.status,
+                afterStatus: updated.status,
+              },
+            },
+          });
+          return toRecord(updated);
         }),
     },
     promotionRepository: {

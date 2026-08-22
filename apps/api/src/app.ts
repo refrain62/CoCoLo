@@ -1,16 +1,32 @@
 import { extractBearerToken, type TokenVerifier } from '@cocolo/auth';
+import { lineDeliveryPublishSchema } from '@cocolo/contracts/line-delivery';
 import type {
   MemberCreateInput,
   MemberListQuery,
   MemberRole,
+  MemberUpdateInput,
   PromotionMode,
 } from '@cocolo/contracts/member';
 import {
   memberCreateSchema,
+  memberIdSchema,
   memberListQuerySchema,
+  memberUpdateSchema,
   promotionRequestSchema,
 } from '@cocolo/contracts/member';
+import type { LineDeliveryProducer } from '@cocolo/db';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
+import {
+  createRateLimitMiddleware,
+  type InMemoryRateLimitStore,
+  rateLimitPolicies,
+} from './security/rate-limit.js';
+import {
+  createConfiguredRateLimitStore,
+  type DistributedRateLimitAdapter,
+  type RateLimitEnvironment,
+  type RateLimitStoreMode,
+} from './security/rate-limit-adapter.js';
 
 export type MembershipContext = {
   tenantId: string;
@@ -48,6 +64,19 @@ export type MemberRepository = {
     },
     member: MemberCreateInput,
   ) => Promise<MemberRecord>;
+  update: (input: {
+    tenantId: string;
+    actorUserId: string;
+    role: MemberRole;
+    memberId: string;
+    member: MemberUpdateInput;
+  }) => Promise<MemberRecord | null>;
+  retire: (input: {
+    tenantId: string;
+    actorUserId: string;
+    role: MemberRole;
+    memberId: string;
+  }) => Promise<MemberRecord | null>;
 };
 
 export type PromotionRecord = {
@@ -75,6 +104,17 @@ export type AppOptions = {
   membershipRepository?: MembershipRepository;
   memberRepository?: MemberRepository;
   promotionRepository?: PromotionRepository;
+  lineDeliveryProducer?: LineDeliveryProducer;
+  rateLimit?: {
+    environment?: RateLimitEnvironment;
+    mode?: RateLimitStoreMode;
+    adapter?: DistributedRateLimitAdapter;
+    distributedAdapter?: DistributedRateLimitAdapter;
+    localStore?: InMemoryRateLimitStore;
+    now?: () => number;
+    namespace?: RateLimitEnvironment;
+    timeoutMs?: number;
+  };
 };
 
 export type ApiEnv = {
@@ -135,6 +175,21 @@ function projectMember(member: MemberRecord, role: MemberRole) {
 // APIの依存性と認証middlewareを組み立て、tenant/roleは認証後の所属解決結果だけを利用する。
 export function createApp(options: AppOptions = {}) {
   const app = new Hono<ApiEnv>();
+  const rateLimitOptions = options.rateLimit ?? {};
+  const rateLimitEnvironment = rateLimitOptions.environment ?? 'local';
+  const rateLimitNamespace = rateLimitOptions.namespace ?? rateLimitEnvironment;
+  if (rateLimitNamespace !== rateLimitEnvironment)
+    throw new Error(
+      'rate limit namespaceはAPP_ENV由来の環境名と一致させてください。',
+    );
+  const rateLimitStore = createConfiguredRateLimitStore({
+    appEnv: rateLimitEnvironment,
+    mode: rateLimitOptions.mode ?? 'memory',
+    adapter: rateLimitOptions.adapter,
+    distributedAdapter: rateLimitOptions.distributedAdapter,
+    localStore: rateLimitOptions.localStore,
+    timeoutMs: rateLimitOptions.timeoutMs,
+  });
 
   app.use('*', async (c, next) => {
     const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
@@ -202,6 +257,26 @@ export function createApp(options: AppOptions = {}) {
 
   app.use('/api/v1/members', authenticate);
   app.use('/api/v1/members/*', authenticate);
+  app.use('/api/v1/notifications/line', authenticate);
+
+  // 認証後のtenant/userだけをキーに使い、production系では起動時に分散adapterを要求する。
+  const authenticatedRateLimit = createRateLimitMiddleware({
+    scope: 'authenticated',
+    ...rateLimitPolicies.authenticated,
+    store: rateLimitStore,
+    now: rateLimitOptions.now,
+    namespace: rateLimitNamespace,
+    timeoutMs: rateLimitOptions.timeoutMs,
+    keyResolver: (c) => {
+      const auth = c.get('auth');
+      return {
+        kind: 'user',
+        tenantId: auth.membership.tenantId,
+        userId: auth.userId,
+      };
+    },
+  });
+  app.use('/api/v1/members/*', authenticatedRateLimit);
 
   // tenantIdはリクエストから受け取らず、authenticateが設定した所属をrepositoryへ渡す。
   app.get('/api/v1/members', async (c) => {
@@ -280,6 +355,118 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ data: projectMember(member, auth.membership.role) }, 201);
   });
 
+  // 通常編集はactive/suspendedだけを受け付け、retiredへの遷移を専用操作へ限定する。
+  app.patch('/api/v1/members/:memberId', async (c) => {
+    if (!options.memberRepository)
+      return errorResponse(
+        c,
+        503,
+        'DEPENDENCY_UNAVAILABLE',
+        '部員データストアが設定されていません。',
+      );
+    const auth = c.get('auth');
+    if (!managerRoles.has(auth.membership.role))
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        '部員を編集する権限がありません。',
+      );
+    const memberId = memberIdSchema.safeParse(c.req.param('memberId'));
+    if (!memberId.success)
+      return errorResponse(c, 400, 'VALIDATION_ERROR', '部員IDが不正です。');
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return errorResponse(c, 400, 'VALIDATION_ERROR', 'JSON入力が不正です。');
+    }
+    const parsed = memberUpdateSchema.safeParse(body);
+    if (!parsed.success)
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        '入力値が不正です。',
+        parsed.error.flatten(),
+      );
+    let member: MemberRecord | null;
+    try {
+      member = await options.memberRepository.update({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        memberId: memberId.data,
+        member: parsed.data,
+      });
+    } catch (error) {
+      if (error instanceof Error && 'status' in error && error.status === 409)
+        return errorResponse(
+          c,
+          409,
+          'MEMBER_STATE_CONFLICT',
+          '部員の状態が編集操作と競合しました。',
+        );
+      throw error;
+    }
+    if (!member)
+      return errorResponse(
+        c,
+        404,
+        'MEMBER_NOT_FOUND',
+        '部員が見つかりません。',
+      );
+    return c.json({ data: projectMember(member, auth.membership.role) });
+  });
+
+  // 退部は専用の冪等操作にし、通常編集からretiredへ変更できないようにする。
+  app.post('/api/v1/members/:memberId/retire', async (c) => {
+    if (!options.memberRepository)
+      return errorResponse(
+        c,
+        503,
+        'DEPENDENCY_UNAVAILABLE',
+        '部員データストアが設定されていません。',
+      );
+    const auth = c.get('auth');
+    if (!managerRoles.has(auth.membership.role))
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        '部員を退部にする権限がありません。',
+      );
+    const memberId = memberIdSchema.safeParse(c.req.param('memberId'));
+    if (!memberId.success)
+      return errorResponse(c, 400, 'VALIDATION_ERROR', '部員IDが不正です。');
+    let member: MemberRecord | null;
+    try {
+      member = await options.memberRepository.retire({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        memberId: memberId.data,
+      });
+    } catch (error) {
+      if (error instanceof Error && 'status' in error && error.status === 409)
+        return errorResponse(
+          c,
+          409,
+          'MEMBER_STATE_CONFLICT',
+          '部員の状態が退部操作と競合しました。',
+        );
+      throw error;
+    }
+    if (!member)
+      return errorResponse(
+        c,
+        404,
+        'MEMBER_NOT_FOUND',
+        '部員が見つかりません。',
+      );
+    return c.json({ data: projectMember(member, auth.membership.role) });
+  });
+
   app.post('/api/v1/members/promote', async (c) => {
     if (!options.promotionRepository)
       return errorResponse(
@@ -343,6 +530,70 @@ export function createApp(options: AppOptions = {}) {
           409,
           'PROMOTION_CONFLICT',
           '年度繰り上げの実行が競合しました。',
+        );
+      throw error;
+    }
+  });
+
+  // 認証済みowner/adminの通知依頼を業務transactionへ渡し、tenantをbodyから受け取らない。
+  app.post('/api/v1/notifications/line', async (c) => {
+    if (!options.lineDeliveryProducer)
+      return errorResponse(
+        c,
+        503,
+        'DEPENDENCY_UNAVAILABLE',
+        'LINE通知producerが設定されていません。',
+      );
+    const auth = c.get('auth');
+    if (!managerRoles.has(auth.membership.role))
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        'LINE通知を登録する権限がありません。',
+      );
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return errorResponse(c, 400, 'VALIDATION_ERROR', 'JSON入力が不正です。');
+    }
+    const parsed = lineDeliveryPublishSchema.safeParse(body);
+    if (!parsed.success)
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        '入力値が不正です。',
+        parsed.error.flatten(),
+      );
+    const idempotencyKey = c.req.header('idempotency-key')?.trim();
+    if (!idempotencyKey || idempotencyKey.length > 128)
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        'LINE通知ではIdempotency-Keyが必要です。',
+      );
+    try {
+      const result = await options.lineDeliveryProducer.publish({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        ...parsed.data,
+        idempotencyKey,
+      });
+      return c.json(
+        { data: { notificationId: result.notificationId, status: 'pending' } },
+        202,
+      );
+    } catch (error) {
+      if (error instanceof Error && 'status' in error && error.status === 409)
+        return errorResponse(
+          c,
+          409,
+          'LINE_DELIVERY_CONFLICT',
+          '同じtenant内で通知の冪等キーまたはpayloadが競合しました。',
         );
       throw error;
     }

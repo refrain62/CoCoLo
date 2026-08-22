@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
-// migration owner接続でRLS用のcocolo_app roleを準備し、アプリroleへbypass権限を与えない。
+// migration owner接続でアプリroleとworker専用roleを準備し、どちらにもRLS bypassを与えない。
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URL が必要です');
 assert.ok(process.env.DIRECT_URL, 'DIRECT_URL が必要です');
 const sql = `
@@ -12,10 +12,17 @@ BEGIN
   ELSE
     ALTER ROLE cocolo_app NOSUPERUSER NOBYPASSRLS;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'line_delivery_worker') THEN
+    CREATE ROLE line_delivery_worker LOGIN PASSWORD 'line_delivery_worker' NOSUPERUSER NOBYPASSRLS NOINHERIT;
+  ELSE
+    ALTER ROLE line_delivery_worker NOSUPERUSER NOBYPASSRLS NOINHERIT;
+  END IF;
 END
 $$;
 GRANT USAGE ON SCHEMA public TO cocolo_app;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO cocolo_app;
+GRANT USAGE ON SCHEMA public TO line_delivery_worker;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM line_delivery_worker;
 `;
 const dockerContainer = process.env.PSQL_DOCKER_CONTAINER;
 const dockerDatabase = process.env.PSQL_DOCKER_DATABASE ?? 'postgres';

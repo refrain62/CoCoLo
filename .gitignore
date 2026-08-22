@@ -10,5 +10,6 @@ coverage/
 test-results/
 playwright-report/
 *.tsbuildinfo
+.worktrees/
 .release/
 .evidence/

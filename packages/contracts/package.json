@@ -3,12 +3,49 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./upload": "./src/upload-contract.ts",
-    "./member": "./src/member-contract.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./upload": {
+      "types": "./src/upload-contract.ts",
+      "import": "./dist/upload-contract.js"
+    },
+    "./member": {
+      "types": "./src/member-contract.ts",
+      "import": "./dist/member-contract.js"
+    },
+    "./line": {
+      "types": "./src/line-contract.ts",
+      "import": "./dist/line-contract.js"
+    },
+    "./line-delivery": {
+      "types": "./src/line-delivery-contract.ts",
+      "import": "./dist/line-delivery-contract.js"
+    },
+    "./auth-team-selection": {
+      "types": "./src/auth-team-selection-contract.ts",
+      "import": "./dist/auth-team-selection-contract.js"
+    },
+    "./ride": {
+      "types": "./src/ride-contract.ts",
+      "import": "./dist/ride-contract.js"
+    },
+    "./orders": {
+      "types": "./src/orders-contract.ts",
+      "import": "./dist/orders-contract.js"
+    },
+    "./bulletin-board": {
+      "types": "./src/bulletin-board-contract.ts",
+      "import": "./dist/bulletin-board-contract.js"
+    },
+    "./events": {
+      "types": "./src/event-contract.ts",
+      "import": "./dist/event-contract.js"
+    }
   },
   "scripts": {
-    "build": "node ../../scripts/generate-openapi.ts",
+    "build": "node ../../scripts/generate-openapi.ts && tsc -p tsconfig.build.json",
     "test": "node --test test/*.test.ts",
     "test:unit": "node --test test/*.test.ts",
     "lint": "tsc -p tsconfig.json --noEmit",
@@ -16,5 +53,8 @@
   },
   "dependencies": {
     "zod": "4.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0"
   }
 }
