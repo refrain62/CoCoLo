@@ -22,13 +22,13 @@ repository secretを代替として使うとデプロイ承認と環境分離が
 
 ## 3. PR品質ゲート
 
-`quality.yml`は`develop`と`main`に対する`pull_request`、両ブランチへの`push`、secretを受け取らない`workflow_call`で実行します。
+`quality.yml`は`develop`と`main`に対する`pull_request`と両ブランチへの`push`で実行します。security検査はこのPR側Workflowへreusable callせず、独立したbase側Workflowで実行します。
 
 すべてのジョブは`ubuntu-24.04`、最小権限、固定タイムアウトで動かします。
 PRの古い実行だけを`concurrency`で中止し、`push`の検査は中止しません。
 
 `actions/checkout`は`persist-credentials: false`とし、PRジョブはsecretを参照しません。
-`pull_request_target`、未信頼コードをcheckoutする`workflow_run`、`secrets: inherit`、GitHub contextの値を直接`run`へ展開する記述を禁止します。
+通常のPR Workflowでは`pull_request_target`、未信頼コードをcheckoutする`workflow_run`、`secrets: inherit`、GitHub contextの値を直接`run`へ展開する記述を禁止します。例外としてsecurity Workflowだけは、base側に存在する定義を`pull_request_target`で起動し、secretなし・base checker実行・head archive検査の構造を固定します。
 
 | ジョブ | 検査内容 | 上限 |
 | --- | --- | --- |
@@ -141,9 +141,11 @@ Workflowは`actionlint`と単体テストを持つ独自validatorで検査しま
 
 WorkflowとvalidatorはPRの変更対象になり得るため、検査結果だけを信頼境界にしません。
 `.github/CODEOWNERS`でWorkflowとvalidatorのownerレビューを要求し、GitHub側でbranch protectionを利用できる環境では当該レビューと品質ゲートを必須条件にします。
-`pull_request`ではbase SHAをcheckoutしたtrust gateが、scanner設定・parser・summary・validator・Workflow・CODEOWNERS・依存固定ファイルの存在とSHA-256をheadと比較します。base側参照の取得不能、対象ファイルの欠落、hash不一致はfail-closedとし、固定malicious fixtureで同時改変を拒否します。
-このPRで新規追加するtrust checkerを同一PRの`pull_request`からbase側の信頼済みコードとして実行することはできないため、baseにcheckerまたは対象ファイルがない初回導入はtrust gateを成功させません。ownerがbase側へtrust checkerを先行配置できるまで、security gate・quality aggregate gate・deployを停止します。
-GitHub Freeの非公開リポジトリではrequired checksとownerレビューを技術的に強制できないことを運用残余として記録します。ownerがbase側hashと差分を確認してからDraft PRを更新し、品質ゲートには秘密情報を渡しません。
+`pull_request_target`ではbase SHAをcheckoutしたtrust gateが、base側の`prepare-security-target.ts`と`verify-security-trust.ts`を実行します。head SHAはPR refから取得してhashを比較し、検査対象は`git archive`で隔離した一時ディレクトリへ展開します。config validator、Workflow validator、scanner parser、summary、scannerはすべてbase checkout側のコードを実行し、headのWorkflowやpackage scriptを実行しません。
+private repositoryのhead取得にはbase側checkerへread-onlyの`github.token`をfetch専用で渡します。tokenはscannerのDocker引数・環境変数へ渡さず、PRコードにもcheckout後の実行権限を与えません。
+trust gate、config、scanners、aggregate gateのWorkflow定義はPR側から実行経路を変更できません。head側のtrust checker、scanner設定、Workflow、CODEOWNERS、依存固定ファイルの存在・SHA-256の欠落や不一致はfail-closedとし、固定malicious fixtureでtrust step削除、gate依存削除、checker差し替えを拒否します。
+初回導入はbootstrapとして分離します。ownerがbase/default branchへsecurity Workflow、checker、CODEOWNERS、required gate設定を先行反映し、baseのpush実行で成功を確認してからPR検査を有効化します。baseにtrusted Workflowが存在しない期間は、PR側に同名Workflowを追加しても安全な検査結果とはみなさず、ownerの手動レビュー・merge停止・deploy停止を継続します。
+GitHub Freeの非公開リポジトリではrequired checksとownerレビューを技術的に強制できないため、`security gate`は検出と証拠化の権威ある入口であって自動merge防止の保証ではありません。ownerはbase側Workflowのrun、security gate、CODEOWNERSを確認し、品質ゲートには秘密情報を渡しません。
 
 ## 9. 定期検査
 
