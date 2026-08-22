@@ -203,7 +203,7 @@ BEGIN
     'pending'::line_notification_status,
     0,
     p_now
-  ) ON CONFLICT (outbox_id) DO NOTHING;
+  ) ON CONFLICT (outbox_id) WHERE outbox_id IS NOT NULL DO NOTHING;
 
   UPDATE line_notification_outbox
      SET status = 'delivered'::line_notification_outbox_status,
