@@ -1,5 +1,9 @@
 import { createSupabaseTokenVerifier } from '@cocolo/auth';
-import { createMemberRepositories, createPrismaClient } from '@cocolo/db';
+import {
+  createMemberRepositories,
+  createPrismaClient,
+} from '@cocolo/db';
+import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
 import { createCentralDatabaseAdapter } from './central-dependencies.js';
@@ -26,6 +30,11 @@ const app = createApp({
     database: createCentralDatabaseAdapter(prisma),
     environment: runtime.appEnv,
     corsOrigins,
+    features: {
+      authTeamSelection: {
+        repository: createAuthTeamSelectionRepository(prisma),
+      },
+    },
     // 分散storeを渡さない限りstaging/productionは起動時に停止する。
     requireDistributedRateLimitStore: runtime.appEnv !== 'local',
   },

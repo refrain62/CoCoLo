@@ -64,6 +64,11 @@ export const promotionResponseSchema = z
   })
   .strict();
 
+// featureごとのpayload詳細は各契約で検証し、中央では公開JSONがdata envelopeを持つことを保証する。
+export const featureEnvelopeResponseSchema = z
+  .object({ data: z.unknown() })
+  .passthrough();
+
 export const errorResponseSchema = z
   .object({
     error: z
@@ -81,4 +86,5 @@ export type RuntimeResponseSchema =
   | typeof memberListResponseSchema
   | typeof memberCreateResponseSchema
   | typeof promotionResponseSchema
+  | typeof featureEnvelopeResponseSchema
   | typeof errorResponseSchema;

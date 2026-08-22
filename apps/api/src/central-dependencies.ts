@@ -1,6 +1,20 @@
-import { createHash } from 'node:crypto';
 import { extractBearerToken, type TokenVerifier } from '@cocolo/auth';
 import type { MemberRole } from '@cocolo/contracts/member';
+import { createCorsMiddleware } from './security/cors.js';
+import {
+  createRateLimitMiddleware,
+  type RateLimitIdentity,
+  type RateLimitStore,
+} from './security/rate-limit.js';
+import {
+  createRequestLoggerMiddleware,
+  createStructuredLogger,
+} from './security/structured-logger.js';
+import {
+  createResponseContractMiddleware,
+  type ResponseContract,
+} from './security/response-contract.js';
+import { featureEnvelopeResponseSchema } from '@cocolo/contracts/runtime-response';
 import type { EventRepository } from '@cocolo/db/events';
 import type { OrdersRepository } from '@cocolo/db/orders';
 import type { LineNotificationService } from './features/line-notifications/line-service.js';
@@ -12,6 +26,10 @@ import { createEventsApp } from './features/events/event-api.js';
 import { createOrdersPaymentsApp } from './features/orders-payments/orders-payments-app.js';
 import { registerRideRoutes } from './features/ride-operations/ride-routes.js';
 import type { RideService } from './features/ride-operations/ride-service.js';
+import { createBulletinBoardApp } from './features/bulletin-board/bulletin-board-app.js';
+import { createAuthTeamSelectionApp } from './features/auth-team-selection/app.js';
+import type { BulletinBoardRepository } from '@cocolo/db/bulletin-board';
+import type { AuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import type { AttachmentRepository } from '@cocolo/domain/attachment';
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
@@ -30,6 +48,7 @@ export type CentralApiEnv = {
   Variables: {
     requestId: string;
     auth: CentralAuth;
+    authUserId: string;
   };
 };
 
@@ -43,6 +62,8 @@ export type CentralFeatureDependencies = {
   };
   line?: { service: LineNotificationService };
   ride?: { service: RideService };
+  bulletinBoard?: { repository: BulletinBoardRepository };
+  authTeamSelection?: { repository: AuthTeamSelectionRepository };
 };
 
 export type CentralDatabaseAdapter = {
@@ -58,12 +79,7 @@ export type CentralRateLimitConsumeInput = {
   nowMs: number;
 };
 
-export type CentralRateLimitStore = {
-  consume: (
-    input: CentralRateLimitConsumeInput,
-  ) =>
-    | { allowed: boolean; remaining: number; resetAtMs: number }
-    | Promise<{ allowed: boolean; remaining: number; resetAtMs: number }>;
+export type CentralRateLimitStore = RateLimitStore & {
   distributed?: boolean;
 };
 
@@ -184,24 +200,6 @@ function routeTemplate(path: string): string {
   );
 }
 
-function hash(value: string): string {
-  return createHash('sha256').update(value, 'utf8').digest('hex');
-}
-
-function normalizeOrigin(value: string): string {
-  const url = new URL(value.trim());
-  if (
-    !['http:', 'https:'].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.pathname !== '/' ||
-    url.search ||
-    url.hash
-  )
-    throw new Error('CORS allowlistにはoriginだけを指定してください。');
-  return `${url.protocol}//${url.host}`;
-}
-
 export function createCentralRequestContextMiddleware(): MiddlewareHandler<CentralApiEnv> {
   return async (context, next) => {
     const requestId = safeRequestId(context.req.header('x-request-id'));
@@ -212,78 +210,11 @@ export function createCentralRequestContextMiddleware(): MiddlewareHandler<Centr
   };
 }
 
-// 認証前にoriginを検査し、allowlist外のブラウザ経路を認証処理へ到達させない。
+// PR #29の共通CORS契約を中央middlewareの認証前へ接続する。
 export function createCentralCorsMiddleware(
   origins: readonly string[],
 ): MiddlewareHandler<CentralApiEnv> {
-  if (!origins.length) throw new Error('CORS allowlistが空です。');
-  const allowlist = new Set(
-    origins.map((origin) => {
-      if (origin.trim() === '*' || origin.trim() === 'null')
-        throw new Error('CORS allowlistにワイルドカードを指定できません。');
-      return normalizeOrigin(origin);
-    }),
-  );
-  const methods = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'];
-  const headers = ['Authorization', 'Content-Type', 'Idempotency-Key', 'If-Match'];
-
-  return async (context, next) => {
-    const origin = context.req.header('origin');
-    if (!origin) return next();
-    let normalized: string;
-    try {
-      normalized = normalizeOrigin(origin);
-    } catch {
-      return errorResponse(
-        context,
-        403,
-        'CORS_ORIGIN_DENIED',
-        '許可されていないCross-Originリクエストです。',
-      );
-    }
-    if (!allowlist.has(normalized))
-      return errorResponse(
-        context,
-        403,
-        'CORS_ORIGIN_DENIED',
-        '許可されていないCross-Originリクエストです。',
-      );
-    if (context.req.method === 'OPTIONS') {
-      const method = context.req.header('access-control-request-method');
-      const requestedHeaders = (context.req.header('access-control-request-headers') ?? '')
-        .split(',')
-        .map((header) => header.trim().toLowerCase())
-        .filter(Boolean);
-      if (!method || !methods.includes(method.toUpperCase()))
-        return errorResponse(
-          context,
-          403,
-          'CORS_METHOD_DENIED',
-          '許可されていないCross-Originリクエストです。',
-        );
-      if (
-        requestedHeaders.some(
-          (header) => !headers.some((allowed) => allowed.toLowerCase() === header),
-        )
-      )
-        return errorResponse(
-          context,
-          403,
-          'CORS_HEADER_DENIED',
-          '許可されていないCross-Originリクエストです。',
-        );
-      context.header('Access-Control-Allow-Origin', normalized);
-      context.header('Access-Control-Allow-Methods', methods.join(', '));
-      context.header('Access-Control-Allow-Headers', headers.join(', '));
-      context.header('Access-Control-Max-Age', '600');
-      context.header('Vary', 'Origin');
-      return context.body(null, 204);
-    }
-    context.header('Access-Control-Allow-Origin', normalized);
-    context.header('Access-Control-Expose-Headers', 'X-Request-Id, Retry-After');
-    context.header('Vary', 'Origin');
-    await next();
-  };
+  return createCorsMiddleware({ origins });
 }
 
 // Supabase JWTとactive membershipを一度解決し、HTTP入力からtenantやroleを受け取らない。
@@ -295,7 +226,8 @@ export function createCentralAuthMiddleware(
   return async (context, next) => {
     if (isPublicWebhook(context)) return next();
     const token = extractBearerToken(context.req.header('authorization') ?? null);
-    if (!verifyToken || !membershipRepository)
+    const bearerOnlyTeamSelection = pathOf(context).startsWith('/api/v1/teams');
+    if (!verifyToken || (!membershipRepository && !bearerOnlyTeamSelection))
       return errorResponse(
         context,
         503,
@@ -313,9 +245,9 @@ export function createCentralAuthMiddleware(
           'UNAUTHENTICATED',
           '認証の有効期限が切れています。',
         );
-      const membership = await membershipRepository.findActiveByUserId(
-        claims.userId,
-      );
+      context.set('authUserId', claims.userId);
+      if (pathOf(context).startsWith('/api/v1/teams')) return next();
+      const membership = await membershipRepository.findActiveByUserId(claims.userId);
       if (!membership)
         return errorResponse(
           context,
@@ -354,21 +286,6 @@ export function createCentralPathValidationMiddleware(): MiddlewareHandler<Centr
   };
 }
 
-function rateLimitError(
-  context: Context<CentralApiEnv>,
-  status: 429 | 503,
-  code: string,
-) {
-  return errorResponse(
-    context,
-    status,
-    code,
-    status === 429
-      ? 'リクエスト数の上限を超えました。'
-      : 'レート制限を適用できないため処理を停止しました。',
-  );
-}
-
 // 認証済み利用者はtenantとuser、Webhookは信頼できるgatewayのclient identityで制限する。
 export function createCentralRateLimitMiddleware(options: {
   store?: CentralRateLimitStore;
@@ -381,157 +298,94 @@ export function createCentralRateLimitMiddleware(options: {
       'stagingとproductionでは分散rate-limit storeの接続が必要です。',
     );
 
-  return async (context, next) => {
-    const webhook = pathOf(context) === '/api/v1/line/webhook';
-    const auth = context.get('auth');
-    const identity = webhook
-      ? options.clientIdentityResolver?.(context)
-      : auth
+  const resolveIdentity = async (
+    context: Context,
+  ): Promise<RateLimitIdentity | null> => {
+    if (pathOf(context) === '/api/v1/line/webhook') {
+      const identity = options.clientIdentityResolver?.(context);
+      return identity ? { kind: 'client', ...identity } : null;
+    }
+    const auth = context.get('auth') as CentralAuth | undefined;
+    const authUserId = context.get('authUserId');
+    return auth
+      ? {
+          kind: 'user',
+          tenantId: auth.membership.tenantId,
+          userId: auth.userId,
+        }
+      : authUserId
         ? {
-            clientId: auth.membership.tenantId,
-            ipAddress: auth.userId,
+            kind: 'user',
+            tenantId: 'team-selection',
+            userId: authUserId,
           }
-        : null;
-    if (!identity)
-      return rateLimitError(
-        context,
-        503,
-        'RATE_LIMIT_IDENTITY_UNAVAILABLE',
-      );
-    const limit = pathOf(context).startsWith('/api/v1/uploads') ? 10 : 60;
-    const windowMs = 60_000;
-    let result: Awaited<ReturnType<CentralRateLimitStore['consume']>>;
-    try {
-      result = await store.consume({
-        key: hash(`${identity.clientId}:${identity.ipAddress}:${pathOf(context)}`),
-        limit,
-        windowMs,
-        nowMs: Date.now(),
+      : null;
+  };
+  const authenticated = createRateLimitMiddleware({
+    scope: 'authenticated',
+    limit: 60,
+    windowMs: 60_000,
+    keyResolver: resolveIdentity,
+    store,
+  });
+  const uploads = createRateLimitMiddleware({
+    scope: 'upload-session',
+    limit: 10,
+    windowMs: 60_000,
+    keyResolver: resolveIdentity,
+    store,
+  });
+  return (context, next) =>
+    pathOf(context).startsWith('/api/v1/uploads')
+      ? uploads(context, next)
+      : authenticated(context, next);
+}
+
+const centralSuccessPath =
+  /^\/api\/v1\/(members|events|board-members|orders|uploads|line|ride-plans|announcements|teams)(?:\/.*)?$/;
+
+function createCentralResponseContracts(): ResponseContract[] {
+  const contracts: ResponseContract[] = [];
+  for (const method of ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'])
+    for (const status of [200, 201, 202])
+      contracts.push({
+        method,
+        path: centralSuccessPath,
+        status,
+        schema: featureEnvelopeResponseSchema,
       });
-    } catch {
-      return rateLimitError(context, 503, 'RATE_LIMIT_UNAVAILABLE');
-    }
-    context.header('X-RateLimit-Limit', String(limit));
-    context.header('X-RateLimit-Remaining', String(result.remaining));
-    context.header('X-RateLimit-Reset', String(Math.ceil(result.resetAtMs / 1000)));
-    if (!result.allowed) {
-      context.header(
-        'Retry-After',
-        String(Math.max(1, Math.ceil((result.resetAtMs - Date.now()) / 1000))),
-      );
-      return rateLimitError(context, 429, 'RATE_LIMIT_EXCEEDED');
-    }
-    await next();
-  };
+  return contracts;
 }
 
-function isJsonResponse(response: Response) {
-  return response.headers.get('content-type')?.toLowerCase().includes('json') ?? false;
-}
-
-function validErrorPayload(value: unknown): boolean {
-  if (!value || typeof value !== 'object' || !('error' in value)) return false;
-  const error = (value as { error?: unknown }).error;
-  if (!error || typeof error !== 'object') return false;
-  const payload = error as Record<string, unknown>;
-  return (
-    typeof payload.code === 'string' &&
-    payload.code.length > 0 &&
-    payload.code.length <= 128 &&
-    typeof payload.message === 'string' &&
-    payload.message.length > 0 &&
-    payload.message.length <= 512 &&
-    'details' in payload &&
-    typeof payload.requestId === 'string' &&
-    safeRequestId(payload.requestId) === payload.requestId
-  );
-}
-
-function validSuccessPayload(value: unknown): boolean {
-  return !!value && typeof value === 'object' && 'data' in value;
-}
-
-function internalResponse(context: Context<CentralApiEnv>) {
-  const requestId = context.get('requestId');
-  context.res = new Response(
-    JSON.stringify({
-      error: {
-        code: 'INTERNAL_SERVER_ERROR',
-        message: '公開レスポンスを検証できませんでした。',
-        details: {},
-        requestId,
-      },
-    }),
-    {
-      status: 500,
-      headers: {
-        'content-type': 'application/json; charset=UTF-8',
-        'x-request-id': requestId,
-      },
-    },
-  );
-}
-
-// JSONの共通envelopeを送信前に検証し、未登録の成功レスポンスや内部情報の直返しを止める。
+// PR #29のruntime response registryへ中央で公開する全featureのJSON envelopeを登録する。
 export function createCentralResponseValidationMiddleware(): MiddlewareHandler<CentralApiEnv> {
-  return async (context, next) => {
-    await next();
-    const path = pathOf(context);
-    if (!path.startsWith('/api/v1') || context.res.status === 204 || !isJsonResponse(context.res))
-      return;
-    let body: unknown;
-    try {
-      body = await context.res.clone().json();
-    } catch {
-      internalResponse(context);
-      return;
-    }
-    const valid =
-      context.res.status >= 400
-        ? validErrorPayload(body)
-        : validSuccessPayload(body);
-    if (!valid) internalResponse(context);
-  };
+  return createResponseContractMiddleware({
+    contracts: createCentralResponseContracts(),
+    onViolation: () => undefined,
+  });
 }
 
-// 秘密、本文、query、IP、tenant、userをログへ出さず、運用に必要な固定項目だけを出力する。
+// PR #29のstructured loggerへ接続し、秘密、本文、query、IP、tenant、userを記録しない。
 export function createCentralRequestLoggerMiddleware(options: {
   environment: 'local' | 'staging' | 'production';
   sink?: (entry: CentralLogEntry) => void;
 }): MiddlewareHandler<CentralApiEnv> {
-  const sink = options.sink ?? ((entry) => console.log(JSON.stringify(entry)));
-  return async (context, next) => {
-    const startedAt = Date.now();
-    let failed = false;
-    try {
-      await next();
-    } catch (error) {
-      void error;
-      failed = true;
-      throw error;
-    } finally {
-      try {
-        sink({
-          timestamp: new Date().toISOString(),
-          level: failed || context.res.status >= 500 ? 'error' : context.res.status >= 400 ? 'warn' : 'info',
-          event: failed
-            ? 'dependency.failure'
-            : [401, 403, 429].includes(context.res.status)
-              ? 'security.denied'
-              : 'request.completed',
-          service: 'api',
-          environment: options.environment,
-          requestId: safeRequestId(context.get('requestId')),
-          method: context.req.method,
-          path: routeTemplate(pathOf(context)),
-          status: failed ? 500 : context.res.status,
-          durationMs: Math.max(0, Date.now() - startedAt),
-        });
-      } catch {
-        // ログsink障害でAPIの結果を変更しない。
-      }
-    }
-  };
+  const logger = createStructuredLogger(
+    options.sink
+      ? (line) => {
+          try {
+            options.sink?.(JSON.parse(line) as CentralLogEntry);
+          } catch {
+            // 構造化ログの解析失敗でAPIの結果を変更しない。
+          }
+        }
+      : undefined,
+  );
+  return createRequestLoggerMiddleware({
+    logger,
+    environment: options.environment,
+    pathResolver: (context) => routeTemplate(pathOf(context)),
+  });
 }
 
 function createUnavailableFeatureApp(
@@ -643,11 +497,34 @@ export function mountCentralFeatureRoutes(
   else
     app.route('/', createUnavailableFeatureApp('FS-RIDE', ['/api/v1/ride-plans']));
 
-  // FS-ANNのfeature appは指定起点へ未取り込みのため、偽の成功応答を作らず明示的に停止する。
-  app.route(
-    '/',
-    createUnavailableFeatureApp('FS-ANN', ['/api/v1/announcements']),
-  );
+  if (input.features?.bulletinBoard)
+    app.route(
+      '/',
+      createBulletinBoardApp({
+        verifyToken: input.verifyToken,
+        membershipRepository,
+        bulletinBoardRepository: input.features.bulletinBoard.repository,
+      }),
+    );
+  else
+    app.route(
+      '/',
+      createUnavailableFeatureApp('FS-ANN', ['/api/v1/announcements']),
+    );
+
+  if (input.features?.authTeamSelection)
+    app.route(
+      '/api/v1',
+      createAuthTeamSelectionApp({
+        verifyToken: input.verifyToken,
+        repository: input.features.authTeamSelection.repository,
+      }),
+    );
+  else
+    app.route(
+      '/',
+      createUnavailableFeatureApp('FS-AUTH', ['/api/v1/teams']),
+    );
 }
 
 // DB schemaとmigrationが中央統合されるまで、Prisma clientを偽のfeature repositoryへ変換しない。
