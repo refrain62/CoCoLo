@@ -8,8 +8,8 @@
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
-    "lint": "node ../../scripts/prisma-validate.mjs",
-    "typecheck": "node ../../scripts/prisma-validate.mjs",
+    "lint": "node ../../scripts/prisma-validate.ts",
+    "typecheck": "node ../../scripts/prisma-validate.ts",
     "prisma:validate": "prisma validate",
     "migrate:deploy": "prisma migrate deploy"
   },

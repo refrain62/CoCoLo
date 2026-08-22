@@ -82,7 +82,7 @@ jobs:
           E2E_TEST_EMAIL: ${{ secrets.STAGING_E2E_TEST_EMAIL }}
           E2E_TEST_PASSWORD: ${{ secrets.STAGING_E2E_TEST_PASSWORD }}
       - name: staging環境の配置証跡を作成
-        run: node scripts/create-staging-evidence.mjs
+        run: node scripts/create-staging-evidence.ts
         env:
           ARTIFACT_SHA: ${{ github.sha }}
           STAGING_BASE_URL: ${{ vars.PUBLIC_APP_URL }}

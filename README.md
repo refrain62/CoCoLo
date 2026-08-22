@@ -14,7 +14,7 @@ Cloudflare R2はPhase 4で導入予定です。現在の外部サービス構成
 
 | 領域 | 採用技術 |
 | --- | --- |
-| Runtime | Node.js 24 |
+| Runtime | Node.js 24.12以降（TypeScriptの型消去を標準実行） |
 | Package manager | pnpm 10.26.0 |
 | Web | React 19 / Vite 7 |
 | API | Hono / TypeScript |
@@ -24,7 +24,9 @@ Cloudflare R2はPhase 4で導入予定です。現在の外部サービス構成
 | テスト | Node test runner / Vitest / Playwright |
 | 品質 | Biome / dependency-cruiser / GitHub Actions |
 
-Node.jsのバージョンは package.json の engines で24系に固定しています。pnpmは packageManager に記載された10.26.0を使用してください。
+Node.jsのバージョンは `package.json` の `engines` で24.12.0以降に固定しています。
+型消去可能なTypeScriptはNode.jsの標準機能で直接実行し、型検査は `pnpm typecheck` で行います。
+pnpmは `packageManager` に記載された10.26.0を使用してください。
 
 ## リポジトリ構成
 
