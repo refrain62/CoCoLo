@@ -11,8 +11,6 @@ import {
   type OrderOption,
   type OrderProduct,
   OrdersDomainError,
-  type OrdersRole,
-  type OrdersSummary,
   type PaymentStatus,
   type PurchaseCampaign,
   type PurchaseCampaignStatus,
@@ -21,10 +19,9 @@ import {
   validateOrderSelection,
   validateProduct,
 } from '@cocolo/domain/orders';
-import { Prisma, type PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import type {
   OrderCampaignInput,
-  OrderEntryInput,
   OrderProductInput,
   OrdersActor,
   OrdersAuditRecord,
@@ -274,9 +271,7 @@ function normalizeProduct(value: OrderProductInput) {
 }
 
 function requestHash(value: unknown): string {
-  return createHash('sha256')
-    .update(JSON.stringify(value))
-    .digest('hex');
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
 async function reserveIdempotency(
@@ -313,7 +308,8 @@ async function reserveIdempotency(
     },
     select: { requestHash: true, resourceId: true },
   });
-  if (!existing) throw new OrdersRepositoryError('CONFLICT', '冪等キーを保存できません。');
+  if (!existing)
+    throw new OrdersRepositoryError('CONFLICT', '冪等キーを保存できません。');
   if (existing.requestHash !== hash)
     throw new OrdersRepositoryError(
       'CONFLICT',
@@ -407,7 +403,9 @@ export function createPrismaOrdersRepository(
     getCampaign: (input) =>
       withActor(client, input, async (tx) => {
         requireViewer(input);
-        const campaign = toCampaign(await findCampaign(tx, input, input.orderId));
+        const campaign = toCampaign(
+          await findCampaign(tx, input, input.orderId),
+        );
         await writeAudit(tx, {
           actor: input,
           action: 'orders.campaign.view',
@@ -435,7 +433,8 @@ export function createPrismaOrdersRepository(
           resourceType: 'order',
           resourceId: id,
         });
-        if (replayId) return toCampaign(await findCampaign(tx, input, replayId));
+        if (replayId)
+          return toCampaign(await findCampaign(tx, input, replayId));
         await tx.purchaseOrder.create({
           data: {
             id,
@@ -489,10 +488,17 @@ export function createPrismaOrdersRepository(
         });
         if (replayId) {
           const replay = await tx.orderProduct.findFirst({
-            where: { tenantId: input.tenantId, id: replayId, orderId: input.orderId },
+            where: {
+              tenantId: input.tenantId,
+              id: replayId,
+              orderId: input.orderId,
+            },
           });
           if (!replay)
-            throw new OrdersRepositoryError('CONFLICT', '冪等キーの結果を復元できません。');
+            throw new OrdersRepositoryError(
+              'CONFLICT',
+              '冪等キーの結果を復元できません。',
+            );
           return toProduct(replay);
         }
         const created = await tx.orderProduct.create({
@@ -513,7 +519,10 @@ export function createPrismaOrdersRepository(
           action: 'orders.product.create',
           resourceType: 'order_product',
           resourceId: id,
-          metadata: { orderId: input.orderId, optionCount: product.options.length },
+          metadata: {
+            orderId: input.orderId,
+            optionCount: product.options.length,
+          },
         });
         return toProduct(created);
       }),
@@ -522,7 +531,10 @@ export function createPrismaOrdersRepository(
       withActor(client, input, async (tx) => {
         requireManager(input);
         const campaign = await findCampaign(tx, input, input.orderId);
-        const nextStatus = transitionCampaignStatus(campaign.status, input.status);
+        const nextStatus = transitionCampaignStatus(
+          campaign.status,
+          input.status,
+        );
         const replayId = await reserveIdempotency(tx, {
           actor: input,
           key: input.idempotencyKey,
@@ -530,7 +542,8 @@ export function createPrismaOrdersRepository(
           resourceType: 'order',
           resourceId: campaign.id,
         });
-        if (replayId) return toCampaign(await findCampaign(tx, input, replayId));
+        if (replayId)
+          return toCampaign(await findCampaign(tx, input, replayId));
         await tx.purchaseOrder.update({
           where: { tenantId_id: { tenantId: input.tenantId, id: campaign.id } },
           data: { status: nextStatus },
@@ -548,10 +561,16 @@ export function createPrismaOrdersRepository(
     createEntry: (input) =>
       withActor(client, input, async (tx) => {
         if (input.role !== 'guardian')
-          throw new OrdersRepositoryError('FORBIDDEN', '保護者の注文権限がありません。');
+          throw new OrdersRepositoryError(
+            'FORBIDDEN',
+            '保護者の注文権限がありません。',
+          );
         const campaign = await findCampaign(tx, input, input.orderId);
         if (campaign.status !== 'open' || campaign.deadline <= new Date())
-          throw new OrdersRepositoryError('CONFLICT', '注文締切を過ぎています。');
+          throw new OrdersRepositoryError(
+            'CONFLICT',
+            '注文締切を過ぎています。',
+          );
         const member = await tx.member.findFirst({
           where: {
             tenantId: input.tenantId,
@@ -564,11 +583,19 @@ export function createPrismaOrdersRepository(
           select: { id: true, name: true },
         });
         if (!member)
-          throw new OrdersRepositoryError('FORBIDDEN', '担当部員の注文だけを登録できます。');
+          throw new OrdersRepositoryError(
+            'FORBIDDEN',
+            '担当部員の注文だけを登録できます。',
+          );
         const orderLines = input.entry.lines.map((line) => {
-          const productRow = campaign.products.find((item) => item.id === line.productId);
+          const productRow = campaign.products.find(
+            (item) => item.id === line.productId,
+          );
           if (!productRow)
-            throw new OrdersRepositoryError('NOT_FOUND', '募集案件に属さない商品です。');
+            throw new OrdersRepositoryError(
+              'NOT_FOUND',
+              '募集案件に属さない商品です。',
+            );
           const product = toProduct(productRow);
           try {
             const selection = validateOrderSelection(product, line);
@@ -588,7 +615,10 @@ export function createPrismaOrdersRepository(
         });
         const ordererName = input.entry.ordererName.trim();
         if (!ordererName || ordererName.length > 200)
-          throw new OrdersRepositoryError('INVALID_INPUT', '注文者名を入力してください。');
+          throw new OrdersRepositoryError(
+            'INVALID_INPUT',
+            '注文者名を入力してください。',
+          );
         const totalAmount = calculateOrderTotal(orderLines);
         const id = createUuidV7();
         const normalized = {
@@ -609,7 +639,10 @@ export function createPrismaOrdersRepository(
             include: { member: { select: { name: true } }, lines: true },
           });
           if (!replay)
-            throw new OrdersRepositoryError('CONFLICT', '冪等キーの結果を復元できません。');
+            throw new OrdersRepositoryError(
+              'CONFLICT',
+              '冪等キーの結果を復元できません。',
+            );
           return toEntry(replay);
         }
         await tx.orderEntry.create({
@@ -647,7 +680,12 @@ export function createPrismaOrdersRepository(
             memberId: member.id,
             lineCount: orderLines.length,
             totalAmount,
-            personalDataFields: ['ordererName', 'memberId', 'memberName', 'backName'],
+            personalDataFields: [
+              'ordererName',
+              'memberId',
+              'memberName',
+              'backName',
+            ],
           },
         });
         const created = await tx.orderEntry.findFirstOrThrow({
@@ -660,15 +698,26 @@ export function createPrismaOrdersRepository(
     listEntries: (input) =>
       withActor(client, input, async (tx) => {
         if (input.role === 'staff')
-          throw new OrdersRepositoryError('FORBIDDEN', '注文を閲覧する権限がありません。');
+          throw new OrdersRepositoryError(
+            'FORBIDDEN',
+            '注文を閲覧する権限がありません。',
+          );
         await findCampaign(tx, input, input.orderId);
-        const entries = await findEntries(tx, input, input.orderId, input.paymentStatus);
+        const entries = await findEntries(
+          tx,
+          input,
+          input.orderId,
+          input.paymentStatus,
+        );
         await writeAudit(tx, {
           actor: input,
           action: 'orders.entry.view',
           resourceType: 'order',
           resourceId: input.orderId,
-          metadata: { scope: input.role === 'guardian' ? 'self' : 'tenant', containsPersonalData: true },
+          metadata: {
+            scope: input.role === 'guardian' ? 'self' : 'tenant',
+            containsPersonalData: true,
+          },
         });
         return entries;
       }),
@@ -678,14 +727,25 @@ export function createPrismaOrdersRepository(
         requireManager(input);
         const campaign = await findCampaign(tx, input, input.orderId);
         const entry = await tx.orderEntry.findFirst({
-          where: { tenantId: input.tenantId, id: input.entryId, orderId: campaign.id },
+          where: {
+            tenantId: input.tenantId,
+            id: input.entryId,
+            orderId: campaign.id,
+          },
         });
         if (!entry)
-          throw new OrdersRepositoryError('NOT_FOUND', '注文明細が見つかりません。');
+          throw new OrdersRepositoryError(
+            'NOT_FOUND',
+            '注文明細が見つかりません。',
+          );
         const replayId = await reserveIdempotency(tx, {
           actor: input,
           key: input.idempotencyKey,
-          request: { orderId: input.orderId, entryId: input.entryId, status: input.status },
+          request: {
+            orderId: input.orderId,
+            entryId: input.entryId,
+            status: input.status,
+          },
           resourceType: 'order_entry',
           resourceId: entry.id,
         });
@@ -701,7 +761,8 @@ export function createPrismaOrdersRepository(
           data: {
             paymentStatus: input.status,
             paymentConfirmedAt: input.status === 'paid' ? new Date() : null,
-            paymentConfirmedBy: input.status === 'paid' ? input.actorUserId : null,
+            paymentConfirmedBy:
+              input.status === 'paid' ? input.actorUserId : null,
           },
         });
         await writeAudit(tx, {
@@ -728,13 +789,19 @@ export function createPrismaOrdersRepository(
       withActor(client, input, async (tx) => {
         requireManager(input);
         await findCampaign(tx, input, input.orderId);
-        const summary = summarizeOrders(await findEntries(tx, input, input.orderId));
+        const summary = summarizeOrders(
+          await findEntries(tx, input, input.orderId),
+        );
         await writeAudit(tx, {
           actor: input,
           action: 'orders.summary.view',
           resourceType: 'order',
           resourceId: input.orderId,
-          metadata: { totalOrders: summary.totalOrders, totalAmount: summary.totalAmount, containsPersonalData: true },
+          metadata: {
+            totalOrders: summary.totalOrders,
+            totalAmount: summary.totalAmount,
+            containsPersonalData: true,
+          },
         });
         return summary;
       }),
@@ -742,7 +809,9 @@ export function createPrismaOrdersRepository(
     exportCsv: (input) =>
       withActor(client, input, async (tx) => {
         requireManager(input);
-        const campaign = toCampaign(await findCampaign(tx, input, input.orderId));
+        const campaign = toCampaign(
+          await findCampaign(tx, input, input.orderId),
+        );
         const rows: OrderCsvRow[] = [];
         for (const entry of await findEntries(tx, input, input.orderId))
           for (const line of entry.lines)
@@ -758,7 +827,8 @@ export function createPrismaOrdersRepository(
               quantity: line.quantity,
               unitPrice: line.unitPrice,
               amount: line.amount,
-              paymentStatus: entry.paymentStatus === 'paid' ? '支払済み' : '未払い',
+              paymentStatus:
+                entry.paymentStatus === 'paid' ? '支払済み' : '未払い',
               paymentConfirmedAt: entry.paymentConfirmedAt ?? '',
             });
         await writeAudit(tx, {
@@ -773,7 +843,10 @@ export function createPrismaOrdersRepository(
 
     listAuditLogs: async (tenantId): Promise<OrdersAuditRecord[]> => {
       const rows = await client.auditLog.findMany({
-        where: { tenantId, resourceType: { in: ['order', 'order_product', 'order_entry'] } },
+        where: {
+          tenantId,
+          resourceType: { in: ['order', 'order_product', 'order_entry'] },
+        },
         orderBy: { createdAt: 'asc' },
       });
       return rows.map((row) => ({

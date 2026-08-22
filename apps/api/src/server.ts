@@ -3,8 +3,8 @@ import { createMemberRepositories, createPrismaClient } from '@cocolo/db';
 import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
-import { createCentralFeatureDependencies } from './central-feature-dependencies.js';
 import { createCentralDatabaseAdapter } from './central-dependencies.js';
+import { createCentralFeatureDependencies } from './central-feature-dependencies.js';
 import { readRuntimeEnvironment } from './runtime-environment.js';
 
 // 起動時に環境境界を検証してから、JWT検証とRLS付きrepositoryを組み立てる。
