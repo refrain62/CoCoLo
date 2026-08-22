@@ -148,6 +148,8 @@ pnpm --filter @cocolo/web typecheck
 pnpm --filter @cocolo/web build
 ```
 
+DB専用テストは `packages/db` のbuild後に実行し、未生成のdomain distへ依存しない順序に固定しています。
+
 統合担当は次の作業を別コミットで行います。
 
 * 既存 `app.ts` へfeature appをmountする。
