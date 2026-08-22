@@ -6,6 +6,7 @@
     ".": "./dist/index.js",
     "./client": "./dist/index.js",
     "./events": "./dist/event-repository.js",
+    "./board-contact": "./dist/board-contact-repository.js",
     "./orders": {
       "types": "./dist/orders-repository.d.ts",
       "import": "./dist/orders-repository.js"

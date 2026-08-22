@@ -3,6 +3,7 @@ import { createMemberRepositories, createPrismaClient } from '@cocolo/db';
 import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
+import { createCentralFeatureDependencies } from './central-feature-dependencies.js';
 import { createCentralDatabaseAdapter } from './central-dependencies.js';
 import { readRuntimeEnvironment } from './runtime-environment.js';
 
@@ -30,6 +31,11 @@ const app = createApp({
     environment: runtime.appEnv,
     corsOrigins,
     features: {
+      ...createCentralFeatureDependencies({
+        client: prisma,
+        appEnv: runtime.appEnv,
+        environment: process.env,
+      }),
       authTeamSelection: {
         repository: createAuthTeamSelectionRepository(prisma),
       },
