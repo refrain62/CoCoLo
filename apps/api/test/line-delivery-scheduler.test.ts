@@ -8,6 +8,7 @@ import {
   type LineDeliveryClaimRepository,
   type LineDeliveryDatabase,
   type LineDeliverySchedulerConfig,
+  loadLineDeliveryWorker,
   readLineDeliverySchedulerConfig,
   runLineDeliveryScheduler,
 } from '../dist/line-delivery-scheduler.js';
@@ -17,17 +18,24 @@ const ALLOWLIST = JSON.stringify({
   staging: {
     hosts: ['staging-db.internal'],
     names: ['cocolo_staging'],
-    roles: ['cocolo_app'],
+    roles: ['line_delivery_worker'],
   },
   production: {
     hosts: ['production-db.internal'],
     names: ['cocolo_production'],
-    roles: ['cocolo_app'],
+    roles: ['line_delivery_worker'],
   },
 });
 const MIGRATION = readFileSync(
   new URL(
     '../../../packages/db/prisma/migrations/20260823100000_line_delivery_scheduler/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const HARDENING_MIGRATION = readFileSync(
+  new URL(
+    '../../../packages/db/prisma/migrations/20260823110000_line_delivery_security_hardening/migration.sql',
     import.meta.url,
   ),
   'utf8',
@@ -38,8 +46,8 @@ function environment(
 ): Record<string, string | undefined> {
   return {
     APP_ENV: 'staging',
-    DATABASE_URL:
-      'postgresql://cocolo_app:secret@staging-db.internal:5432/cocolo_staging',
+    LINE_DELIVERY_WORKER_DATABASE_URL:
+      'postgresql://line_delivery_worker:secret@staging-db.internal:5432/cocolo_staging',
     LINE_DELIVERY_DB_ALLOWLIST: ALLOWLIST,
     LINE_CHANNEL_ACCESS_TOKEN: 'channel-access-token',
     LINE_DELIVERY_TRANSPORT: 'real',
@@ -72,7 +80,7 @@ function config(
     database: {
       host: 'staging-db.internal',
       name: 'cocolo_staging',
-      role: 'cocolo_app',
+      role: 'line_delivery_worker',
     },
     ...overrides,
   };
@@ -86,6 +94,8 @@ function claim(overrides: Partial<LineDeliveryClaim> = {}): LineDeliveryClaim {
     title: 'title',
     body: 'private body',
     deepLink: 'https://app.example.test/notification/1',
+    idempotencyKey: 'line-delivery-11111111-1111-4111-8111-111111111111',
+    payloadHash: 'a'.repeat(64),
     attempt: 1,
     attemptToken: '33333333-3333-4333-8333-333333333333',
     leaseExpiresAt: new Date(NOW.getTime() + 500),
@@ -113,6 +123,10 @@ function repositoryFor(
       failed.push(input);
       return 'failed';
     },
+    markUnknown: async (input) => {
+      failed.push(input);
+      return 'unknown';
+    },
   };
 }
 
@@ -121,7 +135,7 @@ test('APP_ENVとDB host/name/roleの環境別allowlistをfail-closed検証する
   assert.deepEqual(parsed.database, {
     host: 'staging-db.internal',
     name: 'cocolo_staging',
-    role: 'cocolo_app',
+    role: 'line_delivery_worker',
   });
   assert.throws(
     () => readLineDeliverySchedulerConfig(environment({ APP_ENV: 'local' })),
@@ -131,11 +145,33 @@ test('APP_ENVとDB host/name/roleの環境別allowlistをfail-closed検証する
     () =>
       readLineDeliverySchedulerConfig(
         environment({
-          DATABASE_URL:
-            'postgresql://cocolo_app:x@production-db.internal/cocolo_production',
+          LINE_DELIVERY_WORKER_DATABASE_URL:
+            'postgresql://line_delivery_worker:x@production-db.internal/cocolo_production',
         }),
       ),
     /APP_ENVのDB許可値/,
+  );
+  assert.throws(
+    () =>
+      readLineDeliverySchedulerConfig(
+        environment({
+          LINE_DELIVERY_WORKER_DATABASE_URL:
+            'postgresql://cocolo_app:x@staging-db.internal/cocolo_staging',
+          LINE_DELIVERY_DB_ALLOWLIST: JSON.stringify({
+            staging: {
+              hosts: ['staging-db.internal'],
+              names: ['cocolo_staging'],
+              roles: ['cocolo_app'],
+            },
+            production: {
+              hosts: ['production-db.internal'],
+              names: ['cocolo_production'],
+              roles: ['cocolo_app'],
+            },
+          }),
+        }),
+      ),
+    /専用worker role/,
   );
   assert.throws(
     () =>
@@ -145,12 +181,12 @@ test('APP_ENVとDB host/name/roleの環境別allowlistをfail-closed検証する
             staging: {
               hosts: ['same'],
               names: ['same'],
-              roles: ['cocolo_app'],
+              roles: ['line_delivery_worker'],
             },
             production: {
               hosts: ['same'],
               names: ['same'],
-              roles: ['cocolo_app'],
+              roles: ['line_delivery_worker'],
             },
           }),
         }),
@@ -218,6 +254,21 @@ test('schedulerは長時間transaction lockを使わずworkerへclaim処理を�
   assert.equal(processed, 1);
 });
 
+test('release成果物のworker moduleは実際にloadして件数上限まで処理する', async () => {
+  const worker = await loadLineDeliveryWorker('./line-delivery-worker.js');
+  let processed = 0;
+  const result = await worker.run({
+    maxItems: 2,
+    signal: new AbortController().signal,
+    processOne: async () => {
+      processed += 1;
+      return processed === 1 ? 'sent' : 'idle';
+    },
+  });
+  assert.equal(result, 'sent');
+  assert.equal(processed, 2);
+});
+
 test('同時workerのclaim競合はDB状態により一件だけ取得し、schedulerは重複実行しない', async () => {
   let claimed = false;
   const repository: LineDeliveryClaimRepository = {
@@ -228,6 +279,7 @@ test('同時workerのclaim競合はDB状態により一件だけ取得し、sche
     },
     markSent: async () => 'sent',
     markFailed: async () => 'failed',
+    markUnknown: async () => 'unknown',
   };
   const processor = createLineDeliveryProcessor({
     repository,
@@ -268,6 +320,8 @@ test('claim transactionは外部LINE送信前に終了し、attempt token付きs
                   title: claim().title,
                   body: claim().body,
                   deep_link: claim().deepLink,
+                  idempotency_key: claim().idempotencyKey,
+                  payload_hash: claim().payloadHash,
                   attempt: 1,
                   attempt_token: claim().attemptToken,
                   lease_expires_at: claim().leaseExpiresAt,
@@ -326,7 +380,7 @@ test('timeoutはAbortSignalを実際にabortし、lease期限以降の再試行�
   const result = await processor.processOne({
     signal: new AbortController().signal,
   });
-  assert.equal(result, 'failed');
+  assert.equal(result, 'unknown');
   assert.equal(observedSignal?.aborted, true);
   assert.equal(repository.failed.length, 1);
   assert.deepEqual(repository.failed[0], {
@@ -334,8 +388,6 @@ test('timeoutはAbortSignalを実際にabortし、lease期限以降の再試行�
     notificationId: claim().notificationId,
     attemptToken: claim().attemptToken,
     errorCode: 'timeout',
-    nextRetryAt: claim().leaseExpiresAt,
-    now: NOW,
   });
 });
 
@@ -355,7 +407,7 @@ test('親schedulerのAbortSignal中断はaborted状態として再試行へ確�
     now: () => NOW,
   });
   const result = await processor.processOne({ signal: controller.signal });
-  assert.equal(result, 'failed');
+  assert.equal(result, 'unknown');
   assert.equal(
     (repository.failed[0] as { errorCode: string }).errorCode,
     'aborted',
@@ -409,6 +461,33 @@ test('通知失敗は個人情報を結果へ出さず、再試行状態へ確�
   );
 });
 
+test('provider ID欠落は外部副作用不明としてunknownへ遷移する', async () => {
+  const repository = repositoryFor();
+  const processor = createLineDeliveryProcessor({
+    repository,
+    transport: {
+      send: async () => {
+        const error = new Error('provider response has no identity');
+        error.name = 'LineDeliveryProviderIdError';
+        throw error;
+      },
+    },
+    maxAttempts: 5,
+    leaseMs: 500,
+    sendTimeoutMs: 100,
+    retryBaseDelayMs: 1000,
+    now: () => NOW,
+  });
+  assert.equal(
+    await processor.processOne({ signal: new AbortController().signal }),
+    'unknown',
+  );
+  assert.equal(
+    (repository.failed[0] as { errorCode: string }).errorCode,
+    'provider_id_missing',
+  );
+});
+
 test('migrationはtenant・認可・監査・冪等性の境界をDB側で保証する', () => {
   assert.match(MIGRATION, /UNIQUE \(tenant_id, source_type, source_id\)/);
   assert.match(
@@ -428,6 +507,30 @@ test('migrationはtenant・認可・監査・冪等性の境界をDB側で保証
   assert.match(MIGRATION, /INSERT INTO audit_logs/);
   assert.match(MIGRATION, /error_code/);
   assert.doesNotMatch(MIGRATION, /jsonb_build_object\([^)]*body/s);
+});
+
+test('security hardening migrationはDB時刻・unknown・専用worker権限を固定する', () => {
+  assert.match(HARDENING_MIGRATION, /FOR UPDATE/);
+  assert.match(HARDENING_MIGRATION, /clock_timestamp\(\)/);
+  assert.match(HARDENING_MIGRATION, /gen_random_uuid\(\)/);
+  assert.match(
+    HARDENING_MIGRATION,
+    /status IN \('pending', 'sending', 'sent', 'failed', 'unknown'\)/,
+  );
+  assert.match(
+    HARDENING_MIGRATION,
+    /GRANT EXECUTE ON FUNCTION app_claim.*TO line_delivery_worker/s,
+  );
+  assert.match(
+    HARDENING_MIGRATION,
+    /REVOKE ALL ON TABLE line_delivery_outbox FROM cocolo_app/,
+  );
+  assert.doesNotMatch(
+    HARDENING_MIGRATION,
+    /GRANT EXECUTE ON FUNCTION app_claim.*TO cocolo_app/s,
+  );
+  assert.match(HARDENING_MIGRATION, /payload_hash/);
+  assert.match(HARDENING_MIGRATION, /idempotency_key/);
 });
 
 test('schedulerの実行失敗は指数backoffだけを返し、例外本文を返さない', async () => {

@@ -5,7 +5,7 @@ import { createPrismaClient } from '@cocolo/db';
 type SchedulerEnvironmentInput = Record<string, string | undefined>;
 type LineDeliveryAppEnvironment = 'staging' | 'production';
 
-export type LineDeliveryWorkerStatus = 'idle' | 'sent' | 'failed';
+export type LineDeliveryWorkerStatus = 'idle' | 'sent' | 'failed' | 'unknown';
 export type LineDeliveryItemStatus = LineDeliveryWorkerStatus | 'stale';
 
 export type LineDeliverySchedulerConfig = {
@@ -29,6 +29,8 @@ export type LineDeliveryClaim = {
   title: string;
   body: string;
   deepLink: string;
+  idempotencyKey: string;
+  payloadHash: string;
   attempt: number;
   attemptToken: string;
   leaseExpiresAt: Date;
@@ -36,7 +38,6 @@ export type LineDeliveryClaim = {
 
 export type LineDeliveryClaimRepository = {
   claimDue: (input: {
-    now: Date;
     maxAttempts: number;
     leaseMs: number;
     signal: AbortSignal;
@@ -46,16 +47,20 @@ export type LineDeliveryClaimRepository = {
     notificationId: string;
     attemptToken: string;
     providerMessageId: string;
-    now: Date;
   }) => Promise<'sent' | 'stale'>;
   markFailed: (input: {
     tenantId: string;
     notificationId: string;
     attemptToken: string;
-    errorCode: 'aborted' | 'timeout' | 'provider_failure';
-    nextRetryAt: Date | null;
-    now: Date;
+    errorCode: 'provider_failure';
+    retryDelayMs: number;
   }) => Promise<'failed' | 'stale'>;
+  markUnknown: (input: {
+    tenantId: string;
+    notificationId: string;
+    attemptToken: string;
+    errorCode: 'aborted' | 'timeout' | 'provider_id_missing';
+  }) => Promise<'unknown' | 'stale'>;
 };
 
 export type LineDeliveryTransport = {
@@ -64,6 +69,7 @@ export type LineDeliveryTransport = {
       LineDeliveryClaim,
       'notificationId' | 'destination' | 'title' | 'body' | 'deepLink'
     >;
+    idempotencyKey: string;
     signal: AbortSignal;
   }) => Promise<{ providerMessageId: string }>;
 };
@@ -228,7 +234,12 @@ export function readLineDeliverySchedulerConfig(
     throw new Error(
       'LINE配信schedulerはstaging / productionでだけ実行できます。',
     );
-  const database = parseDatabaseUrl(required(environment, 'DATABASE_URL'));
+  // API用DATABASE_URLを誤注入しないよう、worker専用接続URLを別名で必須にする。
+  const database = parseDatabaseUrl(
+    required(environment, 'LINE_DELIVERY_WORKER_DATABASE_URL'),
+  );
+  if (database.role !== 'line_delivery_worker')
+    throw new Error('LINE配信schedulerは専用worker roleでのみ実行できます。');
   const allowlist = parseDatabaseAllowlist(
     required(environment, 'LINE_DELIVERY_DB_ALLOWLIST'),
   );
@@ -358,7 +369,8 @@ export async function runLineDeliveryScheduler(input: {
     if (
       workerStatus !== 'idle' &&
       workerStatus !== 'sent' &&
-      workerStatus !== 'failed'
+      workerStatus !== 'failed' &&
+      workerStatus !== 'unknown'
     )
       throw new Error('workerの結果が不正です。');
     return {
@@ -383,6 +395,8 @@ type ClaimRow = {
   title: string;
   body: string;
   deep_link: string;
+  idempotency_key: string;
+  payload_hash: string;
   attempt: number;
   attempt_token: string;
   lease_expires_at: Date;
@@ -405,6 +419,8 @@ function toClaim(row: ClaimRow | undefined): LineDeliveryClaim | null {
     title: row.title,
     body: row.body,
     deepLink: row.deep_link,
+    idempotencyKey: row.idempotency_key,
+    payloadHash: row.payload_hash,
     attempt: row.attempt,
     attemptToken: row.attempt_token,
     leaseExpiresAt: row.lease_expires_at,
@@ -416,29 +432,23 @@ export function createPostgresLineDeliveryRepository(
   database: LineDeliveryDatabase,
 ): LineDeliveryClaimRepository {
   return {
-    claimDue: ({ now, maxAttempts, leaseMs }) =>
+    claimDue: ({ maxAttempts, leaseMs }) =>
       database.transaction(async (transaction) => {
         const rows = await transaction.queryRaw<ClaimRow[]>`
           SELECT notification_id, tenant_id, destination, title, body, deep_link,
-                 attempt, attempt_token, lease_expires_at
-            FROM app_claim_line_delivery_outbox(${now}, ${maxAttempts}, ${leaseMs})
+                 idempotency_key, payload_hash, attempt, attempt_token, lease_expires_at
+            FROM app_claim_line_delivery_outbox(${maxAttempts}::integer, ${leaseMs}::integer)
         `;
         if (!Array.isArray(rows) || rows.length > 1)
           throw new Error('LINE配信claimの応答が不正です。');
         return toClaim(rows[0]);
       }),
-    markSent: ({
-      tenantId,
-      notificationId,
-      attemptToken,
-      providerMessageId,
-      now,
-    }) =>
+    markSent: ({ tenantId, notificationId, attemptToken, providerMessageId }) =>
       database.transaction(async (transaction) => {
         const rows = await transaction.queryRaw<Array<{ outcome: string }>>`
           SELECT outcome FROM app_mark_line_delivery_sent(
             ${tenantId}::uuid, ${notificationId}::uuid,
-            ${attemptToken}::uuid, ${providerMessageId}, ${now}
+            ${attemptToken}::uuid, ${providerMessageId}::varchar
           )
         `;
         const outcome = rows[0]?.outcome;
@@ -451,19 +461,31 @@ export function createPostgresLineDeliveryRepository(
       notificationId,
       attemptToken,
       errorCode,
-      nextRetryAt,
-      now,
+      retryDelayMs,
     }) =>
       database.transaction(async (transaction) => {
         const rows = await transaction.queryRaw<Array<{ outcome: string }>>`
           SELECT outcome FROM app_mark_line_delivery_failed(
             ${tenantId}::uuid, ${notificationId}::uuid,
-            ${attemptToken}::uuid, ${errorCode}, ${nextRetryAt}, ${now}
+            ${attemptToken}::uuid, ${errorCode}::varchar, ${retryDelayMs}::integer
           )
         `;
         const outcome = rows[0]?.outcome;
         if (outcome !== 'failed' && outcome !== 'stale')
           throw new Error('LINE配信failed確定の応答が不正です。');
+        return outcome;
+      }),
+    markUnknown: ({ tenantId, notificationId, attemptToken, errorCode }) =>
+      database.transaction(async (transaction) => {
+        const rows = await transaction.queryRaw<Array<{ outcome: string }>>`
+          SELECT outcome FROM app_mark_line_delivery_unknown(
+            ${tenantId}::uuid, ${notificationId}::uuid,
+            ${attemptToken}::uuid, ${errorCode}::varchar
+          )
+        `;
+        const outcome = rows[0]?.outcome;
+        if (outcome !== 'unknown' && outcome !== 'stale')
+          throw new Error('LINE配信unknown確定の応答が不正です。');
         return outcome;
       }),
   };
@@ -472,11 +494,23 @@ export function createPostgresLineDeliveryRepository(
 function getErrorCode(
   error: unknown,
   signal: AbortSignal,
-): 'aborted' | 'timeout' | 'provider_failure' {
+): 'aborted' | 'timeout' | 'provider_failure' | 'provider_id_missing' {
   if (signal.aborted) return 'aborted';
   if (error instanceof Error && error.name === 'LineDeliveryTimeoutError')
     return 'timeout';
+  if (error instanceof Error && error.name === 'LineDeliveryProviderIdError')
+    return 'provider_id_missing';
   return 'provider_failure';
+}
+
+function isUnknownDeliveryError(
+  errorCode: ReturnType<typeof getErrorCode>,
+): errorCode is 'aborted' | 'timeout' | 'provider_id_missing' {
+  return (
+    errorCode === 'aborted' ||
+    errorCode === 'timeout' ||
+    errorCode === 'provider_id_missing'
+  );
 }
 
 async function sendWithTimeout(
@@ -508,6 +542,7 @@ async function sendWithTimeout(
           body: claim.body,
           deepLink: claim.deepLink,
         },
+        idempotencyKey: claim.idempotencyKey,
         signal: controller.signal,
       }),
       timeout,
@@ -528,11 +563,11 @@ export function createLineDeliveryProcessor(input: {
   retryBaseDelayMs: number;
   now?: () => Date;
 }): LineDeliveryProcessor {
-  const now = input.now ?? (() => new Date());
+  // retry時刻とleaseはDB時刻で確定する。旧テスト注入値は互換のため受け取るが参照しない。
+  void input.now;
   return {
     async processOne({ signal }) {
       const claim = await input.repository.claimDue({
-        now: now(),
         maxAttempts: input.maxAttempts,
         leaseMs: input.leaseMs,
         signal,
@@ -547,24 +582,23 @@ export function createLineDeliveryProcessor(input: {
           input.sendTimeoutMs,
         );
       } catch (error) {
-        const currentTime = now();
-        const nextRetryAt =
-          claim.attempt < input.maxAttempts
-            ? new Date(
-                Math.max(
-                  currentTime.getTime() +
-                    retryDelayMs(claim.attempt, input.retryBaseDelayMs),
-                  claim.leaseExpiresAt.getTime(),
-                ),
-              )
-            : null;
+        const errorCode = getErrorCode(error, signal);
+        if (isUnknownDeliveryError(errorCode))
+          return await input.repository.markUnknown({
+            tenantId: claim.tenantId,
+            notificationId: claim.notificationId,
+            attemptToken: claim.attemptToken,
+            errorCode,
+          });
         return await input.repository.markFailed({
           tenantId: claim.tenantId,
           notificationId: claim.notificationId,
           attemptToken: claim.attemptToken,
-          errorCode: getErrorCode(error, signal),
-          nextRetryAt,
-          now: currentTime,
+          errorCode,
+          retryDelayMs:
+            claim.attempt < input.maxAttempts
+              ? retryDelayMs(claim.attempt, input.retryBaseDelayMs)
+              : 0,
         });
       }
       return input.repository.markSent({
@@ -572,7 +606,6 @@ export function createLineDeliveryProcessor(input: {
         notificationId: claim.notificationId,
         attemptToken: claim.attemptToken,
         providerMessageId: sent.providerMessageId,
-        now: now(),
       });
     },
   };
@@ -636,7 +669,7 @@ function createPrismaDatabase(
 
 function createLineMessagingTransport(token: string): LineDeliveryTransport {
   return {
-    async send({ notification, signal }) {
+    async send({ notification, idempotencyKey, signal }) {
       const text = `${notification.title}\n${notification.body}\n${notification.deepLink}`;
       if (text.length > 5000) throw new Error('LINE通知本文が長すぎます。');
       const response = await fetch('https://api.line.me/v2/bot/message/push', {
@@ -645,6 +678,7 @@ function createLineMessagingTransport(token: string): LineDeliveryTransport {
           Accept: 'application/json',
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'X-Idempotency-Key': idempotencyKey,
         },
         body: JSON.stringify({
           to: notification.destination,
@@ -653,10 +687,16 @@ function createLineMessagingTransport(token: string): LineDeliveryTransport {
         signal,
       });
       if (!response.ok) throw new Error('LINEプロバイダー送信失敗');
+      const providerMessageId = response.headers
+        .get('x-line-request-id')
+        ?.trim();
+      if (!providerMessageId || providerMessageId.length > 256) {
+        const error = new Error('LINEプロバイダーIDがありません。');
+        error.name = 'LineDeliveryProviderIdError';
+        throw error;
+      }
       return {
-        providerMessageId:
-          response.headers.get('x-line-request-id') ??
-          `line-${notification.notificationId}`,
+        providerMessageId,
       };
     },
   };
@@ -669,7 +709,9 @@ export async function runLineDeliverySchedulerEntry(
   try {
     const config = readLineDeliverySchedulerConfig(environment);
     const worker = await loadLineDeliveryWorker(config.workerModule);
-    client = createPrismaClient();
+    client = createPrismaClient(
+      required(environment, 'LINE_DELIVERY_WORKER_DATABASE_URL'),
+    );
     const processor = createLineDeliveryProcessor({
       repository: createPostgresLineDeliveryRepository(
         createPrismaDatabase(client),

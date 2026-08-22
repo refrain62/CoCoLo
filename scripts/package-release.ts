@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,8 +16,11 @@ if (!artifactSha || !/^[0-9a-f]{40}$/.test(artifactSha))
   throw new Error('成果物の SHA は40桁の小文字 SHA-1 で指定してください。');
 
 await mkdir(output, { recursive: true });
+// schedulerが参照する実行可能workerをrelease成果物へ必ず含める。
+await access(path.join(root, 'apps/api/dist/line-delivery-worker.js'));
 const manifest = {
   artifactSha,
+  workerEntrypoint: 'apps/api/dist/line-delivery-worker.js',
   files: [
     'apps/api/dist',
     'apps/web/dist',
