@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 
+type AppEnvironment = 'local' | 'staging' | 'production';
+
 // 環境名・接続先・公開URL・bucket・production保持期間をallowlistと照合し、環境混同を起動前に拒否する。
-const allowed = {
+const allowed: Record<
+  AppEnvironment,
+  { R2_BUCKET: string; PUBLIC_APP_URL?: string }
+> = {
   local: {
     R2_BUCKET: 'cocolo-local',
     PUBLIC_APP_URL: 'http://localhost:5173',
@@ -14,10 +19,10 @@ const allowed = {
   },
 };
 const appEnv = process.env.APP_ENV;
-assert.ok(
-  appEnv && appEnv in allowed,
-  'APP_ENV には local / staging / production のいずれかを指定してください。',
-);
+if (appEnv !== 'local' && appEnv !== 'staging' && appEnv !== 'production')
+  throw new Error(
+    'APP_ENV には local / staging / production のいずれかを指定してください。',
+  );
 const expectedIndex = process.argv.indexOf('--expected');
 if (expectedIndex !== -1)
   assert.equal(

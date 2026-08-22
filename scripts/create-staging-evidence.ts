@@ -1,11 +1,11 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { assertDeploymentRecord } from './deployment-contract.mjs';
+import { assertDeploymentRecord } from './deployment-contract.ts';
 
 // stagingで実行済みのmigration・smoke・E2Eと、配置したartifact SHAをproduction昇格用証跡へ束ねる。
-if (!/^[0-9a-f]{40}$/.test(process.env.ARTIFACT_SHA ?? ''))
-  throw new Error('ARTIFACT_SHA は40桁の小文字 SHA-1 で指定してください。');
 const artifactSha = process.env.ARTIFACT_SHA;
+if (typeof artifactSha !== 'string' || !/^[0-9a-f]{40}$/.test(artifactSha))
+  throw new Error('ARTIFACT_SHA は40桁の小文字 SHA-1 で指定してください。');
 const deploymentRecordPath =
   process.env.STAGING_DEPLOYMENT_RECORD ??
   path.join('.release', 'deployment-record.json');

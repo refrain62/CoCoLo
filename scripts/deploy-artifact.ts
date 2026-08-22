@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { assertDeploymentRecord } from './deployment-contract.mjs';
+import { assertDeploymentRecord } from './deployment-contract.ts';
 
 // provider固有処理は外部adapterへ委譲し、検証済みartifactと配置記録を確認できない場合は配置成功にしない。
 const environment = process.argv[2];

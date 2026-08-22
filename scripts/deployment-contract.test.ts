@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertDeploymentRecord } from './deployment-contract.mjs';
+import { assertDeploymentRecord } from './deployment-contract.ts';
 
 const validRecord = {
   status: 'success',
