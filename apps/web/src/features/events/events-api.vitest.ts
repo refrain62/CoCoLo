@@ -3,9 +3,11 @@ import { createEventsApi, EventsApiError } from './events-api.js';
 
 describe('createEventsApi', () => {
   it('Bearerと期間を予定一覧へ渡す', async () => {
-    const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ data: [] }), { status: 200 }),
-    );
+    const fetcher = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: [] }), { status: 200 }),
+      );
     const api = createEventsApi({ getAccessToken: () => 'token-a' });
 
     await api.list('2026-08-01T00:00:00Z', '2026-09-01T00:00:00Z');
@@ -34,14 +36,19 @@ describe('createEventsApi', () => {
     const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
-          error: { code: 'ATTENDANCE_DEADLINE_PASSED', message: '締切後です。' },
+          error: {
+            code: 'ATTENDANCE_DEADLINE_PASSED',
+            message: '締切後です。',
+          },
         }),
         { status: 409 },
       ),
     );
     const api = createEventsApi({ getAccessToken: () => 'token-a' });
 
-    await expect(api.answer('event-a', { memberId: 'member-a', response: 'absent' })).rejects.toEqual(
+    await expect(
+      api.answer('event-a', { memberId: 'member-a', response: 'absent' }),
+    ).rejects.toEqual(
       new EventsApiError(409, 'ATTENDANCE_DEADLINE_PASSED', '締切後です。'),
     );
     fetcher.mockRestore();

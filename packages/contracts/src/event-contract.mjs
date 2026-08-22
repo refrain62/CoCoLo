@@ -73,7 +73,10 @@ export const eventCreateSchema = z
 export const eventUpdateSchema = z
   .object(
     Object.fromEntries(
-      Object.entries(eventUpdateFields).map(([key, schema]) => [key, schema.optional()]),
+      Object.entries(eventUpdateFields).map(([key, schema]) => [
+        key,
+        schema.optional(),
+      ]),
     ),
   )
   .strict()

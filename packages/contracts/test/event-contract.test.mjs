@@ -19,7 +19,8 @@ const validEvent = {
 test('予定契約はtenantIdを入力させず、時刻関係を検証する', () => {
   assert.equal(eventCreateSchema.safeParse(validEvent).success, true);
   assert.equal(
-    eventCreateSchema.safeParse({ ...validEvent, tenantId: 'tenant-a' }).success,
+    eventCreateSchema.safeParse({ ...validEvent, tenantId: 'tenant-a' })
+      .success,
     false,
   );
   assert.equal(

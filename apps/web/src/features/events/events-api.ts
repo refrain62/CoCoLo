@@ -63,8 +63,17 @@ export type EventsApi = {
   update: (eventId: string, input: EventUpdateInput) => Promise<EventSummary>;
   answer: (
     eventId: string,
-    input: { memberId: string; response: AttendanceResponse; correctionReason?: string },
-  ) => Promise<{ eventId: string; memberId: string; response: AttendanceResponse; updatedAt: string }>;
+    input: {
+      memberId: string;
+      response: AttendanceResponse;
+      correctionReason?: string;
+    },
+  ) => Promise<{
+    eventId: string;
+    memberId: string;
+    response: AttendanceResponse;
+    updatedAt: string;
+  }>;
   summary: (eventId: string) => Promise<AttendanceSummary>;
 };
 

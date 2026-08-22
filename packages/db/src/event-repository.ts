@@ -1,13 +1,13 @@
 import { randomBytes } from 'node:crypto';
-import { Prisma, PrismaClient } from '@prisma/client';
 import {
+  type AttendanceResponse,
   assertAttendanceChangeAllowed,
   assertValidEventSchedule,
-  summarizeAttendance,
-  type AttendanceResponse,
   type EventRole,
   type EventType,
+  summarizeAttendance,
 } from '@cocolo/domain/event';
+import type { Prisma, PrismaClient } from '@prisma/client';
 
 export type EventRecord = {
   id: string;
@@ -69,10 +69,16 @@ export class EventAuthorizationError extends Error {
 }
 
 export type EventRepository = {
-  list: (input: EventRepositoryInput & { from: Date; to: Date }) => Promise<EventRecord[]>;
-  create: (input: EventRepositoryInput & EventWriteInput) => Promise<EventRecord>;
+  list: (
+    input: EventRepositoryInput & { from: Date; to: Date },
+  ) => Promise<EventRecord[]>;
+  create: (
+    input: EventRepositoryInput & EventWriteInput,
+  ) => Promise<EventRecord>;
   update: (
-    input: EventRepositoryInput & { eventId: string } & Partial<EventWriteInput>,
+    input: EventRepositoryInput & {
+      eventId: string;
+    } & Partial<EventWriteInput>,
   ) => Promise<EventRecord>;
   upsertAttendance: (
     input: EventRepositoryInput & {
@@ -82,7 +88,9 @@ export type EventRepository = {
       correctionReason?: string | null;
     },
   ) => Promise<AttendanceRecord>;
-  summary: (input: EventRepositoryInput & { eventId: string }) => Promise<AttendanceSummary>;
+  summary: (
+    input: EventRepositoryInput & { eventId: string },
+  ) => Promise<AttendanceSummary>;
 };
 
 export type EventWriteInput = {
@@ -137,8 +145,12 @@ function uuidV7() {
   const timestamp = BigInt(Date.now());
   for (let index = 5; index >= 0; index -= 1)
     bytes[index] = Number((timestamp >> BigInt((5 - index) * 8)) & 0xffn);
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const byte6 = bytes[6];
+  const byte8 = bytes[8];
+  if (byte6 === undefined || byte8 === undefined)
+    throw new Error('UUIDv7の乱数領域を確保できませんでした。');
+  bytes[6] = (byte6 & 0x0f) | 0x70;
+  bytes[8] = (byte8 & 0x3f) | 0x80;
   const hex = bytes.toString('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
@@ -297,7 +309,10 @@ export function createEventRepository(client: PrismaClient): EventRepository {
                     attendance_deadline, created_at, updated_at
         `;
         const row = rows[0];
-        if (!row) throw new EventNotFoundError('予定の登録結果を取得できませんでした。');
+        if (!row)
+          throw new EventNotFoundError(
+            '予定の登録結果を取得できませんでした。',
+          );
         await audit(tx, input, 'event.create', 'event', id, {
           type: input.type,
           startsAt: input.startsAt.toISOString(),
@@ -326,17 +341,27 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           type: input.type ?? current.event_type,
           startsAt: input.startsAt ?? current.starts_at,
           endsAt: input.endsAt ?? current.ends_at,
-          location: input.location === undefined ? current.location : input.location,
-          itemsToBring: input.itemsToBring === undefined ? current.items_to_bring : input.itemsToBring,
+          location:
+            input.location === undefined ? current.location : input.location,
+          itemsToBring:
+            input.itemsToBring === undefined
+              ? current.items_to_bring
+              : input.itemsToBring,
           fee: input.fee ?? current.fee,
           announcementImageAttachmentId:
             input.announcementImageAttachmentId === undefined
               ? current.announcement_image_attachment_id
               : input.announcementImageAttachmentId,
-          opponent: input.opponent === undefined ? current.opponent : input.opponent,
-          meetingTime: input.meetingTime === undefined ? current.meeting_time : input.meetingTime,
-          transportationRequired: input.transportationRequired ?? current.transportation_required,
-          attendanceDeadline: input.attendanceDeadline ?? current.attendance_deadline,
+          opponent:
+            input.opponent === undefined ? current.opponent : input.opponent,
+          meetingTime:
+            input.meetingTime === undefined
+              ? current.meeting_time
+              : input.meetingTime,
+          transportationRequired:
+            input.transportationRequired ?? current.transportation_required,
+          attendanceDeadline:
+            input.attendanceDeadline ?? current.attendance_deadline,
         };
         assertValidEventSchedule(next, next.type, next.opponent);
         const rows = await tx.$queryRaw<EventRow[]>`
@@ -356,9 +381,18 @@ export function createEventRepository(client: PrismaClient): EventRepository {
                     attendance_deadline, created_at, updated_at
         `;
         const row = rows[0];
-        if (!row) throw new EventNotFoundError('予定の更新結果を取得できませんでした。');
+        if (!row)
+          throw new EventNotFoundError(
+            '予定の更新結果を取得できませんでした。',
+          );
         await audit(tx, input, 'event.update', 'event', input.eventId, {
-          fields: Object.keys(input).filter((key) => key !== 'tenantId' && key !== 'actorUserId' && key !== 'role' && key !== 'eventId'),
+          fields: Object.keys(input).filter(
+            (key) =>
+              key !== 'tenantId' &&
+              key !== 'actorUserId' &&
+              key !== 'role' &&
+              key !== 'eventId',
+          ),
         });
         return toEventRecord(row);
       }),
@@ -366,7 +400,9 @@ export function createEventRepository(client: PrismaClient): EventRepository {
       client.$transaction(async (tx) => {
         await setRlsContext(tx, input);
         await assertActiveMembership(tx, input);
-        const eventRows = await tx.$queryRaw<Array<{ attendance_deadline: Date }>>`
+        const eventRows = await tx.$queryRaw<
+          Array<{ attendance_deadline: Date }>
+        >`
           SELECT attendance_deadline
           FROM events
           WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
@@ -382,22 +418,22 @@ export function createEventRepository(client: PrismaClient): EventRepository {
         `;
         if (!memberRows[0] || memberRows[0].status === 'retired')
           throw new EventNotFoundError('対象部員が見つかりません。');
-        const isAssignedMember = await findAssignedMember(tx, input, input.memberId);
+        const isAssignedMember = await findAssignedMember(
+          tx,
+          input,
+          input.memberId,
+        );
         const deadlineRows = await tx.$queryRaw<Array<{ passed: boolean }>>`
           SELECT now() > ${event.attendance_deadline} AS passed
         `;
         const deadlinePassed = deadlineRows[0]?.passed === true;
-        try {
-          assertAttendanceChangeAllowed({
-            role: input.role,
-            isAssignedMember,
-            deadlinePassed,
-            correctionReason: input.correctionReason,
-          });
-        } catch (error) {
-          throw error;
-        }
-        let existingRows = await tx.$queryRaw<AttendanceRow[]>`
+        assertAttendanceChangeAllowed({
+          role: input.role,
+          isAssignedMember,
+          deadlinePassed,
+          correctionReason: input.correctionReason,
+        });
+        const existingRows = await tx.$queryRaw<AttendanceRow[]>`
           SELECT id, event_id, user_id, member_id, response, correction_reason,
                  responded_at, updated_at
           FROM attendance_responses
@@ -417,7 +453,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           rows = await tx.$queryRaw<AttendanceRow[]>`
             UPDATE attendance_responses SET
               response = ${input.response}::attendance_response,
-              correction_reason = ${deadlinePassed ? input.correctionReason?.trim() ?? null : null},
+              correction_reason = ${deadlinePassed ? (input.correctionReason?.trim() ?? null) : null},
               updated_at = now()
             WHERE id = ${existing.id}::uuid
             RETURNING id, event_id, user_id, member_id, response, correction_reason,
@@ -430,7 +466,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
             ) VALUES (
               ${uuidV7()}::uuid, ${input.tenantId}::uuid, ${input.eventId}::uuid,
               ${responseUserId}, ${input.memberId}::uuid, ${input.response}::attendance_response,
-              ${deadlinePassed ? input.correctionReason?.trim() ?? null : null}
+              ${deadlinePassed ? (input.correctionReason?.trim() ?? null) : null}
             )
             RETURNING id, event_id, user_id, member_id, response, correction_reason,
                       responded_at, updated_at
@@ -448,7 +484,9 @@ export function createEventRepository(client: PrismaClient): EventRepository {
             eventId: input.eventId,
             memberId: input.memberId,
             response: input.response,
-            correctionReason: deadlinePassed ? input.correctionReason?.trim() : null,
+            correctionReason: deadlinePassed
+              ? input.correctionReason?.trim()
+              : null,
           },
         );
         return toAttendanceRecord(row);
@@ -458,7 +496,9 @@ export function createEventRepository(client: PrismaClient): EventRepository {
         await setRlsContext(tx, input);
         await assertActiveMembership(tx, input);
         if (input.role === 'guardian')
-          throw new EventAuthorizationError('出欠集計を閲覧する権限がありません。');
+          throw new EventAuthorizationError(
+            '出欠集計を閲覧する権限がありません。',
+          );
         const eventRows = await tx.$queryRaw<Array<{ id: string }>>`
           SELECT id
           FROM events
@@ -470,7 +510,9 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           FROM members
           WHERE tenant_id = ${input.tenantId}::uuid AND status <> 'retired'::member_status
         `;
-        const responseRows = await tx.$queryRaw<Array<{ response: AttendanceResponse; member_id: string }>>`
+        const responseRows = await tx.$queryRaw<
+          Array<{ response: AttendanceResponse; member_id: string }>
+        >`
           SELECT response, member_id
           FROM attendance_responses
           WHERE tenant_id = ${input.tenantId}::uuid AND event_id = ${input.eventId}::uuid
@@ -487,7 +529,14 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           WHERE tenant_id = ${input.tenantId}::uuid AND status <> 'retired'::member_status
           ORDER BY id
         `;
-        await audit(tx, input, 'attendance.summary', 'event', input.eventId, {});
+        await audit(
+          tx,
+          input,
+          'attendance.summary',
+          'event',
+          input.eventId,
+          {},
+        );
         return {
           ...counts,
           totalMembers,

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  assertValidEventSchedule,
   AttendancePolicyError,
+  assertValidEventSchedule,
 } from '@cocolo/domain/event';
 import { createEventsApp } from '../dist/features/events/event-api.js';
 
@@ -81,7 +81,8 @@ function createFakeRepository() {
     },
     update: async ({ tenantId, eventId, ...input }) => {
       const current = events.find(
-        (candidate) => candidate.id === eventId && candidate.tenantId === tenantId,
+        (candidate) =>
+          candidate.id === eventId && candidate.tenantId === tenantId,
       );
       if (!current) {
         const error = new Error('予定が見つかりません。');
@@ -122,14 +123,16 @@ function createFakeRepository() {
       correctionReason,
     }) => {
       const current = events.find(
-        (candidate) => candidate.id === eventId && candidate.tenantId === tenantId,
+        (candidate) =>
+          candidate.id === eventId && candidate.tenantId === tenantId,
       );
       if (!current) {
         const error = new Error('予定が見つかりません。');
         error.status = 404;
         throw error;
       }
-      const deadlinePassed = Date.parse(current.attendanceDeadline) < Date.now();
+      const deadlinePassed =
+        Date.parse(current.attendanceDeadline) < Date.now();
       if (role === 'guardian' && !assigned.has(`${actorUserId}:${memberId}`)) {
         throw new AttendancePolicyError(
           'NOT_ASSIGNED',
@@ -166,23 +169,32 @@ function createFakeRepository() {
         updatedAt: new Date().toISOString(),
       };
       value.response = response;
-      value.correctionReason = deadlinePassed ? correctionReason ?? null : null;
+      value.correctionReason = deadlinePassed
+        ? (correctionReason ?? null)
+        : null;
       value.updatedAt = new Date().toISOString();
-      responses.set(`${tenantId}:${eventId}:${value.userId}:${memberId}`, value);
+      responses.set(
+        `${tenantId}:${eventId}:${value.userId}:${memberId}`,
+        value,
+      );
       return value;
     },
     summary: async ({ tenantId, eventId }) => {
       const values = [...responses.values()].filter(
-        (candidate) => candidate.tenantId === tenantId && candidate.eventId === eventId,
+        (candidate) =>
+          candidate.tenantId === tenantId && candidate.eventId === eventId,
       );
       const answered = new Set(values.map((value) => value.memberId));
       return {
         totalMembers: 2,
-        attending: values.filter((value) => value.response === 'attending').length,
+        attending: values.filter((value) => value.response === 'attending')
+          .length,
         absent: values.filter((value) => value.response === 'absent').length,
         pending: values.filter((value) => value.response === 'pending').length,
         unanswered: 2 - answered.size,
-        unansweredMemberIds: [MEMBER_A, MEMBER_B].filter((id) => !answered.has(id)),
+        unansweredMemberIds: [MEMBER_A, MEMBER_B].filter(
+          (id) => !answered.has(id),
+        ),
       };
     },
   };
@@ -266,7 +278,9 @@ test('ownerは所属tenantの予定だけを取得し、tenantIdをDTOへ返さ�
 
 test('guardianは担当部員の締切前回答を一意に更新できる', async () => {
   const repository = createFakeRepository();
-  repository.events[0].attendanceDeadline = new Date(Date.now() + 3_600_000).toISOString();
+  repository.events[0].attendanceDeadline = new Date(
+    Date.now() + 3_600_000,
+  ).toISOString();
   const app = createTestApp(repository);
   for (const responseValue of ['attending', 'absent']) {
     const response = await app.request(`/${EVENT_A}/attendance`, {
@@ -282,7 +296,9 @@ test('guardianは担当部員の締切前回答を一意に更新できる', asy
 
 test('guardianの担当外と締切後の回答を拒否する', async () => {
   const repository = createFakeRepository();
-  repository.events[0].attendanceDeadline = new Date(Date.now() - 3_600_000).toISOString();
+  repository.events[0].attendanceDeadline = new Date(
+    Date.now() - 3_600_000,
+  ).toISOString();
   const app = createTestApp(repository);
   const unassigned = await app.request(`/${EVENT_A}/attendance`, {
     method: 'PUT',
@@ -301,7 +317,9 @@ test('guardianの担当外と締切後の回答を拒否する', async () => {
 
 test('締切後のstaff修正は理由を要求し、集計はmanagerだけに許可する', async () => {
   const repository = createFakeRepository();
-  repository.events[0].attendanceDeadline = new Date(Date.now() - 3_600_000).toISOString();
+  repository.events[0].attendanceDeadline = new Date(
+    Date.now() - 3_600_000,
+  ).toISOString();
   const app = createTestApp(repository);
   const noReason = await app.request(`/${EVENT_A}/attendance`, {
     method: 'PUT',

@@ -7,17 +7,17 @@ import {
   eventUpdateSchema,
 } from '@cocolo/contracts/events';
 import {
-  AttendancePolicyError,
-  EventScheduleError,
-  canManageEvents,
-  type AttendanceResponse,
-  type EventRole,
-  type EventType,
-} from '@cocolo/domain/event';
-import {
   EventAuthorizationError,
   type EventRepository,
 } from '@cocolo/db/events';
+import {
+  AttendancePolicyError,
+  type AttendanceResponse,
+  canManageEvents,
+  type EventRole,
+  EventScheduleError,
+  type EventType,
+} from '@cocolo/domain/event';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
 
 type Membership = { tenantId: string; role: EventRole };
@@ -131,7 +131,9 @@ function toPartialEventWriteInput(input: EventUpdateInput) {
   return next;
 }
 
-function projectEvent(event: Awaited<ReturnType<EventRepository['list']>>[number]) {
+function projectEvent(
+  event: Awaited<ReturnType<EventRepository['list']>>[number],
+) {
   const { tenantId, ...publicEvent } = event;
   void tenantId;
   return publicEvent;
@@ -182,16 +184,31 @@ export function createEventsApp(options: EventApiOptions) {
     try {
       const claims = await options.verifyToken(token);
       if (claims.expiresAt <= Math.floor(Date.now() / 1000))
-        return errorResponse(c, 401, 'UNAUTHENTICATED', '認証の有効期限が切れています。');
+        return errorResponse(
+          c,
+          401,
+          'UNAUTHENTICATED',
+          '認証の有効期限が切れています。',
+        );
       const membership = await options.membershipRepository.findActiveByUserId(
         claims.userId,
       );
       if (!membership)
-        return errorResponse(c, 403, 'FORBIDDEN', '利用可能な所属がありません。');
+        return errorResponse(
+          c,
+          403,
+          'FORBIDDEN',
+          '利用可能な所属がありません。',
+        );
       c.set('auth', { userId: claims.userId, membership });
       await next();
     } catch {
-      return errorResponse(c, 401, 'UNAUTHENTICATED', '認証情報を確認できません。');
+      return errorResponse(
+        c,
+        401,
+        'UNAUTHENTICATED',
+        '認証情報を確認できません。',
+      );
     }
   };
 
@@ -221,11 +238,22 @@ export function createEventsApp(options: EventApiOptions) {
   app.post('/', async (c) => {
     const auth = c.get('auth');
     if (!canManageEvents(auth.membership.role))
-      return errorResponse(c, 403, 'FORBIDDEN', '予定を登録する権限がありません。');
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        '予定を登録する権限がありません。',
+      );
     const body = await c.req.json().catch(() => null);
     const parsed = eventCreateSchema.safeParse(body);
     if (!parsed.success)
-      return errorResponse(c, 400, 'VALIDATION_ERROR', '入力値が不正です。', parsed.error.flatten());
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        '入力値が不正です。',
+        parsed.error.flatten(),
+      );
     const event = await options.eventRepository.create({
       tenantId: auth.membership.tenantId,
       actorUserId: auth.userId,
@@ -238,14 +266,25 @@ export function createEventsApp(options: EventApiOptions) {
   app.patch('/:eventId', async (c) => {
     const auth = c.get('auth');
     if (!canManageEvents(auth.membership.role))
-      return errorResponse(c, 403, 'FORBIDDEN', '予定を編集する権限がありません。');
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        '予定を編集する権限がありません。',
+      );
     const eventId = eventIdSchema.safeParse(c.req.param('eventId'));
     if (!eventId.success)
       return errorResponse(c, 404, 'NOT_FOUND', '対象の予定が見つかりません。');
     const body = await c.req.json().catch(() => null);
     const parsed = eventUpdateSchema.safeParse(body);
     if (!parsed.success)
-      return errorResponse(c, 400, 'VALIDATION_ERROR', '入力値が不正です。', parsed.error.flatten());
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        '入力値が不正です。',
+        parsed.error.flatten(),
+      );
     const event = await options.eventRepository.update({
       tenantId: auth.membership.tenantId,
       actorUserId: auth.userId,
@@ -264,7 +303,13 @@ export function createEventsApp(options: EventApiOptions) {
     const body = await c.req.json().catch(() => null);
     const parsed = attendanceUpsertSchema.safeParse(body);
     if (!parsed.success)
-      return errorResponse(c, 400, 'VALIDATION_ERROR', '入力値が不正です。', parsed.error.flatten());
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        '入力値が不正です。',
+        parsed.error.flatten(),
+      );
     const input = parsed.data as {
       memberId: string;
       response: AttendanceResponse;
@@ -286,7 +331,12 @@ export function createEventsApp(options: EventApiOptions) {
     if (!eventId.success)
       return errorResponse(c, 404, 'NOT_FOUND', '対象の予定が見つかりません。');
     if (auth.membership.role === 'guardian')
-      return errorResponse(c, 403, 'FORBIDDEN', '出欠集計を閲覧する権限がありません。');
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        '出欠集計を閲覧する権限がありません。',
+      );
     const summary = await options.eventRepository.summary({
       tenantId: auth.membership.tenantId,
       actorUserId: auth.userId,

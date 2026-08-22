@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AttendancePolicyError } from '@cocolo/domain/event';
 import { createEventRepository, createPrismaClient } from '@cocolo/db/events';
+import { AttendancePolicyError } from '@cocolo/domain/event';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
@@ -44,8 +44,14 @@ test('実DBの予定・出欠repositoryがtenant境界と一意回答を守る',
     from: new Date(Date.now() - 60 * 60 * 1000),
     to: new Date(Date.now() + 72 * 60 * 60 * 1000),
   });
-  assert.equal(listed.some((event) => event.id === created.id), true);
-  assert.equal(listed.some((event) => event.tenantId === TENANT_B), false);
+  assert.equal(
+    listed.some((event) => event.id === created.id),
+    true,
+  );
+  assert.equal(
+    listed.some((event) => event.tenantId === TENANT_B),
+    false,
+  );
 
   const first = await repository.upsertAttendance({
     tenantId: TENANT_A,
