@@ -9,7 +9,8 @@
       "types": "./dist/orders-domain.d.ts",
       "import": "./dist/orders-domain.js"
     },
-    "./attachment": "./dist/attachment-domain.js"
+    "./attachment": "./dist/attachment-domain.js",
+    "./line": "./dist/line-domain.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
