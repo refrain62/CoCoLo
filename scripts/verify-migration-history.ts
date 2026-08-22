@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -55,19 +56,11 @@ async function main() {
   const directUrl = process.env.DIRECT_URL;
   assert.ok(directUrl, 'migration履歴検証にはDIRECT_URLが必要です');
   const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-  const manifestContent = await import('node:fs/promises').then(({ readFile }) =>
-    readFile(
-      path.join(
-        root,
-        'packages',
-        'db',
-        'prisma',
-        'migrations.sha256',
-      ),
-      'utf8',
-    ),
+  const manifestContent = await readFile(
+    path.join(root, 'packages', 'db', 'prisma', 'migrations.sha256'),
+    'utf8',
   );
-  const expected = parseMigrationManifest(await manifestContent);
+  const expected = parseMigrationManifest(manifestContent);
   const require = createRequire(path.join(root, 'packages', 'db', 'package.json'));
   const { PrismaClient } = require('@prisma/client') as {
     PrismaClient: new (options: {

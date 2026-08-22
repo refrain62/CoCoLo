@@ -63,4 +63,13 @@ test('不正なmanifest形式を拒否する', () => {
       `${'a'.repeat(64)}  20260822090000_phase1_foundation/migration.sql\r\n`,
     ),
   );
+  assert.throws(() =>
+    parseMigrationManifest(
+      [
+        `${'a'.repeat(64)}  20260822090000_phase1_foundation/migration.sql`,
+        `${'b'.repeat(64)}  20260822090000_phase1_foundation/migration.sql`,
+        '',
+      ].join('\n'),
+    ),
+  );
 });
