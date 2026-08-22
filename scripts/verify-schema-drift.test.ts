@@ -274,3 +274,29 @@ test('差分なしではPrisma CLIをexit-code付きで実行して成功する'
     await rm(fixture.root, { recursive: true, force: true });
   }
 });
+
+test('migration履歴DBへ接続できない場合はfail-closedにする', async () => {
+  const fixture = await createFixture();
+  let called = false;
+  try {
+    await assert.rejects(
+      () =>
+        verifySchemaDrift(
+          fixture.paths,
+          () => {
+            called = true;
+            return cleanResult;
+          },
+          shadowDatabaseUrl,
+          shadowConfig,
+          async () => {
+            throw new Error('ECONNREFUSED');
+          },
+        ),
+      /ECONNREFUSED/,
+    );
+    assert.equal(called, false);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});

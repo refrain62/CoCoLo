@@ -25,6 +25,7 @@
     "verify:workspace-boundaries": "depcruise --config .dependency-cruiser.cjs apps packages --output-type err-long && node scripts/verify-workspace-boundaries.ts",
     "verify:migration-sql": "node scripts/verify-migration-sql.ts",
     "verify:migration-checksum": "node scripts/verify-migration-checksum.ts",
+    "verify:migration-history": "node scripts/verify-migration-history.ts",
     "verify:migration-baseline": "node scripts/verify-migration-baseline.ts",
     "test:migration-integrity": "node --test scripts/verify-migration-*.test.ts",
     "verify:schema-drift": "node scripts/verify-schema-drift.ts",
