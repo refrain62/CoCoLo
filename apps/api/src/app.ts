@@ -330,11 +330,7 @@ export function createApp(options: AppOptions = {}) {
       });
       return c.json({ data: promotion });
     } catch (error) {
-      if (
-        error instanceof Error &&
-        'status' in error &&
-        error.status === 409
-      )
+      if (error instanceof Error && 'status' in error && error.status === 409)
         return errorResponse(
           c,
           409,
