@@ -87,7 +87,7 @@ DB triggerは締切後のguardian回答を拒否し、管理者修正理由を�
 
 * `pnpm test:contracts`
 * `pnpm --filter @cocolo/domain test`
-* `node --test apps/api/test/events.test.mjs`
+* `pnpm --filter @cocolo/api test:unit`
 * `pnpm exec vitest run apps/web/src/features/events/events-api.vitest.ts`
 * `pnpm --filter @cocolo/api build`
 * `pnpm --filter @cocolo/web typecheck`
@@ -98,6 +98,7 @@ DB triggerは締切後のguardian回答を拒否し、管理者修正理由を�
 * `pnpm test`
 * `pnpm --filter @cocolo/api test:unit`
 * `pnpm --filter @cocolo/api test:integration`
+* `pnpm lint`
 * `pnpm exec biome check .`
 * `git diff --check`
 
