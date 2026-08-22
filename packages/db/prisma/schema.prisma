@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  owner
+  admin
+  staff
+  guardian
+}
+
+enum MembershipStatus {
+  invited
+  active
+  suspended
+}
+
+enum MemberCategory {
+  student
+  adult
+}
+
+enum MemberStatus {
+  active
+  retired
+  suspended
+}
+
+enum PromotionRunStatus {
+  preview
+  completed
+  failed
+}
+
+model Tenant {
+  id           String             @id @default(uuid(7)) @db.Uuid
+  name         String             @db.VarChar(200)
+  createdAt    DateTime           @default(now()) @map("created_at")
+  memberships  TenantMembership[]
+  members      Member[]
+  guardians    GuardianMember[]
+  auditLogs    AuditLog[]
+  promotionRuns PromotionRun[]
+
+  @@map("tenants")
+}
+
+model TenantMembership {
+  id        String           @id @default(uuid(7)) @db.Uuid
+  tenantId  String           @map("tenant_id") @db.Uuid
+  userId    String           @map("user_id") @db.VarChar(128)
+  role      Role
+  status    MembershipStatus @default(active)
+  createdAt DateTime         @default(now()) @map("created_at")
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, userId])
+  @@index([userId, status])
+  @@map("tenant_memberships")
+}
+
+model Member {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  name          String           @db.VarChar(200)
+  kana          String?          @db.VarChar(200)
+  category      MemberCategory
+  gradeLevel    Int?             @map("grade_level")
+  ageGroup      String?          @map("age_group") @db.VarChar(100)
+  status        MemberStatus     @default(active)
+  note          String?
+  createdAt     DateTime         @default(now()) @map("created_at")
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  guardianLinks GuardianMember[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status, category])
+  @@index([tenantId, name])
+  @@map("members")
+}
+
+model GuardianMember {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  userId       String   @map("user_id") @db.VarChar(128)
+  memberId     String   @map("member_id") @db.Uuid
+  relationship String   @db.VarChar(100)
+  consentedAt  DateTime? @map("consented_at")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  member       Member   @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, userId, memberId])
+  @@index([tenantId, userId])
+  @@map("guardian_members")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  actorUserId String  @map("actor_user_id") @db.VarChar(128)
+  action     String   @db.VarChar(100)
+  resourceType String @map("resource_type") @db.VarChar(100)
+  resourceId String?  @map("resource_id") @db.Uuid
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
+
+model PromotionRun {
+  id             String            @id @default(uuid(7)) @db.Uuid
+  tenantId       String            @map("tenant_id") @db.Uuid
+  fiscalYear     Int               @map("fiscal_year")
+  status         PromotionRunStatus
+  previewCount   Int               @default(0) @map("preview_count")
+  executedAt     DateTime?         @map("executed_at")
+  actorUserId    String            @map("actor_user_id") @db.VarChar(128)
+  idempotencyKey String?           @map("idempotency_key") @db.VarChar(128)
+  requestHash    String?           @map("request_hash") @db.Char(64)
+  result         Json?
+  createdAt      DateTime          @default(now()) @map("created_at")
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, fiscalYear])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status])
+  @@map("promotion_runs")
+}
