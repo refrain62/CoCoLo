@@ -73,6 +73,9 @@ export type EventRepository = {
   list: (
     input: EventRepositoryInput & { from: Date; to: Date },
   ) => Promise<EventRecord[]>;
+  get: (
+    input: EventRepositoryInput & { eventId: string },
+  ) => Promise<EventRecord>;
   create: (
     input: EventRepositoryInput & EventWriteInput,
   ) => Promise<EventRecord>;
@@ -321,6 +324,24 @@ export function createEventRepository(
           to: input.to.toISOString(),
         });
         return rows.map(toEventRecord);
+      }),
+    get: (input) =>
+      client.$transaction(async (tx) => {
+        await setRlsContext(tx, input);
+        await assertActiveMembership(tx, input);
+        const rows = await tx.$queryRaw<EventRow[]>`
+          SELECT id, tenant_id, title, event_type, starts_at, ends_at,
+                 location, items_to_bring, fee, announcement_image_attachment_id,
+                 opponent, meeting_time, transportation_required,
+                 attendance_deadline, created_at, updated_at
+          FROM events
+          WHERE tenant_id = ${input.tenantId}::uuid
+            AND id = ${input.eventId}::uuid
+        `;
+        const row = rows[0];
+        if (!row) throw new EventNotFoundError();
+        await audit(tx, input, 'event.get', 'event', input.eventId, {});
+        return toEventRecord(row);
       }),
     create: (input) =>
       client.$transaction(async (tx) => {
