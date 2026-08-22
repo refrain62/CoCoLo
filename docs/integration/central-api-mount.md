@@ -79,7 +79,9 @@ Redisなどのstoreを接続する場合も、keyはtenantとuserまたはWebhoo
 
 本番の分散rate-limit storeは、RedisまたはCloudflare Durable Objectsなどの原子的なadapterを注入してください。
 
-イベント、締切、回覧の保存処理からLINE queueへ通知を登録するoutbox境界は未接続です。
+イベント、締切、回覧の保存処理からLINE outboxへ通知依頼を登録し、外部schedulerのworkerがqueueへ移す境界を接続済みです。
+
+outboxは同一tenant・通知元の組み合わせで冪等化し、業務保存と通知依頼を同じtransactionで確定します。
 
 予定、共同購買、添付、回覧板の詳細画面は中央Webで未接続表示を返します。
 

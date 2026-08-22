@@ -14,17 +14,31 @@
 | 添付 | DB repository、private R2実adapter、署名URL経路を接続済み |
 | 回覧板 | DB repository、RLS、中央API、Web一覧・既読画面を接続済み |
 | 送迎 | Prisma repository、中央API、Web画面を接続済み |
-| LINE | 接続状態、通知queue、実Messaging API adapter、署名Webhook、重複排除、worker入口を接続済み |
+| LINE | 接続状態、通知queue、実Messaging API adapter、署名Webhook、重複排除、自動outbox、worker入口を接続済み |
 
 ## 未実装・未検証
 
-1. 予定、締切、回覧の保存処理からLINE通知queueへ自動登録するoutbox経路。
-2. 中央Webの予定、共同購買、添付、回覧板の資源詳細画面。
-3. staging / productionで利用する分散rate-limit storeの実adapter。
-4. Supabase、Cloudflare R2、LINE Messaging API、配置先の実資格情報を使った疎通・E2E。
-5. 外部schedulerから`pnpm line:deliver`を定期実行する運用設定。
-6. Dockerまたはstaging PostgreSQLへ接続したfresh migration、RLS越境、worker関数の実DB検証。
-7. `docs/ci-hardening-plan.md`に記載されたT-014のCI強化。
+1. 中央Webの予定、共同購買、添付、回覧板の資源詳細画面。
+2. staging / productionで利用する分散rate-limit storeの実adapter。
+3. Supabase、Cloudflare R2、LINE Messaging API、配置先の実資格情報を使った疎通・E2E。
+4. 外部schedulerから`pnpm line:deliver`を定期実行する運用設定。
+5. Dockerまたはstaging PostgreSQLへ接続したfresh migration、RLS越境、worker関数、outbox関数の実DB検証。
+6. `docs/ci-hardening-plan.md`に記載されたT-014のCI強化。
+
+## 自動LINE通知の接続範囲
+
+予定の作成時は作成通知と出欠締切通知、予定の更新時は出欠締切通知を、業務データと同じtransactionでoutboxへ登録します。
+
+出欠締切通知は締切24時間前を基準とし、既に締切が近い予定は保存直後を通知時刻にします。
+
+回覧の掲載時は、同じtransactionで回覧通知をoutboxへ登録します。
+
+outboxは`tenant_id + source_type + source_id`で冪等化し、未送信の依頼だけ更新できます。
+
+workerは限定された`SECURITY DEFINER`関数でdue outboxを接続済みgroupのqueueへ移し、未接続tenantは`ignored`として確定します。
+
+outboxからqueueへの移送とLINE外部送信は別transactionです。
+外部送信に失敗した場合はqueueの再試行状態を使い、業務データのtransactionを巻き戻しません。
 
 ## fail-closedの条件
 

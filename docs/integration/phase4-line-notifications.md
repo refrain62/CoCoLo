@@ -108,9 +108,19 @@ Webhook の応答に tenant ID、user ID、受信本文を含めません。
 
 通知元ID、タイトル、本文、同一環境のリンクをDTOへ設定し、認証済みの実行者として`service.enqueue`を呼び出します。
 
-現状の中央統合では、利用者がLINE通知画面から手動登録する経路とDTO生成器までを接続しています。
-予定・締切・回覧の保存成功を起点に自動で`service.enqueue`するoutbox経路は未実装です。
-保存処理へ直接通知を追加すると、外部送信障害で業務保存を巻き戻せないため、次の実装では同一tenantのoutboxまたは通知依頼表を追加し、保存と通知依頼を同一transactionで確定します。
+利用者がLINE通知画面から手動登録する経路に加え、予定・締切・回覧の保存成功を起点に自動登録するoutbox経路を接続しています。
+
+予定の作成時は作成通知と締切24時間前通知、予定の更新時は締切通知をoutboxへ登録します。
+締切まで24時間未満の場合は、保存直後を通知時刻にします。
+
+回覧の掲載時は回覧通知をoutboxへ登録します。
+通知本文は個人情報を含まない固定文とし、詳細画面へのリンクだけを通知依頼へ保持します。
+
+outboxの登録は業務データと同じtransactionで行い、`tenant_id + source_type + source_id`で同一通知元を冪等化します。
+通知依頼の登録失敗は業務保存も失敗させ、外部LINE APIの送信失敗はqueueの再試行へ分離します。
+
+外部schedulerが`pnpm line:deliver`を起動すると、限定されたDB関数がdue outboxを接続済みgroupのqueueへ移します。
+接続先がないtenantは`ignored`として確定し、workerは利用者向けHTTP endpointとして公開しません。
 
 各機能は通知の送信結果を自分の状態遷移へ直接反映せず、通知キューの ID と状態を参照します。
 
@@ -142,6 +152,7 @@ migrationはPostgreSQL 17で表、RLS、権限、tenant条件、複合制約、W
 | --- | --- |
 | `line_connections` | `tenant_id`、`group_id`、`status`、`connected_at`、`updated_at`。connected 状態の `group_id` は tenant をまたいで一意 |
 | `line_notification_queue` | `tenant_id`、送信対象 `group_id`、`created_by_user_id`、`source_type`、`source_id`、`title`、`body`、`deep_link`、`status`、`attempts`、`next_retry_at`、provider ID、エラー、時刻 |
+| `line_notification_outbox` | `tenant_id`、`actor_user_id`、`source_type`、`source_id`、`title`、`body`、`deep_link`、`status`、`deliver_at`、処理時刻。`tenant_id + source_type + source_id`を一意 |
 | `line_webhook_receipts` | `tenant_id`、`group_id`、`webhook_event_id`、`received_at`。`group_id + webhook_event_id` を一意 |
 
 すべての表へ RLS を有効化し、API の transaction-local context と一致する tenant だけを参照・変更できるようにします。
@@ -159,6 +170,13 @@ queue の claim、送信結果更新、接続解除と登録の競合は、同�
 queue 作成時の `group_id` は送信対象を固定するため、接続解除後に別 group へ再接続しても古い通知を新 group へ転送しません。
 
 `line_notification_queue` の本文は個人情報を含めない業務公開情報に限定し、保持期間、削除、バックアップ対象を migration review で決定します。
+
+`line_notification_outbox`は業務保存と通知依頼を同じtransactionで確定するための境界であり、外部APIの応答を保存しません。
+
+outboxの状態は`pending → delivered/ignored`です。
+`delivered`はLINE送信済みではなくqueueへの移送済みを意味し、実送信の成否は`line_notification_queue`が保持します。
+
+DB分離時はoutboxの一意キー、通知元種別、通知時刻、状態、queueとの対応IDを同時に移行し、移行途中に同じ通知元を二重登録しないようにします。
 
 DB を Supabase PostgreSQL から分離する場合も、LINE の外部 ID、queue 状態、Webhook 重複排除 ID を値として移行し、Auth schema を移行対象にしません。
 

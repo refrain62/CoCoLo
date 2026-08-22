@@ -215,6 +215,23 @@ Webhook は raw body の HMAC-SHA256 署名、destination、group ID の接続�
 
 LINE 機能の API、Web、DB、LIFF の統合手順は [Phase 4 LINE 通知統合手順](integration/phase4-line-notifications.md) を参照します。
 
+## LINE 自動通知の運用境界
+
+予定・締切・回覧の保存処理は、LINE Messaging APIを直接呼び出さず、中央PostgreSQLの`line_notification_outbox`へ通知依頼を保存します。
+
+外部schedulerは`pnpm line:deliver`を定期実行し、workerがoutboxを`line_notification_queue`へ移してからLINE Push APIを呼び出します。
+
+outboxの`delivered`は外部送信成功ではなくqueueへの移送済みを意味します。
+実送信の成否、再試行時刻、試行回数はqueueの状態で確認します。
+
+workerを起動する環境では`LINE_CHANNEL_ACCESS_TOKEN`とDB接続情報を必須にし、`LINE_DELIVERY_BATCH_SIZE`は1〜100の範囲で設定します。
+
+未接続tenantのdue outboxは`ignored`として記録されます。
+これは利用者向けの成功通知ではないため、stagingでは接続前の保存、接続後の新規保存、未接続時のignoredを個別に確認します。
+
+workerの並列実行はDBの`FOR UPDATE SKIP LOCKED`で分担します。
+同じ通知を二重送信しないことを厳密には保証しないため、外部APIのタイムアウト後にqueueが再試行される場合があることを運用上の前提とします。
+
 ## 8. GitHub Actions と配置サービスの運用
 
 ### 8.1 Secret と Variable

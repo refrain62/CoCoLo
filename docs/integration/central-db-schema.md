@@ -202,6 +202,7 @@ Supabase PostgreSQLから別のPostgreSQLへ分離するときも、次の値と
 * 監査ログのappend-only属性とmetadataの許可範囲
 * R2 object key、MIME、サイズ、SHA-256、添付状態
 * LINE group ID、Webhook event ID、通知queueのattemptsと状態
+* LINE outboxの通知元一意キー、通知時刻、状態、queue対応ID
 
 Supabase Authの内部schemaは移行しない。
 
