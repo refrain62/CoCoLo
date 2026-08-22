@@ -27,7 +27,7 @@
 - `pnpm verify:production-bundle`: 成功（15ファイル）
 - `pnpm lint:workflows`: 成功
 - deployment contract: 4件成功
-- GitHub Actions品質ゲート run `32555164603`: 成功
+- GitHub Actions品質ゲート run `32555296057`: 成功
 - CIの実PostgreSQL role準備、migration、fixture、契約・統合テスト、型検査、build: 成功
 
 ## 残存Medium
