@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { AuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
+import type { EventRepository } from '@cocolo/db/events';
 import type { AuthTeamMembership } from '@cocolo/domain/auth-team-selection';
 import { createApp } from '../dist/app.js';
 
 const TEAM_A = '00000000-0000-7000-8000-000000000001';
 const TEAM_B = '00000000-0000-7000-8000-000000000002';
+const EVENT_A = '00000000-0000-7000-8000-000000000101';
 
 type ApiBody = {
   data?: unknown;
@@ -64,6 +66,30 @@ function teamRepository(): AuthTeamSelectionRepository {
       memberships.find((membership) => membership.tenantId === tenantId) ??
       null,
   };
+}
+
+function eventRepository(): EventRepository {
+  // 中央mountの接続だけを検証するため、DBの書き込み処理はテスト対象外に固定する。
+  return {
+    get: async ({ tenantId }) => ({
+      id: EVENT_A,
+      tenantId,
+      title: '中央mount予定',
+      type: 'practice',
+      startsAt: '2026-09-01T10:00:00.000Z',
+      endsAt: '2026-09-01T12:00:00.000Z',
+      location: null,
+      itemsToBring: null,
+      fee: 0,
+      announcementImageAttachmentId: null,
+      opponent: null,
+      meetingTime: null,
+      transportationRequired: false,
+      attendanceDeadline: '2026-08-31T10:00:00.000Z',
+      createdAt: '2026-08-22T00:00:00.000Z',
+      updatedAt: '2026-08-22T00:00:00.000Z',
+    }),
+  } as unknown as EventRepository;
 }
 
 function createTestApp(withTeamSelection = false) {
@@ -136,6 +162,25 @@ test('未接続featureは中央APIで明示503、unknown pathは404にする', a
   assert.equal((await json(unavailable)).error?.code, 'FEATURE_NOT_CONFIGURED');
   assert.equal(unknown.status, 404);
   assert.equal((await json(unknown)).error?.code, 'NOT_FOUND');
+});
+
+test('予定詳細は中央API mountから所属情報付きで取得する', async () => {
+  const app = createApp({
+    verifyToken,
+    membershipRepository: membershipRepository(),
+    central: {
+      features: { events: { repository: eventRepository() } },
+      logSink: () => undefined,
+    },
+  });
+  const response = await app.request(`/api/v1/events/${EVENT_A}`, {
+    headers: authHeaders,
+  });
+  const body = await json(response);
+
+  assert.equal(response.status, 200);
+  assert.equal((body.data as { id: string }).id, EVENT_A);
+  assert.equal((body.data as { tenantId?: string }).tenantId, undefined);
 });
 
 test('中央path validationはfeatureへ不正なUUIDを渡さない', async () => {
