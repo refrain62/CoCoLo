@@ -30,7 +30,9 @@ test('API起動時に許可されたstaging環境を解決する', () => {
 });
 
 test('APP_ENV未設定でAPI起動を許可しない', () => {
-  const environment = { ...validStagingEnvironment };
+  const environment: Record<string, string | undefined> = {
+    ...validStagingEnvironment,
+  };
   delete environment.APP_ENV;
 
   assert.throws(

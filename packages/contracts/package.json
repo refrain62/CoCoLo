@@ -3,16 +3,16 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.mjs",
-    "./upload": "./src/upload-contract.mjs",
-    "./member": "./src/member-contract.mjs"
+    ".": "./src/index.ts",
+    "./upload": "./src/upload-contract.ts",
+    "./member": "./src/member-contract.ts"
   },
   "scripts": {
-    "build": "node ../../scripts/generate-openapi.mjs",
-    "test": "node --test test/*.test.mjs",
-    "test:unit": "node --test test/*.test.mjs",
-    "lint": "node --check src/upload-contract.mjs && node --check src/openapi-source.mjs",
-    "typecheck": "node --check src/upload-contract.mjs"
+    "build": "node ../../scripts/generate-openapi.ts",
+    "test": "node --test test/*.test.ts",
+    "test:unit": "node --test test/*.test.ts",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "zod": "4.1.5"

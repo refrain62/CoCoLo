@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createApp } from '../dist/app.js';
+import type { MembershipContext, PromotionRepository } from '../src/app.js';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
-const memberships = {
+const memberships: Record<string, MembershipContext> = {
   'owner-a': { tenantId: TENANT_A, role: 'owner' },
   'staff-a': { tenantId: TENANT_A, role: 'staff' },
 };
 
-function createTestApp(calls = []) {
+type PromotionInput = Parameters<PromotionRepository['run']>[0];
+type PromotionPayload = {
+  data: Record<string, unknown>;
+  error?: { code: string; requestId?: string };
+};
+
+function createTestApp(calls: PromotionInput[] = []) {
   return createApp({
     verifyToken: async (token) => {
       if (!memberships[token]) throw new Error('invalid token');
@@ -38,17 +45,18 @@ function createTestApp(calls = []) {
   });
 }
 
-async function readJson(response) {
-  return response.json();
+async function readJson(response: Response): Promise<PromotionPayload> {
+  return (await response.json()) as PromotionPayload;
 }
 
-function assertError(payload, code) {
+function assertError(payload: PromotionPayload, code: string) {
+  assert.ok(payload.error);
   assert.equal(payload.error.code, code);
   assert.ok(payload.error.requestId);
 }
 
 test('owner は年度繰り上げのプレビューで対象件数を確認できる', async () => {
-  const calls = [];
+  const calls: PromotionInput[] = [];
   const response = await createTestApp(calls).request(
     '/api/v1/members/promote',
     {
@@ -70,7 +78,9 @@ test('owner は年度繰り上げのプレビューで対象件数を確認で�
     promotedCount: 0,
     result: null,
   });
-  assert.deepEqual(calls[0], {
+  const firstCall = calls[0];
+  assert.ok(firstCall);
+  assert.deepEqual(firstCall, {
     tenantId: TENANT_A,
     actorUserId: 'owner-a',
     role: 'owner',
@@ -95,7 +105,7 @@ test('年度繰り上げの実行モードは Idempotency-Key なしを拒否す
 });
 
 test('staff は年度繰り上げを実行できない', async () => {
-  const calls = [];
+  const calls: PromotionInput[] = [];
   const response = await createTestApp(calls).request(
     '/api/v1/members/promote',
     {
@@ -115,7 +125,7 @@ test('staff は年度繰り上げを実行できない', async () => {
 });
 
 test('年度繰り上げの実行モードはキーとリクエストをリポジトリへ渡す', async () => {
-  const calls = [];
+  const calls: PromotionInput[] = [];
   const response = await createTestApp(calls).request(
     '/api/v1/members/promote',
     {
@@ -131,8 +141,10 @@ test('年度繰り上げの実行モードはキーとリクエストをリポ�
 
   assert.equal(response.status, 200);
   assert.equal((await readJson(response)).data.status, 'completed');
-  assert.equal(calls[0].idempotencyKey, 'promotion-2026-a');
-  assert.equal(calls[0].mode, 'execute');
+  const firstCall = calls[0];
+  assert.ok(firstCall);
+  assert.equal(firstCall.idempotencyKey, 'promotion-2026-a');
+  assert.equal(firstCall.mode, 'execute');
 });
 
 test('年度繰り上げの不正な年度とmodeを拒否する', async () => {

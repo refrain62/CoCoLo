@@ -14,6 +14,9 @@ importers:
       '@playwright/test':
         specifier: 1.54.2
         version: 1.54.2
+      '@types/node':
+        specifier: 24.3.0
+        version: 24.3.0
       dependency-cruiser:
         specifier: 16.10.4
         version: 16.10.4

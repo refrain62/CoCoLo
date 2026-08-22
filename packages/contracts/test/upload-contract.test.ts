@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseUploadSessionInput } from '../src/upload-contract.mjs';
+import { parseUploadSessionInput } from '../src/upload-contract.ts';
 
 test('アップロードセッションは許可 MIMEと20 MiB以下を受け付ける', () => {
   const parsed = parseUploadSessionInput({
