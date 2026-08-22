@@ -32,6 +32,15 @@ for (const file of files.filter(
     );
   }
 }
+const qualityContent = await readFile(
+  path.join(directory, 'quality.yml'),
+  'utf8',
+);
+assert.match(
+  qualityContent,
+  /pnpm\s+verify:pnpm-config[\s\S]*pnpm\s+lint:workflows/,
+  'quality Workflowからlint:workflowsを実行してください。',
+);
 assertSchemaDriftWorkflowConnected(
   await readFile(path.join(directory, 'schema-drift.yml'), 'utf8'),
 );

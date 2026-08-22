@@ -51,9 +51,24 @@ test('CIのBASE_SHA欠落をfail-closedにする', () => {
 
 test('schema drift検査がCIへ接続されていないfixtureを拒否する', () => {
   const disconnected =
-    'name: schema drift\njobs:\n  check:\n    steps:\n      - run: pnpm test:schema-drift\n';
+    'on:\n  pull_request:\njobs:\n  check:\n    steps:\n      - run: pnpm test:schema-drift\n';
   assert.throws(
     () => assertSchemaDriftWorkflowConnected(disconnected),
     /verify:schema-drift/,
   );
+  const disabled = `
+on:
+  pull_request:
+jobs:
+  check:
+    steps:
+      - name: schema drift
+        if: false
+        run: pnpm verify:schema-drift
+        env:
+          BASE_SHA: \${{ github.event.pull_request.base.sha }}
+          CI: true
+          APP_ENV: local
+`;
+  assert.throws(() => assertSchemaDriftWorkflowConnected(disabled), /無効化/);
 });
