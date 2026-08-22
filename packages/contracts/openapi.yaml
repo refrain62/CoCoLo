@@ -45,6 +45,12 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -86,6 +92,98 @@
           },
           "409": {
             "description": "セッションの再利用またはリクエストの競合"
+          },
+          "422": {
+            "description": "添付本体の検証失敗"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/uploads/{id}/download": {
+      "get": {
+        "operationId": "createAttachmentDownloadUrl",
+        "summary": "認可済み添付の短期ダウンロードURLを作成",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "短期ダウンロードURL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "添付が見つかりません。"
+          }
+        }
+      }
+    },
+    "/uploads/{id}/cleanup": {
+      "post": {
+        "operationId": "cleanupRejectedAttachment",
+        "summary": "検証失敗した添付本体の削除を再試行",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "削除完了"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "cleanup対象が見つかりません。"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/uploads/cleanup-expired": {
+      "post": {
+        "operationId": "cleanupExpiredAttachments",
+        "summary": "期限切れアップロードセッションのcleanupを実行",
+        "responses": {
+          "200": {
+            "description": "期限切れcleanupの結果"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -157,8 +255,7 @@
         "type": "object",
         "required": [
           "mediaType",
-          "byteSize",
-          "ownerUserId"
+          "byteSize"
         ],
         "additionalProperties": false,
         "properties": {
@@ -174,11 +271,6 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 20971520
-          },
-          "ownerUserId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128
           }
         }
       },
@@ -235,6 +327,36 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 20971520
+          }
+        }
+      },
+      "DownloadResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": [
+              "attachmentId",
+              "downloadUrl",
+              "expiresAt"
+            ],
+            "properties": {
+              "attachmentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "downloadUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
           }
         }
       },
@@ -350,6 +472,16 @@
       },
       "Forbidden": {
         "description": "この操作を実行する権限がありません。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "外部サービスまたは依存サービスが利用できません。",
         "content": {
           "application/json": {
             "schema": {

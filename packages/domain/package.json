@@ -8,6 +8,7 @@
       "types": "./dist/orders-domain.d.ts",
       "import": "./dist/orders-domain.js"
     },
+    "./attachment": "./dist/attachment-domain.js",
     "./event": "./dist/event-domain.js"
   },
   "scripts": {
