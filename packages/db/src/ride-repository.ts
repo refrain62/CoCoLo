@@ -3,6 +3,7 @@ import {
   calculateRideMetrics,
   matchRideRequests,
   type RideAssignment,
+  type RideHistoryEntry,
   type RideMetrics,
   type RideOffer,
   type RidePlan,
@@ -184,6 +185,25 @@ function toAssignment(row: AssignmentRow): RideAssignment {
   };
 }
 
+function toHistory(row: {
+  id: string;
+  action: string;
+  createdAt: Date;
+}): RideHistoryEntry {
+  const actionMap: Record<string, RideHistoryEntry['action']> = {
+    'ride.plan.create': 'plan_created',
+    'ride.offer.create': 'offer_registered',
+    'ride.request.create': 'request_registered',
+    'ride.match.execute': 'matching_executed',
+    'ride.assignment.update': 'assignment_updated',
+  };
+  return {
+    id: row.id,
+    action: actionMap[row.action] ?? 'other',
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
 // DB操作の前にtenant・user・roleをtransaction-localへ設定し、アプリ側の条件だけに依存しない。
 async function setRlsContext(client: DatabaseClient, actor: RideActor) {
   await client.$executeRaw`
@@ -305,11 +325,22 @@ async function readSnapshot(
        )
      ORDER BY a.created_at ASC, a.id ASC
   `;
+  const history = await client.auditLog.findMany({
+    where: {
+      tenantId: actor.tenantId,
+      resourceType: 'ride_plan',
+      resourceId: plan.id,
+      action: { startsWith: 'ride.' },
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, action: true, createdAt: true },
+  });
   return {
     plan,
     offers: offers.map(toOffer),
     requests: requests.map(toRequest),
     assignments: assignments.map(toAssignment),
+    history: history.map(toHistory),
   };
 }
 

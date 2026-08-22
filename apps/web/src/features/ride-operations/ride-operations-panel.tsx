@@ -49,6 +49,17 @@ function statusLabel(status: RideSnapshot['requests'][number]['status']) {
   }[status];
 }
 
+function historyLabel(action: RideSnapshot['history'][number]['action']) {
+  return {
+    plan_created: '送迎予定を作成',
+    offer_registered: '車を登録',
+    request_registered: '乗車希望を登録',
+    matching_executed: '補助マッチングを実行',
+    assignment_updated: '割当を変更',
+    other: '送迎情報を変更',
+  }[action];
+}
+
 function Metrics({ metrics }: { metrics: RideMetrics }) {
   return (
     <dl>
@@ -281,6 +292,22 @@ export function RideOperationsPanel({
             {snapshot.requests.map((request) => (
               <li key={request.id}>
                 {request.passengerCount}人、{statusLabel(request.status)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section aria-labelledby="ride-history-heading">
+        <h2 id="ride-history-heading">変更履歴</h2>
+        {snapshot.history.length === 0 ? (
+          <p>変更履歴はありません。</p>
+        ) : (
+          <ul>
+            {snapshot.history.map((entry) => (
+              <li key={entry.id}>
+                {historyLabel(entry.action)}（
+                {new Date(entry.createdAt).toLocaleString('ja-JP')}）
               </li>
             ))}
           </ul>

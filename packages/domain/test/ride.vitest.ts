@@ -16,6 +16,7 @@ const plan = {
   destinationMapsUrl: 'https://www.google.com/maps/search/?api=1&query=Tokyo',
   status: 'open' as const,
   createdAt: '2026-08-22T00:00:00.000Z',
+  history: [],
 };
 
 describe('送迎ドメイン', () => {

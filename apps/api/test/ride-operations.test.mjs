@@ -45,7 +45,13 @@ function createFakeRepository() {
     return plan;
   }
   function append(actor, action, resourceId, metadata) {
-    audit.push({ actorUserId: actor.userId, action, resourceId, metadata });
+    audit.push({
+      actorUserId: actor.userId,
+      action,
+      resourceId,
+      metadata,
+      createdAt: now(),
+    });
   }
   function snapshot(actor, planId) {
     const plan = getPlan(actor, planId);
@@ -71,11 +77,26 @@ function createFakeRepository() {
           ) ||
           visibleOffers.some((offer) => offer.id === assignment.offerId)),
     );
+    const history = audit
+      .filter((entry) => entry.resourceId === plan.id)
+      .map((entry, index) => ({
+        id: `history-${index}`,
+        action:
+          {
+            'ride.plan.create': 'plan_created',
+            'ride.offer.create': 'offer_registered',
+            'ride.request.create': 'request_registered',
+            'ride.match.execute': 'matching_executed',
+            'ride.assignment.update': 'assignment_updated',
+          }[entry.action] ?? 'other',
+        createdAt: entry.createdAt,
+      }));
     return {
       plan,
       offers: visibleOffers,
       requests: visibleRequests,
       assignments: visibleAssignments,
+      history,
     };
   }
   return {

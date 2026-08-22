@@ -37,6 +37,17 @@ export type RideSnapshot = {
     offerId: string;
     passengerCount: number;
   }>;
+  history: Array<{
+    id: string;
+    action:
+      | 'plan_created'
+      | 'offer_registered'
+      | 'request_registered'
+      | 'matching_executed'
+      | 'assignment_updated'
+      | 'other';
+    createdAt: string;
+  }>;
 };
 
 export type RideDispatch = {
@@ -66,6 +77,7 @@ export type RideDispatch = {
     passengerCount: number;
     createdAt: string;
   }>;
+  history: RideSnapshot['history'];
 };
 
 export type RideMetrics = {

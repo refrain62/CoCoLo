@@ -45,11 +45,24 @@ export type RideAssignment = {
   createdAt: string;
 };
 
+export type RideHistoryEntry = {
+  id: string;
+  action:
+    | 'plan_created'
+    | 'offer_registered'
+    | 'request_registered'
+    | 'matching_executed'
+    | 'assignment_updated'
+    | 'other';
+  createdAt: string;
+};
+
 export type RideSnapshot = {
   plan: RidePlan;
   offers: RideOffer[];
   requests: RideRequest[];
   assignments: RideAssignment[];
+  history: RideHistoryEntry[];
 };
 
 export type RideMatchDecision = {

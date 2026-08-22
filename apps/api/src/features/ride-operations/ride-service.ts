@@ -37,6 +37,7 @@ export type RideSnapshotView = {
     offerId: string;
     passengerCount: number;
   }>;
+  history: RideSnapshot['history'];
 };
 
 export type RideDispatchView = {
@@ -120,6 +121,7 @@ function toSnapshotView(
       offerId: assignment.offerId,
       passengerCount: assignment.passengerCount,
     })),
+    history: snapshot.history,
   };
 }
 
