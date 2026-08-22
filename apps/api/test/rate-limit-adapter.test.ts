@@ -8,11 +8,17 @@ import {
   InMemoryRateLimitStore,
 } from '../dist/security/rate-limit.js';
 import {
+  bundledRateLimitAdapterPackages,
+  type CentralRateLimitStore,
   createConfiguredRateLimitStore,
   createDistributedRateLimitStore,
   type DistributedRateLimitAdapter,
+  extractPnpmLockfilePackageNames,
   isHashedRateLimitKey,
+  loadDistributedRateLimitAdapter,
+  validateRateLimitAdapterModule,
 } from '../dist/security/rate-limit-adapter.js';
+import { maliciousRateLimitAdapterModules } from './fixtures/rate-limit-adapter-malicious.mjs';
 
 test('tenant/user identityはハッシュ済みキーだけになり外部adapterへPIIを渡さない', async () => {
   const calls: string[] = [];
@@ -73,6 +79,89 @@ test('tenant/userの区切り文字によるキー衝突を許さない', () => 
   });
 
   assert.notEqual(first, second);
+});
+
+test('APP_ENV由来のnamespaceをキーへ含め、stagingとproductionを分離する', () => {
+  const identity = {
+    kind: 'user' as const,
+    tenantId: 'tenant-a',
+    userId: 'user-a',
+  };
+  const stagingKey = createRateLimitKey('staging', 'members', identity);
+  const productionKey = createRateLimitKey('production', 'members', identity);
+
+  assert.notEqual(stagingKey, productionKey);
+  assert.equal(stagingKey.includes(':staging:'), true);
+  assert.equal(isHashedRateLimitKey(stagingKey, 'staging'), true);
+  assert.equal(isHashedRateLimitKey(stagingKey, 'production'), false);
+});
+
+test('中央RateLimitStore契約へadapterを注入したdistributed storeを生成する', async () => {
+  let receivedContext: { signal: AbortSignal; timeoutMs: number } | undefined;
+  const adapter: DistributedRateLimitAdapter = {
+    consumeAtomic: async (input, context) => {
+      receivedContext = context;
+      return {
+        allowed: true,
+        remaining: input.limit - 1,
+        resetAtMs: input.nowMs + input.windowMs,
+      };
+    },
+  };
+  const store: CentralRateLimitStore = createDistributedRateLimitStore({
+    adapter,
+    namespace: 'staging',
+    timeoutMs: 25,
+  });
+  const key = createRateLimitKey('staging', 'members', {
+    kind: 'user',
+    tenantId: 'tenant-a',
+    userId: 'user-a',
+  });
+
+  const result = await store.consume({
+    key,
+    limit: 1,
+    windowMs: 60_000,
+    nowMs: 1_000,
+  });
+  assert.equal(store.distributed, true);
+  assert.strictEqual(store.adapter, adapter);
+  assert.equal(store.namespace, 'staging');
+  assert.equal(result.allowed, true);
+  assert.ok(receivedContext);
+  assert.equal(receivedContext.timeoutMs, 25);
+  assert.equal(receivedContext.signal.aborted, false);
+});
+
+test('分散storeはnamespaceが異なるkeyをadapterへ渡さない', async () => {
+  let calls = 0;
+  const store = createDistributedRateLimitStore({
+    adapter: {
+      consumeAtomic: async () => {
+        calls += 1;
+        return { allowed: true, remaining: 0, resetAtMs: 61_000 };
+      },
+    },
+    namespace: 'production',
+  });
+
+  await assert.rejects(
+    Promise.resolve(
+      store.consume({
+        key: createRateLimitKey('staging', 'members', {
+          kind: 'user',
+          tenantId: 'tenant-a',
+          userId: 'user-a',
+        }),
+        limit: 1,
+        windowMs: 60_000,
+        nowMs: 1_000,
+      }),
+    ),
+    /分散rate limitの入力契約が不正です。/,
+  );
+  assert.equal(calls, 0);
 });
 
 test('空のtenant/user identityをキーへ変換しない', () => {
@@ -175,6 +264,105 @@ test('distributed adapter障害はfail-closedで503になる', async () => {
   const response = await app.request('/');
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error.code, 'RATE_LIMIT_UNAVAILABLE');
+});
+
+test('外部storeのconsumeAtomicがtimeoutすると503で業務handlerを呼ばない', async () => {
+  let receivedSignal: AbortSignal | undefined;
+  let handlerCalls = 0;
+  const app = new Hono();
+  app.use(
+    '*',
+    createRateLimitMiddleware({
+      scope: 'members',
+      limit: 1,
+      windowMs: 60_000,
+      timeoutMs: 10,
+      store: createDistributedRateLimitStore({
+        adapter: {
+          consumeAtomic: async (_input, context) => {
+            receivedSignal = context.signal;
+            return new Promise<{
+              allowed: boolean;
+              remaining: number;
+              resetAtMs: number;
+            }>(() => undefined);
+          },
+        },
+        namespace: 'local',
+      }),
+      keyResolver: () => ({
+        kind: 'user',
+        tenantId: 'tenant-a',
+        userId: 'user-a',
+      }),
+    }),
+  );
+  app.get('/', () => {
+    handlerCalls += 1;
+    return new Response('ok');
+  });
+
+  const response = await app.request('/');
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error.code, 'RATE_LIMIT_UNAVAILABLE');
+  assert.equal(handlerCalls, 0);
+  assert.ok(receivedSignal);
+  assert.equal(receivedSignal.aborted, true);
+});
+
+test('RATE_LIMIT_ADAPTER_MODULEはfile/data/nodeとlockfile外packageを拒否する', async () => {
+  for (const moduleSpecifier of maliciousRateLimitAdapterModules)
+    assert.throws(
+      () =>
+        validateRateLimitAdapterModule(moduleSpecifier, {
+          allowedPackages: ['@cocolo/test-rate-limit-adapter'],
+          lockfilePackages: ['@cocolo/test-rate-limit-adapter'],
+        }),
+      /Node package名だけを指定してください。/,
+    );
+
+  const maliciousGlobal = globalThis as typeof globalThis & {
+    __rateLimitCompromised?: boolean;
+  };
+  delete maliciousGlobal.__rateLimitCompromised;
+  await assert.rejects(
+    () =>
+      loadDistributedRateLimitAdapter(
+        new URL(
+          './fixtures/rate-limit-adapter-malicious-module.mjs',
+          import.meta.url,
+        ).href,
+      ),
+    /Node package名だけを指定してください。/,
+  );
+  assert.equal(maliciousGlobal.__rateLimitCompromised, undefined);
+
+  assert.throws(
+    () =>
+      validateRateLimitAdapterModule('@cocolo/not-installed-adapter', {
+        allowedPackages: ['@cocolo/not-installed-adapter'],
+        lockfilePackages: [],
+      }),
+    /pnpm lockfileの許可パッケージにありません。/,
+  );
+  assert.throws(
+    () => validateRateLimitAdapterModule('@cocolo/rate-limit-redis-adapter'),
+    /adapter package allowlistにありません。/,
+  );
+  assert.equal(bundledRateLimitAdapterPackages.length, 0);
+});
+
+test('pnpm lockfileからpackage root名だけを抽出する', () => {
+  assert.deepEqual(
+    [
+      ...extractPnpmLockfilePackageNames(`
+packages:
+  '@cocolo/rate-limit-redis-adapter@1.0.0':
+  rate-limit-redis-adapter@1.0.0:
+`),
+    ].sort(),
+    ['@cocolo/rate-limit-redis-adapter', 'rate-limit-redis-adapter'],
+  );
 });
 
 test('環境ごとのstore選択はlocal=in-memory、staging/production=distributedを強制する', () => {

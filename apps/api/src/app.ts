@@ -105,9 +105,12 @@ export type AppOptions = {
   rateLimit?: {
     environment?: RateLimitEnvironment;
     mode?: RateLimitStoreMode;
+    adapter?: DistributedRateLimitAdapter;
     distributedAdapter?: DistributedRateLimitAdapter;
     localStore?: InMemoryRateLimitStore;
     now?: () => number;
+    namespace?: RateLimitEnvironment;
+    timeoutMs?: number;
   };
 };
 
@@ -170,11 +173,19 @@ function projectMember(member: MemberRecord, role: MemberRole) {
 export function createApp(options: AppOptions = {}) {
   const app = new Hono<ApiEnv>();
   const rateLimitOptions = options.rateLimit ?? {};
+  const rateLimitEnvironment = rateLimitOptions.environment ?? 'local';
+  const rateLimitNamespace = rateLimitOptions.namespace ?? rateLimitEnvironment;
+  if (rateLimitNamespace !== rateLimitEnvironment)
+    throw new Error(
+      'rate limit namespaceはAPP_ENV由来の環境名と一致させてください。',
+    );
   const rateLimitStore = createConfiguredRateLimitStore({
-    appEnv: rateLimitOptions.environment ?? 'local',
+    appEnv: rateLimitEnvironment,
     mode: rateLimitOptions.mode ?? 'memory',
+    adapter: rateLimitOptions.adapter,
     distributedAdapter: rateLimitOptions.distributedAdapter,
     localStore: rateLimitOptions.localStore,
+    timeoutMs: rateLimitOptions.timeoutMs,
   });
 
   app.use('*', async (c, next) => {
@@ -250,6 +261,8 @@ export function createApp(options: AppOptions = {}) {
     ...rateLimitPolicies.authenticated,
     store: rateLimitStore,
     now: rateLimitOptions.now,
+    namespace: rateLimitNamespace,
+    timeoutMs: rateLimitOptions.timeoutMs,
     keyResolver: (c) => {
       const auth = c.get('auth');
       return {

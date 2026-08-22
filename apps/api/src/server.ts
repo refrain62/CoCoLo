@@ -21,7 +21,8 @@ const app = createApp({
   rateLimit: {
     environment: runtime.appEnv,
     mode: runtime.rateLimitStoreMode,
-    distributedAdapter: distributedRateLimitAdapter,
+    namespace: runtime.rateLimitNamespace,
+    adapter: distributedRateLimitAdapter,
   },
   ...repositories,
 });
