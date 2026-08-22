@@ -7,6 +7,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertTrustRootReady, readTrustRoot } from './trust-root.ts';
 
 type TrustedManifest = { files?: Record<string, string> };
+type BootstrapExtension = {
+  schema: 1;
+  mode: 'owner-only-one-time';
+  owner: '@refrain62';
+  head_sha: string;
+  files: Record<string, string>;
+};
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -32,6 +39,7 @@ async function trackedFiles(
 async function requiredManifestPaths(): Promise<string[]> {
   const required = [
     '.github/CODEOWNERS',
+    '.github/security/bootstrap-extension.json',
     '.github/security/trust-root.json',
     'package.json',
     'pnpm-lock.yaml',
@@ -124,6 +132,24 @@ export async function verifyTrustRoot(): Promise<void> {
     /^\/scripts\/\*\*\s+@refrain62$/m,
     '秘密情報・deploy呼出しを含むscripts全体をCODEOWNERSで保護してください。',
   );
+  const extension = JSON.parse(
+    await readFile(
+      path.join(root, '.github/security/bootstrap-extension.json'),
+      'utf8',
+    ),
+  ) as BootstrapExtension;
+  assert.equal(extension.schema, 1);
+  assert.equal(extension.mode, 'owner-only-one-time');
+  assert.equal(extension.owner, '@refrain62');
+  assert.match(extension.head_sha, /^[0-9a-f]{40}$/);
+  assert.ok(Object.keys(extension.files).length > 0);
+  for (const [filename, expectedHash] of Object.entries(extension.files)) {
+    assert.ok(
+      !path.isAbsolute(filename) && !filename.includes('..'),
+      `${filename}: extension pathが安全ではありません。`,
+    );
+    assert.match(expectedHash, /^[0-9a-f]{64}$/);
+  }
   console.log('owner bootstrap済みのtrust rootとmanifestを検証しました。');
 }
 
