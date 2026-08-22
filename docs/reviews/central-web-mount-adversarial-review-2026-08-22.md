@@ -57,7 +57,9 @@ session refresh/logoutと同時に変更すると認証状態の競合を起こ�
 
 ## 検証結果
 
-`pnpm exec vitest run apps/web/src/central-navigation.vitest.ts` は7件成功しました。
+`pnpm exec vitest run apps/web/src/central-navigation.vitest.ts` は8件成功しました。
+
+リポジトリ全体のVitestは17ファイル51件が成功しました。
 
 `pnpm --filter @cocolo/domain build` と `pnpm --filter @cocolo/ui build` は成功しました。
 

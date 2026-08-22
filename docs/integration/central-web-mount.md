@@ -128,7 +128,9 @@ PR #31のチーム選択は、中央APIのactive membership解決と同じtenant
 
 feature API、OpenAPI、DB migration、実LINE、実R2の接続は、このブランチの検証範囲に含めません。
 
-中央Webの追加後に、対象テスト7件、domainとUIのbuild、Web typecheck、リポジトリ全体buildが成功しました。
+中央Webの追加後に、対象テスト8件、domainとUIのbuild、Web typecheck、リポジトリ全体buildが成功しました。
+
+リポジトリ全体のVitestは17ファイル51件が成功しました。
 
 リポジトリ全体testは、統合ベースが `apps/api/src/app.ts` から部員編集と退部routeを除外しているため、既存の `apps/api/test/members.test.ts` 4件が404または非JSON応答で失敗します。
 
