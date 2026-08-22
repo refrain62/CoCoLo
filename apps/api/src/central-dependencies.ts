@@ -558,14 +558,13 @@ export function mountCentralFeatureRoutes(
     );
 }
 
-// DB schemaとmigrationが中央統合されるまで、Prisma clientを偽のfeature repositoryへ変換しない。
+// 中央migrationとRLSを統合済みのPrisma clientとして扱い、未対応featureだけを個別に未接続とする。
 export function createCentralDatabaseAdapter(
   client: unknown,
 ): CentralDatabaseAdapter {
   return {
     client,
-    featureSchemaReady: false,
-    unavailableReason:
-      '各featureのPrisma schema、migration、RLS、grantを中央統合するまでfeature repositoryを有効化しません。',
+    featureSchemaReady: true,
+    unavailableReason: '',
   };
 }

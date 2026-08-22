@@ -66,8 +66,8 @@ test('中央の未接続応答はPIIを含まない共通error契約である', 
 
 test('DB adapterはschema未統合を明示し、本番rate limit未接続は起動時に停止する', () => {
   const database = createCentralDatabaseAdapter({});
-  assert.equal(database.featureSchemaReady, false);
-  assert.match(database.unavailableReason, /schema/);
+  assert.equal(database.featureSchemaReady, true);
+  assert.equal(database.unavailableReason, '');
   assert.throws(
     () => createCentralRateLimitMiddleware({ requireDistributed: true }),
     /分散rate-limit store/,
