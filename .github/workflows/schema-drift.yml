@@ -87,7 +87,7 @@ jobs:
           SHADOW_DATABASE_PASSWORD: cocolo_shadow
           SHADOW_DATABASE_ADMIN_PASSWORD: postgres
       - name: テストDBのroleを準備してmigrationを適用
-        run: pnpm db:prepare:test && pnpm --filter @cocolo/db exec prisma migrate deploy && pnpm --filter @cocolo/db exec prisma generate
+        run: pnpm --filter @cocolo/db exec prisma generate && pnpm db:prepare:test && pnpm --filter @cocolo/db exec prisma migrate deploy
         env:
           PGPASSFILE: ${{ runner.temp }}/cocolo.pgpass
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test

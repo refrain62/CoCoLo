@@ -390,16 +390,15 @@ test('差分なしではPrisma CLIをexit-code付きで実行して成功する'
 });
 
 test('実DB構造比較はDIRECT_URLをargvへ渡さずschema datasourceから実行する', () => {
-  const args = buildDirectDatabaseDiffArgs(
-    fixturePaths('C:\\schema-drift-fixture'),
-  );
+  const fixture = fixturePaths('C:\\schema-drift-fixture');
+  const args = buildDirectDatabaseDiffArgs(fixture);
   assert.deepEqual(args, [
     'migrate',
     'diff',
     '--from-schema-datasource',
-    'C:\\schema-drift-fixture\\packages\\db\\prisma\\schema.prisma',
+    fixture.schemaFile,
     '--to-schema-datamodel',
-    'C:\\schema-drift-fixture\\packages\\db\\prisma\\schema.prisma',
+    fixture.schemaFile,
     '--script',
     '--exit-code',
   ]);

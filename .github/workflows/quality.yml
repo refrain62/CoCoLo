@@ -37,7 +37,7 @@ jobs:
       - name: 静的品質検査
         run: pnpm verify:pnpm-config && pnpm lint:workflows && pnpm verify:migration-sql && pnpm lint:biome && pnpm verify:workspace-boundaries
       - name: テストDBのRLS用ロールを準備
-        run: pnpm db:prepare:test
+        run: pnpm --filter @cocolo/db exec prisma generate && pnpm db:prepare:test
         env:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
