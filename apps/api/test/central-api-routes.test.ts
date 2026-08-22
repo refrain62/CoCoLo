@@ -68,28 +68,42 @@ function teamRepository(): AuthTeamSelectionRepository {
   };
 }
 
-function eventRepository(): EventRepository {
+function eventRepository() {
+  const calls: unknown[] = [];
   // 中央mountの接続だけを検証するため、DBの書き込み処理はテスト対象外に固定する。
-  return {
-    get: async ({ tenantId }) => ({
-      id: EVENT_A,
-      tenantId,
-      title: '中央mount予定',
-      type: 'practice',
-      startsAt: '2026-09-01T10:00:00.000Z',
-      endsAt: '2026-09-01T12:00:00.000Z',
-      location: null,
-      itemsToBring: null,
-      fee: 0,
-      announcementImageAttachmentId: null,
-      opponent: null,
-      meetingTime: null,
-      transportationRequired: false,
-      attendanceDeadline: '2026-08-31T10:00:00.000Z',
-      createdAt: '2026-08-22T00:00:00.000Z',
-      updatedAt: '2026-08-22T00:00:00.000Z',
-    }),
+  const repository = {
+    get: async (input: {
+      tenantId: string;
+      actorUserId: string;
+      role: string;
+      eventId: string;
+    }) => {
+      calls.push(input);
+      if (input.eventId !== EVENT_A)
+        throw Object.assign(new Error('予定が見つかりません。'), {
+          status: 404,
+        });
+      return {
+        id: EVENT_A,
+        tenantId: input.tenantId,
+        title: '中央mount予定',
+        type: 'practice' as const,
+        startsAt: '2026-09-01T10:00:00.000Z',
+        endsAt: '2026-09-01T12:00:00.000Z',
+        location: null,
+        itemsToBring: null,
+        fee: 0,
+        announcementImageAttachmentId: null,
+        opponent: null,
+        meetingTime: null,
+        transportationRequired: false,
+        attendanceDeadline: '2026-08-31T10:00:00.000Z',
+        createdAt: '2026-08-22T00:00:00.000Z',
+        updatedAt: '2026-08-22T00:00:00.000Z',
+      };
+    },
   } as unknown as EventRepository;
+  return { repository, calls };
 }
 
 function createTestApp(withTeamSelection = false) {
@@ -165,11 +179,12 @@ test('未接続featureは中央APIで明示503、unknown pathは404にする', a
 });
 
 test('予定詳細は中央API mountから所属情報付きで取得する', async () => {
+  const eventStore = eventRepository();
   const app = createApp({
     verifyToken,
     membershipRepository: membershipRepository(),
     central: {
-      features: { events: { repository: eventRepository() } },
+      features: { events: { repository: eventStore.repository } },
       logSink: () => undefined,
     },
   });
@@ -181,6 +196,20 @@ test('予定詳細は中央API mountから所属情報付きで取得する', as
   assert.equal(response.status, 200);
   assert.equal((body.data as { id: string }).id, EVENT_A);
   assert.equal((body.data as { tenantId?: string }).tenantId, undefined);
+  assert.deepEqual(eventStore.calls, [
+    {
+      tenantId: TEAM_A,
+      actorUserId: 'user-a',
+      role: 'owner',
+      eventId: EVENT_A,
+    },
+  ]);
+
+  const missing = await app.request(
+    '/api/v1/events/00000000-0000-7000-8000-000000000199',
+    { headers: authHeaders },
+  );
+  assert.equal(missing.status, 404);
 });
 
 test('中央path validationはfeatureへ不正なUUIDを渡さない', async () => {
