@@ -157,14 +157,16 @@ export function createMemberRepositories(client: PrismaClient) {
             take: input.query.pageSize,
             select: memberSelect,
           });
-          await tx.auditLog.create({
-            data: {
-              tenantId: input.tenantId,
-              actorUserId: input.userId,
-              action: 'member.list',
-              resourceType: 'member',
-              metadata: { query: input.query },
-            },
+          await tx.auditLog.createMany({
+            data: [
+              {
+                tenantId: input.tenantId,
+                actorUserId: input.userId,
+                action: 'member.list',
+                resourceType: 'member',
+                metadata: { query: input.query },
+              },
+            ],
           });
           return members.map(toRecord);
         }),
@@ -195,15 +197,17 @@ export function createMemberRepositories(client: PrismaClient) {
             },
             select: memberSelect,
           });
-          await tx.auditLog.create({
-            data: {
-              tenantId: input.tenantId,
-              actorUserId: input.actorUserId,
-              action: 'member.create',
-              resourceType: 'member',
-              resourceId: created.id,
-              metadata: { category: member.category },
-            },
+          await tx.auditLog.createMany({
+            data: [
+              {
+                tenantId: input.tenantId,
+                actorUserId: input.actorUserId,
+                action: 'member.create',
+                resourceType: 'member',
+                resourceId: created.id,
+                metadata: { category: member.category },
+              },
+            ],
           });
           return toRecord(created);
         }),
