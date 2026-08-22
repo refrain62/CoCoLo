@@ -16,6 +16,7 @@ import {
   type MemberListFilters,
   type MemberStatus,
   type MemberSummary,
+  type MemberUpdateInput,
   type PromotionSummary,
 } from './member-api.js';
 
@@ -96,7 +97,196 @@ function getErrorMessage(error: unknown) {
   return '通信に失敗しました。';
 }
 
-function MemberTable({ members }: { members: MemberSummary[] }) {
+function toMemberFormState(member: MemberSummary): MemberFormState {
+  return {
+    name: member.name,
+    kana: member.kana ?? '',
+    category: member.category,
+    gradeLevel: member.gradeLevel == null ? '' : String(member.gradeLevel),
+    ageGroup: member.ageGroup ?? '',
+    status: member.status === 'suspended' ? 'suspended' : 'active',
+  };
+}
+
+function MemberEditForm({
+  member,
+  api,
+  onUpdated,
+  onRetired,
+}: {
+  member: MemberSummary;
+  api: MemberApi;
+  onUpdated: (member: MemberSummary) => void;
+  onRetired: (member: MemberSummary) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [form, setForm] = useState(() => toMemberFormState(member));
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  function updateForm<K extends keyof MemberFormState>(
+    key: K,
+    value: MemberFormState[K],
+  ) {
+    setForm((current) => ({ ...current, [key]: value }));
+    setError(null);
+    setSuccess(null);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+    let input: MemberUpdateInput;
+    try {
+      input = validateForm(form);
+    } catch (validationError) {
+      setError(getErrorMessage(validationError));
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const updated = await api.update(member.id, input);
+      onUpdated(updated);
+      setForm(toMemberFormState(updated));
+      setSuccess('更新しました。');
+      setIsEditing(false);
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function retire() {
+    if (!window.confirm('この部員を退部にしますか？')) return;
+    setError(null);
+    setSuccess(null);
+    setIsSaving(true);
+    try {
+      const retired = await api.retire(member.id);
+      onRetired(retired);
+      setSuccess('退部にしました。');
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      {member.status !== 'retired' ? (
+        <button
+          type="button"
+          onClick={() => {
+            setForm(toMemberFormState(member));
+            setIsEditing((current) => !current);
+            setError(null);
+            setSuccess(null);
+          }}
+        >
+          {isEditing ? '編集を閉じる' : '編集'}
+        </button>
+      ) : null}
+      {member.status !== 'retired' ? (
+        <button type="button" disabled={isSaving} onClick={() => void retire()}>
+          退部
+        </button>
+      ) : null}
+      {isEditing ? (
+        <form noValidate onSubmit={submit}>
+          <label htmlFor={`member-edit-name-${member.id}`}>氏名</label>
+          <input
+            id={`member-edit-name-${member.id}`}
+            maxLength={200}
+            value={form.name}
+            onChange={(event) => updateForm('name', event.target.value)}
+          />
+          <label htmlFor={`member-edit-kana-${member.id}`}>ふりがな</label>
+          <input
+            id={`member-edit-kana-${member.id}`}
+            maxLength={200}
+            value={form.kana}
+            onChange={(event) => updateForm('kana', event.target.value)}
+          />
+          <label htmlFor={`member-edit-category-${member.id}`}>区分</label>
+          <select
+            id={`member-edit-category-${member.id}`}
+            value={form.category}
+            onChange={(event) =>
+              updateForm('category', event.target.value as MemberCategory)
+            }
+          >
+            <option value="student">学生</option>
+            <option value="adult">一般</option>
+          </select>
+          {form.category === 'student' ? (
+            <>
+              <label htmlFor={`member-edit-grade-${member.id}`}>学年</label>
+              <input
+                id={`member-edit-grade-${member.id}`}
+                inputMode="numeric"
+                max="16"
+                min="1"
+                type="number"
+                value={form.gradeLevel}
+                onChange={(event) =>
+                  updateForm('gradeLevel', event.target.value)
+                }
+              />
+            </>
+          ) : (
+            <>
+              <label htmlFor={`member-edit-age-group-${member.id}`}>年代</label>
+              <input
+                id={`member-edit-age-group-${member.id}`}
+                maxLength={100}
+                value={form.ageGroup}
+                onChange={(event) => updateForm('ageGroup', event.target.value)}
+              />
+            </>
+          )}
+          <label htmlFor={`member-edit-status-${member.id}`}>状態</label>
+          <select
+            id={`member-edit-status-${member.id}`}
+            value={form.status}
+            onChange={(event) =>
+              updateForm(
+                'status',
+                event.target.value as MemberFormState['status'],
+              )
+            }
+          >
+            <option value="active">在籍</option>
+            <option value="suspended">停止</option>
+          </select>
+          {error ? <p role="alert">{error}</p> : null}
+          {success ? <p role="status">{success}</p> : null}
+          <button type="submit" disabled={isSaving}>
+            {isSaving ? '更新中…' : '更新する'}
+          </button>
+        </form>
+      ) : null}
+      {!isEditing && error ? <p role="alert">{error}</p> : null}
+      {!isEditing && success ? <p role="status">{success}</p> : null}
+    </div>
+  );
+}
+
+function MemberTable({
+  members,
+  api,
+  onUpdated,
+  onRetired,
+}: {
+  members: MemberSummary[];
+  api: MemberApi;
+  onUpdated: (member: MemberSummary) => void;
+  onRetired: (member: MemberSummary) => void;
+}) {
   if (members.length === 0)
     return <p role="status">表示できる部員がいません。</p>;
 
@@ -110,6 +300,7 @@ function MemberTable({ members }: { members: MemberSummary[] }) {
           <th scope="col">区分</th>
           <th scope="col">学年・年代</th>
           <th scope="col">状態</th>
+          <th scope="col">操作</th>
         </tr>
       </thead>
       <tbody>
@@ -126,6 +317,14 @@ function MemberTable({ members }: { members: MemberSummary[] }) {
               )}
             </td>
             <td>{formatMemberStatus(member.status)}</td>
+            <td>
+              <MemberEditForm
+                api={api}
+                member={member}
+                onRetired={onRetired}
+                onUpdated={onUpdated}
+              />
+            </td>
           </tr>
         ))}
       </tbody>
@@ -417,6 +616,12 @@ export function MemberManagementPage({
     void loadMembers(filters);
   }
 
+  function replaceMember(updated: MemberSummary) {
+    setMembers((current) =>
+      current.map((member) => (member.id === updated.id ? updated : member)),
+    );
+  }
+
   const environment =
     import.meta.env.VITE_APP_ENV ??
     (import.meta.env.DEV ? 'local' : '環境未設定');
@@ -487,7 +692,14 @@ export function MemberManagementPage({
         </h2>
         {isLoading ? <p role="status">読み込み中…</p> : null}
         {listError ? <p role="alert">{listError}</p> : null}
-        {!isLoading && !listError ? <MemberTable members={members} /> : null}
+        {!isLoading && !listError ? (
+          <MemberTable
+            api={api}
+            members={members}
+            onRetired={replaceMember}
+            onUpdated={replaceMember}
+          />
+        ) : null}
       </section>
 
       <section aria-labelledby="member-create-toggle-heading">
