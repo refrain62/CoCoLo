@@ -742,7 +742,7 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * **API テスト:** 認証なし、別テナント、ロール別、正常系、入力不正、競合、トランザクション失敗を Hono の `app.request` で検証。
 * **UI テスト:** 部員検索・登録、出欠入力、支払い切り替え、権限による表示差分、読み込み中 / エラー / データなしの状態を Vitest + Testing Library で検証。
 * **E2E テスト:** Playwright でログイン後の主要導線を検証します。外部 LINE / Maps / R2 は実サービスではなくテスト用アダプターを使用します。
-* **CI ゲート:** `pnpm --filter @cocolo/db exec prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:e2e:local`、`pnpm build` を必須にします。staging は `pnpm test:e2e:staging` を追加し、失敗時はマージ・本番マイグレーションを許可しません。
+* **CI ゲート:** PRでは `pnpm --filter @cocolo/db exec prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm build` を必須にします。負荷の高い `pnpm test:e2e:local` はPRごとに実行せず、日次、週次、手動のWorkflowで実行します。staging は本番昇格前に同一SHAの `pnpm test:e2e:staging` を要求し、失敗時は本番マイグレーションを許可しません。
 
 ### 8.7 環境・運用・監視
 
@@ -852,7 +852,7 @@ API DTO は role ごとに別 schema を持ち、staff / guardian のレスポ�
 * **アップロード:** R2 は private bucket を初期値とし、DB にテナント・所有者・MIME・サイズ・object key・`status`（`uploaded` / `available` / `deleted` / `rejected`）を記録します。短期署名 URL でのみ配信し、SVG は拒否、magic bytes と実体サイズを検証し、ファイル名を object key に使用しません。`deletedAt` は `deleted` のときだけ設定します。
 * **年度繰り上げ:** `promotion_runs(tenantId, fiscalYear)` 相当の実行記録を保存し、同一年度の再実行は no-op とします。実行前件数プレビュー、対象条件、17以上の扱い、実行者監査ログを仕様化します。
 * **注文整合性:** `OrderItem` の `tenantId + orderId` と `UserOrderItem` の `tenantId + orderId + itemId` を複合参照で整合させます。選択肢は JSON 文字列のまま信頼せず、Zod で許可値を検証し、`isPaid` と `paidAt` を状態遷移として更新します。
-* **CIとテストDB:** PR 用の `quality.yml`、staging 用の `staging-deploy.yml`、production 用の `production-promote.yml` を分離します。PRでは PostgreSQL を起動して migration、RLS用テストロール、seed を実行し、`pnpm --filter @cocolo/db exec prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:e2e:local`、`pnpm build` を必須にします。staging では staging Auth ユーザーによる `test:e2e:staging` を実行し、production は承認済み staging evidence と同一 artifact SHA だけを promote します。
+* **CIとテストDB:** PR 用の `quality.yml`、定期検査用のWorkflow、staging 用の `staging-deploy.yml`、production 用の `production-promote.yml` を分離します。PRでは PostgreSQL を起動して migration、RLS用テストロール、seed を実行し、`pnpm --filter @cocolo/db exec prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm build` を必須にします。`pnpm test:e2e:local` は日次、週次、手動で実行します。staging では staging Auth ユーザーによる `test:e2e:staging` を本番昇格前に実行し、production は承認済み staging evidence と同一 artifact SHA だけを promote します。
 
 ### 8.13 Phase 1 スキーマ契約
 
@@ -873,6 +873,8 @@ Phase 1 の実装開始前に、次の契約を選択肢なしで `packages/db/p
 Phase 4 の `Attachment` は `id UUID`（UUIDv7）、`tenantId`、`ownerUserId`、`objectKey`、`mediaType`、`byteSize`、`sha256`、`status`（`uploaded` / `available` / `deleted` / `rejected`）、`deletedAt`、`createdAt` を持ち、`tenantId + objectKey` を一意にします。`deletedAt` は `deleted` のときだけ設定し、`rejected` は配信・署名URL発行の対象にしません。R2 の公開 URL は保存せず、download API が毎回認可して短期署名 URL を発行します。
 
 ### 8.14 CI・TDD・レビュー成果物の実行契約
+
+CI強化後の契約は `docs/ci-hardening-plan.md` を正本とします。以下のWorkflow例は開発基盤を作成した時点の記録であり、E2EをPRごとに実行する箇所は日次、週次、手動実行へ置き換えます。
 
 PR 用 `quality.yml` は次の順序とコマンドを固定します。Workflow が未作成の段階では、同じコマンドをローカルで実行した結果をタスク完了の証拠にします。
 
@@ -954,10 +956,6 @@ jobs:
         run: pnpm test:unit
       - name: 統合テストを実行
         run: pnpm test:integration
-      - name: Playwrightを準備
-        run: pnpm exec playwright install --with-deps chromium
-      - name: ローカルE2Eを実行
-        run: pnpm test:e2e:local
       - name: 本番bundleをビルド
         run: pnpm build
       - name: 本番bundleの混入を検査
@@ -989,6 +987,7 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 * [x] **T-010 実装後敵対的レビュー:** T-005〜T-009の成果物に対して越境、PII、認可、入力、環境混同、test-only Auth混入、テスト不足をレビューした。レビューコミット: `db7b464`。High 4件をT-011の修正対象として記録した。レビュー: `docs/reviews/t010-implementation-adversarial-review-2026-08-22.md`。
 * [x] **T-011 指摘修正とリリース判定:** T010-H-001〜T010-H-004を修正し、Critical / Highをゼロ化した。修正コミット: `05a101a`、`85c08f6`、`8c9eb58`、`e8e1967`、`a0a6854`、`5f5ff98`。Node 24のlocal lint/typecheck/test/unit/build/bundle/workflow検査、配置契約4件、GitHub quality run `32555164603`（実PostgreSQL統合テストを含む）が成功。再レビュー: `docs/reviews/t011-remediation-release-review-2026-08-22.md`。
 * [x] **T-012 Phase 1完了機能:** 年度繰り上げを別の Red → Green → Refactor 縦切りとして実装し、`PromotionRun` のスキーマ・冪等性・プレビュー・監査ログを検証する。実装、敵対的レビュー、PR CIの実PostgreSQL検証が完了。実装・修正コミット: `143a328`〜`7cc5b17`。品質ゲート: `32557510191`。レビュー: `docs/reviews/t012-promotion-adversarial-review-2026-08-22.md`。
+* [ ] **T-013 CI強化:** `docs/ci-hardening-plan.md` に従い、PR品質ゲート、カバレッジ、migrationとRLS、供給網検査、日次、週次、手動E2E、GitHub設定、デプロイ停止を実装する。実装後の敵対的レビューでCriticalとHighを0件にする。
 
 ### 9.2 タスク完了記録
 
