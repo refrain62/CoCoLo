@@ -2,6 +2,7 @@ import { AppShell } from '@cocolo/ui';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemberManagementPage } from './member-management-page.js';
+import './styles.css';
 
 function App() {
   return (

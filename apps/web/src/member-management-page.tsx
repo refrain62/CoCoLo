@@ -300,10 +300,14 @@ export function MemberManagementPage({
     void loadMembers(filters);
   }
 
+  const environment =
+    import.meta.env.VITE_APP_ENV ??
+    (import.meta.env.DEV ? 'local' : '環境未設定');
+
   return (
     <>
       <header>
-        <p>環境: {import.meta.env.VITE_APP_ENV ?? 'local'}</p>
+        <p>環境: {environment}</p>
         <h1>部員一覧</h1>
         <p>所属チームの部員を確認・登録できます。</p>
       </header>
