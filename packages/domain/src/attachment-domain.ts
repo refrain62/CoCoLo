@@ -3,14 +3,14 @@ export type AttachmentMediaType =
   | 'image/png'
   | 'application/pdf';
 
+export const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
+export const ATTACHMENT_SESSION_TTL_SECONDS = 900;
 export type AttachmentStatus =
   | 'uploaded'
   | 'available'
   | 'rejected'
   | 'deleted';
 
-export const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
-export const ATTACHMENT_SESSION_TTL_SECONDS = 900;
 export const ATTACHMENT_COMPLETE_MAX_ATTEMPTS = 3;
 
 export type AttachmentRecord = {
@@ -167,7 +167,7 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
     .join('');
 }
 
-// 署名URLを持つだけでは信頼せず、ストレージから取得した実体を三つの独立条件で検証する。
+// ストレージから取得した実体だけを信頼し、MIME・サイズ・magic byte・SHA-256を独立に確認する。
 export async function validateAttachmentObject(input: {
   declaredMediaType: AttachmentMediaType;
   expectedByteSize: number;
@@ -192,7 +192,6 @@ export async function validateAttachmentObject(input: {
     throw new AttachmentValidationError('SHA-256が申告値と一致しません。');
   return { sha256: actualSha256, byteSize: input.object.bytes.length };
 }
-
 // オブジェクトキーに個人情報を含めず、時系列を持つUUIDv7を境界IDとして発行する。
 export function createAttachmentId(now = Date.now()): string {
   const bytes = new Uint8Array(16);
