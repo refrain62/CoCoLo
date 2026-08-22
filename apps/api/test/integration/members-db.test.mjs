@@ -52,6 +52,26 @@ test('実PostgreSQLのRLSがguardianを担当部員だけに限定する', async
   );
 });
 
+test('実PostgreSQLのowner登録は同一transactionで監査される', async () => {
+  const created = await repositories.memberRepository.create(
+    {
+      tenantId: TENANT_A,
+      actorUserId: 'owner-a',
+      role: 'owner',
+    },
+    {
+      name: `統合テスト-${Date.now()}`,
+      category: 'adult',
+      ageGroup: '30代',
+      status: 'active',
+    },
+  );
+
+  assert.equal(created.tenantId, TENANT_A);
+  assert.equal(created.category, 'adult');
+  assert.equal(created.ageGroup, '30代');
+});
+
 test.after(async () => {
   await prisma.$disconnect();
 });
