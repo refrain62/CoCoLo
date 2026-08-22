@@ -1,5 +1,29 @@
 import { extractBearerToken, type TokenVerifier } from '@cocolo/auth';
 import type { MemberRole } from '@cocolo/contracts/member';
+import { featureEnvelopeResponseSchema } from '@cocolo/contracts/runtime-response';
+import type { AuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
+import type { BulletinBoardRepository } from '@cocolo/db/bulletin-board';
+import type { EventRepository } from '@cocolo/db/events';
+import type { OrdersRepository } from '@cocolo/db/orders';
+import type { AttachmentRepository } from '@cocolo/domain/attachment';
+import { type Context, Hono, type MiddlewareHandler } from 'hono';
+import { createAttachmentApp } from './features/attachments/attachment-app.js';
+import type { AttachmentStorage } from './features/attachments/attachment-storage.js';
+import { createAuthTeamSelectionApp } from './features/auth-team-selection/app.js';
+import {
+  type BoardContactRepository,
+  createBoardContactApp,
+} from './features/board-contact/index.js';
+import { createBulletinBoardApp } from './features/bulletin-board/bulletin-board-app.js';
+import { createEventsApp } from './features/events/event-api.js';
+import type { LineNotificationService } from './features/line-notifications/line-service.js';
+import { createLineNotificationApp } from './features/line-notifications/routes.js';
+import { createOrdersPaymentsApp } from './features/orders-payments/orders-payments-app.js';
+import {
+  type RideRouteApp,
+  registerRideRoutes,
+} from './features/ride-operations/ride-routes.js';
+import type { RideService } from './features/ride-operations/ride-service.js';
 import { createCorsMiddleware } from './security/cors.js';
 import {
   createRateLimitMiddleware,
@@ -7,31 +31,13 @@ import {
   type RateLimitStore,
 } from './security/rate-limit.js';
 import {
-  createRequestLoggerMiddleware,
-  createStructuredLogger,
-} from './security/structured-logger.js';
-import {
   createResponseContractMiddleware,
   type ResponseContract,
 } from './security/response-contract.js';
-import { featureEnvelopeResponseSchema } from '@cocolo/contracts/runtime-response';
-import type { EventRepository } from '@cocolo/db/events';
-import type { OrdersRepository } from '@cocolo/db/orders';
-import type { LineNotificationService } from './features/line-notifications/line-service.js';
-import { createLineNotificationApp } from './features/line-notifications/routes.js';
-import { createAttachmentApp } from './features/attachments/attachment-app.js';
-import type { AttachmentStorage } from './features/attachments/attachment-storage.js';
-import { createBoardContactApp, type BoardContactRepository } from './features/board-contact/index.js';
-import { createEventsApp } from './features/events/event-api.js';
-import { createOrdersPaymentsApp } from './features/orders-payments/orders-payments-app.js';
-import { registerRideRoutes } from './features/ride-operations/ride-routes.js';
-import type { RideService } from './features/ride-operations/ride-service.js';
-import { createBulletinBoardApp } from './features/bulletin-board/bulletin-board-app.js';
-import { createAuthTeamSelectionApp } from './features/auth-team-selection/app.js';
-import type { BulletinBoardRepository } from '@cocolo/db/bulletin-board';
-import type { AuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
-import type { AttachmentRepository } from '@cocolo/domain/attachment';
-import type { Context, Hono, MiddlewareHandler } from 'hono';
+import {
+  createRequestLoggerMiddleware,
+  createStructuredLogger,
+} from './security/structured-logger.js';
 
 export type CentralMembershipRepository = {
   findActiveByUserId: (
@@ -146,7 +152,7 @@ const uuidV7Pattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const protectedPathPatterns = [
-  /^\/api\/v1\/members\/([^/]+)(?:\/retire)?$/,
+  /^\/api\/v1\/members\/(?!promote(?:\/|$))([^/]+)(?:\/retire)?$/,
   /^\/api\/v1\/events\/([^/]+)(?:\/attendance(?:\/summary)?)?$/,
   /^\/api\/v1\/board-members\/([^/]+)$/,
   /^\/api\/v1\/orders\/([^/]+)(?:\/.*)?$/,
@@ -193,6 +199,12 @@ function pathOf(context: Context): string {
   return new URL(context.req.url).pathname;
 }
 
+function isTeamSelectionPath(path: string): boolean {
+  return (
+    path === '/api/v1/auth/teams' || path.startsWith('/api/v1/auth/teams/')
+  );
+}
+
 function routeTemplate(path: string): string {
   return path.replace(
     /\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?=\/|$)/gi,
@@ -225,8 +237,10 @@ export function createCentralAuthMiddleware(
 ): MiddlewareHandler<CentralApiEnv> {
   return async (context, next) => {
     if (isPublicWebhook(context)) return next();
-    const token = extractBearerToken(context.req.header('authorization') ?? null);
-    const bearerOnlyTeamSelection = pathOf(context).startsWith('/api/v1/teams');
+    const token = extractBearerToken(
+      context.req.header('authorization') ?? null,
+    );
+    const bearerOnlyTeamSelection = isTeamSelectionPath(pathOf(context));
     if (!verifyToken || (!membershipRepository && !bearerOnlyTeamSelection))
       return errorResponse(
         context,
@@ -246,8 +260,17 @@ export function createCentralAuthMiddleware(
           '認証の有効期限が切れています。',
         );
       context.set('authUserId', claims.userId);
-      if (pathOf(context).startsWith('/api/v1/teams')) return next();
-      const membership = await membershipRepository.findActiveByUserId(claims.userId);
+      if (isTeamSelectionPath(pathOf(context))) return next();
+      if (!membershipRepository)
+        return errorResponse(
+          context,
+          503,
+          'AUTH_NOT_CONFIGURED',
+          '認証・所属解決が設定されていません。',
+        );
+      const membership = await membershipRepository.findActiveByUserId(
+        claims.userId,
+      );
       if (!membership)
         return errorResponse(
           context,
@@ -292,7 +315,8 @@ export function createCentralRateLimitMiddleware(options: {
   requireDistributed?: boolean;
   clientIdentityResolver?: CentralAppOptions['clientIdentityResolver'];
 }): MiddlewareHandler<CentralApiEnv> {
-  const store = options.store ?? new InMemoryCentralRateLimitStore();
+  const store: CentralRateLimitStore =
+    options.store ?? new InMemoryCentralRateLimitStore();
   if (options.requireDistributed && !store.distributed)
     throw new Error(
       'stagingとproductionでは分散rate-limit storeの接続が必要です。',
@@ -319,7 +343,7 @@ export function createCentralRateLimitMiddleware(options: {
             tenantId: 'team-selection',
             userId: authUserId,
           }
-      : null;
+        : null;
   };
   const authenticated = createRateLimitMiddleware({
     scope: 'authenticated',
@@ -342,7 +366,7 @@ export function createCentralRateLimitMiddleware(options: {
 }
 
 const centralSuccessPath =
-  /^\/api\/v1\/(members|events|board-members|orders|uploads|line|ride-plans|announcements|teams)(?:\/.*)?$/;
+  /^\/api\/v1\/(session|members|events|board-members|orders|uploads|line|ride-plans|announcements|auth\/teams)(?:\/.*)?$/;
 
 function createCentralResponseContracts(): ResponseContract[] {
   const contracts: ResponseContract[] = [];
@@ -427,7 +451,9 @@ export function mountCentralFeatureRoutes(
       '/api/v1/events',
       createEventsApp({
         verifyToken: input.verifyToken,
-        membershipRepository: membershipRepository as NonNullable<typeof membershipRepository>,
+        membershipRepository: membershipRepository as NonNullable<
+          typeof membershipRepository
+        >,
         eventRepository: input.features.events.repository,
       }),
     );
@@ -443,7 +469,10 @@ export function mountCentralFeatureRoutes(
       }),
     );
   else
-    app.route('/', createUnavailableFeatureApp('FS-BRD', ['/api/v1/board-members']));
+    app.route(
+      '/',
+      createUnavailableFeatureApp('FS-BRD', ['/api/v1/board-members']),
+    );
 
   if (input.features?.orders)
     app.route(
@@ -477,11 +506,10 @@ export function mountCentralFeatureRoutes(
         service: input.features.line.service,
       }),
     );
-  else
-    app.route('/', createUnavailableFeatureApp('FS-NOT', ['/api/v1/line']));
+  else app.route('/', createUnavailableFeatureApp('FS-NOT', ['/api/v1/line']));
 
   if (input.features?.ride)
-    registerRideRoutes(app, {
+    registerRideRoutes(app as unknown as RideRouteApp, {
       service: input.features.ride.service,
       getAuth: (context) => {
         const auth = context.get('auth') as CentralAuth | undefined;
@@ -495,7 +523,10 @@ export function mountCentralFeatureRoutes(
       },
     });
   else
-    app.route('/', createUnavailableFeatureApp('FS-RIDE', ['/api/v1/ride-plans']));
+    app.route(
+      '/',
+      createUnavailableFeatureApp('FS-RIDE', ['/api/v1/ride-plans']),
+    );
 
   if (input.features?.bulletinBoard)
     app.route(
@@ -514,7 +545,7 @@ export function mountCentralFeatureRoutes(
 
   if (input.features?.authTeamSelection)
     app.route(
-      '/api/v1',
+      '/api/v1/auth',
       createAuthTeamSelectionApp({
         verifyToken: input.verifyToken,
         repository: input.features.authTeamSelection.repository,
@@ -523,12 +554,14 @@ export function mountCentralFeatureRoutes(
   else
     app.route(
       '/',
-      createUnavailableFeatureApp('FS-AUTH', ['/api/v1/teams']),
+      createUnavailableFeatureApp('FS-AUTH', ['/api/v1/auth/teams']),
     );
 }
 
 // DB schemaとmigrationが中央統合されるまで、Prisma clientを偽のfeature repositoryへ変換しない。
-export function createCentralDatabaseAdapter(client: unknown): CentralDatabaseAdapter {
+export function createCentralDatabaseAdapter(
+  client: unknown,
+): CentralDatabaseAdapter {
   return {
     client,
     featureSchemaReady: false,
