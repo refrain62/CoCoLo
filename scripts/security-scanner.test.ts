@@ -168,6 +168,11 @@ test('固定malicious fixtureのscanner信頼対象改変を拒否する', async
     ),
   ) as {
     tamperedFile: string;
+    scannerRegression: {
+      tool: string;
+      mode: string;
+      requiresGitDirectory: boolean;
+    };
     changedFiles: string[];
     disableAttempts: string[];
   };
