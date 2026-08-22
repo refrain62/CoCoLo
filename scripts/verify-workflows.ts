@@ -1046,6 +1046,10 @@ export function validateCodeowners(content: string): void {
     '/scripts/run-security-scanners.ts @refrain62',
     '/scripts/security-scanner.test.ts @refrain62',
     '/.github/security/* @refrain62',
+    '/.github/CODEOWNERS @refrain62',
+    '/.gitleaks.toml @refrain62',
+    '/.semgrep/ci.yml @refrain62',
+    '/.trivy-secret.yaml @refrain62',
     '/package.json @refrain62',
   ].join('\n');
   assert.equal(

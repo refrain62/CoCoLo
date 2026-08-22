@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   readScannerConfig,
+  scannerRuleAllowlist,
   type ScannerName,
   scannerNames,
 } from './security-scanner-config.ts';
@@ -96,7 +97,11 @@ for (const name of scannerNames) {
     tool.command.includes('--report-path') || tool.command.includes('--output'),
     `${name}: 結果ファイルを固定してください`,
   );
-  await readFile(path.join(root, tool.ruleFile), 'utf8');
+  assert.equal(
+    await readFile(path.join(root, tool.ruleFile), 'utf8'),
+    scannerRuleAllowlist[name],
+    `${name}: ルールファイルが固定allowlistと一致しません`,
+  );
 }
 
 type ScannerException = {

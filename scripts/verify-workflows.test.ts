@@ -255,4 +255,10 @@ test('CODEOWNERSの信頼境界削除を拒否する', async () => {
   assert.throws(() =>
     validateCodeowners(codeowners.replace('/package.json @refrain62', '')),
   );
+  assert.throws(() =>
+    validateCodeowners(codeowners.replace('/.github/CODEOWNERS @refrain62', '')),
+  );
+  assert.throws(() =>
+    validateCodeowners(codeowners.replace('/.gitleaks.toml @refrain62', '')),
+  );
 });

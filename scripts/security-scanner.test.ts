@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   readScannerConfig,
+  scannerRuleAllowlist,
   scannerImageAllowlist,
   validateScannerConfig,
 } from './security-scanner-config.ts';
@@ -41,6 +42,28 @@ test('Gitleaksはgit履歴を検査する固定コマンドになっている', 
     tools: { gitleaks: { command: string[] } };
   };
   assert.equal(config.tools.gitleaks.command[0], 'git');
+});
+
+test('scannerのcommand、network、ルール本文は固定allowlistと一致する', async () => {
+  const config = await readScannerConfig(root);
+  for (const name of ['gitleaks', 'semgrep', 'trivy'] as const) {
+    assert.equal(
+      await readFile(path.join(root, config.tools[name].ruleFile), 'utf8'),
+      scannerRuleAllowlist[name],
+    );
+  }
+
+  const tamperedCommand = structuredClone(config) as typeof config;
+  tamperedCommand.tools.semgrep.command = ['semgrep', 'scan'];
+  assert.throws(() => validateScannerConfig(tamperedCommand));
+
+  const tamperedNetwork = structuredClone(config) as typeof config;
+  tamperedNetwork.tools.trivy.network = 'none';
+  assert.throws(() => validateScannerConfig(tamperedNetwork));
+
+  const tamperedRule = structuredClone(config) as typeof config;
+  tamperedRule.tools.gitleaks.ruleFile = '.semgrep/ci.yml';
+  assert.throws(() => validateScannerConfig(tamperedRule));
 });
 
 test('不正JSONはunknown fail-closedになる', async () => {

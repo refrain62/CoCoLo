@@ -44,12 +44,148 @@ export const scannerImageAllowlist: Record<
   },
 };
 
+export const scannerRuleAllowlist: Record<ScannerName, string> = {
+  gitleaks: `title = "CoCoLo 固定 secret 検査ルール"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "cocolo-canary-secret"
+description = "CI canary secret must always be detected"
+regex = '''COCOLO_CANARY_[A-Z0-9]{16,}'''
+keywords = ["COCOLO_CANARY_"]
+`,
+  semgrep: String.raw`rules:
+  - id: cocolo-canary-secret
+    message: CI canary secrets must never be committed.
+    severity: ERROR
+    languages:
+      - generic
+    patterns:
+      - pattern-regex: |
+          COCOLO_CANARY_[A-Z0-9]{16,}
+
+  - id: cocolo-hardcoded-credential
+    message: Credential-like literals must come from runtime configuration.
+    severity: ERROR
+    languages:
+      - generic
+    patterns:
+      - pattern-regex: |
+          (?i)(?:api[_-]?key|access[_-]?token|client[_-]?secret|password|private[_-]?key)\s*[:=]\s*["'][A-Za-z0-9_./+=-]{16,}["']
+
+  - id: cocolo-no-dynamic-code
+    message: Dynamic code execution is not allowed in application source.
+    severity: WARNING
+    languages:
+      - javascript
+      - typescript
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: new Function(...)
+
+paths:
+  exclude:
+    - node_modules
+    - dist
+    - coverage
+    - test-results
+`,
+  trivy: `secret:
+  rules:
+    - id: cocolo-canary-secret
+      category: CoCoLo
+      title: CoCoLo CI canary secret
+      severity: CRITICAL
+      regex: COCOLO_CANARY_[A-Z0-9]{16,}
+`,
+};
+
+const scannerCommandAllowlist: Record<ScannerName, string[]> = {
+  gitleaks: [
+    'git',
+    '--config',
+    '/src/.gitleaks.toml',
+    '--redact',
+    '--report-format',
+    'json',
+    '--report-path',
+    '__OUTPUT__',
+    '--exit-code',
+    '1',
+    '--no-banner',
+    '/src',
+  ],
+  semgrep: [
+    'semgrep',
+    'scan',
+    '--config',
+    '/src/.semgrep/ci.yml',
+    '--json',
+    '--output',
+    '__OUTPUT__',
+    '--error',
+    '--no-git-ignore',
+    '--metrics',
+    'off',
+    '/src',
+  ],
+  trivy: [
+    'fs',
+    '--scanners',
+    'vuln,misconfig,secret',
+    '--secret-config',
+    '/src/.trivy-secret.yaml',
+    '--format',
+    'json',
+    '--output',
+    '__OUTPUT__',
+    '--exit-code',
+    '1',
+    '--quiet',
+    '/src',
+  ],
+};
+
+const scannerRuleFileAllowlist: Record<ScannerName, string> = {
+  gitleaks: '.gitleaks.toml',
+  semgrep: '.semgrep/ci.yml',
+  trivy: '.trivy-secret.yaml',
+};
+
+const scannerNetworkAllowlist: Record<ScannerName, ScannerToolConfig['network']> = {
+  gitleaks: 'none',
+  semgrep: 'none',
+  trivy: 'bridge',
+};
+
+const scannerEnvironmentAllowlist: Record<
+  ScannerName,
+  Record<string, string>
+> = {
+  gitleaks: {},
+  semgrep: { HOME: '/out', SEMGREP_SEND_METRICS: 'off' },
+  trivy: {
+    TRIVY_DISABLE_VEX_NOTICE: 'true',
+    TRIVY_CACHE_DIR: '/out/trivy-cache',
+    TRIVY_NO_PROGRESS: 'true',
+    TRIVY_QUIET: 'true',
+    TRIVY_SKIP_VERSION_CHECK: 'true',
+  },
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const isStringRecord = (value: unknown): value is Record<string, string> =>
   isRecord(value) &&
   Object.values(value).every((entry) => typeof entry === 'string');
+
+const arraysEqual = (actual: unknown[], expected: readonly unknown[]): boolean =>
+  actual.length === expected.length &&
+  actual.every((entry, index) => entry === expected[index]);
 
 // CIとローカルが同じimage@digest・固定ルール・出力形式を使うことを保証する。
 export function validateScannerConfig(value: unknown): ScannerConfig {
@@ -75,14 +211,15 @@ export function validateScannerConfig(value: unknown): ScannerConfig {
       version !== scannerImageAllowlist[name].version ||
       typeof digest !== 'string' ||
       digest !== scannerImageAllowlist[name].digest ||
-      (network !== 'none' && network !== 'bridge') ||
+      network !== scannerNetworkAllowlist[name] ||
       typeof ruleFile !== 'string' ||
-      ruleFile.startsWith('/') ||
-      ruleFile.includes('..') ||
+      ruleFile !== scannerRuleFileAllowlist[name] ||
       !Array.isArray(command) ||
       !command.every((entry) => typeof entry === 'string') ||
-      !command.includes('__OUTPUT__') ||
-      !isStringRecord(environment)
+      !arraysEqual(command, scannerCommandAllowlist[name]) ||
+      !isStringRecord(environment) ||
+      JSON.stringify(environment) !==
+        JSON.stringify(scannerEnvironmentAllowlist[name])
     )
       throw new Error(
         `${name}の許可されたimage・version・digest対応が不正です。`,
