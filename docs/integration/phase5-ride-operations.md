@@ -20,7 +20,7 @@
 
 | 層 | ファイル | 責務 |
 | --- | --- | --- |
-| contract | `packages/contracts/src/ride-contract.mjs` | JSON入力の型、件数、文字数、URL基本形式を検証する |
+| contract | `packages/contracts/src/ride-contract.ts` | JSON入力の型、件数、文字数、URL基本形式を検証する |
 | domain | `packages/domain/src/ride-domain.ts` | Maps URLの許可範囲、定員、不変条件、決定的マッチング、メトリクスを検証する |
 | DB repository | `packages/db/src/ride-repository.ts` | tenant条件、transaction-local RLS、所属再確認、plan単位ロック、状態変更、監査INSERTを束ねる |
 | API | `apps/api/src/features/ride-operations/ride-service.ts` | roleごとの操作権限とレスポンス投影を固定する |
@@ -47,6 +47,8 @@ HTTP入力から`tenantId`、`userId`、運転者識別子を受け取りませ�
 | GET | `/api/v1/ride-plans/:planId/metrics` | owner, admin, staff | 個人を含まない運用集計を取得する |
 
 `GET /api/v1/ride-plans/:planId`の利用者向けレスポンスには、他人の`driverUserId`と`requesterUserId`を含めません。
+
+同じレスポンスには、実行者識別子や監査metadataを含めない公開用の変更履歴を含めます。
 
 管理者向け配車表は、認可済みの管理者だけが取得でき、運転者識別子、乗車希望識別子、人数を含みます。
 
