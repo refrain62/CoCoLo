@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+
+assert.ok(process.env.DATABASE_URL, 'DATABASE_URL が必要です');
+assert.ok(process.env.DIRECT_URL, 'DIRECT_URL が必要です');
+const sql = `
+INSERT INTO tenants (id, name)
+VALUES
+  ('00000000-0000-7000-8000-000000000001', 'テストチームA'),
+  ('00000000-0000-7000-8000-000000000002', 'テストチームB')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status)
+VALUES
+  ('00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000001', 'owner-a', 'owner', 'active'),
+  ('00000000-0000-7000-8000-000000000102', '00000000-0000-7000-8000-000000000001', 'guardian-a', 'guardian', 'active'),
+  ('00000000-0000-7000-8000-000000000103', '00000000-0000-7000-8000-000000000002', 'owner-b', 'owner', 'active')
+ON CONFLICT (tenant_id, user_id) DO NOTHING;
+`;
+const command = process.platform === 'win32' ? 'psql.exe' : 'psql';
+const result = spawnSync(
+  command,
+  ['--no-psqlrc', '--dbname', process.env.DIRECT_URL, '--command', sql],
+  {
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  },
+);
+if (result.error) throw result.error;
+assert.equal(result.status, 0, 'テストfixtureの投入に失敗しました');
+console.log('テストfixtureを投入しました。');
