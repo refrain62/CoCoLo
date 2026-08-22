@@ -8,7 +8,7 @@
   "scripts": {
     "test": "pnpm -r --if-present test",
     "test:contracts": "node --test packages/contracts/test/*.test.mjs",
-    "test:unit": "pnpm -r --if-present test:unit",
+    "test:unit": "vitest run && pnpm -r --if-present test:unit",
     "test:integration": "pnpm -r --if-present test:integration",
     "test:e2e:local": "node scripts/run-e2e.mjs local",
     "test:e2e:staging": "node scripts/run-e2e.mjs staging",
@@ -38,6 +38,7 @@
     "@biomejs/biome": "2.5.9",
     "@playwright/test": "1.54.2",
     "dependency-cruiser": "16.10.4",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "vitest": "3.2.4"
   }
 }
