@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
+// localはtest-only Auth、stagingは実環境だけを対象にし、productionへE2Eを誤接続させない。
 const environment = process.argv[2];
 assert.ok(environment === 'local' || environment === 'staging');
 assert.notEqual(

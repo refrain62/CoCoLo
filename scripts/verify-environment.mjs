@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 
+// 環境名・接続先・公開URL・bucket・production保持期間をallowlistと照合し、環境混同を起動前に拒否する。
 const allowed = {
   local: {
     R2_BUCKET: 'cocolo-local',
