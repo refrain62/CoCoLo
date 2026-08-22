@@ -1,0 +1,165 @@
+import type { MiddlewareHandler } from 'hono';
+
+const defaultMethods = [
+  'GET',
+  'POST',
+  'PATCH',
+  'PUT',
+  'DELETE',
+  'OPTIONS',
+] as const;
+const defaultHeaders = [
+  'Authorization',
+  'Content-Type',
+  'Idempotency-Key',
+  'If-Match',
+] as const;
+
+export type CorsOptions = {
+  origins: readonly string[];
+  methods?: readonly string[];
+  headers?: readonly string[];
+  maxAgeSeconds?: number;
+};
+
+function normalizeOrigin(origin: string): string {
+  const value = origin.trim();
+  if (!value || value === '*' || value === 'null')
+    throw new Error('CORS origin allowlistに不正な値があります。');
+  const url = new URL(value);
+  if (
+    (url.protocol !== 'https:' && url.protocol !== 'http:') ||
+    url.username ||
+    url.password ||
+    url.pathname !== '/' ||
+    url.search ||
+    url.hash
+  )
+    throw new Error('CORS origin allowlistにはoriginだけを指定してください。');
+  return `${url.protocol}//${url.host}`;
+}
+
+function splitHeaderList(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function setVaryOrigin(headers: Headers) {
+  const current = headers.get('Vary');
+  if (!current) headers.set('Vary', 'Origin');
+  else if (!current.split(',').some((item) => item.trim() === 'Origin'))
+    headers.set('Vary', `${current}, Origin`);
+}
+
+function requestId(request: Request): string {
+  const candidate = request.headers.get('x-request-id')?.trim();
+  if (
+    candidate &&
+    candidate.length <= 128 &&
+    !hasUnsafeControlCharacter(candidate)
+  )
+    return candidate;
+  return crypto.randomUUID();
+}
+
+function hasUnsafeControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code <= 31 || code === 127) return true;
+  }
+  return false;
+}
+
+function rejectCors(c: Parameters<MiddlewareHandler>[0], code: string) {
+  const id = requestId(c.req.raw);
+  c.header('x-request-id', id);
+  return c.json(
+    {
+      error: {
+        code,
+        message: '許可されていないCross-Originリクエストです。',
+        details: {},
+        requestId: id,
+      },
+    },
+    403,
+  );
+}
+
+// 認証より前にorigin、preflight method、headerを検査し、未許可のブラウザ経路をfail-closedにする。
+export function createCorsMiddleware(options: CorsOptions): MiddlewareHandler {
+  if (!options.origins.length)
+    throw new Error('CORS origin allowlistが空です。');
+  const origins = new Set(options.origins.map(normalizeOrigin));
+  const methods = new Set(
+    (options.methods ?? defaultMethods).map((method) => method.toUpperCase()),
+  );
+  const headers = new Set(
+    (options.headers ?? defaultHeaders).map((header) => header.toLowerCase()),
+  );
+  if (
+    !methods.size ||
+    [...methods].some(
+      (method) =>
+        method === '*' ||
+        !defaultMethods.includes(method as (typeof defaultMethods)[number]),
+    )
+  )
+    throw new Error('CORS許可メソッドが不正です。');
+  if (
+    [...headers].some(
+      (header) =>
+        header === '*' ||
+        !defaultHeaders.map((value) => value.toLowerCase()).includes(header),
+    )
+  )
+    throw new Error('CORS許可ヘッダーが不正です。');
+  const maxAgeSeconds = options.maxAgeSeconds ?? 600;
+  if (
+    !Number.isInteger(maxAgeSeconds) ||
+    maxAgeSeconds < 0 ||
+    maxAgeSeconds > 86_400
+  )
+    throw new Error('CORS preflightのmax-ageが不正です。');
+
+  return async (c, next) => {
+    const origin = c.req.header('origin');
+    if (!origin) return next();
+
+    let normalizedOrigin: string;
+    try {
+      normalizedOrigin = normalizeOrigin(origin);
+    } catch {
+      return rejectCors(c, 'CORS_ORIGIN_DENIED');
+    }
+    if (!origins.has(normalizedOrigin))
+      return rejectCors(c, 'CORS_ORIGIN_DENIED');
+
+    const requestedMethod = c.req.header('access-control-request-method');
+    const requestedHeaders = splitHeaderList(
+      c.req.header('access-control-request-headers'),
+    );
+    if (c.req.method === 'OPTIONS') {
+      if (!requestedMethod || !methods.has(requestedMethod.toUpperCase()))
+        return rejectCors(c, 'CORS_METHOD_DENIED');
+      if (requestedHeaders.some((header) => !headers.has(header.toLowerCase())))
+        return rejectCors(c, 'CORS_HEADER_DENIED');
+      c.header('Access-Control-Allow-Origin', normalizedOrigin);
+      c.header('Access-Control-Allow-Methods', [...methods].join(', '));
+      c.header('Access-Control-Allow-Headers', [...headers].join(', '));
+      c.header('Access-Control-Max-Age', String(maxAgeSeconds));
+      setVaryOrigin(c.res.headers);
+      return c.body(null, 204);
+    }
+
+    c.header('Access-Control-Allow-Origin', normalizedOrigin);
+    c.header(
+      'Access-Control-Expose-Headers',
+      'X-Request-Id, ETag, Retry-After',
+    );
+    setVaryOrigin(c.res.headers);
+    await next();
+  };
+}
