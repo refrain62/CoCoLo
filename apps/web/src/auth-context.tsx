@@ -181,6 +181,8 @@ export function createAuthSessionManager({
   }
 
   function clearSession(expired = false) {
+    if (refreshTimer !== undefined) clearTimeout(refreshTimer);
+    refreshTimer = undefined;
     current = null;
     clearPersistedSession(storage);
     notify();
