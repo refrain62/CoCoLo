@@ -1,4 +1,9 @@
 {
+  "protected_paths": [
+    ".gitleaks.toml",
+    ".semgrep/ci.yml",
+    ".trivy-secret.yaml"
+  ],
   "files": {
     ".github/CODEOWNERS": "d315e4b4dc32a8433d02431b32b2856ab92dc90bfa42b044bb78880a59c9edf8",
     ".github/security/bootstrap-extension.json": "dfe7dc6026eefc3e236d38b0334426e6ad8ea7bc07d0c3c56efdddca44bfba07",
@@ -32,8 +37,8 @@
     "scripts/verify-pnpm-config.ts": "de5fcbea207a36553e6bc3e82c6ffe94e18fdf2568db8eda89e31ba3077ec263",
     "scripts/verify-production-bundle.ts": "52e34aa58f5e08326a8ea1a3fced4b840d371d113a6f707114a1e847e228fc3d",
     "scripts/verify-release.ts": "ace5e625feb9388e8c155b26de934fa0b17465b77e25d14cd613462933cfa1b1",
-    "scripts/verify-trust-root.ts": "e42b82b68f8c21572f36edce89fa478134535571f2413bb3128553fd1017359b",
-    "scripts/verify-trusted-pr.ts": "5a8491a37c5a3366435d007d2dddde339c8e7360a39ac7378f9ae53091049962",
+    "scripts/verify-trust-root.ts": "842d5a06d6f161952d581c70c20f8592e57005397086291dd4144afee22488e4",
+    "scripts/verify-trusted-pr.ts": "bb18299951071613b79b57b0333f89512b4d36e0d7fa919e16de52b7516c38c5",
     "scripts/verify-workflows.ts": "0d6e9929214915c533da954e7c34bc0cf7c3cd929baa66f792297d5331628731",
     "scripts/verify-workspace-boundaries.ts": "142ae19436873fc254f91c6351b9c3354a1675f392fc5183a4c669febc0efa74",
     "tsconfig.scripts.json": "b812bc3ef869600859f0df844e151987d45a651207f16f4161052ec98a7f319b"

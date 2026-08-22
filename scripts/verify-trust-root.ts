@@ -6,7 +6,10 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertTrustRootReady, readTrustRoot } from './trust-root.ts';
 
-type TrustedManifest = { files?: Record<string, string> };
+type TrustedManifest = {
+  protected_paths?: string[];
+  files?: Record<string, string>;
+};
 type BootstrapExtension = {
   schema: 1;
   mode: 'owner-only-one-time';
@@ -99,6 +102,11 @@ export async function verifyTrustRoot(): Promise<void> {
     await readFile(manifestPath, 'utf8'),
   ) as TrustedManifest;
   assert.ok(manifest.files, '信頼対象manifestがありません。');
+  assert.deepEqual(
+    manifest.protected_paths?.slice().sort(),
+    ['.gitleaks.toml', '.semgrep/ci.yml', '.trivy-secret.yaml'],
+    'scanner rule fileのtrusted manifest保護対象が不正です。',
+  );
   const files = manifest.files;
   for (const filename of await requiredManifestPaths()) {
     assert.ok(

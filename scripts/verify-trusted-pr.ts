@@ -9,7 +9,10 @@ import { assertTrustRootReady, readTrustRoot } from './trust-root.ts';
 type PullRequestFile = { filename?: string; status?: string };
 type PullRequestMetadata = { changed_files?: number };
 type ContentsResponse = { content?: string; encoding?: string };
-type TrustedManifest = { files?: Record<string, string> };
+type TrustedManifest = {
+  protected_paths?: string[];
+  files?: Record<string, string>;
+};
 type BootstrapExtension = {
   schema: 1;
   mode: 'owner-only-one-time';
@@ -182,6 +185,11 @@ async function main(): Promise<void> {
   assert.ok(
     trustedFiles && Object.keys(trustedFiles).length > 0,
     '信頼対象manifestが空です。',
+  );
+  assert.deepEqual(
+    manifest.protected_paths?.slice().sort(),
+    ['.gitleaks.toml', '.semgrep/ci.yml', '.trivy-secret.yaml'],
+    'scanner rule fileのtrusted manifest保護対象が不正です。',
   );
   for (const [filename, expectedHash] of Object.entries(trustedFiles)) {
     assert.ok(
