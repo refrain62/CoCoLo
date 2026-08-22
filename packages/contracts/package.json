@@ -5,7 +5,8 @@
   "exports": {
     ".": "./src/index.mjs",
     "./upload": "./src/upload-contract.mjs",
-    "./member": "./src/member-contract.mjs"
+    "./member": "./src/member-contract.mjs",
+    "./bulletin-board": "./src/bulletin-board-contract.mjs"
   },
   "scripts": {
     "build": "node ../../scripts/generate-openapi.mjs",
