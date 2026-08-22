@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
+    "./line": "./dist/line-domain.js",
     "./auth-team-selection": "./dist/auth-team-selection-domain.js",
     "./ride": {
       "types": "./dist/ride-domain.d.ts",

@@ -5,6 +5,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/index.js",
+    "./line": "./dist/line-repository.js",
     "./auth-team-selection": "./dist/auth-team-selection-repository.js",
     "./ride": {
       "types": "./dist/ride-repository.d.ts",
