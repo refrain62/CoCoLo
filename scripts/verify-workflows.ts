@@ -374,7 +374,11 @@ function assertNoForbiddenValues(
       `${location}: 禁止されたWorkflow構文です: workflow_run`,
     );
     if (key === 'actions')
-      assert.notEqual(child, 'write', `${location}.actions: actions: writeは禁止です`);
+      assert.notEqual(
+        child,
+        'write',
+        `${location}.actions: actions: writeは禁止です`,
+      );
     if (key === 'secrets' && child === 'inherit')
       assert.fail(`${location}.secrets: secrets: inheritは禁止です`);
     assertNoForbiddenValues(child, `${location}.${key}`, allowTrustedTrigger);
@@ -447,7 +451,7 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
       if (body === 'github.token')
         assert.ok(
           location ===
-              'production-promote.yml.jobs.production.steps[0].env.GH_TOKEN' ||
+            'production-promote.yml.jobs.production.steps[0].env.GH_TOKEN' ||
             location ===
               'production-promote.yml.jobs.production.steps[2].env.GH_TOKEN' ||
             location ===
@@ -459,7 +463,7 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
       if (body === 'inputs.artifact_sha')
         assert.ok(
           location ===
-              'production-promote.yml.jobs.production.steps[2].env.ARTIFACT_SHA' ||
+            'production-promote.yml.jobs.production.steps[2].env.ARTIFACT_SHA' ||
             location ===
               'production-promote.yml.jobs.production.steps[9].env.ARTIFACT_SHA' ||
             location ===
@@ -645,7 +649,10 @@ function validateQualityWorkflowDocument(workflow: WorkflowRecord): void {
   validateQualityServices(quality);
   validateSteps('quality.yml', quality, qualitySteps);
   const steps = asArray(quality.steps, 'quality.yml.jobs.quality.steps');
-  const staticQualityStep = asRecord(steps[4], 'quality.yml.jobs.quality.steps[4]');
+  const staticQualityStep = asRecord(
+    steps[4],
+    'quality.yml.jobs.quality.steps[4]',
+  );
   assert.match(
     String(staticQualityStep.run ?? ''),
     /pnpm\s+test:workflows/,
@@ -795,7 +802,10 @@ function validateTrustedPrWorkflowDocument(workflow: WorkflowRecord): void {
   );
   const jobs = asRecord(workflow.jobs, 'pr-trust-gate.yml.jobs');
   assertExactKeys(jobs, ['trusted-validation'], 'pr-trust-gate.yml.jobs');
-  const job = asRecord(jobs['trusted-validation'], 'pr-trust-gate.yml.jobs.trusted-validation');
+  const job = asRecord(
+    jobs['trusted-validation'],
+    'pr-trust-gate.yml.jobs.trusted-validation',
+  );
   assertExactKeys(
     job,
     ['runs-on', 'timeout-minutes', 'steps'],

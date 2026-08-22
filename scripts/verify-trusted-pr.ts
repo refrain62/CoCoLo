@@ -7,10 +7,17 @@ type ContentsResponse = { content?: string; encoding?: string };
 const eventPath = process.env.GITHUB_EVENT_PATH;
 const token = process.env.GH_TOKEN;
 const repository = process.env.GITHUB_REPOSITORY;
-assert.ok(eventPath && token && repository, '信頼境界検査のGitHub contextが不足しています');
+assert.ok(
+  eventPath && token && repository,
+  '信頼境界検査のGitHub contextが不足しています',
+);
 
 const event = JSON.parse(await readFile(eventPath, 'utf8')) as {
-  pull_request?: { number?: number; base?: { sha?: string }; head?: { sha?: string } };
+  pull_request?: {
+    number?: number;
+    base?: { sha?: string };
+    head?: { sha?: string };
+  };
 };
 const pullRequest = event.pull_request;
 const pullRequestNumber = pullRequest?.number;
@@ -51,7 +58,11 @@ async function headFile(filename: string) {
   const response = await githubJson<ContentsResponse>(
     `${apiRoot}/contents/${encoded}?ref=${headSha}`,
   );
-  assert.equal(response.encoding, 'base64', `${filename}: base64以外の応答です`);
+  assert.equal(
+    response.encoding,
+    'base64',
+    `${filename}: base64以外の応答です`,
+  );
   assert.ok(response.content, `${filename}: PR headの内容が取得できません`);
   return Buffer.from(response.content.replaceAll('\n', ''), 'base64').toString(
     'utf8',
@@ -61,22 +72,43 @@ async function headFile(filename: string) {
 for (const filename of trustedPaths) {
   const content = await headFile(filename);
   if (filename.startsWith('.github/workflows/')) {
-    assert.doesNotMatch(content, /actions:\s*\n\s+write\b/i, `${filename}: actions writeは禁止です`);
-    assert.doesNotMatch(content, /workflow_run:/, `${filename}: workflow_runは禁止です`);
+    assert.doesNotMatch(
+      content,
+      /actions:\s*\n\s+write\b/i,
+      `${filename}: actions writeは禁止です`,
+    );
+    assert.doesNotMatch(
+      content,
+      /workflow_run:/,
+      `${filename}: workflow_runは禁止です`,
+    );
     for (const match of content.matchAll(/uses:\s*([^\s#]+)@([^\s#]+)/g))
-      assert.match(match[2] ?? '', /^[0-9a-f]{40}$/, `${filename}: Action SHAが不正です`);
+      assert.match(
+        match[2] ?? '',
+        /^[0-9a-f]{40}$/,
+        `${filename}: Action SHAが不正です`,
+      );
     if (filename !== '.github/workflows/pr-trust-gate.yml')
-      assert.doesNotMatch(content, /pull_request_target:/, `${filename}: untrusted Workflowでpull_request_targetは禁止です`);
+      assert.doesNotMatch(
+        content,
+        /pull_request_target:/,
+        `${filename}: untrusted Workflowでpull_request_targetは禁止です`,
+      );
   }
   if (filename === 'package.json') {
-    const packageJson = JSON.parse(content) as { scripts?: Record<string, string> };
+    const packageJson = JSON.parse(content) as {
+      scripts?: Record<string, string>;
+    };
     assert.equal(
       packageJson.scripts?.['test:workflows'],
       'node --test scripts/verify-workflows.test.ts',
       'package.jsonのtest:workflowsを変更できません',
     );
     assert.ok(packageJson.scripts?.test, 'package.jsonのtest scriptが必要です');
-    assert.ok(packageJson.scripts?.build, 'package.jsonのbuild scriptが必要です');
+    assert.ok(
+      packageJson.scripts?.build,
+      'package.jsonのbuild scriptが必要です',
+    );
   }
   if (filename === 'scripts/verify-workflows.ts') {
     assert.match(content, /validateWorkflow/);
