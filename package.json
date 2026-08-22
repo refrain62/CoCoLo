@@ -34,6 +34,7 @@
     "verify:production-bundle": "node scripts/verify-production-bundle.ts",
     "verify:release": "node scripts/verify-release.ts",
     "lint:workflows": "node scripts/verify-workflows.ts",
+    "test:workflows": "node --test scripts/verify-workflows.test.ts",
     "db:prepare:test": "node scripts/db-prepare-test.ts",
     "db:seed:test": "node scripts/db-seed-test.ts",
     "deploy:staging": "node scripts/deploy-artifact.ts staging",
@@ -47,6 +48,7 @@
     "@types/node": "24.3.0",
     "dependency-cruiser": "16.10.4",
     "typescript": "5.9.2",
-    "vitest": "3.2.4"
+    "vitest": "3.2.4",
+    "yaml": "2.8.1"
   }
 }

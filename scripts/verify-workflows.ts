@@ -12,6 +12,7 @@ const workflowFiles = [
   'staging-deploy.yml',
   'production-promote.yml',
   'pr-trust-gate.yml',
+  'database-integrity.yml',
 ] as const;
 type WorkflowName = (typeof workflowFiles)[number];
 type WorkflowRecord = Record<string, unknown>;
@@ -373,6 +374,8 @@ function assertNoForbiddenValues(
       'workflow_run',
       `${location}: 禁止されたWorkflow構文です: workflow_run`,
     );
+    if (key === 'actions')
+      assert.notEqual(child, 'write', `${location}.actions: actions: writeは禁止です`);
     if (key === 'secrets' && child === 'inherit')
       assert.fail(`${location}.secrets: secrets: inheritは禁止です`);
     assertNoForbiddenValues(child, `${location}.${key}`, allowTrustedTrigger);
@@ -384,6 +387,7 @@ const safeExpressionBodies = new Set([
   'github.workflow',
   'github.event.pull_request.number || github.ref',
   "github.event_name == 'pull_request'",
+  "github.event.pull_request.base.sha || github.event.before || inputs.base_sha || ''",
   'github.sha',
   'github.token',
   'inputs.artifact_sha',
@@ -428,15 +432,15 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
         body === 'github.event.pull_request.number || github.ref'
       )
         assert.equal(
-          location,
-          'quality.yml.concurrency.group',
-          `${location}: concurrency以外でこのGitHub contextを使えません`,
+          location.endsWith('.concurrency.group'),
+          true,
+          `${location}: concurrency.group以外でこのGitHub contextを使えません`,
         );
       if (body === "github.event_name == 'pull_request'")
         assert.equal(
-          location,
-          'quality.yml.concurrency.cancel-in-progress',
-          `${location}: concurrency以外でこのGitHub contextを使えません`,
+          location.endsWith('.concurrency.cancel-in-progress'),
+          true,
+          `${location}: concurrency.cancel-in-progress以外でこのGitHub contextを使えません`,
         );
       if (body === 'github.sha')
         assert.ok(
@@ -644,6 +648,13 @@ function validateQualityWorkflowDocument(workflow: WorkflowRecord): void {
   assert.equal(quality['timeout-minutes'], 10);
   validateQualityServices(quality);
   validateSteps('quality.yml', quality, qualitySteps);
+  const steps = asArray(quality.steps, 'quality.yml.jobs.quality.steps');
+  const staticQualityStep = asRecord(steps[4], 'quality.yml.jobs.quality.steps[4]');
+  assert.match(
+    String(staticQualityStep.run ?? ''),
+    /pnpm\s+test:workflows/,
+    'quality.yml: pnpm test:workflowsを必須接続してください',
+  );
 }
 
 function assertEnvironmentProtectionStep(
