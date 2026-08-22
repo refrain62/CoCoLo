@@ -161,6 +161,7 @@ model Tenant {
   orderProducts OrderProduct[]
   orderEntries  OrderEntry[]
   orderLines    OrderLine[]
+  orderIdempotencyKeys OrderIdempotencyKey[]
   announcements Announcement[]
   announcementAttachments AnnouncementAttachment[]
   announcementReads AnnouncementRead[]
@@ -338,7 +339,7 @@ model Attachment {
   mediaType           String         @map("media_type") @db.VarChar(64)
   byteSize            Int            @map("byte_size")
   sha256              String?        @db.Char(64)
-  status              AttachmentStatus
+  status              AttachmentStatus @default(uploaded)
   expiresAt           DateTime       @map("expires_at")
   completeAttempts    Int            @default(0) @map("complete_attempts")
   cleanupAttempts     Int            @default(0) @map("cleanup_attempts")
@@ -377,7 +378,7 @@ model OrderProduct {
   tenantId           String       @map("tenant_id") @db.Uuid
   orderId            String       @map("order_id") @db.Uuid
   name               String       @db.VarChar(200)
-  unitPrice          Int          @map("unit_price")
+  unitPrice          BigInt       @map("unit_price")
   imageUrl           String?      @map("image_url") @db.VarChar(2000)
   options            Json         @default("[]")
   requiresBackNumber Boolean      @default(false) @map("requires_back_number")
@@ -399,7 +400,7 @@ model OrderEntry {
   ordererUserId        String        @map("orderer_user_id") @db.VarChar(128)
   ordererName          String        @map("orderer_name") @db.VarChar(200)
   memberId             String        @map("member_id") @db.Uuid
-  totalAmount          Int           @map("total_amount")
+  totalAmount          BigInt        @map("total_amount")
   paymentStatus        PaymentStatus @default(unpaid) @map("payment_status")
   paymentConfirmedAt   DateTime?     @map("payment_confirmed_at")
   paymentConfirmedBy   String?       @map("payment_confirmed_by") @db.VarChar(128)
@@ -421,12 +422,12 @@ model OrderLine {
   orderEntryId     String      @map("order_entry_id") @db.Uuid
   productId        String      @map("product_id") @db.Uuid
   productName      String      @map("product_name") @db.VarChar(200)
-  unitPrice        Int         @map("unit_price")
+  unitPrice        BigInt      @map("unit_price")
   quantity         Int
   selectedOptions  Json        @map("selected_options")
   backNumber       String?     @map("back_number") @db.VarChar(20)
   backName         String?     @map("back_name") @db.VarChar(40)
-  amount           Int
+  amount           BigInt
   tenant           Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   orderEntry       OrderEntry  @relation(fields: [tenantId, orderEntryId], references: [tenantId, id], onDelete: Restrict)
   product          OrderProduct @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
@@ -435,6 +436,23 @@ model OrderLine {
   @@index([tenantId, orderEntryId])
   @@index([tenantId, productId])
   @@map("order_lines")
+}
+
+model OrderIdempotencyKey {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  actorUserId    String   @map("actor_user_id") @db.VarChar(128)
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(128)
+  requestHash    String   @map("request_hash") @db.Char(64)
+  resourceType   String   @map("resource_type") @db.VarChar(64)
+  resourceId     String   @map("resource_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, actorUserId, idempotencyKey])
+  @@index([tenantId, resourceType, resourceId])
+  @@map("order_idempotency_keys")
 }
 
 model Announcement {
@@ -495,7 +513,7 @@ model LineConnection {
 }
 
 model LineNotificationQueue {
-  id                String                 @id @default(uuid(7)) @db.Uuid
+  id                String                 @id @default(dbgenerated("app_uuidv7()")) @db.Uuid
   tenantId          String                 @map("tenant_id") @db.Uuid
   groupId           String                 @map("group_id") @db.VarChar(128)
   createdByUserId   String                 @map("created_by_user_id") @db.VarChar(128)
