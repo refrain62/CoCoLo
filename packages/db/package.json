@@ -9,6 +9,10 @@
       "types": "./dist/ride-repository.d.ts",
       "import": "./dist/ride-repository.js"
     },
+    "./orders": {
+      "types": "./dist/orders-repository.d.ts",
+      "import": "./dist/orders-repository.js"
+    },
     "./bulletin-board": "./dist/bulletin-board-repository.js",
     "./attachment": "./dist/attachment-repository.js",
     "./events": "./dist/event-repository.js"
@@ -16,6 +20,7 @@
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
     "test": "pnpm build && node --test test/*.test.mjs",
+    "test:unit": "pnpm build && node --test test/*.test.ts",
     "lint": "node ../../scripts/prisma-validate.ts",
     "typecheck": "node ../../scripts/prisma-validate.ts",
     "prisma:validate": "prisma validate",
