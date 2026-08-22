@@ -128,3 +128,15 @@ pnpm typecheck
 ```
 
 API テストは 33件、DB repository テストは 3件、Vitest は 13件が成功した。
+
+## 追加レビュー
+
+最新の `develop` 取り込み後に、DB repository の一覧認可を再確認した。
+
+初回実装では一覧処理にも manager role 判定があり、staff と guardian の役職枠閲覧を拒否する仕様不整合があった。
+
+一覧は全ての有効な所属へ許可し、連絡先の投影は API 層へ委譲した。
+
+登録、更新、削除、年度引き継ぎの manager role 判定は維持している。
+
+staff の一覧取得を DB repository テストへ追加し、Critical 0件、High 0件を再確認した。
