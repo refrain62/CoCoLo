@@ -46,6 +46,10 @@ app.route('/', ordersApp);
 
 `ordersRepository`は、要求から受け取った `tenantId` を信用せず、認証middlewareが解決した所属だけを受け取る実装にします。
 
+注文URLの `orderId` と `entryId` は、契約層のUUIDv7 parserで検証します。
+
+UUIDv7でないpath paramは、repositoryや永続DBへ渡す前に400を返します。
+
 ### エンドポイント
 
 | メソッド | パス | 権限 | 用途 |
@@ -132,6 +136,7 @@ CSV出力の監査には行数と列名だけを保存し、注文者名や部�
 * **監査**：注文登録、支払状態変更、集計、CSV出力をappend-only監査へ記録します。
 * **金額の再計算**：注文明細へ登録する金額は商品単価と数量からサーバー側で再計算します。
 * **UUIDv7**：資源IDは既存仕様のUUIDv7を使い、連番やクライアント入力IDを採用しません。
+* **資源ID検証**：APIのpath paramは契約層でUUIDv7形式を検証し、DBの型変換や検索より前に不正入力を拒否します。
 
 Prisma schemaへモデルを追加する場合は、migration、RLS policy、grant、tenant A/Bの統合テスト、seedの順に同時更新します。
 
@@ -143,7 +148,7 @@ feature単位では次のテストを実行します。
 pnpm exec vitest run packages/domain/test/orders-domain.vitest.ts apps/web/src/features/orders-payments/orders-payments-api.vitest.ts
 pnpm --filter @cocolo/db test:unit
 pnpm --filter @cocolo/api build
-node apps/api/test/orders-payments.test.mjs
+node --test apps/api/test/orders-payments.test.ts
 pnpm --filter @cocolo/web typecheck
 pnpm --filter @cocolo/web build
 ```
