@@ -371,6 +371,9 @@ export function EventDetailView({
           >
             {summaryState === 'loading' ? '集計中…' : '出欠を集計'}
           </button>
+          {summaryState === 'loading' ? (
+            <p role="status">出欠を集計中…</p>
+          ) : null}
           {summaryState === 'error' && summaryError ? (
             <p role="alert">{summaryError}</p>
           ) : null}
