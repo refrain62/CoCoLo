@@ -71,6 +71,137 @@ test('実 PostgreSQL の owner 登録は同じトランザクションで監査�
   assert.equal(created.ageGroup, '30代');
 });
 
+test('部員編集と退部は状態遷移を監査し、退部を冪等に扱う', async () => {
+  const created = await repositories.memberRepository.create(
+    {
+      tenantId: TENANT_A,
+      actorUserId: 'owner-a',
+      role: 'owner',
+    },
+    {
+      name: `ライフサイクル-${Date.now()}`,
+      category: 'adult',
+      ageGroup: '40代',
+      status: 'active',
+    },
+  );
+
+  const updated = await repositories.memberRepository.update({
+    tenantId: TENANT_A,
+    actorUserId: 'owner-a',
+    role: 'owner',
+    memberId: created.id,
+    member: {
+      name: created.name,
+      kana: null,
+      category: 'adult',
+      ageGroup: '40代',
+      status: 'suspended',
+    },
+  });
+  assert.equal(updated?.status, 'suspended');
+
+  const retired = await repositories.memberRepository.retire({
+    tenantId: TENANT_A,
+    actorUserId: 'owner-a',
+    role: 'owner',
+    memberId: created.id,
+  });
+  const retried = await repositories.memberRepository.retire({
+    tenantId: TENANT_A,
+    actorUserId: 'owner-a',
+    role: 'owner',
+    memberId: created.id,
+  });
+
+  assert.equal(retired?.status, 'retired');
+  assert.deepEqual(retried, retired);
+
+  const auditLogs = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT
+        set_config('app.tenant_id', ${TENANT_A}, true),
+        set_config('app.user_id', 'owner-a', true),
+        set_config('app.role', 'owner', true)
+    `;
+    return tx.auditLog.findMany({
+      where: { tenantId: TENANT_A, resourceId: created.id },
+      select: { action: true, metadata: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  });
+  assert.equal(
+    auditLogs.some(
+      (log) =>
+        log.action === 'member.update' &&
+        JSON.stringify(log.metadata).includes('suspended'),
+    ),
+    true,
+  );
+  assert.equal(
+    auditLogs.filter((log) => log.action === 'member.retire').length,
+    2,
+  );
+});
+
+test('別テナントの部員は編集・退部できず、退部済みは通常編集できない', async () => {
+  const crossTenantUpdate = await repositories.memberRepository.update({
+    tenantId: TENANT_A,
+    actorUserId: 'owner-a',
+    role: 'owner',
+    memberId: '00000000-0000-7000-8000-000000000203',
+    member: {
+      name: '越境更新',
+      category: 'student',
+      gradeLevel: 10,
+      status: 'active',
+    },
+  });
+  const crossTenantRetire = await repositories.memberRepository.retire({
+    tenantId: TENANT_A,
+    actorUserId: 'owner-a',
+    role: 'owner',
+    memberId: '00000000-0000-7000-8000-000000000203',
+  });
+  assert.equal(crossTenantUpdate, null);
+  assert.equal(crossTenantRetire, null);
+
+  const created = await repositories.memberRepository.create(
+    {
+      tenantId: TENANT_A,
+      actorUserId: 'owner-a',
+      role: 'owner',
+    },
+    {
+      name: `退部済み編集拒否-${Date.now()}`,
+      category: 'adult',
+      ageGroup: '50代',
+      status: 'active',
+    },
+  );
+  await repositories.memberRepository.retire({
+    tenantId: TENANT_A,
+    actorUserId: 'owner-a',
+    role: 'owner',
+    memberId: created.id,
+  });
+  await assert.rejects(
+    repositories.memberRepository.update({
+      tenantId: TENANT_A,
+      actorUserId: 'owner-a',
+      role: 'owner',
+      memberId: created.id,
+      member: {
+        name: '退部済み編集',
+        category: 'adult',
+        ageGroup: '50代',
+        status: 'active',
+      },
+    }),
+    (error) => error?.status === 409,
+  );
+});
+
 test('部員一覧の監査ログへ検索語を保存しない', async () => {
   const searchTerm = `監査対象の個人名-${Date.now()}`;
   await repositories.memberRepository.list({
