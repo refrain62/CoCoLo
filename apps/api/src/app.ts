@@ -14,6 +14,17 @@ import {
   promotionRequestSchema,
 } from '@cocolo/contracts/member';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
+import {
+  createRateLimitMiddleware,
+  type InMemoryRateLimitStore,
+  rateLimitPolicies,
+} from './security/rate-limit.js';
+import {
+  createConfiguredRateLimitStore,
+  type DistributedRateLimitAdapter,
+  type RateLimitEnvironment,
+  type RateLimitStoreMode,
+} from './security/rate-limit-adapter.js';
 
 export type MembershipContext = {
   tenantId: string;
@@ -91,6 +102,16 @@ export type AppOptions = {
   membershipRepository?: MembershipRepository;
   memberRepository?: MemberRepository;
   promotionRepository?: PromotionRepository;
+  rateLimit?: {
+    environment?: RateLimitEnvironment;
+    mode?: RateLimitStoreMode;
+    adapter?: DistributedRateLimitAdapter;
+    distributedAdapter?: DistributedRateLimitAdapter;
+    localStore?: InMemoryRateLimitStore;
+    now?: () => number;
+    namespace?: RateLimitEnvironment;
+    timeoutMs?: number;
+  };
 };
 
 export type ApiEnv = {
@@ -151,6 +172,21 @@ function projectMember(member: MemberRecord, role: MemberRole) {
 // APIの依存性と認証middlewareを組み立て、tenant/roleは認証後の所属解決結果だけを利用する。
 export function createApp(options: AppOptions = {}) {
   const app = new Hono<ApiEnv>();
+  const rateLimitOptions = options.rateLimit ?? {};
+  const rateLimitEnvironment = rateLimitOptions.environment ?? 'local';
+  const rateLimitNamespace = rateLimitOptions.namespace ?? rateLimitEnvironment;
+  if (rateLimitNamespace !== rateLimitEnvironment)
+    throw new Error(
+      'rate limit namespaceはAPP_ENV由来の環境名と一致させてください。',
+    );
+  const rateLimitStore = createConfiguredRateLimitStore({
+    appEnv: rateLimitEnvironment,
+    mode: rateLimitOptions.mode ?? 'memory',
+    adapter: rateLimitOptions.adapter,
+    distributedAdapter: rateLimitOptions.distributedAdapter,
+    localStore: rateLimitOptions.localStore,
+    timeoutMs: rateLimitOptions.timeoutMs,
+  });
 
   app.use('*', async (c, next) => {
     const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
@@ -218,6 +254,25 @@ export function createApp(options: AppOptions = {}) {
 
   app.use('/api/v1/members', authenticate);
   app.use('/api/v1/members/*', authenticate);
+
+  // 認証後のtenant/userだけをキーに使い、production系では起動時に分散adapterを要求する。
+  const authenticatedRateLimit = createRateLimitMiddleware({
+    scope: 'authenticated',
+    ...rateLimitPolicies.authenticated,
+    store: rateLimitStore,
+    now: rateLimitOptions.now,
+    namespace: rateLimitNamespace,
+    timeoutMs: rateLimitOptions.timeoutMs,
+    keyResolver: (c) => {
+      const auth = c.get('auth');
+      return {
+        kind: 'user',
+        tenantId: auth.membership.tenantId,
+        userId: auth.userId,
+      };
+    },
+  });
+  app.use('/api/v1/members/*', authenticatedRateLimit);
 
   // tenantIdはリクエストから受け取らず、authenticateが設定した所属をrepositoryへ渡す。
   app.get('/api/v1/members', async (c) => {

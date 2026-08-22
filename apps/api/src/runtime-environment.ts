@@ -1,4 +1,12 @@
-type AppEnvironment = 'local' | 'staging' | 'production';
+import {
+  type AppEnvironment,
+  validateEnvironmentUrls,
+} from './environment-url-policy.js';
+import type { RateLimitStoreMode } from './security/rate-limit-adapter.js';
+import {
+  type RateLimitAdapterModulePolicy,
+  validateRateLimitAdapterModule,
+} from './security/rate-limit-adapter-policy.js';
 
 type RuntimeEnvironmentInput = Record<string, string | undefined>;
 
@@ -11,6 +19,10 @@ export type RuntimeEnvironment = {
   supabaseIssuer: string;
   r2Endpoint: string;
   r2Bucket: string;
+  rateLimitNamespace: AppEnvironment;
+  rateLimitStoreMode: RateLimitStoreMode;
+  rateLimitFailClosed: true;
+  rateLimitAdapterModule?: string;
 };
 
 const allowedBuckets: Record<AppEnvironment, string> = {
@@ -50,8 +62,13 @@ function assertR2Endpoint(appEnv: AppEnvironment, value: string) {
 }
 
 // 環境、Supabase接続先、R2 bucket、公開URLを相互検証し、環境混同をfail-closedで防ぐ。
+export type RuntimeEnvironmentOptions = {
+  rateLimitAdapterPolicy?: RateLimitAdapterModulePolicy;
+};
+
 export function readRuntimeEnvironment(
   environment: RuntimeEnvironmentInput,
+  options: RuntimeEnvironmentOptions = {},
 ): RuntimeEnvironment {
   const appEnv = environment.APP_ENV?.trim();
   if (appEnv !== 'local' && appEnv !== 'staging' && appEnv !== 'production')
@@ -69,6 +86,12 @@ export function readRuntimeEnvironment(
   required(environment, 'R2_ACCESS_KEY_ID');
   required(environment, 'R2_SECRET_ACCESS_KEY');
   const publicAppUrl = required(environment, 'PUBLIC_APP_URL');
+  const rateLimitStoreMode = required(
+    environment,
+    'RATE_LIMIT_STORE',
+  ) as RateLimitStoreMode;
+  const rateLimitFailClosed = required(environment, 'RATE_LIMIT_FAIL_CLOSED');
+  const rateLimitAdapterModule = environment.RATE_LIMIT_ADAPTER_MODULE?.trim();
   const supabaseIssuer = `${supabaseUrl}/auth/v1`;
 
   assertUrl('SUPABASE_URL', supabaseUrl);
@@ -77,14 +100,33 @@ export function readRuntimeEnvironment(
   if (r2Bucket !== allowedBuckets[appEnv])
     throw new Error('R2_BUCKET が環境の許可値と一致しません。');
 
-  if (appEnv === 'local' && publicAppUrl !== 'http://localhost:5173')
-    throw new Error('PUBLIC_APP_URL が local 環境の許可値と一致しません。');
+  if (rateLimitFailClosed !== 'true')
+    throw new Error('RATE_LIMIT_FAIL_CLOSED は true に固定してください。');
+  if (appEnv === 'local') {
+    if (rateLimitStoreMode !== 'memory')
+      throw new Error(
+        'local環境のRATE_LIMIT_STOREは memoryに固定してください。',
+      );
+    if (rateLimitAdapterModule)
+      throw new Error(
+        'local環境ではRATE_LIMIT_ADAPTER_MODULEを設定できません。',
+      );
+  } else {
+    if (rateLimitStoreMode !== 'distributed')
+      throw new Error(
+        `${appEnv}環境のRATE_LIMIT_STOREは distributedに固定してください。`,
+      );
+    if (!rateLimitAdapterModule)
+      throw new Error(`${appEnv}環境ではRATE_LIMIT_ADAPTER_MODULEが必要です。`);
+    validateRateLimitAdapterModule(
+      rateLimitAdapterModule,
+      options.rateLimitAdapterPolicy,
+    );
+  }
 
   const allowedUrl = environment.SUPABASE_ALLOWED_URL?.trim();
   const allowedJwksUrl = environment.SUPABASE_ALLOWED_JWKS_URL?.trim();
-  const allowlist = environment.PUBLIC_APP_URL_ALLOWLIST?.split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
+  const allowlist = environment.PUBLIC_APP_URL_ALLOWLIST;
   if (appEnv !== 'local') {
     if (!allowedUrl) throw new Error('SUPABASE_ALLOWED_URL が必要です。');
     if (!allowedJwksUrl)
@@ -92,12 +134,14 @@ export function readRuntimeEnvironment(
     if (!allowlist?.length)
       throw new Error('PUBLIC_APP_URL_ALLOWLIST が必要です。');
   }
-  if (allowedUrl && allowedUrl.replace(/\/$/, '') !== supabaseUrl)
-    throw new Error('SUPABASE_URL が許可された環境値と一致しません。');
-  if (allowedJwksUrl && allowedJwksUrl !== supabaseJwksUrl)
-    throw new Error('SUPABASE_JWKS_URL が許可された環境値と一致しません。');
-  if (allowlist && !allowlist.includes(publicAppUrl))
-    throw new Error('PUBLIC_APP_URL が許可リストに含まれていません。');
+  validateEnvironmentUrls(appEnv, {
+    supabaseUrl,
+    supabaseJwksUrl,
+    publicAppUrl,
+    supabaseAllowedUrl: allowedUrl,
+    supabaseAllowedJwksUrl: allowedJwksUrl,
+    publicAppUrlAllowlist: allowlist,
+  });
 
   const configuredIssuer = environment.SUPABASE_ISSUER?.trim();
   if (configuredIssuer && configuredIssuer !== supabaseIssuer)
@@ -120,5 +164,9 @@ export function readRuntimeEnvironment(
     supabaseIssuer,
     r2Endpoint,
     r2Bucket,
+    rateLimitNamespace: appEnv,
+    rateLimitStoreMode,
+    rateLimitFailClosed: true,
+    ...(rateLimitAdapterModule ? { rateLimitAdapterModule } : {}),
   };
 }

@@ -39,6 +39,9 @@ jobs:
           R2_BUCKET: cocolo-staging-private
           PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
           PUBLIC_APP_URL_ALLOWLIST: ${{ vars.PUBLIC_APP_URL_ALLOWLIST }}
+          RATE_LIMIT_STORE: distributed
+          RATE_LIMIT_FAIL_CLOSED: 'true'
+          RATE_LIMIT_ADAPTER_MODULE: ${{ vars.RATE_LIMIT_ADAPTER_MODULE }}
       - name: staging環境のRLS用ロールを準備
         run: pnpm db:prepare:test
         env:
