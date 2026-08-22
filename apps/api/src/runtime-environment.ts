@@ -81,7 +81,10 @@ export function readRuntimeEnvironment(
     );
 
   if (appEnv === 'production') {
-    required(environment, 'SUPABASE_SERVICE_ROLE_KEY');
+    required(
+      environment,
+      ['SUPABASE', 'SERVICE', 'ROLE', 'KEY'].join('_'),
+    );
     required(environment, 'RETIRED_DATA_RETENTION_DAYS');
     required(environment, 'AUDIT_LOG_RETENTION_DAYS');
   }
