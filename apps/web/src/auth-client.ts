@@ -118,7 +118,8 @@ export function createAuthClient({
     },
 
     async refreshSession(refreshToken) {
-      if (!refreshToken) throw new AuthApiError(400, '更新トークンがありません。');
+      if (!refreshToken)
+        throw new AuthApiError(400, '更新トークンがありません。');
       const response = await requestAuth('refresh', refreshEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
