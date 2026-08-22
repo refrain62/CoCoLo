@@ -15,7 +15,12 @@ assert.ok(process.env.DATABASE_URL, 'DATABASE_URLが必要です');
 const prisma = createPrismaClient();
 const repositories = createMemberRepositories(prisma);
 
-async function setMemberGrade(tenantId, userId, memberId, gradeLevel) {
+async function setMemberGrade(
+  tenantId: string,
+  userId: string,
+  memberId: string,
+  gradeLevel: number,
+) {
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`
       SELECT
@@ -43,8 +48,11 @@ test('年度繰り上げのプレビューは在籍中の学生だけを同じ�
   assert.equal(result.status, 'preview');
   assert.equal(result.previewCount, 2);
   assert.equal(result.promotedCount, 2);
+  const previewResult = result.result as {
+    changes: Array<{ id: string }>;
+  };
   assert.deepEqual(
-    result.result.changes.map((change) => change.id),
+    previewResult.changes.map((change) => change.id),
     [MEMBER_A, MEMBER_A2],
   );
 });

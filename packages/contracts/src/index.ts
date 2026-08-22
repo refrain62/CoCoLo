@@ -1,4 +1,4 @@
-export * from './upload-contract.mjs';
+export * from './upload-contract.ts';
 
 export const apiVersion = 'v1';
 // 全APIが共有するエラー形式の例。実際のrequestIdはAPI middlewareで発行する。
