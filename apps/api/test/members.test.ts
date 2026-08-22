@@ -1,19 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createApp } from '../dist/app.js';
+import type { MemberRecord, MembershipContext } from '../src/app.js';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
 const MEMBER_A = '00000000-0000-7000-8000-000000000101';
 
-const memberships = {
+const memberships: Record<string, MembershipContext> = {
   'owner-a': { tenantId: TENANT_A, role: 'owner' },
   'staff-a': { tenantId: TENANT_A, role: 'staff' },
   'guardian-a': { tenantId: TENANT_A, role: 'guardian' },
   'owner-b': { tenantId: TENANT_B, role: 'owner' },
 };
 
-const members = [
+const members: MemberRecord[] = [
   {
     id: MEMBER_A,
     tenantId: TENANT_A,
@@ -26,6 +27,11 @@ const members = [
     createdAt: '2026-08-22T00:00:00.000Z',
   },
 ];
+
+type MembersPayload<T = Array<Record<string, unknown>>> = {
+  data: T;
+  error?: { code: string; requestId?: string };
+};
 
 function createTestApp() {
   return createApp({
@@ -49,9 +55,14 @@ function createTestApp() {
             (role !== 'guardian' || userId === 'guardian-a'),
         ),
       create: async ({ tenantId, actorUserId }, input) => ({
-        ...input,
         id: '00000000-0000-7000-8000-000000000102',
         tenantId,
+        name: input.name,
+        kana: input.kana ?? null,
+        category: input.category,
+        gradeLevel: input.gradeLevel ?? null,
+        ageGroup: input.ageGroup ?? null,
+        status: input.status,
         createdAt: '2026-08-22T00:00:00.000Z',
         actorUserId,
       }),
@@ -71,11 +82,14 @@ function createTestApp() {
   });
 }
 
-async function readJson(response) {
-  return response.json();
+async function readJson<T = Array<Record<string, unknown>>>(
+  response: Response,
+): Promise<MembersPayload<T>> {
+  return (await response.json()) as MembersPayload<T>;
 }
 
-function assertError(payload, code) {
+function assertError(payload: MembersPayload, code: string) {
+  assert.ok(payload.error);
   assert.equal(payload.error.code, code);
   assert.ok(payload.error.requestId);
 }
@@ -189,8 +203,10 @@ test('owner の一覧は所属情報で解決したテナント内だけを返�
 
   assert.equal(response.status, 200);
   assert.equal(payload.data.length, 1);
-  assert.equal(payload.data[0].tenantId, undefined);
-  assert.equal(payload.data[0].id, MEMBER_A);
+  const member = payload.data[0];
+  assert.ok(member);
+  assert.equal(member.tenantId, undefined);
+  assert.equal(member.id, MEMBER_A);
 });
 
 test('guardian の一覧は担当部員の最小項目だけを返す', async () => {
@@ -200,7 +216,9 @@ test('guardian の一覧は担当部員の最小項目だけを返す', async ()
   const payload = await readJson(response);
 
   assert.equal(response.status, 200);
-  assert.deepEqual(Object.keys(payload.data[0]).sort(), [
+  const member = payload.data[0];
+  assert.ok(member);
+  assert.deepEqual(Object.keys(member).sort(), [
     'category',
     'gradeLevel',
     'id',
@@ -225,7 +243,7 @@ test('owner の登録は所属情報のテナントで作成し、note を永続
       status: 'active',
     }),
   });
-  const payload = await readJson(response);
+  const payload = await readJson<Record<string, unknown>>(response);
 
   assert.equal(response.status, 201);
   assert.equal(payload.data.tenantId, undefined);

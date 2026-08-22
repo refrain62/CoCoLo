@@ -3,8 +3,20 @@ import test from 'node:test';
 import { createMemberRepositories } from '@cocolo/db';
 
 test('部員一覧の監査metadataへ検索語を保存しない', async () => {
-  const auditEntries = [];
-  const transaction = {
+  type AuditEntry = { metadata: unknown };
+  type Transaction = {
+    $queryRaw: () => Promise<unknown[]>;
+    $executeRaw: () => Promise<number>;
+    tenantMembership: {
+      findUnique: () => Promise<{ role: string; status: string }>;
+    };
+    member: { findMany: () => Promise<unknown[]> };
+    auditLog: {
+      createMany: (input: { data: AuditEntry[] }) => Promise<{ count: number }>;
+    };
+  };
+  const auditEntries: AuditEntry[] = [];
+  const transaction: Transaction = {
     $queryRaw: async () => [],
     $executeRaw: async () => 1,
     tenantMembership: {
@@ -14,15 +26,17 @@ test('部員一覧の監査metadataへ検索語を保存しない', async () => 
       findMany: async () => [],
     },
     auditLog: {
-      createMany: async ({ data }) => {
+      createMany: async ({ data }: { data: AuditEntry[] }) => {
         auditEntries.push(...data);
         return { count: data.length };
       },
     },
   };
   const repositories = createMemberRepositories({
-    $transaction: async (callback) => callback(transaction),
-  });
+    $transaction: async (
+      callback: (transaction: Transaction) => Promise<unknown>,
+    ) => callback(transaction),
+  } as unknown as Parameters<typeof createMemberRepositories>[0]);
   const searchTerm = '監査対象の個人名';
 
   await repositories.memberRepository.list({
@@ -33,11 +47,10 @@ test('部員一覧の監査metadataへ検索語を保存しない', async () => 
   });
 
   assert.equal(auditEntries.length, 1);
-  assert.equal(
-    JSON.stringify(auditEntries[0].metadata).includes(searchTerm),
-    false,
-  );
-  assert.deepEqual(auditEntries[0].metadata, {
+  const auditEntry = auditEntries[0];
+  assert.ok(auditEntry);
+  assert.equal(JSON.stringify(auditEntry.metadata).includes(searchTerm), false);
+  assert.deepEqual(auditEntry.metadata, {
     filters: { category: null, status: null, page: 1, pageSize: 50 },
   });
 });
