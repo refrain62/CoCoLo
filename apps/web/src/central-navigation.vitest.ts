@@ -28,6 +28,7 @@ describe('中央Webのroute境界', () => {
       route: { kind: 'events' },
     });
     expect(matchCentralRoute('/manual')).toEqual({ kind: 'manual' });
+    expect(matchCentralRoute('/bulletins')).toEqual({ kind: 'bulletins' });
   });
 
   it('UUIDv7でない資源IDをAPIへ渡さない', () => {
