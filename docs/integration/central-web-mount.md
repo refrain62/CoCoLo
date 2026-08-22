@@ -127,3 +127,13 @@ PR #31のチーム選択は、中央APIのactive membership解決と同じtenant
 中央routeの直接URL、未認証、unknown path、UUIDv7境界、所属APIへのtenant非注入を `apps/web/src/central-navigation.vitest.ts` で検証します。
 
 feature API、OpenAPI、DB migration、実LINE、実R2の接続は、このブランチの検証範囲に含めません。
+
+中央Webの追加後に、対象テスト7件、domainとUIのbuild、Web typecheck、リポジトリ全体buildが成功しました。
+
+リポジトリ全体testは、統合ベースが `apps/api/src/app.ts` から部員編集と退部routeを除外しているため、既存の `apps/api/test/members.test.ts` 4件が404または非JSON応答で失敗します。
+
+リポジトリ全体lintは、統合ベースのBiome設定でルート指定時に処理対象が0件となり失敗します。
+
+リポジトリ全体typecheckは、同じ部員編集と退部route除外に対して既存APIテストが `MemberRepository.update` 型を参照するため失敗します。
+
+これらは中央Webの許可範囲外であり、中央API統合時にroute、テスト、Biome設定を同じ変更単位で整合させます。

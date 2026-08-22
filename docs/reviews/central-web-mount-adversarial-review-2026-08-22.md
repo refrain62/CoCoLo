@@ -63,4 +63,12 @@ session refresh/logoutと同時に変更すると認証状態の競合を起こ�
 
 `pnpm --filter @cocolo/web exec tsc -p tsconfig.json --noEmit` は成功しました。
 
-リポジトリ全体の `pnpm test`、`pnpm build`、`pnpm lint`、`pnpm typecheck` は、文書追加後に中央統合ブランチで実行します。
+リポジトリ全体の `pnpm build` は成功しました。
+
+リポジトリ全体の `pnpm test` は、中央APIから除外された部員編集と退部routeを前提にした既存テスト4件が失敗しました。
+
+リポジトリ全体の `pnpm lint` は、統合ベースのBiome設定がルート指定で0ファイル扱いとなり失敗しました。
+
+リポジトリ全体の `pnpm typecheck` は、既存APIテストが中央APIから除外された `MemberRepository.update` 型を参照するため失敗しました。
+
+上記3件は中央Webの変更範囲外であり、CriticalまたはHighの中央Web指摘には分類しません。
