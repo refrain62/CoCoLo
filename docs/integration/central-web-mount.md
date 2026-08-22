@@ -23,6 +23,7 @@ tenant IDをURL、query、body、画面のチーム選択値へ渡しません�
 | `/` | トップ | 中央ナビゲーションを表示 |
 | `/members` | 部員管理 | ownerまたはadminだけに表示 |
 | `/events` | 予定と出欠 | `EventsPage`を接続 |
+| `/events/:eventId` | 予定詳細 | UUIDv7を検証し、`EventDetailPage`を接続 |
 | `/board-contacts` | 役員と連絡先 | ownerまたはadminだけに表示 |
 | `/orders` | 共同購買と集金 | `OrdersPaymentsPage`を接続 |
 | `/attachments` | 添付 | `AttachmentUploader`を接続 |
@@ -32,7 +33,9 @@ tenant IDをURL、query、body、画面のチーム選択値へ渡しません�
 | `/team-selection` | チーム選択 | Web画面と`/api/v1/auth` APIを接続 |
 | `/manual` | 操作マニュアル | 認証前後に表示可能 |
 
-予定、共同購買、添付、回覧板の詳細URLは、UUIDv7を検証した後に詳細画面未接続として表示します。
+共同購買、添付、回覧板の詳細URLは、UUIDv7を検証した後に詳細画面未接続として表示します。
+
+予定詳細は、同じBearer tokenで`GET /api/v1/events/:eventId`を呼び出し、所属tenant内の予定だけを表示します。
 
 詳細画面を一覧画面へ黙って置き換えることはしません。
 

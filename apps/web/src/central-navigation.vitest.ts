@@ -74,11 +74,10 @@ describe('中央Webのroute境界', () => {
     });
   });
 
-  it('詳細画面が未接続の資源はIDを検証した上で未接続表示へ送る', () => {
+  it('予定詳細はIDを検証した上で予定詳細routeへ送る', () => {
     expect(matchCentralRoute(`/events/${resourceId}`)).toEqual({
-      kind: 'resource-unavailable',
-      feature: 'events',
-      resourceId,
+      kind: 'event-detail',
+      eventId: resourceId,
     });
   });
 
