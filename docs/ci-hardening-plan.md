@@ -140,8 +140,9 @@ Workflowは`actionlint`と単体テストを持つ独自validatorで検査しま
 - 上流ジョブの失敗、取消、skip時に集約`gate`を失敗させる。
 
 WorkflowとvalidatorはPRの変更対象になり得るため、検査結果だけを信頼境界にしません。
-`.github/CODEOWNERS`でWorkflowとvalidatorのownerレビューを要求し、GitHub側でbranch protectionを利用できる環境では当該レビューと品質ゲートを必須条件にします。
-GitHub Freeの非公開リポジトリで必須レビューを技術的に強制できない期間は、ownerが差分を確認してからDraft PRを更新し、品質ゲートには秘密情報を渡しません。
+`.github/CODEOWNERS`でWorkflow、CODEOWNERS自身、`package.json`、`pnpm-lock.yaml`、validatorのownerレビューを要求し、GitHub側でbranch protectionを利用できる環境では当該レビューと品質ゲートを必須条件にします。
+GitHub Freeの非公開リポジトリではCODEOWNERSのレビュー要求とrequired checksを技術的に強制できないため、ownerがこれらの保護対象ファイルの差分を確認してからDraft PRを更新し、品質ゲートには秘密情報を渡しません。
+この制約が解消されるまで、PR上で成功した検査結果だけをマージ許可の根拠にしないでください。
 
 ## 9. 定期検査
 
