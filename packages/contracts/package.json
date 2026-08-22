@@ -1,0 +1,19 @@
+{
+  "name": "@cocolo/contracts",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./upload": "./src/upload-contract.mjs"
+  },
+  "scripts": {
+    "build": "node ../../scripts/generate-openapi.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:unit": "node --test test/*.test.mjs",
+    "lint": "node --check src/upload-contract.mjs && node --check src/openapi-source.mjs",
+    "typecheck": "node --check src/upload-contract.mjs"
+  },
+  "dependencies": {
+    "zod": "4.1.5"
+  }
+}

@@ -1,0 +1,11 @@
+export * from './upload-contract.mjs';
+
+export const apiVersion = 'v1';
+export const errorResponseExample = {
+  error: {
+    code: 'VALIDATION_ERROR',
+    message: '入力値が不正です。',
+    details: {},
+    requestId: '00000000-0000-7000-8000-000000000000',
+  },
+};
