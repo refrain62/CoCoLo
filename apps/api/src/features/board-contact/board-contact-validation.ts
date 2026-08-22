@@ -222,7 +222,11 @@ export function parseCopyBoardContactYearInput(
 
 export function parseBoardContactId(value: string) {
   const id = value.trim();
-  if (!id || id.length > 128)
+  if (
+    !/^\b[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b$/i.test(
+      id,
+    )
+  )
     throw new BoardContactValidationError('役員IDが不正です。');
   return id;
 }

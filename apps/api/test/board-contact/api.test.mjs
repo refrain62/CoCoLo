@@ -220,6 +220,21 @@ test('別テナントのownerはAテナントの役員を取得できず、更�
   assert.equal(staffUpdate.status, 403);
 });
 
+test('UUIDv7でない役員IDはDB処理前に400で拒否する', async () => {
+  const { app } = createTestApp();
+  const response = await app.request('/api/v1/board-members/not-a-uuid', {
+    method: 'PATCH',
+    headers: {
+      authorization: 'Bearer owner-a',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ roleName: '会計' }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal((await json(response)).error.code, 'VALIDATION_ERROR');
+});
+
 test('ownerの登録と年度引き継ぎはtenantを認証所属から決め、個人情報をコピーしない', async () => {
   const { app, calls } = createTestApp();
   const createResponse = await app.request('/api/v1/board-members', {
