@@ -3,14 +3,11 @@ import type {
   MemberCreateInput,
   MemberListQuery,
   MemberRole,
-  MemberUpdateInput,
   PromotionMode,
 } from '@cocolo/contracts/member';
 import {
   memberCreateSchema,
-  memberIdSchema,
   memberListQuerySchema,
-  memberUpdateSchema,
   promotionRequestSchema,
 } from '@cocolo/contracts/member';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
@@ -51,19 +48,6 @@ export type MemberRepository = {
     },
     member: MemberCreateInput,
   ) => Promise<MemberRecord>;
-  update: (input: {
-    tenantId: string;
-    actorUserId: string;
-    role: MemberRole;
-    memberId: string;
-    member: MemberUpdateInput;
-  }) => Promise<MemberRecord | null>;
-  retire: (input: {
-    tenantId: string;
-    actorUserId: string;
-    role: MemberRole;
-    memberId: string;
-  }) => Promise<MemberRecord | null>;
 };
 
 export type PromotionRecord = {
@@ -294,118 +278,6 @@ export function createApp(options: AppOptions = {}) {
       parsed.data,
     );
     return c.json({ data: projectMember(member, auth.membership.role) }, 201);
-  });
-
-  // 通常編集はactive/suspendedだけを受け付け、retiredへの遷移を専用操作へ限定する。
-  app.patch('/api/v1/members/:memberId', async (c) => {
-    if (!options.memberRepository)
-      return errorResponse(
-        c,
-        503,
-        'DEPENDENCY_UNAVAILABLE',
-        '部員データストアが設定されていません。',
-      );
-    const auth = c.get('auth');
-    if (!managerRoles.has(auth.membership.role))
-      return errorResponse(
-        c,
-        403,
-        'FORBIDDEN',
-        '部員を編集する権限がありません。',
-      );
-    const memberId = memberIdSchema.safeParse(c.req.param('memberId'));
-    if (!memberId.success)
-      return errorResponse(c, 400, 'VALIDATION_ERROR', '部員IDが不正です。');
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      return errorResponse(c, 400, 'VALIDATION_ERROR', 'JSON入力が不正です。');
-    }
-    const parsed = memberUpdateSchema.safeParse(body);
-    if (!parsed.success)
-      return errorResponse(
-        c,
-        400,
-        'VALIDATION_ERROR',
-        '入力値が不正です。',
-        parsed.error.flatten(),
-      );
-    let member: MemberRecord | null;
-    try {
-      member = await options.memberRepository.update({
-        tenantId: auth.membership.tenantId,
-        actorUserId: auth.userId,
-        role: auth.membership.role,
-        memberId: memberId.data,
-        member: parsed.data,
-      });
-    } catch (error) {
-      if (error instanceof Error && 'status' in error && error.status === 409)
-        return errorResponse(
-          c,
-          409,
-          'MEMBER_STATE_CONFLICT',
-          '部員の状態が編集操作と競合しました。',
-        );
-      throw error;
-    }
-    if (!member)
-      return errorResponse(
-        c,
-        404,
-        'MEMBER_NOT_FOUND',
-        '部員が見つかりません。',
-      );
-    return c.json({ data: projectMember(member, auth.membership.role) });
-  });
-
-  // 退部は専用の冪等操作にし、通常編集からretiredへ変更できないようにする。
-  app.post('/api/v1/members/:memberId/retire', async (c) => {
-    if (!options.memberRepository)
-      return errorResponse(
-        c,
-        503,
-        'DEPENDENCY_UNAVAILABLE',
-        '部員データストアが設定されていません。',
-      );
-    const auth = c.get('auth');
-    if (!managerRoles.has(auth.membership.role))
-      return errorResponse(
-        c,
-        403,
-        'FORBIDDEN',
-        '部員を退部にする権限がありません。',
-      );
-    const memberId = memberIdSchema.safeParse(c.req.param('memberId'));
-    if (!memberId.success)
-      return errorResponse(c, 400, 'VALIDATION_ERROR', '部員IDが不正です。');
-    let member: MemberRecord | null;
-    try {
-      member = await options.memberRepository.retire({
-        tenantId: auth.membership.tenantId,
-        actorUserId: auth.userId,
-        role: auth.membership.role,
-        memberId: memberId.data,
-      });
-    } catch (error) {
-      if (error instanceof Error && 'status' in error && error.status === 409)
-        return errorResponse(
-          c,
-          409,
-          'MEMBER_STATE_CONFLICT',
-          '部員の状態が退部操作と競合しました。',
-        );
-      throw error;
-    }
-    if (!member)
-      return errorResponse(
-        c,
-        404,
-        'MEMBER_NOT_FOUND',
-        '部員が見つかりません。',
-      );
-    return c.json({ data: projectMember(member, auth.membership.role) });
   });
 
   app.post('/api/v1/members/promote', async (c) => {
