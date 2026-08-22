@@ -105,6 +105,14 @@ migration owner、role bootstrap、`cocolo_app`、seedの接続資格情報を�
 context未設定、tenant Aからtenant Bへの越境、各roleのCRUD、guardian担当外、AuditLogの更新と削除を失敗ケースとして固定します。
 古いmigrationに安全な記述が存在するだけで新しい危険なmigrationが合格しないよう、追加ファイル単位でも検査します。
 
+この検査の正本は `packages/db/prisma/migrations.sha256` です。
+`pnpm verify:migration-checksum` は各 `migration.sql` の生バイト列をSHA-256で計算し、manifestとのchecksumとファイル集合を完全一致させます。
+そのため、既存migrationの編集だけでなく、migrationの追加、削除、改名、manifestの破損も失敗します。
+
+空のPostgreSQLへmigrationを適用した後は、`pnpm verify:migration-history` を `DIRECT_URL` だけで実行します。
+`_prisma_migrations` のmigration名、checksum、完了時刻、rollback状態をmanifestと照合し、app roleや別の接続先へのフォールバックを認めません。
+schema drift、RLS、role属性、policyの実DB検査は別のCI-003実装単位で追加します。
+
 ## 7. セキュリティと供給網
 
 runtime依存だけでなく、buildとCIで実行される開発用依存もCriticalとHighで失敗させます。
