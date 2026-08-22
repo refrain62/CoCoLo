@@ -23,12 +23,12 @@ Cloudflare R2 のように未実装のサービスは、導入前にこの文書
   ├─ Supabase Auth       ログインしてアクセストークンを取得
   └─ CoCoLo Web/API
        ├─ Supabase Auth の JWT を検証
-       ├─ 外部 PostgreSQL へアプリケーションデータを保存
+       ├─ Supabase PostgreSQL（現行。将来は分離先 PostgreSQL）へアプリケーションデータを保存
        ├─ Cloudflare R2 へ署名付きアップロードを発行（Phase 4）
        └─ Cloudflare の配置先へ配置アダプター経由で公開
 
 GitHub Actions
-  ├─ Supabase PostgreSQL のマイグレーションと検証
+  ├─ 現行は Supabase PostgreSQL、分離後は分離先 PostgreSQL のマイグレーションと検証
   ├─ staging の E2E と配置証跡の保存
   └─ 検証済み成果物だけを production へ昇格
 ```
