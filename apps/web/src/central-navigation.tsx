@@ -33,6 +33,7 @@ import {
   BulletinBoardPage,
   createBulletinBoardApi,
 } from './features/bulletin-board/index.js';
+import { EventDetailPage } from './features/events/event-detail-page.js';
 import {
   createEventsApi,
   type EventsApi,
@@ -81,6 +82,7 @@ export type CentralRoute =
   | { kind: 'team-selection' }
   | { kind: 'members' }
   | { kind: 'events' }
+  | { kind: 'event-detail'; eventId: string }
   | { kind: 'board-contacts' }
   | { kind: 'orders' }
   | { kind: 'attachments' }
@@ -162,6 +164,8 @@ function resourceRoute(
   if (!resourceId || !isUuidV7(resourceId))
     return { kind: 'invalid-resource', feature };
   if (feature === 'ride') return { kind: 'ride', planId: resourceId };
+  if (feature === 'events')
+    return { kind: 'event-detail', eventId: resourceId };
   return { kind: 'resource-unavailable', feature, resourceId };
 }
 
@@ -170,7 +174,7 @@ export function isUuidV7(value: string) {
   return uuidV7Pattern.test(value);
 }
 
-// 画面URLを固定したfeature routeへ変換し、未実装の詳細画面は未接続状態として扱う。
+// 画面URLを固定したfeature routeへ変換し、未接続の詳細画面は未接続状態として扱う。
 export function matchCentralRoute(pathname: string): CentralRoute {
   const normalized = normalizePathname(pathname);
   const segments = normalized.split('/').filter(Boolean);
@@ -636,6 +640,12 @@ function renderCentralRoute(
             memberOptions={memberOptions.map(({ id, name }) => ({ id, name }))}
             role={role}
           />
+        </IntegrationNotice>
+      );
+    case 'event-detail':
+      return (
+        <IntegrationNotice>
+          <EventDetailPage api={apis.events} eventId={route.eventId} />
         </IntegrationNotice>
       );
     case 'board-contacts':

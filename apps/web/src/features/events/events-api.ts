@@ -59,6 +59,7 @@ export class EventsApiError extends Error {
 
 export type EventsApi = {
   list: (from: string, to: string) => Promise<EventSummary[]>;
+  get: (eventId: string) => Promise<EventSummary>;
   create: (input: EventCreateInput) => Promise<EventSummary>;
   update: (eventId: string, input: EventUpdateInput) => Promise<EventSummary>;
   answer: (
@@ -126,6 +127,10 @@ export function createEventsApi({
     async list(from, to) {
       const params = new URLSearchParams({ from, to });
       const result = await request<{ data: EventSummary[] }>(`?${params}`);
+      return result.data;
+    },
+    async get(eventId) {
+      const result = await request<{ data: EventSummary }>(`/${eventId}`);
       return result.data;
     },
     async create(input) {

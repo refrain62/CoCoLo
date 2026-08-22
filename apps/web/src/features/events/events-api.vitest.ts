@@ -21,6 +21,24 @@ describe('createEventsApi', () => {
     fetcher.mockRestore();
   });
 
+  it('予定詳細をBearer付きで取得する', async () => {
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: { id: 'event-a' } }), {
+        status: 200,
+      }),
+    );
+    const api = createEventsApi({ getAccessToken: () => 'token-a' });
+
+    await expect(api.get('event-a')).resolves.toEqual({ id: 'event-a' });
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/v1/events/event-a',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer token-a' }),
+      }),
+    );
+    fetcher.mockRestore();
+  });
+
   it('tokenがなければAPIへ送信しない', async () => {
     const fetcher = vi.spyOn(globalThis, 'fetch');
     const api = createEventsApi({ getAccessToken: () => null });

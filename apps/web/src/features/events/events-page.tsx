@@ -153,6 +153,9 @@ function EventCard({
       <p>
         {formatDate(event.startsAt)}〜{formatDate(event.endsAt)}
       </p>
+      <p>
+        <a href={`/events/${encodeURIComponent(event.id)}`}>予定詳細</a>
+      </p>
       <p>出欠締切: {formatDate(event.attendanceDeadline)}</p>
       {event.location ? <p>場所: {event.location}</p> : null}
       {event.opponent ? <p>対戦相手: {event.opponent}</p> : null}
