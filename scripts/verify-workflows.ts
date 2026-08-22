@@ -11,6 +11,7 @@ const workflowFiles = [
   'quality.yml',
   'staging-deploy.yml',
   'production-promote.yml',
+  'security-scanners.yml',
 ] as const;
 type WorkflowName = (typeof workflowFiles)[number];
 type WorkflowRecord = Record<string, unknown>;
@@ -80,6 +81,13 @@ const qualitySteps: readonly StepPolicy[] = [
 ];
 
 const stagingSteps: readonly StepPolicy[] = [
+  {
+    kind: 'run',
+    envValues: {
+      GH_TOKEN: githubExpression('github.token'),
+      ARTIFACT_SHA: githubExpression('github.sha'),
+    },
+  },
   {
     kind: 'uses',
     action: `actions/checkout@${actionAllowlist['actions/checkout']}`,
@@ -352,7 +360,14 @@ const expressionPattern = /\$\{\{([\s\S]*?)\}\}/g;
 const safeExpressionBodies = new Set([
   'github.workflow',
   'github.event.pull_request.number || github.ref',
+  "github.event_name == 'pull_request' && github.event.pull_request.number || github.ref",
   "github.event_name == 'pull_request'",
+  'github.server_url',
+  'github.repository',
+  'github.run_id',
+  'always()',
+  'needs.config.result',
+  'needs.scanners.result',
   'github.sha',
   'github.token',
   'inputs.artifact_sha',
@@ -394,17 +409,18 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
       );
       if (
         body === 'github.workflow' ||
-        body === 'github.event.pull_request.number || github.ref'
+        body === 'github.event.pull_request.number || github.ref' ||
+        body ===
+          "github.event_name == 'pull_request' && github.event.pull_request.number || github.ref"
       )
-        assert.equal(
-          location,
-          'quality.yml.concurrency.group',
+        assert.ok(
+          location.endsWith('.concurrency.group'),
           `${location}: concurrency以外でこのGitHub contextを使えません`,
         );
       if (body === "github.event_name == 'pull_request'")
-        assert.equal(
-          location,
-          'quality.yml.concurrency.cancel-in-progress',
+        assert.ok(
+          location === 'quality.yml.concurrency.cancel-in-progress' ||
+            location === 'security-scanners.yml.concurrency.cancel-in-progress',
           `${location}: concurrency以外でこのGitHub contextを使えません`,
         );
       if (body === 'github.sha')
@@ -414,10 +430,17 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
           `${location}: github.shaの用途を許可していません`,
         );
       if (body === 'github.token')
+        assert.ok(
+          location ===
+            'production-promote.yml.jobs.production.steps[0].env.GH_TOKEN' ||
+            location.endsWith('.env.GH_TOKEN'),
+          `${location}: github.tokenは読み取り専用CLI用途だけに限定します`,
+        );
+      if (body === 'always()')
         assert.equal(
           location,
-          'production-promote.yml.jobs.production.steps[0].env.GH_TOKEN',
-          `${location}: github.tokenはproductionの読み取り専用CLI用途だけに限定します`,
+          'security-scanners.yml.jobs.gate.if',
+          `${location}: always()はsecurity gateのjob条件だけで許可します`,
         );
       if (body === 'inputs.artifact_sha')
         assert.ok(
@@ -625,7 +648,12 @@ function validateStagingWorkflowDocument(workflow: WorkflowRecord): void {
   );
   assertExactRecord(
     workflow.permissions,
-    { contents: 'read', 'id-token': 'write', attestations: 'write' },
+    {
+      contents: 'read',
+      actions: 'read',
+      'id-token': 'write',
+      attestations: 'write',
+    },
     'staging-deploy.yml.permissions',
   );
   const jobs = asRecord(
@@ -695,6 +723,274 @@ function validateProductionWorkflowDocument(workflow: WorkflowRecord): void {
   validateSteps('production-promote.yml', production, productionSteps);
 }
 
+function validateSecurityRunStep(
+  stepValue: unknown,
+  expectedName: string,
+  expectedRun: string,
+): void {
+  const step = asRecord(
+    stepValue,
+    'security-scanners.yml: stepはobjectが必要です',
+  );
+  assertExactKeys(step, ['name', 'run'], 'security-scanners.yml: run step');
+  assert.equal(step.name, expectedName);
+  assert.equal(String(step.run).trim(), expectedRun.trim());
+}
+
+function validateSecurityActionStep(
+  stepValue: unknown,
+  expectedName: string,
+  action: string,
+  withValues: Record<string, unknown>,
+): void {
+  const step = asRecord(
+    stepValue,
+    'security-scanners.yml: Action stepはobjectが必要です',
+  );
+  assertExactKeys(
+    step,
+    ['name', 'uses', 'with'],
+    'security-scanners.yml: Action step',
+  );
+  assert.equal(step.name, expectedName);
+  assert.equal(step.uses, action);
+  validateActionReference(step.uses, 'security-scanners.yml: Action step.uses');
+  assertExactRecord(
+    step.with,
+    withValues,
+    'security-scanners.yml: Action step.with',
+  );
+}
+
+function validateSecurityWorkflowDocument(workflow: WorkflowRecord): void {
+  assertExactKeys(
+    workflow,
+    ['name', 'on', 'permissions', 'concurrency', 'jobs'],
+    'security-scanners.yml',
+  );
+  assert.equal(workflow.name, 'セキュリティ検査');
+  const triggers = asRecord(
+    workflow.on,
+    'security-scanners.yml.on: objectが必要です',
+  );
+  assertExactKeys(
+    triggers,
+    ['pull_request', 'push', 'schedule', 'workflow_dispatch'],
+    'security-scanners.yml.on',
+  );
+  assert.equal(triggers.pull_request, null);
+  assertExactRecord(
+    triggers.push,
+    { branches: ['develop', 'main'] },
+    'security-scanners.yml.on.push',
+  );
+  assert.deepEqual(
+    triggers.schedule,
+    [{ cron: '17 3 * * *' }],
+    'security-scanners.yml.on.schedule',
+  );
+  assert.equal(triggers.workflow_dispatch, null);
+  assertExactRecord(
+    workflow.permissions,
+    { contents: 'read' },
+    'security-scanners.yml.permissions',
+  );
+  assertExactRecord(
+    workflow.concurrency,
+    {
+      group: [
+        'security-',
+        githubExpression('github.workflow'),
+        '-',
+        githubExpression(
+          "github.event_name == 'pull_request' && github.event.pull_request.number || github.ref",
+        ),
+      ].join(''),
+      'cancel-in-progress': githubExpression(
+        "github.event_name == 'pull_request'",
+      ),
+    },
+    'security-scanners.yml.concurrency',
+  );
+
+  const jobs = asRecord(
+    workflow.jobs,
+    'security-scanners.yml.jobs: objectが必要です',
+  );
+  assertExactKeys(
+    jobs,
+    ['config', 'scanners', 'gate'],
+    'security-scanners.yml.jobs',
+  );
+  const config = asRecord(jobs.config, 'security-scanners.yml.jobs.config');
+  assertExactKeys(
+    config,
+    ['name', 'runs-on', 'timeout-minutes', 'permissions', 'steps'],
+    'security-scanners.yml.jobs.config',
+  );
+  assert.equal(config.name, 'scanner設定');
+  assert.equal(config['runs-on'], 'ubuntu-24.04');
+  assert.equal(config['timeout-minutes'], 5);
+  assertExactRecord(
+    config.permissions,
+    { contents: 'read' },
+    'security-scanners.yml.jobs.config.permissions',
+  );
+  const configSteps = asArray(
+    config.steps,
+    'security-scanners.yml.jobs.config.steps',
+  );
+  assert.equal(configSteps.length, 6);
+  validateSecurityActionStep(
+    configSteps[0],
+    'リポジトリを取得',
+    `actions/checkout@${actionAllowlist['actions/checkout']}`,
+    { 'persist-credentials': false, 'fetch-depth': 1 },
+  );
+  validateSecurityActionStep(
+    configSteps[1],
+    'pnpmを準備',
+    `pnpm/action-setup@${actionAllowlist['pnpm/action-setup']}`,
+    { version: '10.26.0' },
+  );
+  validateSecurityActionStep(
+    configSteps[2],
+    'Node.js 24を準備',
+    `actions/setup-node@${actionAllowlist['actions/setup-node']}`,
+    { 'node-version': '24.12.0', 'check-latest': false },
+  );
+  validateSecurityRunStep(
+    configSteps[3],
+    'scanner設定を静的検証',
+    'pnpm security:verify',
+  );
+  validateSecurityRunStep(
+    configSteps[4],
+    'WorkflowのAction SHAを検証',
+    'pnpm lint:workflows',
+  );
+  validateSecurityRunStep(
+    configSteps[5],
+    'scanner悪性fixtureを検証',
+    'pnpm test:security',
+  );
+
+  const scanners = asRecord(
+    jobs.scanners,
+    'security-scanners.yml.jobs.scanners',
+  );
+  assertExactKeys(
+    scanners,
+    [
+      'name',
+      'needs',
+      'runs-on',
+      'timeout-minutes',
+      'permissions',
+      'env',
+      'steps',
+    ],
+    'security-scanners.yml.jobs.scanners',
+  );
+  assert.equal(scanners.name, 'Gitleaks / Semgrep / Trivy');
+  assert.equal(scanners.needs, 'config');
+  assert.equal(scanners['runs-on'], 'ubuntu-24.04');
+  assert.equal(scanners['timeout-minutes'], 10);
+  assertExactRecord(
+    scanners.permissions,
+    { contents: 'read' },
+    'security-scanners.yml.jobs.scanners.permissions',
+  );
+  assertExactRecord(
+    scanners.env,
+    {
+      SECURITY_RUN_URL: `${githubExpression('github.server_url')}/${githubExpression('github.repository')}/actions/runs/${githubExpression('github.run_id')}`,
+    },
+    'security-scanners.yml.jobs.scanners.env',
+  );
+  const scannerSteps = asArray(
+    scanners.steps,
+    'security-scanners.yml.jobs.scanners.steps',
+  );
+  assert.equal(scannerSteps.length, 4);
+  validateSecurityActionStep(
+    scannerSteps[0],
+    'リポジトリを取得',
+    `actions/checkout@${actionAllowlist['actions/checkout']}`,
+    { 'persist-credentials': false, 'fetch-depth': 0 },
+  );
+  validateSecurityActionStep(
+    scannerSteps[1],
+    'pnpmを準備',
+    `pnpm/action-setup@${actionAllowlist['pnpm/action-setup']}`,
+    { version: '10.26.0' },
+  );
+  validateSecurityActionStep(
+    scannerSteps[2],
+    'Node.js 24を準備',
+    `actions/setup-node@${actionAllowlist['actions/setup-node']}`,
+    { 'node-version': '24.12.0', 'check-latest': false },
+  );
+  validateSecurityRunStep(
+    scannerSteps[3],
+    '固定digest scannerを実行',
+    'pnpm security:scan',
+  );
+
+  const gate = asRecord(jobs.gate, 'security-scanners.yml.jobs.gate');
+  assertExactKeys(
+    gate,
+    [
+      'name',
+      'if',
+      'needs',
+      'runs-on',
+      'timeout-minutes',
+      'permissions',
+      'env',
+      'steps',
+    ],
+    'security-scanners.yml.jobs.gate',
+  );
+  assert.equal(gate.name, 'security gate');
+  assert.equal(gate.if, githubExpression('always()'));
+  assert.deepEqual(gate.needs, ['config', 'scanners']);
+  assert.equal(gate['runs-on'], 'ubuntu-24.04');
+  assert.equal(gate['timeout-minutes'], 2);
+  assertExactRecord(
+    gate.permissions,
+    { contents: 'read' },
+    'security-scanners.yml.jobs.gate.permissions',
+  );
+  assertExactRecord(
+    gate.env,
+    {
+      CONFIG_RESULT: githubExpression('needs.config.result'),
+      SCANNERS_RESULT: githubExpression('needs.scanners.result'),
+      SECURITY_RUN_URL: `${githubExpression('github.server_url')}/${githubExpression('github.repository')}/actions/runs/${githubExpression('github.run_id')}`,
+    },
+    'security-scanners.yml.jobs.gate.env',
+  );
+  const gateSteps = asArray(
+    gate.steps,
+    'security-scanners.yml.jobs.gate.steps',
+  );
+  assert.equal(gateSteps.length, 1);
+  validateSecurityRunStep(
+    gateSteps[0],
+    'scanner結果をfail-closedで集約',
+    `if [ "$CONFIG_RESULT" != "success" ] || [ "$SCANNERS_RESULT" != "success" ]; then
+  line="tool=security-gate critical=0 high=0 medium=0 low=0 unknown=1 verdict=FAIL run_url=$SECURITY_RUN_URL"
+  echo "$line"
+  echo "$line" >> "$GITHUB_STEP_SUMMARY"
+  exit 1
+fi
+line="tool=security-gate critical=0 high=0 medium=0 low=0 unknown=0 verdict=PASS run_url=$SECURITY_RUN_URL"
+echo "$line"
+echo "$line" >> "$GITHUB_STEP_SUMMARY"`,
+  );
+}
+
 // 全Workflowの許可構造を検査する。未知のWorkflow名も実行経路の追加とみなして拒否する。
 export function validateWorkflow(name: WorkflowName, content: string): void {
   const workflow = parseWorkflow(name, content);
@@ -703,12 +999,39 @@ export function validateWorkflow(name: WorkflowName, content: string): void {
   if (name === 'staging-deploy.yml') validateStagingWorkflowDocument(workflow);
   if (name === 'production-promote.yml')
     validateProductionWorkflowDocument(workflow);
+  if (name === 'security-scanners.yml')
+    validateSecurityWorkflowDocument(workflow);
   assertNoUntrustedExpressions(workflow, name);
 }
 
 // 既存テストとの互換性を保ちながら、quality.ymlも全Workflow検査と同じ経路で検査する。
 export function validateQualityWorkflow(content: string): void {
   validateWorkflow('quality.yml', content);
+}
+
+export function validatePackageScripts(value: unknown): void {
+  const packageJson = asRecord(value, 'package.json: objectが必要です');
+  const scripts = asRecord(
+    packageJson.scripts,
+    'package.json.scripts: objectが必要です',
+  );
+  assert.deepEqual(
+    {
+      'lint:workflows': scripts['lint:workflows'],
+      'test:workflows': scripts['test:workflows'],
+      'security:verify': scripts['security:verify'],
+      'security:scan': scripts['security:scan'],
+      'test:security': scripts['test:security'],
+    },
+    {
+      'lint:workflows': 'node scripts/verify-workflows.ts',
+      'test:workflows': 'node --test scripts/verify-workflows.test.ts',
+      'security:verify': 'node scripts/verify-security-scanners.ts',
+      'security:scan': 'node scripts/run-security-scanners.ts',
+      'test:security': 'node --test scripts/security-scanner.test.ts',
+    },
+    'package.jsonの検査scriptを変更できません',
+  );
 }
 
 async function main(): Promise<void> {
@@ -722,6 +1045,9 @@ async function main(): Promise<void> {
   );
   for (const file of workflowFiles)
     validateWorkflow(file, await readFile(path.join(directory, file), 'utf8'));
+  validatePackageScripts(
+    JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8')),
+  );
   console.log('GitHub Actions のWorkflow構造と信頼境界を検証しました。');
 }
 

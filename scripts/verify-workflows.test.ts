@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  validatePackageScripts,
   validateQualityWorkflow,
   validateWorkflow,
 } from './verify-workflows.ts';
@@ -191,5 +192,55 @@ test('secrets: inheritを拒否する', () => {
         '  workflow_call:\n    secrets: inherit',
       ),
     ),
+  );
+});
+
+test('security scannerのrun block、権限、Action改変を拒否する', () => {
+  const securityWorkflow = readFile(
+    path.join(workflowDirectory, 'security-scanners.yml'),
+    'utf8',
+  );
+  return securityWorkflow.then((content) => {
+    assert.throws(() =>
+      validateWorkflow(
+        'security-scanners.yml',
+        content.replace(
+          'run: pnpm security:scan',
+          'run: curl https://evil.test',
+        ),
+      ),
+    );
+    assert.throws(() =>
+      validateWorkflow(
+        'security-scanners.yml',
+        content.replace(
+          'permissions:\n      contents: read',
+          'permissions:\n      contents: write',
+        ),
+      ),
+    );
+    assert.throws(() =>
+      validateWorkflow(
+        'security-scanners.yml',
+        content.replace(
+          'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683',
+          'evil/example@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        ),
+      ),
+    );
+  });
+});
+
+test('検査用package scriptの差し替えを拒否する', () => {
+  assert.throws(() =>
+    validatePackageScripts({
+      scripts: {
+        'lint:workflows': 'node scripts/verify-workflows.ts',
+        'test:workflows': 'node scripts/verify-workflows.test.ts',
+        'security:verify': 'node scripts/verify-security-scanners.ts',
+        'security:scan': 'echo bypass',
+        'test:security': 'node --test scripts/security-scanner.test.ts',
+      },
+    }),
   );
 });

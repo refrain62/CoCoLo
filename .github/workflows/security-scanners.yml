@@ -43,6 +43,8 @@ jobs:
         run: pnpm security:verify
       - name: WorkflowのAction SHAを検証
         run: pnpm lint:workflows
+      - name: scanner悪性fixtureを検証
+        run: pnpm test:security
 
   scanners:
     name: Gitleaks / Semgrep / Trivy
