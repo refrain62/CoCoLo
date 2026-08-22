@@ -1,7 +1,7 @@
 {
   "files": {
     ".github/CODEOWNERS": "b93322d7f42865376ca966a35925a2989bff26b35a399d4d6edff4255680be13",
-    ".github/security/trust-root.json": "ac3baf9e128e84e9ce3bf97929bb4c8cb3bf399898af9e7a4192e5c87ae1256e",
+    ".github/security/trust-root.json": "db548ee83ce90a79925c843deb28d35e0e4397718d0fb19db5a0c10feca6a3c1",
     ".github/workflows/pr-trust-gate.yml": "86a5f87226bfef8cab712eb37cf86d90859467b420d286dc34d299c28ec2969d",
     ".github/workflows/production-promote.yml": "3b97d25c21cdb1b5477926f64ef762f58e6d4e135b89fd0b3f8c53d3a8606510",
     ".github/workflows/quality.yml": "9387b8031e81a5750f78cfdc90f5a5afade0a2b4de1091b76bc3b94ba0fa4b5e",

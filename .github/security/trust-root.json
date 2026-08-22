@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "manual-owner-bootstrap-required",
+  "status": "bootstrapped",
   "owner": "@refrain62",
-  "bootstrap_commit": null
+  "bootstrap_commit": "66be13f78560297f4cf876e079333422fdb1697c"
 }
