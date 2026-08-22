@@ -8,6 +8,7 @@
       "types": "./dist/ride-domain.d.ts",
       "import": "./dist/ride-domain.js"
     },
+    "./attachment": "./dist/attachment-domain.js",
     "./event": "./dist/event-domain.js"
   },
   "scripts": {

@@ -9,6 +9,7 @@
       "types": "./dist/ride-repository.d.ts",
       "import": "./dist/ride-repository.js"
     },
+    "./attachment": "./dist/attachment-repository.js",
     "./events": "./dist/event-repository.js"
   },
   "scripts": {
