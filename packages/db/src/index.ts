@@ -445,7 +445,7 @@ export function createMemberRepositories(client: PrismaClient) {
                     requestHash: input.idempotencyKey ? requestHash : null,
                   },
                 });
-            let plan;
+            let plan: ReturnType<typeof planPromotion>;
             try {
               plan = await createPromotionPlan(tx, input.tenantId);
             } catch (error) {
@@ -507,7 +507,7 @@ export function createMemberRepositories(client: PrismaClient) {
                   requestHash,
                 },
               });
-          let plan;
+          let plan: ReturnType<typeof planPromotion>;
           try {
             plan = await createPromotionPlan(tx, input.tenantId);
           } catch (error) {

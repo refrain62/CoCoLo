@@ -3,6 +3,12 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status <> 'preview'::promotion_run_status THEN
+      RAISE EXCEPTION 'PromotionRunはpreviewで開始する必要があります';
+    END IF;
+    RETURN NEW;
+  END IF;
   IF OLD.tenant_id <> NEW.tenant_id OR OLD.fiscal_year <> NEW.fiscal_year THEN
     RAISE EXCEPTION 'promotion runのtenantまたは年度は変更できません';
   END IF;
@@ -44,8 +50,8 @@ COMMENT ON FUNCTION app_guard_promotion_run_transition() IS '年度繰り上げ�
 
 DROP TRIGGER IF EXISTS promotion_run_state_guard ON promotion_runs;
 CREATE TRIGGER promotion_run_state_guard
-BEFORE UPDATE ON promotion_runs
+BEFORE INSERT OR UPDATE ON promotion_runs
 FOR EACH ROW
 EXECUTE FUNCTION app_guard_promotion_run_transition();
 
-COMMENT ON TRIGGER promotion_run_state_guard ON promotion_runs IS 'previewからcompleted/failed、failedからcompleted/failedだけを許可';
+COMMENT ON TRIGGER promotion_run_state_guard ON promotion_runs IS 'preview開始とpreviewからcompleted/failed、failedからcompleted/failedだけを許可';
