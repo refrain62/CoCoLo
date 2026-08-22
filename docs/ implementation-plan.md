@@ -18,7 +18,7 @@
 * **基本技術スタック:**
   * フロントエンド: Vite + React (TypeScript) + Tailwind CSS
   * UIコンポーネント: Shadcn UI (Radix UI / Lucide React)
-  * バックエンド: Hono（Phase 0〜3 は Node.js 20 に固定。Cloudflare Workers 版は Prisma 接続方式を検証した後に別フェーズで対応）
+  * バックエンド: Hono（Phase 0〜3 は Node.js 24 に固定。Cloudflare Workers 版は Prisma 接続方式を検証した後に別フェーズで対応）
   * データベース: Supabase (PostgreSQL)
   * ORM・マイグレーション: Prisma ORM (`prisma migrate`)
   * 認証 (Auth)：Supabase Auth
@@ -427,12 +427,14 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: pnpmを準備
-        run: corepack enable && corepack prepare pnpm@10.26.0 --activate
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10.26.0
 
       - name: Node.js環境を準備
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
           cache: 'pnpm'
 
       - name: 依存関係を固定インストール
@@ -549,11 +551,13 @@ jobs:
           ref: ${{ inputs.artifact_sha }}
           persist-credentials: false
       - name: pnpmを準備
-        run: corepack enable && corepack prepare pnpm@10.26.0 --activate
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10.26.0
       - name: Node.js環境を準備
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - name: 検証後に依存関係を固定インストール
         run: pnpm install --frozen-lockfile
@@ -652,7 +656,7 @@ onlyBuiltDependencies:
 
 本計画は一度に全機能を実装するのではなく、利用可能な縦切り（画面・API・DB・テストを含む単位）で段階的にリリースします。各フェーズは、前フェーズの受け入れ条件と自動テストが通過してから着手します。
 
-* **Phase 0（開発基盤）:** pnpm、Node.js 20、TypeScript strict、Vite、Hono、Prisma、Vitest、Playwright、ESLint、Prettier、環境変数、CI の最小構成を整備します。
+* **Phase 0（開発基盤）:** pnpm、Node.js 24、TypeScript strict、Vite、Hono、Prisma、Vitest、Playwright、ESLint、Prettier、環境変数、CI の最小構成を整備します。
 * **Phase 1（認証・テナント・部員）:** Supabase Auth の JWT 検証、チーム境界、役割認可、部員 CRUD、学年表示、年度末繰り上がりを実装します。
 * **Phase 2（予定・出欠）:** 月間/週間の予定一覧、イベント CRUD、締切、出欠登録・集計、持ち物・集合情報を実装します。
 * **Phase 3（役員・共同購買・集金）:** 役員名簿、年度引き継ぎ、商品・注文・集金確認、未払い一覧、CSV 出力を実装します。
@@ -798,7 +802,7 @@ LINE の通知先（グループか公式アカウントか）、Google Maps の
 
 実装前レビューで指摘された事項を、次の方針で解消してから実装を開始します。
 
-* **実行環境:** Phase 0〜3 は Node.js 20 + `@hono/node-server` に固定します。Prisma の通常クライアントを使用し、Cloudflare Workers 対応は別タスクで接続方式を検証してから行います。
+* **実行環境:** Phase 0〜3 は Node.js 24 + `@hono/node-server` に固定します。Prisma の通常クライアントを使用し、Cloudflare Workers 対応は別タスクで接続方式を検証してから行います。
 * **JWT検証:** issuer は `${SUPABASE_URL}/auth/v1`、audience は `authenticated`、署名アルゴリズムは Supabase の JWKS に従う RS256 とし、`exp`・`nbf`・issuer・audience を必ず検証します。JWKS は短時間キャッシュし、鍵ローテーション時に再取得します。失効・期限切れ・署名不正は 401、test-only Auth adapter は本番ビルドで有効化しません。
 * **DBレベルのテナント境界:** `Tenant`、`TenantMembership`、すべてのテナント所属モデルに `tenantId` を持たせ、親子参照には `tenantId + id` の複合外部キーを使います。Production のアプリ接続は `BYPASSRLS` 属性を持たない `cocolo_app` ロールとし、migration は別の owner / `DIRECT_URL` 接続で実行します。
 * **RLSの実行契約:** API は Prisma の interactive `$transaction` を先に開始し、同一の transaction client で JWT subject と許可されたテナント識別子に対する membership を `FOR UPDATE` 付きで取得します。そこで `status=active` を確認し、DBから取得した role / status を使って `SELECT set_config('app.tenant_id', $1, true)`、`SELECT set_config('app.user_id', $2, true)`、`SELECT set_config('app.role', $3, true)` を同じ transaction 内で実行してから全業務クエリを行います。transaction client 外の Prisma query を禁止する repository API を用意し、context 未設定時は RLS が 0 件 / 拒否となるようにします。membership の停止・role変更と同時に実行された transaction の扱いを統合テストで固定します。
@@ -894,11 +898,13 @@ jobs:
       - name: リポジトリを取得
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: pnpmを準備
-        run: corepack enable && corepack prepare pnpm@10.26.0 --activate
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10.26.0
       - name: Node.js環境を準備
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
