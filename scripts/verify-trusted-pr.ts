@@ -13,7 +13,10 @@ const event = JSON.parse(await readFile(eventPath, 'utf8')) as {
   pull_request?: { number?: number; base?: { sha?: string }; head?: { sha?: string } };
 };
 const pullRequest = event.pull_request;
-assert.ok(pullRequest?.number && pullRequest.base?.sha && pullRequest.head?.sha);
+const pullRequestNumber = pullRequest?.number;
+const baseSha = pullRequest?.base?.sha;
+const headSha = pullRequest?.head?.sha;
+assert.ok(pullRequestNumber && baseSha && headSha);
 
 const headers = {
   accept: 'application/vnd.github+json',
@@ -29,7 +32,7 @@ async function githubJson<T>(url: string): Promise<T> {
 
 const apiRoot = `https://api.github.com/repos/${repository}`;
 const files = await githubJson<PullRequestFile[]>(
-  `${apiRoot}/pulls/${pullRequest.number}/files?per_page=100`,
+  `${apiRoot}/pulls/${pullRequestNumber}/files?per_page=100`,
 );
 const changed = files
   .map((file) => file.filename)
@@ -46,7 +49,7 @@ const trustedPaths = changed.filter(
 async function headFile(filename: string) {
   const encoded = encodeURIComponent(filename).replaceAll('%2F', '/');
   const response = await githubJson<ContentsResponse>(
-    `${apiRoot}/contents/${encoded}?ref=${pullRequest.head?.sha}`,
+    `${apiRoot}/contents/${encoded}?ref=${headSha}`,
   );
   assert.equal(response.encoding, 'base64', `${filename}: base64以外の応答です`);
   assert.ok(response.content, `${filename}: PR headの内容が取得できません`);

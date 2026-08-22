@@ -627,6 +627,8 @@ export function validateMigrationSql(files: readonly MigrationSqlFile[]) {
   }
 
   const effectivePolicies = new Map<string, { file: MigrationSqlFile; statement: string }>();
+  const firstFile = files[0];
+  assert.ok(firstFile, 'migration.sqlが1件以上必要です。');
   for (const statement of allStatements) {
     const text = compactSql(statement.text);
     const dropped = parseDroppedObject(text);
@@ -637,7 +639,7 @@ export function validateMigrationSql(files: readonly MigrationSqlFile[]) {
     if (!/^CREATE\s+POLICY\b/i.test(text)) continue;
     const tableName = policyTableName(text);
     const name = policyName(text);
-    if (tableName && name) effectivePolicies.set(`${tableName}.${name}`, { file: files[0]!, statement: text });
+    if (tableName && name) effectivePolicies.set(`${tableName}.${name}`, { file: firstFile, statement: text });
   }
   for (const policy of effectivePolicies.values())
     assertEffectivePolicyFailClosed(policy.file, policy.statement);
