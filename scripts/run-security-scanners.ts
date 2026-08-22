@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { chmod, mkdir, rm } from 'node:fs/promises';
+import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { finished } from 'node:stream/promises';
@@ -73,6 +73,10 @@ async function runDocker(
 ): Promise<number> {
   const stdoutPath = path.join(outputRoot, `${name}.stdout`);
   const stderrPath = path.join(outputRoot, `${name}.stderr`);
+  await Promise.all([
+    writeFile(stdoutPath, '', { encoding: 'utf8', mode: 0o600 }),
+    writeFile(stderrPath, '', { encoding: 'utf8', mode: 0o600 }),
+  ]);
   const stdout = createWriteStream(stdoutPath, { mode: 0o600 });
   const stderr = createWriteStream(stderrPath, { mode: 0o600 });
   const child = spawn('docker', dockerArguments(name, config), {
