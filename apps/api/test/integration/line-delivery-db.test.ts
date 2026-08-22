@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { createPrismaClient, enqueueLineDelivery } from '@cocolo/db';
+import {
+  createMemberRepositories,
+  createPrismaClient,
+  enqueueLineDelivery,
+} from '@cocolo/db';
+import { createApp } from '../../dist/app.js';
 import {
   createLineDeliveryProcessor,
   createPostgresLineDeliveryRepository,
   type LineDeliveryDatabase,
 } from '../../dist/line-delivery-scheduler.js';
 
-const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
-const MEMBER_A = '00000000-0000-7000-8000-000000000201';
 const ACTOR = 'owner-a';
 const RACE_ACTOR = 'owner-b';
 
@@ -26,6 +29,19 @@ const worker = createPrismaClient(
   process.env.LINE_DELIVERY_WORKER_DATABASE_URL,
 );
 const owner = createPrismaClient(process.env.DIRECT_URL);
+const apiRepositories = createMemberRepositories(app);
+const api = createApp({
+  verifyToken: async (token) => {
+    if (token !== 'integration-owner-token') throw new Error('invalid token');
+    return {
+      userId: ACTOR,
+      issuer: 'integration',
+      audience: 'integration',
+      expiresAt: Math.floor(Date.now() / 1000) + 60,
+    };
+  },
+  ...apiRepositories,
+});
 
 function workerDatabase(): LineDeliveryDatabase {
   return {
@@ -41,43 +57,56 @@ function workerDatabase(): LineDeliveryDatabase {
   };
 }
 
+async function publishViaProductionApi(input: {
+  sourceId: string;
+  idempotencyKey: string;
+  title?: string;
+}) {
+  const response = await api.request('/api/v1/notifications/line', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer integration-owner-token',
+      'content-type': 'application/json',
+      'idempotency-key': input.idempotencyKey,
+    },
+    body: JSON.stringify({
+      sourceId: input.sourceId,
+      destination: 'Uintegration',
+      title: input.title ?? '統合テスト通知',
+      body: '統合テスト本文',
+      deepLink: 'https://app.example.test/integration',
+    }),
+  });
+  assert.equal(response.status, 202);
+  const result = (await response.json()) as {
+    data: { notificationId: string; status: string };
+  };
+  assert.equal(result.data.status, 'pending');
+  return result.data.notificationId;
+}
+
 test('業務transactionのenqueueからworker claim・送信・sent確定まで実DBで完了する', async () => {
-  const notificationId = randomUUID();
   const sourceId = `integration-${randomUUID()}`;
   const idempotencyKey = `integration-${randomUUID()}`;
-  const input = {
-    id: notificationId,
-    tenantId: TENANT_A,
-    actorUserId: ACTOR,
-    role: 'owner' as const,
-    sourceType: 'integration',
+  const notificationId = await publishViaProductionApi({
     sourceId,
-    destination: 'Uintegration',
-    title: '統合テスト通知',
-    body: '統合テスト本文',
-    deepLink: 'https://app.example.test/integration',
     idempotencyKey,
-  };
-  await app.$transaction(async (tx) => {
-    await tx.$queryRaw`
-      SELECT set_config('app.tenant_id', ${TENANT_A}, true),
-             set_config('app.user_id', ${ACTOR}, true),
-             set_config('app.role', 'owner', true)
-    `;
-    await tx.member.update({
-      where: { tenantId_id: { tenantId: TENANT_A, id: MEMBER_A } },
-      data: { note: `transaction-${sourceId}` },
-    });
-    assert.equal(await enqueueLineDelivery(tx, input), notificationId);
   });
 
+  const retryNotificationId = await publishViaProductionApi({
+    sourceId,
+    idempotencyKey,
+  });
+  assert.equal(retryNotificationId, notificationId);
   const sentKeys: string[] = [];
+  const retryKeys: string[] = [];
   const repository = createPostgresLineDeliveryRepository(workerDatabase());
   const processor = createLineDeliveryProcessor({
     repository,
     transport: {
-      send: async ({ idempotencyKey: key }) => {
+      send: async ({ idempotencyKey: key, retryKey }) => {
         sentKeys.push(key);
+        retryKeys.push(retryKey);
         return { providerMessageId: `provider-${randomUUID()}` };
       },
     },
@@ -93,14 +122,151 @@ test('業務transactionのenqueueからworker claim・送信・sent確定まで�
   assert.deepEqual(sentKeys, [idempotencyKey]);
 
   const rows = await owner.$queryRaw<
-    Array<{ status: string; attempt: number }>
+    Array<{ status: string; attempt: number; provider_retry_key: string }>
   >`
-    SELECT status, attempt FROM line_delivery_outbox WHERE id = ${notificationId}::uuid
+    SELECT status, attempt, provider_retry_key
+      FROM line_delivery_outbox
+     WHERE id = ${notificationId}::uuid
   `;
-  assert.deepEqual(rows, [{ status: 'sent', attempt: 1 }]);
+  assert.deepEqual(rows, [
+    {
+      status: 'sent',
+      attempt: 1,
+      provider_retry_key: notificationId,
+    },
+  ]);
+  assert.deepEqual(retryKeys, [notificationId]);
+  const auditRows = await owner.$queryRaw<Array<{ action: string }>>`
+    SELECT action
+      FROM audit_logs
+     WHERE resource_id = ${notificationId}::uuid
+       AND action = 'line_delivery.requested'
+  `;
+  assert.equal(auditRows.length, 2);
+  await owner.$executeRaw`
+    DELETE FROM audit_logs WHERE resource_id = ${notificationId}::uuid
+  `;
   await owner.$executeRaw`
     DELETE FROM line_delivery_outbox WHERE id = ${notificationId}::uuid
   `;
+});
+
+test('retry・unknown・lease切れは同じprovider retry keyで重複送信を抑止する', async () => {
+  const retryId = await publishViaProductionApi({
+    sourceId: `retry-${randomUUID()}`,
+    idempotencyKey: `retry-${randomUUID()}`,
+    title: '再試行統合テスト',
+  });
+  const unknownId = await publishViaProductionApi({
+    sourceId: `unknown-${randomUUID()}`,
+    idempotencyKey: `unknown-${randomUUID()}`,
+    title: '照合待ち統合テスト',
+  });
+  const leaseId = await publishViaProductionApi({
+    sourceId: `lease-${randomUUID()}`,
+    idempotencyKey: `lease-${randomUUID()}`,
+    title: 'lease切れ統合テスト',
+  });
+  const providerCalls: Array<{ notificationId: string; retryKey: string }> = [];
+  const providerDelivered = new Set<string>();
+  let retryAttempts = 0;
+  let leaseAttempts = 0;
+  const repository = createPostgresLineDeliveryRepository(workerDatabase());
+  const processor = createLineDeliveryProcessor({
+    repository,
+    transport: {
+      send: async ({ notification, retryKey, signal }) => {
+        providerCalls.push({
+          notificationId: notification.notificationId,
+          retryKey,
+        });
+        providerDelivered.add(retryKey);
+        if (notification.notificationId === retryId && retryAttempts++ === 0)
+          throw new Error('provider応答を失ったため再試行する');
+        if (notification.notificationId === unknownId) {
+          await new Promise<void>((resolve) => {
+            if (signal.aborted) return resolve();
+            signal.addEventListener('abort', () => resolve(), { once: true });
+          });
+          return { providerMessageId: `provider-${retryKey}` };
+        }
+        if (notification.notificationId === leaseId && leaseAttempts++ === 0)
+          await owner.$executeRaw`
+            UPDATE line_delivery_outbox
+               SET lease_expires_at = clock_timestamp() - interval '1 second'
+             WHERE id = ${leaseId}::uuid
+          `;
+        return { providerMessageId: `provider-${retryKey}` };
+      },
+    },
+    maxAttempts: 5,
+    leaseMs: 5000,
+    sendTimeoutMs: 20,
+    retryBaseDelayMs: 1,
+  });
+
+  assert.equal(
+    await processor.processOne({ signal: new AbortController().signal }),
+    'failed',
+  );
+  assert.equal(
+    await processor.processOne({ signal: new AbortController().signal }),
+    'unknown',
+  );
+  assert.equal(
+    await processor.processOne({ signal: new AbortController().signal }),
+    'stale',
+  );
+  assert.equal(
+    await processor.processOne({ signal: new AbortController().signal }),
+    'sent',
+  );
+  await owner.$executeRaw`
+    UPDATE line_delivery_outbox
+       SET next_retry_at = created_at
+     WHERE id = ${retryId}::uuid
+  `;
+  assert.equal(
+    await processor.processOne({ signal: new AbortController().signal }),
+    'sent',
+  );
+
+  const callsByNotification = (notificationId: string) =>
+    providerCalls.filter((call) => call.notificationId === notificationId);
+  const retryCalls = callsByNotification(retryId);
+  const unknownCalls = callsByNotification(unknownId);
+  const leaseCalls = callsByNotification(leaseId);
+  assert.equal(retryCalls.length, 2);
+  assert.equal(new Set(retryCalls.map((call) => call.retryKey)).size, 1);
+  assert.equal(unknownCalls.length, 1);
+  assert.equal(leaseCalls.length, 2);
+  assert.equal(new Set(leaseCalls.map((call) => call.retryKey)).size, 1);
+  assert.equal(providerDelivered.size, 3);
+
+  const rows = await owner.$queryRaw<
+    Array<{ id: string; status: string; attempt: number }>
+  >`
+    SELECT id, status, attempt
+      FROM line_delivery_outbox
+     WHERE id IN (${retryId}::uuid, ${unknownId}::uuid, ${leaseId}::uuid)
+     ORDER BY id
+  `;
+  assert.deepEqual(
+    rows.sort((left, right) => left.id.localeCompare(right.id)),
+    [
+      { id: retryId, status: 'sent', attempt: 2 },
+      { id: unknownId, status: 'unknown', attempt: 1 },
+      { id: leaseId, status: 'sent', attempt: 2 },
+    ].sort((left, right) => left.id.localeCompare(right.id)),
+  );
+  for (const notificationId of [retryId, unknownId, leaseId]) {
+    await owner.$executeRaw`
+      DELETE FROM audit_logs WHERE resource_id = ${notificationId}::uuid
+    `;
+    await owner.$executeRaw`
+      DELETE FROM line_delivery_outbox WHERE id = ${notificationId}::uuid
+    `;
+  }
 });
 
 test('enqueueはmembership変更とFOR UPDATEで直列化し、停止後の通知登録を拒否する', async () => {

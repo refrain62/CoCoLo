@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   type PromotionMember,
   PromotionPlanningError,
@@ -72,6 +72,33 @@ export type LineDeliveryEnqueueInput = {
   deepLink: string;
   idempotencyKey: string;
 };
+
+export type LineDeliveryProducerInput = {
+  tenantId: string;
+  actorUserId: string;
+  role: MemberRole;
+  sourceId: string;
+  destination: string;
+  title: string;
+  body: string;
+  deepLink: string;
+  idempotencyKey: string;
+};
+
+export type LineDeliveryProducer = {
+  publish: (
+    input: LineDeliveryProducerInput,
+  ) => Promise<{ notificationId: string }>;
+};
+
+export class LineDeliveryConflictError extends Error {
+  readonly status = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'LineDeliveryConflictError';
+  }
+}
 
 const memberSelect = {
   id: true,
@@ -309,9 +336,63 @@ export function createPrismaClient(databaseUrl?: string) {
     : new PrismaClient();
 }
 
+// 公開通知APIの業務イベントとoutbox登録を同一transactionへ束ね、片方だけの成功を防ぐ。
+export function createLineDeliveryProducer(
+  client: PrismaClient,
+): LineDeliveryProducer {
+  return {
+    publish: (input) =>
+      client.$transaction(async (tx) => {
+        await setRlsContext(tx, {
+          tenantId: input.tenantId,
+          userId: input.actorUserId,
+          role: input.role,
+        });
+        let notificationId: string;
+        try {
+          notificationId = await enqueueLineDelivery(tx, {
+            id: randomUUID(),
+            tenantId: input.tenantId,
+            actorUserId: input.actorUserId,
+            role: input.role,
+            sourceType: 'api_notification',
+            sourceId: input.sourceId,
+            destination: input.destination,
+            title: input.title,
+            body: input.body,
+            deepLink: input.deepLink,
+            idempotencyKey: input.idempotencyKey,
+          });
+        } catch (error) {
+          if (error instanceof Error && /冪等キー|payload/.test(error.message))
+            throw new LineDeliveryConflictError(
+              '同じ通知sourceへ異なる内容を登録できません。',
+            );
+          throw error;
+        }
+        await tx.auditLog.create({
+          data: {
+            tenantId: input.tenantId,
+            actorUserId: input.actorUserId,
+            action: 'line_delivery.requested',
+            resourceType: 'line_delivery',
+            resourceId: notificationId,
+            metadata: {
+              sourceType: 'api_notification',
+              sourceId: input.sourceId,
+              idempotencyKey: input.idempotencyKey,
+            },
+          },
+        });
+        return { notificationId };
+      }),
+  };
+}
+
 // RLS context、入力条件、監査ログをrepositoryに閉じ込め、API handlerからDB境界を迂回させない。
 export function createMemberRepositories(client: PrismaClient) {
   return {
+    lineDeliveryProducer: createLineDeliveryProducer(client),
     lineDeliveryRepository: {
       // 呼び出し側が開始した業務transactionへenqueueを組み込むための境界。
       enqueueInTransaction: enqueueLineDelivery,

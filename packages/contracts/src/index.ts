@@ -1,3 +1,4 @@
+export * from './line-delivery-contract.ts';
 export * from './upload-contract.ts';
 
 export const apiVersion = 'v1';

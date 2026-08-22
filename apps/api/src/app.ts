@@ -1,4 +1,5 @@
 import { extractBearerToken, type TokenVerifier } from '@cocolo/auth';
+import { lineDeliveryPublishSchema } from '@cocolo/contracts/line-delivery';
 import type {
   MemberCreateInput,
   MemberListQuery,
@@ -10,6 +11,7 @@ import {
   memberListQuerySchema,
   promotionRequestSchema,
 } from '@cocolo/contracts/member';
+import type { LineDeliveryProducer } from '@cocolo/db';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
 
 export type MembershipContext = {
@@ -75,6 +77,7 @@ export type AppOptions = {
   membershipRepository?: MembershipRepository;
   memberRepository?: MemberRepository;
   promotionRepository?: PromotionRepository;
+  lineDeliveryProducer?: LineDeliveryProducer;
 };
 
 export type ApiEnv = {
@@ -202,6 +205,7 @@ export function createApp(options: AppOptions = {}) {
 
   app.use('/api/v1/members', authenticate);
   app.use('/api/v1/members/*', authenticate);
+  app.use('/api/v1/notifications/line', authenticate);
 
   // tenantIdはリクエストから受け取らず、authenticateが設定した所属をrepositoryへ渡す。
   app.get('/api/v1/members', async (c) => {
@@ -343,6 +347,70 @@ export function createApp(options: AppOptions = {}) {
           409,
           'PROMOTION_CONFLICT',
           '年度繰り上げの実行が競合しました。',
+        );
+      throw error;
+    }
+  });
+
+  // 認証済みowner/adminの通知依頼を業務transactionへ渡し、tenantをbodyから受け取らない。
+  app.post('/api/v1/notifications/line', async (c) => {
+    if (!options.lineDeliveryProducer)
+      return errorResponse(
+        c,
+        503,
+        'DEPENDENCY_UNAVAILABLE',
+        'LINE通知producerが設定されていません。',
+      );
+    const auth = c.get('auth');
+    if (!managerRoles.has(auth.membership.role))
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        'LINE通知を登録する権限がありません。',
+      );
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return errorResponse(c, 400, 'VALIDATION_ERROR', 'JSON入力が不正です。');
+    }
+    const parsed = lineDeliveryPublishSchema.safeParse(body);
+    if (!parsed.success)
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        '入力値が不正です。',
+        parsed.error.flatten(),
+      );
+    const idempotencyKey = c.req.header('idempotency-key')?.trim();
+    if (!idempotencyKey || idempotencyKey.length > 128)
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        'LINE通知ではIdempotency-Keyが必要です。',
+      );
+    try {
+      const result = await options.lineDeliveryProducer.publish({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        ...parsed.data,
+        idempotencyKey,
+      });
+      return c.json(
+        { data: { notificationId: result.notificationId, status: 'pending' } },
+        202,
+      );
+    } catch (error) {
+      if (error instanceof Error && 'status' in error && error.status === 409)
+        return errorResponse(
+          c,
+          409,
+          'LINE_DELIVERY_CONFLICT',
+          '同じ通知sourceへ異なる内容を登録できません。',
         );
       throw error;
     }
