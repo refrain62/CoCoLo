@@ -11,6 +11,10 @@
       "types": "./dist/orders-repository.d.ts",
       "import": "./dist/orders-repository.js"
     },
+    "./orders-persistent": {
+      "types": "./dist/orders-persistent-repository.d.ts",
+      "import": "./dist/orders-persistent-repository.js"
+    },
     "./attachment": "./dist/attachment-repository.js",
     "./line": "./dist/line-repository.js",
     "./ride": {

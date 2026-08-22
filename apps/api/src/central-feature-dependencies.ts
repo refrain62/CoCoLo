@@ -2,7 +2,7 @@ import { createAttachmentRepositories } from '@cocolo/db/attachment';
 import { createBoardContactRepository } from '@cocolo/db/board-contact';
 import { createBulletinBoardRepositories } from '@cocolo/db/bulletin-board';
 import { createEventRepository } from '@cocolo/db/events';
-import { createInMemoryOrdersRepository } from '@cocolo/db/orders';
+import { createPrismaOrdersRepository } from '@cocolo/db/orders-persistent';
 import { createRideRepository } from '@cocolo/db/ride';
 import type { CentralFeatureDependencies } from './central-dependencies.js';
 import { createR2AttachmentStorageFromEnv } from './features/attachments/r2-real-attachment-storage.js';
@@ -37,11 +37,8 @@ export function createCentralFeatureDependencies({
     bulletinBoard: { repository: bulletinBoard.bulletinBoardRepository },
   };
 
-  // 注文の永続Repositoryは未実装のため、localだけ検証用adapterを接続する。本番系では機能を成功扱いにしない。
-  if (appEnv === 'local')
-    dependencies.orders = {
-      repository: createInMemoryOrdersRepository(),
-    };
+  // 注文も中央migrationのPrisma modelへ接続し、localと本番系で保存経路を分けない。
+  dependencies.orders = { repository: createPrismaOrdersRepository(client) };
 
   return dependencies;
 }
