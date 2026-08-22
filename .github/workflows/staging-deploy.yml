@@ -77,6 +77,8 @@ jobs:
         env:
           APP_ENV: staging
           STAGING_BASE_URL: ${{ vars.PUBLIC_APP_URL }}
+          E2E_TEST_EMAIL: ${{ secrets.STAGING_E2E_TEST_EMAIL }}
+          E2E_TEST_PASSWORD: ${{ secrets.STAGING_E2E_TEST_PASSWORD }}
       - name: staging evidenceを作成
         run: node scripts/create-staging-evidence.mjs
         env:
