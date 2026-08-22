@@ -3,8 +3,9 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createPublicBuildConfigFromEnv } from './release-public-config.ts';
 
-// API/Web、DB schema、migrationを同一artifactへ梱包し、SHA-256を後続環境でも再検証できる形にする。
+// API/WebとDB schema・migrationを同一artifactへ梱包し、SHA-256を後続環境でも再検証できる形にする。
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const output =
   process.argv[process.argv.indexOf('--output') + 1] ??
@@ -18,6 +19,7 @@ if (!artifactSha || !/^[0-9a-f]{40}$/.test(artifactSha))
 await mkdir(output, { recursive: true });
 const manifest = {
   artifactSha,
+  publicBuildConfig: createPublicBuildConfigFromEnv(),
   files: [
     'apps/api/dist',
     'apps/web/dist',
@@ -37,7 +39,16 @@ await writeFile(
 const archive = path.join(output, 'release.tar.gz');
 const tarResult = spawnSync(
   'tar',
-  ['-czf', archive, '-C', root, ...manifest.files],
+  [
+    '-czf',
+    archive,
+    '-C',
+    root,
+    ...manifest.files,
+    '-C',
+    output,
+    'release-manifest.json',
+  ],
   {
     stdio: 'inherit',
   },

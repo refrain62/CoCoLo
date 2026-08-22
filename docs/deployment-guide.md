@@ -83,14 +83,11 @@ Workflow内で次の値は固定されており、Environment variableとして�
 
 ### Webのビルド設定に関する重要な前提
 
-staging Workflow は `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` に staging Environment の値を渡して Web をビルドします。production promote は再ビルドしないため、productionへ昇格するartifact内のWebは staging build 時の Supabase client 設定を保持します。
+staging Workflow は `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` に staging Environment の値を渡して Web をビルドします。`package-release` は、このViteのbuild-time公開設定を `release-manifest.json` の `publicBuildConfig` へ記録します。manifestにはViteのsource、設定の版、Supabase project refまたはoriginの識別子、照合用のSHA-256だけを記録し、URLやanon keyの生値は記録しません。`release.tar.gz` にも同じmanifestを同梱します。
 
-したがって、次のいずれかを満たさない限り production promote を実行しません。
+production promote は再ビルドもmanifestの書き換えも行いません。stagingで作成した同一artifact SHAをproductionへ昇格できる条件は、artifact manifestの `publicBuildConfig` と production Environment の `SUPABASE_URL` / `SUPABASE_ANON_KEY` から計算した公開設定が完全一致することです。production Workflowはarchive内外のmanifestを照合し、migration・配置の前にこの一致を検証します。
 
-1. staging と production が同じ Supabase project / client endpoint を使う。
-2. provider側の公開URL・環境設定が、stagingでビルドされたWebのSupabase client設定と互換であることを事前に確認済みである。
-
-staging と production でSupabase projectが分離され、Webも別のSupabase URLへ接続する必要がある場合、現行の「staging artifactを再ビルドなしで昇格する」Workflowはそのまま使用できません。環境別の実行時設定注入またはartifact生成方式を変更し、Workflow・検証・レビューを更新してから運用します。
+stagingとproductionでSupabase projectまたはclient設定が異なる場合、staging artifactをproductionへ昇格してはいけません。SHAを同じにしたままmanifestを差し替えたり、production用に再パッケージしたりすることも禁止です。環境別のSupabase設定が必要になった場合は、実行時設定注入へ移行するか、環境別build artifactへ変更して各artifactに固有のSHA・manifest・staging検証証跡を付与し、Workflowとレビュー条件を更新します。現行Workflowでは設定不一致時にfail-closedで停止します。
 
 ## 3. deploy adapter の準備
 
@@ -192,7 +189,7 @@ pnpm verify:production-bundle
 - release.tar.gzのSHA-256が `artifact.sha256` と一致する。
 - staging Workflow由来のGitHub build provenance attestationを検証できる。
 - production Environmentのprotected approvalが完了している。
-- productionのSupabase URLと、stagingでビルドしたWebのclient設定が昇格前提を満たしている。
+- artifact manifestの `publicBuildConfig` とproduction Environmentの `SUPABASE_URL` / `SUPABASE_ANON_KEY` が完全一致する。
 
 ### 5.2 手動起動
 
@@ -214,8 +211,9 @@ gh run watch <production-run-id>
 5. release.tar.gzのSHA-256とGitHub attestationを、production secretを読み込む前に検証する。
 6. 検証済みSHAをcheckoutし、artifactを展開する。ここで再ビルドしない。
 7. production環境、DB URL、Supabase URL/JWKS、R2 bucket、公開URL、保持期間、Service Role Keyを検証する。
-8. artifactに同梱されたschema / migrationだけを使って `prisma migrate deploy` を実行する。
-9. production deploy adapterでartifactを配置し、production配置記録を検証する。
+8. archive内外のmanifestを照合し、artifactのVite公開設定とproductionの許可値を照合する。不一致なら以降を実行しない。
+9. artifactに同梱されたschema / migrationだけを使って `prisma migrate deploy` を実行する。
+10. production deploy adapterでartifactを配置し、production配置記録を検証する。
 
 production Workflowには `concurrency: production-migration` が設定されているため、production migrationの同時実行は許可しません。既に別のproduction promoteが実行中の場合は、完了または停止理由を確認してから次を実行します。
 
@@ -262,6 +260,7 @@ adapterが途中まで配置した可能性がある場合は、providerの実�
 | migration SQLを検証 | `pnpm verify:migration-sql` |
 | artifactを作成 | `pnpm build && pnpm package:release --artifact-sha <SHA> --output .release` |
 | artifactを検証 | `pnpm verify:release --release-dir .release --artifact-sha <SHA>` |
+| artifactのVite公開設定を検証 | `node scripts/release-verify-public-config.ts --release-dir .release`（`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`を対象環境の許可値に設定） |
 | stagingへ配置 | `pnpm deploy:staging --artifact-sha <SHA> --release-dir .release` |
 | productionへ配置 | `pnpm deploy:production --artifact-sha <SHA> --release-dir .release` |
 | staging E2E | `pnpm test:e2e:staging` |
