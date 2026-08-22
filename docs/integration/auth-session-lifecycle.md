@@ -14,13 +14,13 @@ Service Role Key、test-only固定token、test-onlyパスワードはWebの実�
 
 ログイン成功時はSupabaseが返す`access_token`、`refresh_token`、`expires_at`を`AuthSession`へ変換する。
 
-再読み込み後も期限前更新を再開できるよう、現行互換の`localStorage`へ次のキーを保存する。
+本番のブラウザ実行ではtokenを`localStorage`や`sessionStorage`へ保存せず、AuthSessionをメモリだけで保持する。XSSで永続領域からtokenを抜き取れる経路を作らないためである。`createAuthSessionManager`の`storage`引数は、保存処理の単体テストまたは明示的に安全性を確認したadapterを注入する場合だけ使用する。
 
 | キー | 内容 | 取り扱い |
 | --- | --- | --- |
-| `cocolo.accessToken` | APIへ送る短期access token | 画面、ログ、例外へ出さない |
-| `cocolo.refreshToken` | Supabase Authへ返すrefresh token | URLへ置かず、Auth APIのrequest bodyだけで使う |
-| `cocolo.expiresAt` | Unix epoch秒の有効期限 | 期限前更新の判定にだけ使う |
+| `cocolo.accessToken` | APIへ送る短期access token | 明示注入したテスト用storageだけで扱い、画面、ログ、例外へ出さない |
+| `cocolo.refreshToken` | Supabase Authへ返すrefresh token | 明示注入したテスト用storageだけで扱い、URLへ置かずAuth APIのrequest bodyだけで使う |
+| `cocolo.expiresAt` | Unix epoch秒の有効期限 | 明示注入したテスト用storageだけで扱い、期限前更新の判定にだけ使う |
 
 パスワードはpassword grantのrequest bodyへ渡した後に保持しない。
 
@@ -50,7 +50,7 @@ bodyが再利用できない`ReadableStream`の要求は、refresh後に再送�
 
 ## logoutの動作
 
-明示logoutは、リモートAPIを呼ぶ前にReact state、`localStorage`の3キー、更新タイマーを消去する。
+明示logoutは、リモートAPIを呼ぶ前にReact state、更新タイマー、明示注入されたstorageの値を消去する。
 
 リモートlogoutにはaccess tokenだけを`Authorization: Bearer`で渡し、refresh tokenは送らない。
 
@@ -86,7 +86,7 @@ refresh tokenの実値を含むfixtureはリポジトリへ追加せず、テス
 
 ## 残るMedium
 
-`localStorage`へtokenを保存する構成はXSS時の窃取リスクを残すため、将来BFFとHttpOnly Secure SameSite cookieへ移行する。
+メモリ保持へ変更したため、ブラウザ再読み込み時は再ログインが必要になる。永続sessionが必要になった場合は、ブラウザへtokenを置くのではなく、BFFとHttpOnly Secure SameSite cookieの採用を別設計・別レビューで検討する。
 
 中央Web mountが未接続の間は、既存API clientの401要求を自動refreshできないため、接続完了をこの機能の運用開始条件とする。
 

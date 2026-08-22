@@ -51,15 +51,6 @@ export class AuthSessionError extends Error {
   }
 }
 
-function getBrowserStorage(): StorageLike | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
 function readStoredSession(storage: StorageLike | null): AuthSession | null {
   if (!storage) return null;
   try {
@@ -142,7 +133,8 @@ type AuthSessionManagerOptions = {
 // refreshInFlightは同じrefresh tokenを使う更新を単一化し、Supabaseのtoken rotation競合を防ぐ。
 export function createAuthSessionManager({
   client,
-  storage = getBrowserStorage(),
+  // 本番のsessionはメモリだけで保持する。storageはテストまたは明示的な安全なadapterの注入に限定する。
+  storage = null,
   requester = fetch,
   now = Date.now,
   refreshSkewSeconds = REFRESH_SKEW_SECONDS,
@@ -297,16 +289,11 @@ export function createAuthSessionManager({
   };
 }
 
-// access tokenとrefresh tokenを復元し、再読み込み後も期限前更新を再開できるようにする。
-function getStoredSession(): AuthSession | null {
-  return readStoredSession(getBrowserStorage());
-}
-
 export function AuthProvider({
   children,
   client = defaultAuthClient,
 }: PropsWithChildren<{ client?: AuthClient }>) {
-  const [session, setSession] = useState<AuthSession | null>(getStoredSession);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);

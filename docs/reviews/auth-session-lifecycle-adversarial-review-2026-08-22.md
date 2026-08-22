@@ -28,7 +28,7 @@
 | AUTH-SESSION-H-001 | High | refresh失敗後に古いaccess tokenを保存領域または画面へ残すと、期限切れsessionを利用し続ける可能性がある。 | refresh失敗、401時のrefresh不能、明示logoutで3つの保存キーとReact stateを消去する。 | 解消 |
 | AUTH-SESSION-H-002 | High | 同時401が別々のrefreshを送ると、Supabaseのrefresh token rotationで片方が失敗し、正しいsessionも消去する可能性がある。 | `refreshInFlight`でPromiseを共有し、古いaccess tokenを条件に結果を適用する。 | 解消 |
 | AUTH-SESSION-H-003 | High | Auth providerの応答本文や通信例外をそのまま画面へ出すと、tokenや内部情報が漏れる可能性がある。 | Auth clientとAuth providerで固定メッセージへ変換し、応答本文と例外本文を表示しない。 | 解消 |
-| AUTH-SESSION-M-001 | Medium | `localStorage`保存はXSS時にtokenを読み取れるリスクを残す。 | 現行API clientとの互換性を保つため今回の範囲では維持し、BFFとHttpOnly cookieへの移行条件を統合ドキュメントへ記録した。 | 継続 |
+| AUTH-SESSION-H-004 | High | `localStorage`保存はXSS時にaccess tokenとrefresh tokenを読み取られ、利用者のsessionを奪取される経路になる。 | 本番デフォルトのstorageを`null`へ変更し、AuthSessionをメモリだけで保持する。storage引数は明示注入したテスト・adapterに限定し、再読み込み時は再ログインする。 | 解消 |
 | AUTH-SESSION-M-002 | Medium | `authenticatedFetch`を中央Web mountと既存feature APIへ接続するまで、401時の自動refresh保証が全画面へ及ばない。 | 中央mountでの接続条件を記録した。今回の書き込み範囲外のため後続統合で対応する。 | 継続 |
 | AUTH-SESSION-M-003 | Medium | 実Supabaseのstaging E2Eは、このローカル検証だけでは証明できない。 | 専用ユーザーとstaging環境での確認項目を記録した。 | 継続 |
 | AUTH-SESSION-M-004 | Medium | 明示logoutをAuthenticated画面の操作へ接続するには中央Web mountの変更が必要である。 | `useAuth().logout`を公開し、接続条件として記録した。今回の範囲ではmountを変更しない。 | 継続 |
@@ -46,8 +46,9 @@
 - refresh失敗時の保存領域消去
 - リモートlogout失敗時の先行消去
 - Auth providerへの通信例外の秘匿
+- 本番デフォルトでブラウザstorageへtokenを保存しないこと
 
-`pnpm test:unit`は専用Vitest 9件を含む17件が成功した。
+`pnpm test:unit`は専用Vitest 10件を含む18件が成功した。
 
 `pnpm exec biome check apps/web/src/auth-client.ts apps/web/src/auth-context.tsx apps/web/src/auth-client.vitest.ts`は成功した。
 
@@ -55,8 +56,8 @@
 
 `pnpm --dir apps/web exec vite build`は成功した。
 
-## 判定
+## 再レビュー判定（2026-08-23）
 
-Critical 0件、High 0件と判定する。
+初回のMedium判定を見直し、XSSによるtoken窃取経路はHighとして扱った。storageの本番デフォルトを無効化した修正と回帰テストを確認し、Critical 0件、High 0件と判定する。
 
-Mediumは中央Web mount、storage方式、staging実接続の後続作業として残す。
+Mediumは中央Web mount、staging実接続、再読み込み時の再ログインという運用上の残課題として残す。

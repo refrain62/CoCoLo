@@ -160,6 +160,20 @@ const baseSession = {
 };
 
 describe('Auth session manager', () => {
+  it('本番デフォルトはブラウザstorageへtokenを保存せず、sessionをメモリだけで保持する', async () => {
+    const client = {
+      signInWithPassword: async () => baseSession,
+      refreshSession: async () => baseSession,
+      signOut: async () => undefined,
+    };
+    const manager = createAuthSessionManager({ client });
+
+    await manager.signIn('member@example.com', 'password');
+
+    expect(manager.getSession()).toEqual(baseSession);
+    expect(createAuthSessionManager({ client }).getSession()).toBeNull();
+  });
+
   it('期限前にrefreshし、保存済みtokenとBearerを更新する', async () => {
     const storage = createStorage({
       'cocolo.accessToken': 'old-access-token',
