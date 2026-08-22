@@ -246,6 +246,12 @@ test('予定のtenantId入力とguardianの登録を拒否する', async () => {
     body: JSON.stringify({ ...body, tenantId: undefined }),
   });
   assert.equal(forbidden.status, 403);
+  const admin = await app.request('/', {
+    method: 'POST',
+    headers: { ...auth('admin-a'), 'content-type': 'application/json' },
+    body: JSON.stringify({ ...body, tenantId: undefined, title: '管理者予定' }),
+  });
+  assert.equal(admin.status, 201);
 });
 
 test('ownerは所属tenantの予定だけを取得し、tenantIdをDTOへ返さない', async () => {

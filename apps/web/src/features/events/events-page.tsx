@@ -43,6 +43,12 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function toDateTimeLocal(value: string) {
+  const date = new Date(value);
+  const pad = (number: number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function getErrorMessage(error: unknown) {
   return error instanceof EventsApiError
     ? error.message
@@ -72,6 +78,11 @@ function EventCard({
   const [summary, setSummary] = useState<Awaited<ReturnType<EventsApi['summary']>> | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(event.title);
+  const [editStartsAt, setEditStartsAt] = useState(toDateTimeLocal(event.startsAt));
+  const [editEndsAt, setEditEndsAt] = useState(toDateTimeLocal(event.endsAt));
+  const [editDeadline, setEditDeadline] = useState(toDateTimeLocal(event.attendanceDeadline));
 
   useEffect(() => {
     if (!memberOptions.some((member) => member.id === memberId))
@@ -106,6 +117,27 @@ function EventCard({
     }
   }
 
+  async function updateEvent(eventSubmit: FormEvent<HTMLFormElement>) {
+    eventSubmit.preventDefault();
+    setIsSaving(true);
+    setMessage(null);
+    try {
+      await api.update(event.id, {
+        title: editTitle.trim(),
+        startsAt: new Date(editStartsAt).toISOString(),
+        endsAt: new Date(editEndsAt).toISOString(),
+        attendanceDeadline: new Date(editDeadline).toISOString(),
+      });
+      setIsEditing(false);
+      setMessage('予定を更新しました。');
+      onChanged();
+    } catch (error) {
+      setMessage(getErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <article className={`event-card event-card-${event.type}`}>
       <p className="event-type">{typeLabels[event.type]}</p>
@@ -118,6 +150,27 @@ function EventCard({
       {event.opponent ? <p>対戦相手: {event.opponent}</p> : null}
       {event.itemsToBring ? <p>持ち物: {event.itemsToBring}</p> : null}
       {event.fee > 0 ? <p>会費: {event.fee.toLocaleString('ja-JP')}円</p> : null}
+
+      {canManage(role) ? (
+        <div>
+          <button type="button" onClick={() => setIsEditing((current) => !current)}>
+            {isEditing ? '編集を閉じる' : '予定を編集'}
+          </button>
+          {isEditing ? (
+            <form onSubmit={updateEvent}>
+              <label htmlFor={`event-${event.id}-edit-title`}>タイトル</label>
+              <input id={`event-${event.id}-edit-title`} value={editTitle} onChange={(input) => setEditTitle(input.target.value)} required />
+              <label htmlFor={`event-${event.id}-edit-starts`}>開始</label>
+              <input id={`event-${event.id}-edit-starts`} type="datetime-local" value={editStartsAt} onChange={(input) => setEditStartsAt(input.target.value)} required />
+              <label htmlFor={`event-${event.id}-edit-ends`}>終了</label>
+              <input id={`event-${event.id}-edit-ends`} type="datetime-local" value={editEndsAt} onChange={(input) => setEditEndsAt(input.target.value)} required />
+              <label htmlFor={`event-${event.id}-edit-deadline`}>出欠締切</label>
+              <input id={`event-${event.id}-edit-deadline`} type="datetime-local" value={editDeadline} onChange={(input) => setEditDeadline(input.target.value)} required />
+              <button type="submit" disabled={isSaving}>更新</button>
+            </form>
+          ) : null}
+        </div>
+      ) : null}
 
       {memberOptions.length > 0 ? (
         <form onSubmit={answer}>
