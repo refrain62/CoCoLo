@@ -453,9 +453,29 @@ function assertGrantTarget(file: MigrationSqlFile, statement: string) {
 
 function assertAllowedStatement(file: MigrationSqlFile, statement: string) {
   const compact = compactSql(statement);
+  const membershipResolverBody = /AS\s+\$\$(.*)\$\$/i.exec(compact)?.[1] ?? '';
+  const isMembershipResolver =
+    /^CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?app_resolve_active_membership\s*\(\s*p_user_id\s+text\s*\)/i.test(
+      compact,
+    ) &&
+    /\bRETURNS\s+TABLE\s*\(\s*tenant_id\s+uuid\s*,\s*role\s+role\s*\)/i.test(
+      compact,
+    ) &&
+    /\bLANGUAGE\s+sql\b/i.test(compact) &&
+    /\bSECURITY\s+DEFINER\b/i.test(compact) &&
+    /\bSET\s+search_path\s*=\s*pg_catalog\s*,\s*public\b/i.test(compact) &&
+    /\bFROM\s+public\.tenant_memberships\s+AS\s+tm\b/i.test(compact) &&
+    /\bWHERE\s+tm\.user_id\s*=\s*p_user_id\b/i.test(compact) &&
+    /\bAND\s+tm\.status\s*=\s*'active'::public\.membership_status\b/i.test(
+      compact,
+    ) &&
+    !/\bOR\b|current_setting/i.test(membershipResolverBody);
   assert.doesNotMatch(
     compact,
-    /\b(?:SECURITY\s+DEFINER|CREATE\s+(?:OR\s+REPLACE\s+)?VIEW|CREATE\s+MATERIALIZED\s+VIEW|SET\s+(?:LOCAL\s+)?row_security\s*=\s*off|ALTER\s+TABLE\b[^;]*\b(?:DROP\s+CONSTRAINT|DISABLE\s+TRIGGER|DROP\s+COLUMN|NO\s+FORCE\s+ROW\s+LEVEL\s+SECURITY|DISABLE\s+ROW\s+LEVEL\s+SECURITY)|\b(?:CREATE|ALTER|DROP)\s+ROLE\b|\bDROP\s+(?:TABLE|SCHEMA|DATABASE|SEQUENCE|TYPE|VIEW|FUNCTION)|\b(?:TRUNCATE|DELETE\s+FROM|REVOKE)\b)/i,
+    new RegExp(
+      `\\b(?:${isMembershipResolver ? '' : 'SECURITY\\s+DEFINER|'}CREATE\\s+(?:OR\\s+REPLACE\\s+)?VIEW|CREATE\\s+MATERIALIZED\\s+VIEW|SET\\s+(?:LOCAL\\s+)?row_security\\s*=\\s*off|ALTER\\s+TABLE\\b[^;]*\\b(?:DROP\\s+CONSTRAINT|DISABLE\\s+TRIGGER|DROP\\s+COLUMN|NO\\s+FORCE\\s+ROW\\s+LEVEL\\s+SECURITY|DISABLE\\s+ROW\\s+LEVEL\\s+SECURITY)|\\b(?:CREATE|ALTER|DROP)\\s+ROLE\\b|\\bDROP\\s+(?:TABLE|SCHEMA|DATABASE|SEQUENCE|TYPE|VIEW|FUNCTION)|\\b(?:TRUNCATE|DELETE\\s+FROM|REVOKE)\\b)`,
+      'i',
+    ),
     `${file.path}: 危険なDDLまたは権限操作は禁止です。`,
   );
 
@@ -481,7 +501,13 @@ function assertAllowedStatement(file: MigrationSqlFile, statement: string) {
     );
     return;
   }
-  if (/^CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b/i.test(compact)) return;
+  if (/^CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b/i.test(compact)) {
+    assert.ok(
+      isMembershipResolver || !/\bSECURITY\s+DEFINER\b/i.test(compact),
+      `${file.path}: 許可されたSECURITY DEFINER関数以外は禁止です。`,
+    );
+    return;
+  }
   if (/^CREATE\s+TRIGGER\b/i.test(compact)) return;
   if (/^CREATE\s+(?:UNIQUE\s+)?INDEX\b/i.test(compact)) return;
   if (/^CREATE\s+TYPE\b/i.test(compact)) {

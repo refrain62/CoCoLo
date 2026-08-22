@@ -11,6 +11,10 @@ BEGIN
   END IF;
 
   IF OLD.status = 'completed'::promotion_run_status
+    AND NEW.status IS DISTINCT FROM OLD.status THEN
+    RAISE EXCEPTION 'completedからの状態変更はできません';
+  END IF;
+  IF OLD.status = 'completed'::promotion_run_status
     AND NEW IS DISTINCT FROM OLD THEN
     RAISE EXCEPTION 'completed状態の年度繰り上げpayloadは変更できません';
   END IF;
