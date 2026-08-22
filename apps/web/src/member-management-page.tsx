@@ -24,6 +24,8 @@ const emptyFilters: MemberListFilters = {
   status: '',
 };
 
+const defaultMemberApi = createMemberApi();
+
 type MemberFormState = {
   name: string;
   kana: string;
@@ -264,7 +266,7 @@ function MemberForm({
 }
 
 export function MemberManagementPage({
-  api = createMemberApi(),
+  api = defaultMemberApi,
 }: {
   api?: MemberApi;
 }) {
