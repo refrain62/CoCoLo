@@ -307,6 +307,12 @@ function policyTableName(statement: string) {
     ?.toLowerCase();
 }
 
+function parseDroppedObject(statement: string) {
+  return /^DROP\s+(POLICY|TRIGGER)\s+(?:IF\s+EXISTS\s+)?"?([a-z_][a-z0-9_]*)"?\s+ON\s+(?:"?public"?\.)?"?([a-z_][a-z0-9_]*)"?/i.exec(
+    statement,
+  );
+}
+
 function findPolicyExpression(
   statement: string,
   firstKeyword: string,
@@ -423,14 +429,23 @@ function assertAllowedStatement(file: MigrationSqlFile, statement: string) {
     return;
   }
   if (/^CREATE\s+TABLE\b/i.test(compact)) {
-    parseCreateTable(compact);
+    assert.ok(
+      parseCreateTable(compact),
+      `${file.path}: CREATE TABLEの構文を解釈できません。`,
+    );
     return;
   }
   if (/^CREATE\s+POLICY\b/i.test(compact)) {
     assertPolicyTenantBoundary(file, compact);
     return;
   }
-  if (/^DROP\s+(?:POLICY|TRIGGER)\b/i.test(compact)) return;
+  if (/^DROP\s+(?:POLICY|TRIGGER)\b/i.test(compact)) {
+    assert.ok(
+      parseDroppedObject(compact),
+      `${file.path}: DROP POLICY/TRIGGERの対象を解釈できません。`,
+    );
+    return;
+  }
   if (/^CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b/i.test(compact)) return;
   if (/^CREATE\s+TRIGGER\b/i.test(compact)) return;
   if (/^CREATE\s+(?:UNIQUE\s+)?INDEX\b/i.test(compact)) return;
@@ -530,6 +545,29 @@ function assertCreatedTablesAreProtected(
   }
 }
 
+function assertDroppedObjectsAreRecreated(
+  file: MigrationSqlFile,
+  statements: readonly SqlStatement[],
+) {
+  for (const statement of statements) {
+    const dropped = parseDroppedObject(compactSql(statement.text));
+    if (!dropped) continue;
+    const [, objectType, objectName, tableName] = dropped;
+    assert.ok(objectType && objectName && tableName);
+    const recreated = statements.some((candidate) => {
+      const text = compactSql(candidate.text);
+      return new RegExp(
+        `^CREATE\\s+${objectType}\\s+"?${objectName}"?.*\\bON\\s+(?:"?public"?\\.)?"?${tableName}"?\\b`,
+        'i',
+      ).test(text);
+    });
+    assert.ok(
+      recreated,
+      `${file.path}: ${objectType} ${objectName}は同一migration内で再作成する必要があります。`,
+    );
+  }
+}
+
 function statementsForFile(file: MigrationSqlFile) {
   return splitSqlStatements(stripSqlComments(file.content));
 }
@@ -556,6 +594,7 @@ export function validateMigrationSql(files: readonly MigrationSqlFile[]) {
       allStatements.push(statement);
     }
     assertCreatedTablesAreProtected(file, statements);
+    assertDroppedObjectsAreRecreated(file, statements);
   }
 
   assert.ok(

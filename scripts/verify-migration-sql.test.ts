@@ -113,10 +113,28 @@ test('既存のDROP POLICYとDROP TRIGGERは再作成用として許可する', 
           'DROP POLICY IF EXISTS tenants_select ON tenants;',
           'DROP TRIGGER IF EXISTS tenant_guard ON tenants;',
           "CREATE POLICY tenants_select ON tenants FOR SELECT USING (id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);",
+          'CREATE TRIGGER tenant_guard BEFORE INSERT ON tenants FOR EACH ROW EXECUTE FUNCTION tenant_guard_function();',
         ].join('\n'),
       },
     ]),
   );
+});
+
+test('DROP POLICY/TRIGGER単独で既存の保護を削除するmigrationを拒否する', () => {
+  for (const content of [
+    'DROP POLICY IF EXISTS tenants_select ON tenants;',
+    'DROP TRIGGER IF EXISTS tenant_guard ON tenants;',
+  ]) {
+    assert.throws(() =>
+      validateMigrationSql([
+        safeMigration,
+        {
+          path: '20260822110000_remove-guard/migration.sql',
+          content,
+        },
+      ]),
+    );
+  }
 });
 
 test('コメント内の危険SQLは無視し、コメントを挟んだ危険SQLは拒否する', () => {
