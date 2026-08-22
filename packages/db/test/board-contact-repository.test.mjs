@@ -52,7 +52,11 @@ function createFakeClient() {
       const text = normalized.sql;
       if (text.includes('FROM tenant_memberships')) {
         if (text.includes('SELECT user_id')) return [{ user_id: 'user-a' }];
-        return [{ role: 'owner' }];
+        return [
+          {
+            role: normalized.values.includes('staff-a') ? 'staff' : 'owner',
+          },
+        ];
       }
       if (text.includes('SELECT id') && text.includes('FROM board_contacts'))
         return [];
@@ -68,6 +72,21 @@ function createFakeClient() {
     },
   };
 }
+
+test('repositoryの一覧はstaffにも許可し、連絡先の投影はAPI層へ委譲する', async () => {
+  const client = createFakeClient();
+  const repository = createBoardContactRepository(client);
+
+  const result = await repository.list({
+    tenantId: TENANT_ID,
+    actorUserId: 'staff-a',
+    role: 'staff',
+    query: {},
+  });
+
+  assert.equal(result[0]?.lineContact, 'line-a');
+  assert.equal(result[0]?.phone, '090-0000-0000');
+});
 
 test('repositoryの書き込み境界でもstaffのmanager操作を拒否する', async () => {
   const client = createFakeClient();

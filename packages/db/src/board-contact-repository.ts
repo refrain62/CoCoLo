@@ -270,7 +270,6 @@ export function createBoardContactRepository(client: PrismaClient) {
       query: { fiscalYear?: number };
     }) =>
       client.$transaction(async (tx) => {
-        assertManagerRole(input.role);
         await setRlsContext(tx, input);
         await assertActiveMembership(tx, input);
         const rows = await tx.$queryRaw<RawBoardContact[]>(Prisma.sql`
