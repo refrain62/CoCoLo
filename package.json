@@ -24,6 +24,8 @@
     "test:contract": "node --test packages/contracts/test/*.test.ts",
     "verify:workspace-boundaries": "depcruise --config .dependency-cruiser.cjs apps packages --output-type err-long && node scripts/verify-workspace-boundaries.ts",
     "verify:migration-sql": "node scripts/verify-migration-sql.ts",
+    "verify:schema-drift": "node scripts/verify-schema-drift.ts",
+    "test:schema-drift": "node --test scripts/verify-schema-drift.test.ts",
     "verify:pnpm-config": "node scripts/verify-pnpm-config.ts",
     "verify:database-version": "node scripts/verify-database-version.ts",
     "verify:environment": "node scripts/verify-environment.ts",
