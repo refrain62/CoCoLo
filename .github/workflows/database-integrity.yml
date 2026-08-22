@@ -4,6 +4,10 @@ on:
   push:
     branches: [develop, main]
   workflow_call:
+    inputs:
+      base_sha:
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -46,7 +50,7 @@ jobs:
       - name: migrationの正本とSQLを検証
         run: pnpm verify:migration-baseline && pnpm verify:migration-checksum && pnpm verify:migration-sql
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_sha || '' }}
       - name: checksum検証のfixtureを実行
         run: pnpm test:database-integrity
       - name: PostgreSQLのバージョンを検証
