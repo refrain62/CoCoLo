@@ -9,3 +9,51 @@
   white-space: nowrap;
   border: 0;
 }
+
+.manual-toc {
+  margin: 24px 0;
+  padding: 16px 24px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.manual-toc ul {
+  columns: 2;
+  margin-bottom: 0;
+}
+
+.manual-content section {
+  scroll-margin-top: 16px;
+  margin: 32px 0;
+}
+
+.manual-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+.manual-content th,
+.manual-content td {
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  text-align: left;
+  vertical-align: top;
+}
+
+.manual-content th {
+  background: #f3f4f6;
+}
+
+.manual-footer {
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid #d1d5db;
+}
+
+@media (max-width: 640px) {
+  .manual-toc ul {
+    columns: 1;
+  }
+}

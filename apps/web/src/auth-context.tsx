@@ -106,6 +106,9 @@ export function LoginPage() {
           {isSigningIn ? 'ログイン中…' : 'ログイン'}
         </button>
       </form>
+      <p>
+        <a href="/manual">操作マニュアルを確認</a>
+      </p>
     </main>
   );
 }
