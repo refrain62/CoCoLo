@@ -54,10 +54,11 @@ repositoryへ`now`関数を注入できるようにし、締切まで24時間未
 
 - [x] fresh PostgreSQLへmigrationを順番に適用し、`app_enqueue_line_notification_outbox`をactive membership、staff、別tenantで確認した（PR #40品質ゲート）。
 - [x] outboxの重複登録とpending更新を確認した（PR #40品質ゲート）。
-- [ ] delivered後に同じ通知元を再登録しても更新されないことを確認する。
+- [x] delivered後に同じ通知元を再登録しても更新されないことを確認した（PR #40品質ゲート）。
+- [x] connected groupの一意制約とWebhook重複制約を確認した（PR #40品質ゲート）。
 - [x] 2 worker同時起動でoutboxとqueueが二重作成されないことを確認した（PR #40品質ゲート）。
 - [ ] 接続前の保存、接続後の保存、接続解除後の古いqueue、LINE送信失敗をstaging専用channelで確認する。
 - [ ] Supabase、Cloudflare R2、LINE Messaging API、配置先の実資格情報を使ったE2Eを実施する。
 
 ローカルではDB接続情報とDockerが利用できないため、同じ統合テストはskipされます。
-CIの品質ゲート実行結果は[PR #40](https://github.com/refrain62/CoCoLo/pull/40)と[品質ゲートrun](https://github.com/refrain62/CoCoLo/actions/runs/32580017314)に記録しています。
+CIの品質ゲート実行結果は[PR #40](https://github.com/refrain62/CoCoLo/pull/40)と[品質ゲートrun](https://github.com/refrain62/CoCoLo/actions/runs/32580512425)に記録しています。

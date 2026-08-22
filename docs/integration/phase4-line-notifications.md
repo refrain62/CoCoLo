@@ -197,7 +197,7 @@ staging と production で channel secret、access token、group ID を共有し
 
 - [x] Central app へ feature app を mount し、既存 JWT と active membership を渡した。
 - [x] LINE専用migrationのRLS、connected groupの状態trigger、worker関数、outbox関数をPR品質ゲートの実PostgreSQLで確認した。
-- [ ] connected groupの一意制約、Webhook重複制約を実DBで確認した。
+- [x] connected groupの一意制約、Webhook重複制約をPR品質ゲートの実PostgreSQLで確認した。
 - [ ] staging の専用 LINE channel と専用 group で、接続、未接続、通知登録、送信、失敗、再試行を確認した。
 - [ ] 不正署名、destination 不一致、未知 group、重複 webhook、別 tenant の通知参照を拒否した。
 - [ ] 通知本文、ログ、監査 metadata、Webhook 応答へ個人情報と秘密情報が混入しないことを確認した。
