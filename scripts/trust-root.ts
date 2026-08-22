@@ -8,21 +8,40 @@ export type TrustRootRecord = Readonly<{
   schema: 1;
   status: 'manual-owner-bootstrap-required' | 'bootstrapped';
   owner: '@refrain62';
+  bootstrap_mode: 'owner-only-minimal';
+  protected_branches: readonly ['develop', 'main'];
   bootstrap_commit: string | null;
 }>;
 
 export function assertTrustRootRecord(value: unknown): TrustRootRecord {
-  assert.ok(value && typeof value === 'object', 'trust rootがobjectではありません。');
+  assert.ok(
+    value && typeof value === 'object',
+    'trust rootがobjectではありません。',
+  );
   const record = value as Partial<TrustRootRecord>;
   assert.equal(record.schema, 1, 'trust rootのschemaが不正です。');
   assert.equal(record.owner, '@refrain62', 'trust rootのownerが不正です。');
+  assert.equal(
+    record.bootstrap_mode,
+    'owner-only-minimal',
+    'trust rootはowner-onlyの最小bootstrapである必要があります。',
+  );
+  assert.deepEqual(
+    record.protected_branches,
+    ['develop', 'main'],
+    'trust rootの保護対象branchが不正です。',
+  );
   assert.ok(
     record.status === 'manual-owner-bootstrap-required' ||
       record.status === 'bootstrapped',
     'trust rootのstatusが不正です。',
   );
   if (record.status === 'manual-owner-bootstrap-required')
-    assert.equal(record.bootstrap_commit, null, 'bootstrap前のcommitは禁止です。');
+    assert.equal(
+      record.bootstrap_commit,
+      null,
+      'bootstrap前のcommitは禁止です。',
+    );
   else
     assert.ok(
       typeof record.bootstrap_commit === 'string' &&
@@ -52,7 +71,8 @@ export async function readTrustRoot(root: string): Promise<TrustRootRecord> {
   try {
     return assertTrustRootRecord(JSON.parse(content) as unknown);
   } catch (error) {
-    if (error instanceof SyntaxError) throw new Error('trust rootのJSONが不正です。');
+    if (error instanceof SyntaxError)
+      throw new Error('trust rootのJSONが不正です。');
     throw error;
   }
 }

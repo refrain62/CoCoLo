@@ -2,5 +2,7 @@
   "schema": 1,
   "status": "bootstrapped",
   "owner": "@refrain62",
+  "bootstrap_mode": "owner-only-minimal",
+  "protected_branches": ["develop", "main"],
   "bootstrap_commit": "66be13f78560297f4cf876e079333422fdb1697c"
 }

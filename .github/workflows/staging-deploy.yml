@@ -25,6 +25,8 @@ jobs:
           cache: pnpm
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
+      - name: owner bootstrap済みのtrust rootを検証
+        run: pnpm verify:trust-root
       - name: staging環境の設定を検証
         run: pnpm verify:environment --expected staging
         env:
