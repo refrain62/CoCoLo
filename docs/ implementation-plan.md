@@ -967,10 +967,10 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 
 * [x] **T-001 プラン補充:** 認証、テナント、API、TDD、CI、受け入れ条件を文書化する。コミット: `e0ed27f`
 * [x] **T-002 実装前敵対的レビュー:** Critical / High / Medium の指摘を取得する。レビュー結果を T-003 の修正対象にする。
-* [~] **T-003 レビュー指摘の解消:** Node.js 固定、Phase 1 Schema 契約、RLS 方針、権限表、private upload、PR CI、local / staging / production 環境、機能仕様書、UUIDv7、migration SQL の命名・文字コード、依存パッケージ待機、Actions SHA 固定、Monorepo 境界、Web/APIプロトコルを確定する。再レビューで未解消が判明したため継続中。
-* [~] **T-003a 機能仕様書の分離:** `docs/functional-specification.md` に機能ID、業務ルール、権限、状態遷移、資源ID、受け入れ条件、変更依頼テンプレートを定義する。計画と仕様の整合レビュー待ち。
-* [!] **T-004 実装前敵対的レビュー再実施:** 第3レビューは Critical 1件 / High 5件、第4レビュー（`46023fc`）は Critical 0件 / High 3件、第5レビュー（`9f49cb4`）は Critical 0件 / High 2件、第6レビュー（`30ebace`）は Critical 0件 / High 5件が残り、いずれも不合格。機能仕様書とサプライチェーン対策を含む現行文書で再レビューする。
-* [ ] **T-005 開発基盤:** pnpm workspace の `apps/web`、`apps/api`、`packages/db`、`packages/auth`、`packages/contracts`、`packages/domain`、`packages/ui`、`packages/test-fixtures`、root package scripts、dependency-cruiserによるpackage間依存境界、Zodからの`generate:openapi`、OpenAPI 3.1、package単位の TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build、`dev:test`、`db:prepare:test`、`db:seed:test`、`verify:pnpm-config`、`verify:migration-sql`、`verify:database-version`、`verify:environment`、`test:unit`、`test:integration`、`test:e2e:local`、`test:e2e:staging`、`verify:production-bundle`、staging smoke / deploy / evidence scripts を追加する。local / staging / production の `.env` 契約、起動時環境ガード、`playwright.config.ts` の `webServer`、quality / staging / production promote Workflow の実行結果を完了条件に含める。
+* [x] **T-003 レビュー指摘の解消:** Node.js 固定、Phase 1 Schema 契約、RLS 方針、権限表、private upload、PR CI、local / staging / production 環境、機能仕様書、UUIDv7、migration SQL の命名・文字コード、依存パッケージ待機、Actions SHA 固定、Monorepo 境界、Web/APIプロトコルを確定する。完了コミット: `d04faee`
+* [x] **T-003a 機能仕様書の分離:** `docs/functional-specification.md` に機能ID、業務ルール、権限、状態遷移、資源ID、受け入れ条件、変更依頼テンプレートを定義する。実装計画との整合を `d04faee` で確定する。
+* [x] **T-004 実装前敵対的レビュー再実施:** 最終対象 `d04faee` は Critical 0件 / High 0件 / Medium 5件。MediumはT-005の実装・CI検証で解消する前提とし、実装開始可と判定された。
+* [~] **T-005 開発基盤:** pnpm workspace の `apps/web`、`apps/api`、`packages/db`、`packages/auth`、`packages/contracts`、`packages/domain`、`packages/ui`、`packages/test-fixtures`、root package scripts、dependency-cruiserによるpackage間依存境界、Zodからの`generate:openapi`、OpenAPI 3.1、package単位の TypeScript、Vite、Hono、Prisma、Vitest、Playwright、lint、typecheck、build、`dev:test`、`db:prepare:test`、`db:seed:test`、`verify:pnpm-config`、`verify:migration-sql`、`verify:database-version`、`verify:environment`、`test:unit`、`test:integration`、`test:e2e:local`、`test:e2e:staging`、`verify:production-bundle`、staging smoke / deploy / evidence scripts を追加する。local / staging / production の `.env` 契約、起動時環境ガード、`playwright.config.ts` の `webServer`、quality / staging / production promote Workflow の実行結果を完了条件に含める。
 * [ ] **T-006 Red:** 部員 API の未認証、別テナント、権限不足、入力不正、一覧・登録の失敗テストを先に追加する。
 * [ ] **T-007 Green:** Tenant / TenantMembership / Member / GuardianMember / AuditLog / PromotionRun の migration、JWT検証、RLS policy、transaction context、テナント解決、部員 API を最小実装する。
 * [ ] **T-008 Red/Green:** 部員一覧・登録 UI のテストを先に追加して画面を実装する。
@@ -986,6 +986,7 @@ Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:te
 * **T-004第4レビュー記録（2026-08-22、`46023fc`）:** Critical 0件、High 3件。membership 検証から RLS context 設定までの原子性、GuardianMember の Tenant relation、PATCH / DELETE / owner-admin DTO の完全定義が不足しているため不合格。次の再開先は T-003。
 * **T-004第5レビュー記録（2026-08-22、`9f49cb4`）:** Critical 0件、High 2件。staging 検証を必須化した production promote Workflow と、環境誤接続・Service Role Key・R2・E2E 認証の fail-closed 検証が不足しているため不合格。次の再開先は T-003。
 * **T-004第6レビュー記録（2026-08-22、`30ebace`）:** Critical 0件、High 5件。production migration artifact、フェーズ対応、Member本人の出欠主体、guardian/staff 権限、Attachment状態が不一致のため不合格。次の再開先は T-003。
+* **T-004最終レビュー記録（2026-08-22、`d04faee`）:** Critical 0件、High 0件、Medium 5件。PromotionRunの状態遷移・UPDATE RLS・冪等性、staging workflow path・job step・artifact attestation、production secret注入順、UUIDv7、R2 upload、Monorepo境界を確認し、実装開始可と判定。MediumはT-005の実装とCI実行で解消する。
 
 ### 9.3 中断後の再開手順
 

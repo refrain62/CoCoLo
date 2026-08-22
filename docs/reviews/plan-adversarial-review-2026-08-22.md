@@ -101,3 +101,14 @@ Critical 0件、High 5件。**実装開始不可**。
 ## 第6レビュー後の修正
 
 第6レビュー結果を受け、T-003を継続中、T-004を不合格のまま維持する。機能仕様書のフェーズ・権限・状態遷移を正本として更新し、release artifact に migration と checksum を同梱して production では検証済み release だけを適用する。UUIDv7、migration SQL の英語物理名・日本語コメント・UTF-8、pnpm の `minimumReleaseAge`、Actions の SHA 固定と追加のサプライチェーン対策も実装前契約へ追加してから再レビューする。
+
+## 第7レビュー結果（対象 `d04faee`）
+
+Critical 0件、High 0件、Medium 5件。**実装開始可**。
+
+- PromotionRunのpreview → completed / failed、failed → completed / failed、owner/admin限定UPDATE RLS、Idempotency-Key・requestHash・result保存・再送時の409を確定
+- staging runのworkflow name、REST APIのworkflow path、job stepのmigration / smoke / E2E成否、artifact SHA、GitHub attestationをcheckout前に検証する契約を確定
+- production secretをartifact検証後のstepへ限定し、Web/APIプロトコル、private R2 upload、UUIDv7、Monorepo package境界、PostgreSQL 17、migration SQL検査を文書間で整合
+- MediumはPromotionRun列別更新表、固定CLI導入、staging強権限job分離など、T-005の実装・CI検証で解消する
+
+最終判定は、Critical / High がゼロのため実装開始可。次の作業はT-005のRed（開発基盤の検証テスト）から開始する。
