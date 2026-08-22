@@ -8,7 +8,7 @@
 | --- | --- |
 | 認証・所属 | Supabase JWT、active membership、session、チーム選択を中央APIへ接続済み |
 | 部員 | 既存repository、owner/adminの画面、年度繰り上げを接続済み |
-| 予定・出欠 | Prisma repository、中央API、Web一覧・出欠画面を接続済み |
+| 予定・出欠 | Prisma repository、中央API、Web一覧・詳細・出欠画面を接続済み |
 | 役員連絡先 | Prisma repository、中央API、Web画面を接続済み |
 | 共同購買・集金 | Prisma永続repository、中央API、Web画面を接続済み |
 | 添付 | DB repository、private R2実adapter、署名URL経路を接続済み |
@@ -18,7 +18,7 @@
 
 ## 未実装・未検証
 
-1. 中央Webの予定、共同購買、添付、回覧板の資源詳細画面。
+1. 中央Webの共同購買、添付、回覧板の資源詳細画面。
 2. staging / productionで利用する分散rate-limit storeの実adapter。
 3. Supabase、Cloudflare R2、LINE Messaging API、配置先の実資格情報を使った疎通・E2E。
 4. 外部schedulerから`pnpm line:deliver`を定期実行する運用設定。

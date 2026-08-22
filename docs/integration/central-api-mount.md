@@ -85,6 +85,8 @@ staging DBでの実資格情報を使ったE2Eと、外部サービスを含む�
 
 outboxは同一tenant・通知元の組み合わせで冪等化し、業務保存と通知依頼を同じtransactionで確定します。
 
-予定、共同購買、添付、回覧板の詳細画面は中央Webで未接続表示を返します。
+予定詳細は中央Webから`GET /api/v1/events/:eventId`へ接続済みです。
+
+共同購買、添付、回覧板の詳細画面は中央Webで未接続表示を返します。
 
 staging / productionの実Supabase、R2、LINE、配置adapterと外部schedulerの疎通確認は、環境固有の作業として残っています。

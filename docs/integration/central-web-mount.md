@@ -139,7 +139,9 @@ Web clientの一覧・選択pathは、中央APIを `/api/v1/auth` へmountした
 
 feature API、OpenAPI、DB migration、実LINE、実R2の接続は、このブランチの検証範囲に含めません。
 
-詳細画面（予定、共同購買、添付、回覧板）は、UUIDv7を検証したうえで未接続表示を返します。
+予定詳細はUUIDv7を検証したうえで中央APIへ接続します。
+
+共同購買、添付、回覧板の詳細画面は、UUIDv7を検証したうえで未接続表示を返します。
 
 中央Webの追加後に、対象テスト、domainとUIのbuild、Web typecheck、リポジトリ全体buildを実行します。
 
