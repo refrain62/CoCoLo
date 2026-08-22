@@ -1,5 +1,7 @@
 # デプロイadapter契約
 
+全体の手順、Environment設定、stagingからproductionへの昇格、障害対応は[デプロイ運用手順](deployment-guide.md)を参照してください。この文書ではprovider固有adapterとの入出力契約だけを定義します。
+
 staging / production の実配置は環境固有サービスへ依存するため、Workflowへ直接のprovider実装を埋め込まない。GitHub Environmentのprotected secretで、環境ごとの実行可能なadapterを指定する。
 
 adapterは次の引数を受け取り、検証済みartifactを配置した後、`--release-dir` 配下へ `deployment-record.json` を作成する。
