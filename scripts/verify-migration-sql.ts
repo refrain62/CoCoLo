@@ -314,7 +314,9 @@ function parseDroppedObject(statement: string) {
 }
 
 function policyName(statement: string) {
-  return /^CREATE\s+POLICY\s+"?([a-z_][a-z0-9_]*)"?/i.exec(statement)?.[1]?.toLowerCase();
+  return /^CREATE\s+POLICY\s+"?([a-z_][a-z0-9_]*)"?/i
+    .exec(statement)?.[1]
+    ?.toLowerCase();
 }
 
 function findPolicyExpression(
@@ -413,9 +415,13 @@ function assertEffectivePolicyFailClosed(
   const name = policyName(statement);
   assert.ok(tableName && name, `${file.path}: policyの正本を解釈できません。`);
   const command =
-    /\bFOR\s+(SELECT|INSERT|UPDATE|DELETE|ALL)\b/i.exec(statement)?.[1]?.toUpperCase() ??
-    'ALL';
-  const expressions = [findPolicyExpression(statement, 'USING') ?? '', findPolicyExpression(statement, 'WITH', 'CHECK') ?? ''];
+    /\bFOR\s+(SELECT|INSERT|UPDATE|DELETE|ALL)\b/i
+      .exec(statement)?.[1]
+      ?.toUpperCase() ?? 'ALL';
+  const expressions = [
+    findPolicyExpression(statement, 'USING') ?? '',
+    findPolicyExpression(statement, 'WITH', 'CHECK') ?? '',
+  ];
   for (const expression of expressions)
     assert.doesNotMatch(
       compactSql(expression).toLowerCase(),
@@ -626,20 +632,29 @@ export function validateMigrationSql(files: readonly MigrationSqlFile[]) {
     assertDroppedObjectsAreRecreated(file, statements);
   }
 
-  const effectivePolicies = new Map<string, { file: MigrationSqlFile; statement: string }>();
+  const effectivePolicies = new Map<
+    string,
+    { file: MigrationSqlFile; statement: string }
+  >();
   const firstFile = files[0];
   assert.ok(firstFile, 'migration.sqlが1件以上必要です。');
   for (const statement of allStatements) {
     const text = compactSql(statement.text);
     const dropped = parseDroppedObject(text);
     if (dropped?.[1] === 'POLICY') {
-      effectivePolicies.delete(`${dropped[3]?.toLowerCase()}.${dropped[2]?.toLowerCase()}`);
+      effectivePolicies.delete(
+        `${dropped[3]?.toLowerCase()}.${dropped[2]?.toLowerCase()}`,
+      );
       continue;
     }
     if (!/^CREATE\s+POLICY\b/i.test(text)) continue;
     const tableName = policyTableName(text);
     const name = policyName(text);
-    if (tableName && name) effectivePolicies.set(`${tableName}.${name}`, { file: firstFile, statement: text });
+    if (tableName && name)
+      effectivePolicies.set(`${tableName}.${name}`, {
+        file: firstFile,
+        statement: text,
+      });
   }
   for (const policy of effectivePolicies.values())
     assertEffectivePolicyFailClosed(policy.file, policy.statement);
