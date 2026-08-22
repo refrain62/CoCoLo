@@ -8,6 +8,8 @@ const forbidden = [
   'SUPABASE_SERVICE_ROLE_KEY',
   'test-only Auth',
   'TEST_ONLY_AUTH',
+  'local-test-owner-token',
+  'owner-password',
 ];
 const roots = [
   path.join(root, 'apps', 'web', 'dist'),
