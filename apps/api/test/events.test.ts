@@ -73,6 +73,19 @@ function createFakeRepository(): EventRepository & {
     responses,
     list: async ({ tenantId }) =>
       events.filter((current) => current.tenantId === tenantId),
+    get: async ({ tenantId, eventId }) => {
+      const current = events.find(
+        (candidate) =>
+          candidate.id === eventId && candidate.tenantId === tenantId,
+      );
+      if (!current) {
+        const error = Object.assign(new Error('予定が見つかりません。'), {
+          status: 404,
+        });
+        throw error;
+      }
+      return current;
+    },
     create: async ({ tenantId, actorUserId, ...input }) => {
       assertEvent(input);
       const created = event({
@@ -287,6 +300,25 @@ test('ownerは所属tenantの予定だけを取得し、tenantIdをDTOへ返さ�
   assert.equal(response.status, 200);
   assert.equal(payload.data.length, 1);
   assert.equal(payload.data[0].tenantId, undefined);
+});
+
+test('予定詳細は所属tenant内だけを取得し、存在しない予定を404にする', async () => {
+  const app = createTestApp();
+  const response = await app.request(`/${EVENT_A}`, {
+    headers: auth('owner-a'),
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await json(response)).data.id, EVENT_A);
+
+  const crossTenant = await app.request(`/${EVENT_A}`, {
+    headers: auth('owner-b'),
+  });
+  assert.equal(crossTenant.status, 404);
+
+  const missing = await app.request('/00000000-0000-7000-8000-000000009999', {
+    headers: auth('owner-a'),
+  });
+  assert.equal(missing.status, 404);
 });
 
 test('guardianは担当部員の締切前回答を一意に更新できる', async () => {
