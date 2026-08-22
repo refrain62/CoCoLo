@@ -41,7 +41,7 @@
     "scripts/generate-openapi.ts": "dd4bc5ee9b828550c02853da6e422f0c4e1aaa56dd815604692cedc50bf2257e",
     "scripts/package-release.ts": "9b998e9cfc770a19c6237e9a8a286ba8366aee0620293fd2e6d14955614a00f6",
     "scripts/prisma-validate.ts": "d6873d328345f8cf888ae74f99678796c18f6d583d149b02d6b92914182dcc20",
-    "scripts/release-artifact.test.ts": "54640cdb25361bd86755f33b59c484391116988b1574352b151e6dd1711b0b61",
+    "scripts/release-artifact.test.ts": "5d820d2c4a3527147d994f666845a240f887fe8a922c226fdc0da126755d11d3",
     "scripts/release-public-config.test.ts": "84e1a3c33ea5e06f85ff89fb804924079bce694b74449e0953a2ebdf1822cba8",
     "scripts/release-public-config.ts": "e241d578c2df848c9008971584f4114be6a178f10bd6afb4a141f85914b0dfeb",
     "scripts/release-verify-public-config.ts": "8979818d041903366043b8486dc127cda4d10e8253c22daa0cb3015ebbdcf3ec",
