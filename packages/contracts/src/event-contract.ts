@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 const uuid = z.string().uuid();
 const dateTime = z.string().datetime({ offset: true });
-const optionalText = (max) => z.string().trim().max(max).nullable().optional();
+const optionalText = (max: number) =>
+  z.string().trim().max(max).nullable().optional();
 
 const eventFields = {
   title: z.string().trim().min(1).max(200),
@@ -34,7 +35,9 @@ const eventUpdateFields = {
   attendanceDeadline: dateTime,
 };
 
-function validateEventTimes(value, context) {
+type EventInput = z.infer<z.ZodObject<typeof eventFields>>;
+
+function validateEventTimes(value: EventInput, context: z.RefinementCtx) {
   const startsAt = Date.parse(value.startsAt);
   const endsAt = Date.parse(value.endsAt);
   const deadline = Date.parse(value.attendanceDeadline);
@@ -80,7 +83,7 @@ export const eventUpdateSchema = z
     ),
   )
   .strict()
-  .refine((value) => Object.keys(value).length > 0, {
+  .refine((value: Record<string, unknown>) => Object.keys(value).length > 0, {
     message: '変更項目を1つ以上指定してください。',
   });
 

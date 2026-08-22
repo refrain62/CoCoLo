@@ -4,7 +4,7 @@ import {
   attendanceUpsertSchema,
   eventCreateSchema,
   eventUpdateSchema,
-} from '../src/event-contract.mjs';
+} from '../src/event-contract.ts';
 
 const validEvent = {
   title: '練習',
