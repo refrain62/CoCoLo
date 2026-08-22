@@ -342,7 +342,7 @@ test('未読者一覧は掲載者本人だけに公開し、ユーザーID以外
   }>(ownerUnread);
   assert.equal(ownerUnread.status, 200);
   assert.ok(ownerPayload.data.some((member) => member.userId === 'guardian-a'));
-  assert.equal(ownerPayload.data[0].email, undefined);
+  assert.equal(ownerPayload.data[0]?.email, undefined);
   const staffUnread = await app.request(
     `/api/v1/announcements/${announcementId}/unread`,
     { headers: auth('staff-a') },
