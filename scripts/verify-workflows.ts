@@ -245,7 +245,33 @@ const productionSteps: readonly StepPolicy[] = [
       ARTIFACT_SHA: githubExpression('inputs.artifact_sha'),
     },
   },
+  {
+    kind: 'uses',
+    action: `actions/checkout@${actionAllowlist['actions/checkout']}`,
+    withValues: {
+      ref: githubExpression('inputs.artifact_sha'),
+      'fetch-depth': 0,
+      'persist-credentials': false,
+    },
+  },
+  {
+    kind: 'uses',
+    action: `pnpm/action-setup@${actionAllowlist['pnpm/action-setup']}`,
+    withValues: { version: '10.26.0' },
+  },
+  {
+    kind: 'uses',
+    action: `actions/setup-node@${actionAllowlist['actions/setup-node']}`,
+    withValues: { 'node-version': 24, cache: 'pnpm' },
+  },
   { kind: 'run' },
+  { kind: 'run' },
+  {
+    kind: 'run',
+    envValues: {
+      ARTIFACT_SHA: githubExpression('inputs.artifact_sha'),
+    },
+  },
   {
     kind: 'run',
     envValues: {
@@ -582,7 +608,11 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
           location ===
             'production-promote.yml.jobs.production.steps[6].env.ARTIFACT_SHA' ||
             location ===
-              'production-promote.yml.jobs.production.steps[10].env.ARTIFACT_SHA',
+              'production-promote.yml.jobs.production.steps[7].with.ref' ||
+            location ===
+              'production-promote.yml.jobs.production.steps[12].env.ARTIFACT_SHA' ||
+            location ===
+              'production-promote.yml.jobs.production.steps[15].env.ARTIFACT_SHA',
           `${location}: 手動入力を許可されたproductionのSHA用途以外へ渡せません`,
         );
       if (body.startsWith('secrets.') || body.startsWith('vars.'))
@@ -911,12 +941,13 @@ function validateStagingWorkflowDocument(workflow: WorkflowRecord): void {
   );
   assertExactKeys(
     staging,
-    ['runs-on', 'timeout-minutes', 'environment', 'steps'],
+    ['runs-on', 'timeout-minutes', 'environment', 'concurrency', 'steps'],
     'staging-deploy.yml.jobs.staging',
   );
   assert.equal(staging['runs-on'], 'ubuntu-24.04');
   assert.equal(staging['timeout-minutes'], 15);
   assert.equal(staging.environment, 'staging');
+  assert.equal(staging.concurrency, 'staging-deploy');
   validateSteps('staging-deploy.yml', staging, stagingSteps);
   assertEnvironmentProtectionStep('staging-deploy.yml', staging, 5, 'staging');
 }

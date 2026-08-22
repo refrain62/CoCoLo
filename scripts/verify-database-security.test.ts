@@ -40,6 +40,8 @@ const safe: DatabaseSecurityInspection = {
       isGrantable: false,
     })),
   ),
+  columnGrantDrift: false,
+  columnGrantOption: false,
   securityDefinerPublicExecute: false,
   securityDefinerAppExecute: true,
   securityDefinerOwnerIsApp: false,
@@ -84,6 +86,8 @@ test('SECURITY DEFINERのPUBLIC executeとapp ownerを拒否する', () => {
     { securityDefinerUnexpectedGrant: true },
     { securityDefinerAppGrantOption: true },
     { securityDefinerHasSafeSearchPath: false },
+    { columnGrantDrift: true },
+    { columnGrantOption: true },
   ])
     assert.throws(() => assertDatabaseSecurity({ ...safe, ...change }));
   assert.throws(() =>

@@ -75,7 +75,12 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 // membership検索用のuser contextだけをtransaction内へ設定し、後続のRLS判定に利用する。
 async function setUserContext(client: DatabaseClient, userId: string) {
-  await client.$queryRaw`SELECT set_config('app.user_id', ${userId}, true)`;
+  await client.$queryRaw`
+    SELECT
+      set_config('app.tenant_id', '', true),
+      set_config('app.user_id', ${userId}, true),
+      set_config('app.role', '', true)
+  `;
 }
 
 // tenant・user・roleをtransaction-local設定へまとめて入れ、同じtransaction内の全クエリへRLS境界を適用する。
