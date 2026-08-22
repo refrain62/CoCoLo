@@ -2,7 +2,7 @@
 
 ## 対象
 
-対象SHAは `5d41e50` です。
+対象SHAは `c66ed43` です。
 
 対象機能はFS-ORD-001〜004です。
 
@@ -32,6 +32,16 @@
 repositoryへstaff閲覧拒否を追加し、APIテストで403を確認しました。
 
 修正コミットは `5d41e50` です。
+
+### CI-002テスト実行順序への依存
+
+初回のGitHub品質ゲートでは、VitestがDB packageのbuild前にrepositoryテストを読み込み、domainのサブパスdistを解決できませんでした。
+
+DB専用テストをbuild後にNode testで実行するpackage scriptへ移し、CIとローカルで同じ実行順序に揃えました。
+
+修正コミットは `c66ed43` です。
+
+再実行した `pnpm test:unit` ではDB専用テスト4件を含めて成功しています。
 
 ## 判定
 

@@ -140,7 +140,8 @@ Prisma schemaへモデルを追加する場合は、migration、RLS policy、gra
 feature単位では次のテストを実行します。
 
 ```text
-pnpm exec vitest run packages/domain/test/orders-domain.vitest.ts packages/db/test/orders-repository.vitest.ts apps/web/src/features/orders-payments/orders-payments-api.vitest.ts
+pnpm exec vitest run packages/domain/test/orders-domain.vitest.ts apps/web/src/features/orders-payments/orders-payments-api.vitest.ts
+pnpm --filter @cocolo/db test:unit
 pnpm --filter @cocolo/api build
 node apps/api/test/orders-payments.test.mjs
 pnpm --filter @cocolo/web typecheck
