@@ -1,18 +1,19 @@
 -- FS-EVT、FS-BRD、FS-ORD、FS-FIL、FS-ANN、FS-NOT、FS-RIDEの中央DB契約。
 -- 新規IDはUUIDv7とし、LINE通知キューだけは既存repository互換のためSQL defaultで生成する。
 
-CREATE TYPE event_type AS ENUM ('practice', 'match', 'event');
-CREATE TYPE attendance_response AS ENUM ('attending', 'absent', 'pending');
-CREATE TYPE attachment_status AS ENUM ('uploaded', 'available', 'rejected', 'deleted');
-CREATE TYPE announcement_status AS ENUM ('published', 'archived');
-CREATE TYPE purchase_order_status AS ENUM ('open', 'closed', 'completed');
-CREATE TYPE payment_status AS ENUM ('unpaid', 'paid');
-CREATE TYPE line_connection_status AS ENUM ('connected', 'disconnected');
-CREATE TYPE line_notification_source AS ENUM ('event', 'deadline', 'bulletin');
-CREATE TYPE line_notification_status AS ENUM ('pending', 'sending', 'sent', 'failed');
-CREATE TYPE ride_plan_status AS ENUM ('draft', 'open', 'closed', 'finalized');
-CREATE TYPE ride_offer_status AS ENUM ('open', 'cancelled');
-CREATE TYPE ride_request_status AS ENUM ('pending', 'assigned', 'unassigned', 'cancelled');
+-- 各featureの先行migrationで作成済みの型を再利用し、fresh DBでも中央統合単独でも適用できるようにする。
+DO $$ BEGIN CREATE TYPE event_type AS ENUM ('practice', 'match', 'event'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE attendance_response AS ENUM ('attending', 'absent', 'pending'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE attachment_status AS ENUM ('uploaded', 'available', 'rejected', 'deleted'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE announcement_status AS ENUM ('published', 'archived'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE purchase_order_status AS ENUM ('open', 'closed', 'completed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE payment_status AS ENUM ('unpaid', 'paid'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE line_connection_status AS ENUM ('connected', 'disconnected'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE line_notification_source AS ENUM ('event', 'deadline', 'bulletin'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE line_notification_status AS ENUM ('pending', 'sending', 'sent', 'failed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE ride_plan_status AS ENUM ('draft', 'open', 'closed', 'finalized'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE ride_offer_status AS ENUM ('open', 'cancelled'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE ride_request_status AS ENUM ('pending', 'assigned', 'unassigned', 'cancelled'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE OR REPLACE FUNCTION app_is_uuidv7(value uuid)
 RETURNS boolean
@@ -51,7 +52,7 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_id_uuidv7 CHECK (app_is_uuidv7(
 ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_resource_id_uuidv7 CHECK (resource_id IS NULL OR app_is_uuidv7(resource_id));
 ALTER TABLE promotion_runs ADD CONSTRAINT promotion_runs_id_uuidv7 CHECK (app_is_uuidv7(id));
 
-CREATE TABLE attachments (
+CREATE TABLE IF NOT EXISTS attachments (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   owner_user_id varchar(128) NOT NULL,
@@ -80,9 +81,9 @@ CREATE TABLE attachments (
   CHECK (position('://' IN object_key) = 0),
   CHECK (left(object_key, 1) <> '/')
 );
-CREATE INDEX attachments_tenant_status_expiry_idx ON attachments(tenant_id, status, expires_at);
+CREATE INDEX IF NOT EXISTS attachments_tenant_status_expiry_idx ON attachments(tenant_id, status, expires_at);
 
-CREATE TABLE events (
+CREATE TABLE IF NOT EXISTS events (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   title varchar(200) NOT NULL,
@@ -111,9 +112,9 @@ CREATE TABLE events (
   CHECK (fee BETWEEN 0 AND 1000000),
   CHECK (event_type <> 'match'::event_type OR length(btrim(opponent)) > 0)
 );
-CREATE INDEX events_tenant_starts_idx ON events(tenant_id, starts_at, id);
+CREATE INDEX IF NOT EXISTS events_tenant_starts_idx ON events(tenant_id, starts_at, id);
 
-CREATE TABLE attendance_responses (
+CREATE TABLE IF NOT EXISTS attendance_responses (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   event_id uuid NOT NULL,
@@ -129,9 +130,9 @@ CREATE TABLE attendance_responses (
   FOREIGN KEY (tenant_id, member_id) REFERENCES members(tenant_id, id) ON DELETE RESTRICT,
   CHECK (app_is_uuidv7(id))
 );
-CREATE INDEX attendance_responses_event_member_idx ON attendance_responses(tenant_id, event_id, member_id);
+CREATE INDEX IF NOT EXISTS attendance_responses_event_member_idx ON attendance_responses(tenant_id, event_id, member_id);
 
-CREATE TABLE board_contacts (
+CREATE TABLE IF NOT EXISTS board_contacts (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   fiscal_year integer NOT NULL,
@@ -152,9 +153,9 @@ CREATE TABLE board_contacts (
   CHECK (role_type IN ('admin', 'staff', 'member')),
   CHECK (contact_preference IN ('line', 'phone', 'both'))
 );
-CREATE INDEX board_contacts_tenant_year_idx ON board_contacts(tenant_id, fiscal_year);
+CREATE INDEX IF NOT EXISTS board_contacts_tenant_year_idx ON board_contacts(tenant_id, fiscal_year);
 
-CREATE TABLE purchase_orders (
+CREATE TABLE IF NOT EXISTS purchase_orders (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   title varchar(200) NOT NULL,
@@ -164,9 +165,9 @@ CREATE TABLE purchase_orders (
   UNIQUE (tenant_id, id),
   CHECK (app_is_uuidv7(id))
 );
-CREATE INDEX purchase_orders_tenant_status_deadline_idx ON purchase_orders(tenant_id, status, deadline);
+CREATE INDEX IF NOT EXISTS purchase_orders_tenant_status_deadline_idx ON purchase_orders(tenant_id, status, deadline);
 
-CREATE TABLE order_products (
+CREATE TABLE IF NOT EXISTS order_products (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   order_id uuid NOT NULL,
@@ -183,9 +184,9 @@ CREATE TABLE order_products (
   CHECK (unit_price BETWEEN 0 AND 1000000000),
   CHECK (jsonb_typeof(options) = 'array')
 );
-CREATE INDEX order_products_tenant_order_created_idx ON order_products(tenant_id, order_id, created_at);
+CREATE INDEX IF NOT EXISTS order_products_tenant_order_created_idx ON order_products(tenant_id, order_id, created_at);
 
-CREATE TABLE order_entries (
+CREATE TABLE IF NOT EXISTS order_entries (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   order_id uuid NOT NULL,
@@ -205,10 +206,10 @@ CREATE TABLE order_entries (
   CHECK ((payment_status = 'paid'::payment_status AND payment_confirmed_at IS NOT NULL AND payment_confirmed_by IS NOT NULL)
     OR (payment_status = 'unpaid'::payment_status AND payment_confirmed_at IS NULL AND payment_confirmed_by IS NULL))
 );
-CREATE INDEX order_entries_tenant_order_payment_created_idx ON order_entries(tenant_id, order_id, payment_status, created_at);
-CREATE INDEX order_entries_tenant_orderer_idx ON order_entries(tenant_id, orderer_user_id);
+CREATE INDEX IF NOT EXISTS order_entries_tenant_order_payment_created_idx ON order_entries(tenant_id, order_id, payment_status, created_at);
+CREATE INDEX IF NOT EXISTS order_entries_tenant_orderer_idx ON order_entries(tenant_id, orderer_user_id);
 
-CREATE TABLE order_lines (
+CREATE TABLE IF NOT EXISTS order_lines (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   order_entry_id uuid NOT NULL,
@@ -230,10 +231,10 @@ CREATE TABLE order_lines (
   CHECK (amount BETWEEN 0 AND 9007199254740991),
   CHECK (jsonb_typeof(selected_options) = 'object')
 );
-CREATE INDEX order_lines_tenant_entry_idx ON order_lines(tenant_id, order_entry_id);
-CREATE INDEX order_lines_tenant_product_idx ON order_lines(tenant_id, product_id);
+CREATE INDEX IF NOT EXISTS order_lines_tenant_entry_idx ON order_lines(tenant_id, order_entry_id);
+CREATE INDEX IF NOT EXISTS order_lines_tenant_product_idx ON order_lines(tenant_id, product_id);
 
-CREATE TABLE order_idempotency_keys (
+CREATE TABLE IF NOT EXISTS order_idempotency_keys (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   actor_user_id varchar(128) NOT NULL,
@@ -247,10 +248,10 @@ CREATE TABLE order_idempotency_keys (
   CHECK (request_hash ~ '^[0-9a-f]{64}$'),
   CHECK (app_is_uuidv7(resource_id))
 );
-CREATE INDEX order_idempotency_keys_tenant_resource_idx
+CREATE INDEX IF NOT EXISTS order_idempotency_keys_tenant_resource_idx
   ON order_idempotency_keys(tenant_id, resource_type, resource_id);
 
-CREATE TABLE announcements (
+CREATE TABLE IF NOT EXISTS announcements (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   author_user_id varchar(128) NOT NULL,
@@ -261,9 +262,9 @@ CREATE TABLE announcements (
   UNIQUE (tenant_id, id),
   CHECK (app_is_uuidv7(id))
 );
-CREATE INDEX announcements_tenant_status_published_idx ON announcements(tenant_id, status, published_at, id);
+CREATE INDEX IF NOT EXISTS announcements_tenant_status_published_idx ON announcements(tenant_id, status, published_at, id);
 
-CREATE TABLE announcement_attachments (
+CREATE TABLE IF NOT EXISTS announcement_attachments (
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   announcement_id uuid NOT NULL,
   attachment_id uuid NOT NULL,
@@ -279,7 +280,7 @@ CREATE TABLE announcement_attachments (
   CHECK (byte_size BETWEEN 1 AND 20971520)
 );
 
-CREATE TABLE announcement_reads (
+CREATE TABLE IF NOT EXISTS announcement_reads (
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   announcement_id uuid NOT NULL,
   user_id varchar(128) NOT NULL,
@@ -287,9 +288,9 @@ CREATE TABLE announcement_reads (
   PRIMARY KEY (tenant_id, announcement_id, user_id),
   FOREIGN KEY (tenant_id, announcement_id) REFERENCES announcements(tenant_id, id) ON DELETE RESTRICT
 );
-CREATE INDEX announcement_reads_tenant_user_read_idx ON announcement_reads(tenant_id, user_id, read_at);
+CREATE INDEX IF NOT EXISTS announcement_reads_tenant_user_read_idx ON announcement_reads(tenant_id, user_id, read_at);
 
-CREATE TABLE line_connections (
+CREATE TABLE IF NOT EXISTS line_connections (
   tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE RESTRICT,
   group_id varchar(128),
   status line_connection_status NOT NULL,
@@ -299,10 +300,10 @@ CREATE TABLE line_connections (
   CHECK ((status = 'connected'::line_connection_status AND group_id IS NOT NULL AND connected_at IS NOT NULL)
     OR (status = 'disconnected'::line_connection_status AND group_id IS NULL))
 );
-CREATE UNIQUE INDEX line_connections_connected_group_idx
+CREATE UNIQUE INDEX IF NOT EXISTS line_connections_connected_group_idx
   ON line_connections(group_id) WHERE status = 'connected'::line_connection_status;
 
-CREATE TABLE line_notification_queue (
+CREATE TABLE IF NOT EXISTS line_notification_queue (
   id uuid PRIMARY KEY DEFAULT app_uuidv7(),
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   group_id varchar(128) NOT NULL,
@@ -327,19 +328,19 @@ CREATE TABLE line_notification_queue (
     OR (status <> 'sent'::line_notification_status AND sent_at IS NULL)),
   CHECK (deep_link ~ '^https://|^http://localhost(:[0-9]+)?/')
 );
-CREATE INDEX line_notification_queue_due_idx ON line_notification_queue(status, next_retry_at, created_at, id);
-CREATE INDEX line_notification_queue_tenant_group_status_idx ON line_notification_queue(tenant_id, group_id, status);
+CREATE INDEX IF NOT EXISTS line_notification_queue_due_idx ON line_notification_queue(status, next_retry_at, created_at, id);
+CREATE INDEX IF NOT EXISTS line_notification_queue_tenant_group_status_idx ON line_notification_queue(tenant_id, group_id, status);
 
-CREATE TABLE line_webhook_receipts (
+CREATE TABLE IF NOT EXISTS line_webhook_receipts (
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   group_id varchar(128) NOT NULL,
   webhook_event_id varchar(128) NOT NULL,
   received_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (group_id, webhook_event_id)
 );
-CREATE INDEX line_webhook_receipts_tenant_received_idx ON line_webhook_receipts(tenant_id, received_at);
+CREATE INDEX IF NOT EXISTS line_webhook_receipts_tenant_received_idx ON line_webhook_receipts(tenant_id, received_at);
 
-CREATE TABLE ride_plans (
+CREATE TABLE IF NOT EXISTS ride_plans (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   title varchar(200) NOT NULL,
@@ -353,9 +354,9 @@ CREATE TABLE ride_plans (
   CHECK (pickup_maps_url IS NULL OR pickup_maps_url ~ '^https://(www\\.)?google\\.com/maps(/|$)|^https://maps\\.google\\.com/'),
   CHECK (destination_maps_url IS NULL OR destination_maps_url ~ '^https://(www\\.)?google\\.com/maps(/|$)|^https://maps\\.google\\.com/')
 );
-CREATE INDEX ride_plans_tenant_departure_idx ON ride_plans(tenant_id, departure_at, id);
+CREATE INDEX IF NOT EXISTS ride_plans_tenant_departure_idx ON ride_plans(tenant_id, departure_at, id);
 
-CREATE TABLE ride_offers (
+CREATE TABLE IF NOT EXISTS ride_offers (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   plan_id uuid NOT NULL,
@@ -368,9 +369,9 @@ CREATE TABLE ride_offers (
   CHECK (app_is_uuidv7(id)),
   CHECK (capacity BETWEEN 1 AND 20)
 );
-CREATE INDEX ride_offers_tenant_plan_status_created_idx ON ride_offers(tenant_id, plan_id, status, created_at);
+CREATE INDEX IF NOT EXISTS ride_offers_tenant_plan_status_created_idx ON ride_offers(tenant_id, plan_id, status, created_at);
 
-CREATE TABLE ride_requests (
+CREATE TABLE IF NOT EXISTS ride_requests (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   plan_id uuid NOT NULL,
@@ -385,10 +386,10 @@ CREATE TABLE ride_requests (
   CHECK (app_is_uuidv7(id)),
   CHECK (passenger_count BETWEEN 1 AND 8)
 );
-CREATE INDEX ride_requests_tenant_plan_status_created_idx ON ride_requests(tenant_id, plan_id, status, created_at);
-CREATE INDEX ride_requests_tenant_requester_idx ON ride_requests(tenant_id, requester_user_id);
+CREATE INDEX IF NOT EXISTS ride_requests_tenant_plan_status_created_idx ON ride_requests(tenant_id, plan_id, status, created_at);
+CREATE INDEX IF NOT EXISTS ride_requests_tenant_requester_idx ON ride_requests(tenant_id, requester_user_id);
 
-CREATE TABLE ride_assignments (
+CREATE TABLE IF NOT EXISTS ride_assignments (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   plan_id uuid NOT NULL,
@@ -404,7 +405,7 @@ CREATE TABLE ride_assignments (
   CHECK (app_is_uuidv7(id)),
   CHECK (passenger_count BETWEEN 1 AND 8)
 );
-CREATE INDEX ride_assignments_tenant_plan_offer_idx ON ride_assignments(tenant_id, plan_id, offer_id);
+CREATE INDEX IF NOT EXISTS ride_assignments_tenant_plan_offer_idx ON ride_assignments(tenant_id, plan_id, offer_id);
 
 CREATE OR REPLACE FUNCTION app_guard_attachment_state()
 RETURNS trigger
@@ -749,6 +750,26 @@ ALTER TABLE ride_requests FORCE ROW LEVEL SECURITY;
 ALTER TABLE ride_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ride_assignments FORCE ROW LEVEL SECURITY;
 
+-- 先行feature migrationのpolicyを置き換え、RLS policyのOR結合で古いtenant判定が残らないようにする。
+DO $$
+DECLARE
+  existing_policy record;
+BEGIN
+  FOR existing_policy IN
+    SELECT tablename, policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN ('attachments', 'events', 'attendance_responses', 'announcements', 'announcement_attachments', 'announcement_reads')
+  LOOP
+    EXECUTE format(
+      'DROP POLICY IF EXISTS %I ON public.%I',
+      existing_policy.policyname,
+      existing_policy.tablename
+    );
+  END LOOP;
+END
+$$;
+
 CREATE POLICY attachments_read ON attachments FOR SELECT
   USING (app_has_active_membership(tenant_id) AND (app_is_event_manager() OR owner_user_id = current_setting('app.user_id', true)));
 CREATE POLICY attachments_insert ON attachments FOR INSERT
@@ -756,6 +777,8 @@ CREATE POLICY attachments_insert ON attachments FOR INSERT
 CREATE POLICY attachments_update ON attachments FOR UPDATE
   USING (app_has_active_membership(tenant_id) AND (app_is_event_manager() OR owner_user_id = current_setting('app.user_id', true)))
   WITH CHECK (app_has_active_membership(tenant_id) AND (app_is_event_manager() OR owner_user_id = current_setting('app.user_id', true)));
+CREATE POLICY attachments_delete ON attachments FOR DELETE
+  USING (app_has_active_membership(tenant_id) AND app_is_event_manager());
 
 CREATE POLICY events_read ON events FOR SELECT USING (app_has_active_membership(tenant_id));
 CREATE POLICY events_write ON events FOR INSERT
