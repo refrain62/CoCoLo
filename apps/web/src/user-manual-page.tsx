@@ -6,7 +6,7 @@ export function UserManualPage() {
         <p>CoCoLo ご利用ガイド</p>
         <h1>CoCoLo 操作マニュアル</h1>
         <p>
-          CoCoLoで現在利用できる、ログイン・部員管理・年度繰り上げの操作を説明します。
+          このページでは、CoCoLoで現在利用できるログイン・部員管理・年度繰り上げの操作を説明します。
         </p>
         <nav aria-label="マニュアル操作">
           <a href="/login">ログイン・部員管理へ戻る</a>
@@ -44,7 +44,7 @@ export function UserManualPage() {
         <section id="first" aria-labelledby="first-heading">
           <h2 id="first-heading">はじめに</h2>
           <p>
-            画面上部の「環境」が表示されている場合は、いま接続している環境です。staging（検証環境）とproduction（本番環境）を間違えないよう、登録や年度繰り上げの前に確認してください。
+            画面上部に環境名が表示されている場合は、接続先を確認してください。staging（検証環境）とproduction（本番環境）を間違えないよう、登録や年度繰り上げの前に確認します。
           </p>
           <p>
             「環境未設定」と表示される場合は、登録や年度繰り上げなどの重要操作を行わず、チーム管理者へ確認してください。
@@ -59,7 +59,7 @@ export function UserManualPage() {
           <ol>
             <li>ログイン画面で登録済みのメールアドレスを入力します。</li>
             <li>パスワードを入力し、「ログイン」を押します。</li>
-            <li>認証に成功すると、所属チームの「部員一覧」が表示されます。</li>
+            <li>ログインに成功すると、所属チームの部員一覧が表示されます。</li>
           </ol>
           <p>
             ログインに失敗した場合は、メールアドレスとパスワードを確認してください。解決しない場合は、チーム管理者へ連絡してください。
@@ -87,11 +87,11 @@ export function UserManualPage() {
             </thead>
             <tbody>
               <tr>
-                <th scope="row">owner / admin / staff</th>
+                <th scope="row">オーナー・管理者・スタッフ</th>
                 <td>所属チームの部員</td>
               </tr>
               <tr>
-                <th scope="row">guardian</th>
+                <th scope="row">保護者</th>
                 <td>担当している部員</td>
               </tr>
             </tbody>
@@ -101,7 +101,7 @@ export function UserManualPage() {
         <section id="register" aria-labelledby="register-heading">
           <h2 id="register-heading">部員を登録する</h2>
           <p>
-            部員登録はownerまたはadminだけが実行できます。部員一覧の「部員を登録」を押して入力欄を開きます。
+            部員登録は、オーナーまたは管理者（owner / admin）だけが実行できます。部員一覧の「部員を登録」を押して入力欄を開きます。
           </p>
           <ol>
             <li>氏名を入力します。</li>
@@ -126,7 +126,7 @@ export function UserManualPage() {
         <section id="promotion" aria-labelledby="promotion-heading">
           <h2 id="promotion-heading">年度繰り上げを実行する</h2>
           <p>
-            年度繰り上げはownerまたはadmin向けの操作です。年度末など、チームで実行時期と対象年度を確認してから行ってください。
+            年度繰り上げは、オーナーまたは管理者（owner / admin）向けの操作です。年度末など、チームで実行時期と対象年度を確認してから行ってください。
           </p>
           <ol>
             <li>「対象年度」に2000〜2100の整数を入力します。</li>
@@ -136,13 +136,12 @@ export function UserManualPage() {
           </ol>
           <p>対象になるのは、次の条件をすべて満たす部員です。</p>
           <ul>
-            <li>在籍中（active）である。</li>
+            <li>在籍中である。</li>
             <li>区分が学生である。</li>
             <li>学年が登録されている。</li>
           </ul>
           <p>
-            一般、停止、退部、学年未設定の部員は対象外です。学年を一律に+1し、17以上は「OB
-            / 院生」と表示します。卒業・留年・退部は自動判定しません。
+            一般、停止、退部、学年未設定の部員は対象外です。学年を一律に1つ上げ、繰り上げ後の学年が17以上の場合は「OB / 院生」と表示します。卒業・留年・退部は自動判定しません。
           </p>
           <p>
             同じ年度の処理を再度実行しても、保存済みの結果を使って二重更新を防ぎます。実行後は表示された完了人数を確認してください。
@@ -154,7 +153,7 @@ export function UserManualPage() {
           <ul>
             <li>アカウントやパスワードを他の人と共有しないでください。</li>
             <li>
-              stagingとproductionを間違えないよう、操作前に環境表示を確認してください。
+              staging（検証環境）とproduction（本番環境）を間違えないよう、操作前に環境表示を確認してください。
             </li>
             <li>
               必要な権限がない情報を、スクリーンショットや別の方法で共有しないでください。
