@@ -56,6 +56,11 @@ export function createAuthClient({
 
   return {
     async signInWithPassword(email, password) {
+      if (baseUrl && !anonKey)
+        throw new AuthApiError(
+          503,
+          'Supabase Authの公開キーが設定されていません。',
+        );
       const response = await fetcher(endpoint, {
         method: 'POST',
         headers: {
@@ -68,7 +73,10 @@ export function createAuthClient({
       if (!response.ok) throw await readError(response);
 
       const body = (await response.json()) as AuthResponse;
-      if (!body.access_token)
+      if (
+        typeof body.access_token !== 'string' ||
+        body.access_token.length === 0
+      )
         throw new AuthApiError(502, '認証サーバーの応答が不正です。');
       return {
         accessToken: body.access_token,
