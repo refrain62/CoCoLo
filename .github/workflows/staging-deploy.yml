@@ -39,6 +39,11 @@ jobs:
           R2_BUCKET: cocolo-staging-private
           PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
           PUBLIC_APP_URL_ALLOWLIST: ${{ vars.PUBLIC_APP_URL_ALLOWLIST }}
+      - name: staging RLS用roleを準備
+        run: pnpm db:prepare:test
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: staging migrationを適用
         run: pnpm --filter @cocolo/db exec prisma migrate deploy
         env:
@@ -48,11 +53,6 @@ jobs:
         run: pnpm verify:database-version --expected-major 17
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - name: RLS用roleを準備
-        run: pnpm db:prepare:test
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: staging fixtureを投入
         run: pnpm db:seed:test
         env:
