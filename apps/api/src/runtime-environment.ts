@@ -17,10 +17,7 @@ const allowedBuckets: Record<AppEnvironment, string> = {
   production: 'cocolo-production-private',
 };
 
-function required(
-  environment: RuntimeEnvironmentInput,
-  name: string,
-): string {
+function required(environment: RuntimeEnvironmentInput, name: string): string {
   const value = environment[name]?.trim();
   if (!value) throw new Error(`${name}が必要です`);
   return value;
@@ -37,7 +34,9 @@ export function readRuntimeEnvironment(
 ): RuntimeEnvironment {
   const appEnv = environment.APP_ENV?.trim();
   if (appEnv !== 'local' && appEnv !== 'staging' && appEnv !== 'production')
-    throw new Error('APP_ENV は local / staging / production のいずれかが必要です');
+    throw new Error(
+      'APP_ENV は local / staging / production のいずれかが必要です',
+    );
 
   const databaseUrl = required(environment, 'DATABASE_URL');
   const directUrl = required(environment, 'DIRECT_URL');
@@ -81,10 +80,7 @@ export function readRuntimeEnvironment(
     );
 
   if (appEnv === 'production') {
-    required(
-      environment,
-      ['SUPABASE', 'SERVICE', 'ROLE', 'KEY'].join('_'),
-    );
+    required(environment, ['SUPABASE', 'SERVICE', 'ROLE', 'KEY'].join('_'));
     required(environment, 'RETIRED_DATA_RETENTION_DAYS');
     required(environment, 'AUDIT_LOG_RETENTION_DAYS');
   }

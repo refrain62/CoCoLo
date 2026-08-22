@@ -15,7 +15,8 @@ const deploymentRecord = assertDeploymentRecord(
 const expectedBaseUrl = process.env.STAGING_BASE_URL;
 if (
   expectedBaseUrl &&
-  new URL(deploymentRecord.deployedUrl).origin !== new URL(expectedBaseUrl).origin
+  new URL(deploymentRecord.deployedUrl).origin !==
+    new URL(expectedBaseUrl).origin
 )
   throw new Error('配置済みURLがstaging公開URLと一致しません');
 await mkdir('.evidence', { recursive: true });

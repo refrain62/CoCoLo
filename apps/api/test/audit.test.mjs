@@ -32,7 +32,10 @@ test('部員一覧の監査metadataへ検索語を保存しない', async () => 
   });
 
   assert.equal(auditEntries.length, 1);
-  assert.equal(JSON.stringify(auditEntries[0].metadata).includes(searchTerm), false);
+  assert.equal(
+    JSON.stringify(auditEntries[0].metadata).includes(searchTerm),
+    false,
+  );
   assert.deepEqual(auditEntries[0].metadata, {
     filters: { category: null, status: null, page: 1, pageSize: 50 },
   });

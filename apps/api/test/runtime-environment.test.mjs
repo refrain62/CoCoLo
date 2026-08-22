@@ -19,17 +19,14 @@ const validStagingEnvironment = {
 };
 
 test('API起動時に許可されたstaging環境を解決する', () => {
-  assert.deepEqual(
-    readRuntimeEnvironment(validStagingEnvironment),
-    {
-      appEnv: 'staging',
-      databaseUrl: validStagingEnvironment.DATABASE_URL,
-      directUrl: validStagingEnvironment.DIRECT_URL,
-      supabaseUrl: validStagingEnvironment.SUPABASE_URL,
-      supabaseJwksUrl: validStagingEnvironment.SUPABASE_JWKS_URL,
-      supabaseIssuer: 'https://staging.example.supabase.co/auth/v1',
-    },
-  );
+  assert.deepEqual(readRuntimeEnvironment(validStagingEnvironment), {
+    appEnv: 'staging',
+    databaseUrl: validStagingEnvironment.DATABASE_URL,
+    directUrl: validStagingEnvironment.DIRECT_URL,
+    supabaseUrl: validStagingEnvironment.SUPABASE_URL,
+    supabaseJwksUrl: validStagingEnvironment.SUPABASE_JWKS_URL,
+    supabaseIssuer: 'https://staging.example.supabase.co/auth/v1',
+  });
 });
 
 test('APP_ENV未設定でAPI起動を許可しない', () => {
