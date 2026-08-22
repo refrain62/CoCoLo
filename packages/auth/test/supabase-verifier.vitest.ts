@@ -1,8 +1,4 @@
-import {
-  exportJWK,
-  generateKeyPair,
-  SignJWT,
-} from 'jose';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createSupabaseTokenVerifier } from '../src/index.js';
 
