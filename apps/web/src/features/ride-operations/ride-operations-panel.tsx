@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import {
   createRideOperationsApi,
   RideApiError,
+  type RideDispatch,
   type RideMetrics,
   type RideOperationsApi,
   type RideSnapshot,
@@ -88,6 +89,7 @@ export function RideOperationsPanel({
 }: RideOperationsPanelProps) {
   const [snapshot, setSnapshot] = useState<RideSnapshot | null>(null);
   const [metrics, setMetrics] = useState<RideMetrics | null>(null);
+  const [dispatch, setDispatch] = useState<RideDispatch | null>(null);
   const [capacity, setCapacity] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState(
     members[0]?.id ?? '',
@@ -104,7 +106,14 @@ export function RideOperationsPanel({
     try {
       const nextSnapshot = await api.getSnapshot(planId);
       setSnapshot(nextSnapshot);
-      if (isManager) setMetrics(await api.getMetrics(planId));
+      if (isManager) {
+        const [nextMetrics, nextDispatch] = await Promise.all([
+          api.getMetrics(planId),
+          api.getDispatch(planId),
+        ]);
+        setMetrics(nextMetrics);
+        setDispatch(nextDispatch);
+      }
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -289,7 +298,32 @@ export function RideOperationsPanel({
             補助マッチングを実行
           </button>
           {metrics ? <Metrics metrics={metrics} /> : null}
-          <p>配車表は管理者だけが確認できます。</p>
+          {dispatch ? (
+            <table>
+              <caption>配車表</caption>
+              <thead>
+                <tr>
+                  <th scope="col">運転者識別子</th>
+                  <th scope="col">乗車希望識別子</th>
+                  <th scope="col">人数</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dispatch.assignments.map((assignment) => {
+                  const offer = dispatch.offers.find(
+                    (item) => item.id === assignment.offerId,
+                  );
+                  return (
+                    <tr key={assignment.id}>
+                      <td>{offer?.driverUserId ?? '不明'}</td>
+                      <td>{assignment.requestId}</td>
+                      <td>{assignment.passengerCount}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : null}
         </section>
       ) : null}
 
