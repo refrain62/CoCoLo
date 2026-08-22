@@ -821,7 +821,10 @@ export function CentralNavigation({
           </p>
         )
       ) : teamState.status !== 'ready' && route.kind !== 'team-selection' ? (
-        <p className="central-state" role={teamState.status === 'unavailable' ? 'alert' : 'status'}>
+        <p
+          className="central-state"
+          role={teamState.status === 'unavailable' ? 'alert' : 'status'}
+        >
           {teamState.status === 'unavailable'
             ? 'チーム選択APIが未接続のため、業務画面を表示できません。'
             : '利用可能なチームを確認中…'}
