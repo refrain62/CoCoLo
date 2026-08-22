@@ -444,11 +444,11 @@ export function createSqlLineRepository(
             JOIN line_connections c ON c.tenant_id = q.tenant_id
            WHERE q.status IN ('pending', 'failed')
              AND q.attempts < $2
-             AND (q.next_retry_at IS NULL OR q.next_retry_at <= $1)
-             AND c.status = 'connected' AND c.group_id = q.group_id
+           AND (q.next_retry_at IS NULL OR q.next_retry_at <= $1)
+           AND c.status = 'connected' AND c.group_id = q.group_id
            ORDER BY q.created_at, q.id
-           FOR UPDATE OF q SKIP LOCKED
            LIMIT 1
+           FOR UPDATE OF q SKIP LOCKED
         )
         UPDATE line_notification_queue q
            SET status = 'sending', attempts = q.attempts + 1
