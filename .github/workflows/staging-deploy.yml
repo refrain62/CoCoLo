@@ -49,6 +49,12 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      - name: migration履歴照合用のPrisma Clientを生成
+        run: pnpm --filter @cocolo/db exec prisma generate
+      - name: staging環境のmigration履歴をchecksumと照合
+        run: pnpm verify:migration-history
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: PostgreSQLのメジャーバージョンを検証
         run: pnpm verify:database-version --expected-major 17
         env:
