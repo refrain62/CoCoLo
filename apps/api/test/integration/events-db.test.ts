@@ -63,6 +63,15 @@ test('実DBの予定・出欠repositoryがtenant境界と一意回答を守る',
     memberId: MEMBER_A,
     response: 'attending',
   });
+  const secondGuardian = await repository.upsertAttendance({
+    tenantId: TENANT_A,
+    actorUserId: 'guardian-a2',
+    role: 'guardian',
+    eventId: created.id,
+    memberId: MEMBER_A,
+    response: 'absent',
+  });
+  assert.notEqual(first.id, secondGuardian.id);
   const second = await repository.upsertAttendance({
     tenantId: TENANT_A,
     actorUserId: 'guardian-a',
@@ -82,6 +91,47 @@ test('実DBの予定・出欠repositoryがtenant境界と一意回答を守る',
   });
   assert.equal(summary.absent, 1);
   assert.equal(summary.attending, 0);
+  assert.equal(summary.totalMembers, 2);
+  assert.equal(summary.unanswered, 1);
+});
+
+test('実DBの同時初回回答はatomic upsertで一意行へ収束する', async () => {
+  const created = await repository.create({
+    tenantId: TENANT_A,
+    actorUserId: 'owner-a',
+    role: 'owner',
+    ...eventInput(`concurrent-${Date.now()}`),
+  });
+
+  const results = await Promise.all([
+    repository.upsertAttendance({
+      tenantId: TENANT_A,
+      actorUserId: 'owner-a',
+      role: 'owner',
+      eventId: created.id,
+      memberId: MEMBER_A,
+      response: 'attending',
+    }),
+    repository.upsertAttendance({
+      tenantId: TENANT_A,
+      actorUserId: 'owner-a',
+      role: 'owner',
+      eventId: created.id,
+      memberId: MEMBER_A,
+      response: 'absent',
+    }),
+  ]);
+
+  assert.equal(results[0]?.id, results[1]?.id);
+  const summary = await repository.summary({
+    tenantId: TENANT_A,
+    actorUserId: 'owner-a',
+    role: 'owner',
+    eventId: created.id,
+  });
+  assert.equal(summary.totalMembers, 2);
+  assert.equal(summary.unanswered, 1);
+  assert.equal(summary.attending + summary.absent + summary.pending, 1);
 });
 
 test('実DBは締切後の管理者修正理由を要求する', async () => {

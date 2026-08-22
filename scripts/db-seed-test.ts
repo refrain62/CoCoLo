@@ -14,6 +14,7 @@ INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status)
 VALUES
   ('00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000001', 'owner-a', 'owner', 'active'),
   ('00000000-0000-7000-8000-000000000102', '00000000-0000-7000-8000-000000000001', 'guardian-a', 'guardian', 'active'),
+  ('00000000-0000-7000-8000-000000000104', '00000000-0000-7000-8000-000000000001', 'guardian-a2', 'guardian', 'active'),
   ('00000000-0000-7000-8000-000000000103', '00000000-0000-7000-8000-000000000002', 'owner-b', 'owner', 'active')
 ON CONFLICT (tenant_id, user_id) DO NOTHING;
 INSERT INTO members (id, tenant_id, name, kana, category, grade_level, status)
@@ -24,7 +25,8 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO guardian_members (id, tenant_id, user_id, member_id, relationship)
 VALUES
-  ('00000000-0000-7000-8000-000000000301', '00000000-0000-7000-8000-000000000001', 'guardian-a', '00000000-0000-7000-8000-000000000201', '母')
+  ('00000000-0000-7000-8000-000000000301', '00000000-0000-7000-8000-000000000001', 'guardian-a', '00000000-0000-7000-8000-000000000201', '母'),
+  ('00000000-0000-7000-8000-000000000302', '00000000-0000-7000-8000-000000000001', 'guardian-a2', '00000000-0000-7000-8000-000000000201', '父')
 ON CONFLICT (tenant_id, user_id, member_id) DO NOTHING;
 `;
 const dockerContainer = process.env.PSQL_DOCKER_CONTAINER;
