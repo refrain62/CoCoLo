@@ -5,7 +5,7 @@ import { createMemberRepositories } from '@cocolo/db';
 test('部員一覧の監査metadataへ検索語を保存しない', async () => {
   const auditEntries = [];
   const transaction = {
-    $queryRaw: async () => [],
+    $queryRaw: async () => [{ role: 'owner', status: 'active' }],
     tenantMembership: {
       findUnique: async () => ({ role: 'owner', status: 'active' }),
     },
