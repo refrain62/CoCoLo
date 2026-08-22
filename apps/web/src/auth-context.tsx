@@ -22,11 +22,19 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const defaultAuthClient = createAuthClient();
 
+function getStoredSession(): AuthSession | null {
+  if (typeof window === 'undefined') return null;
+  const accessToken = window.localStorage.getItem('cocolo.accessToken');
+  return accessToken
+    ? { accessToken, refreshToken: null, expiresAt: null }
+    : null;
+}
+
 export function AuthProvider({
   children,
   client = defaultAuthClient,
 }: PropsWithChildren<{ client?: AuthClient }>) {
-  const [session, setSession] = useState<AuthSession | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(getStoredSession);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
