@@ -3,6 +3,16 @@ import { z } from 'zod';
 const uuid = z.string().uuid();
 const dateTime = z.string().datetime({ offset: true });
 
+// 注文資源はDBの主キー生成器と同じUUIDv7だけを受け付け、旧形式や任意文字列を永続層へ渡さない。
+const uuidv7Pattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export const uuidv7ResourceIdSchema = z.string().regex(uuidv7Pattern);
+
+export function parseUuidv7ResourceId(input: unknown): string {
+  return uuidv7ResourceIdSchema.parse(input);
+}
+
 export const orderOptionSchema = z
   .object({
     name: z.string().trim().min(1).max(100),
@@ -29,7 +39,9 @@ export const orderCreateSchema = z
   })
   .strict();
 
-export const orderProductPathSchema = z.object({ orderId: uuid }).strict();
+export const orderProductPathSchema = z
+  .object({ orderId: uuidv7ResourceIdSchema })
+  .strict();
 
 export const orderEntryCreateSchema = z
   .object({
@@ -73,18 +85,23 @@ export const paymentStatusQuerySchema = z
   .object({ paymentStatus: z.enum(['unpaid', 'paid']).optional() })
   .strict();
 
-export function parseOrderCreate(input) {
+export type OrderCreateInput = z.infer<typeof orderCreateSchema>;
+export type OrderEntryCreateInput = z.infer<typeof orderEntryCreateSchema>;
+export type OrderStatusUpdateInput = z.infer<typeof orderStatusUpdateSchema>;
+export type PaymentUpdateInput = z.infer<typeof paymentUpdateSchema>;
+
+export function parseOrderCreate(input: unknown) {
   return orderCreateSchema.parse(input);
 }
 
-export function parseOrderEntryCreate(input) {
+export function parseOrderEntryCreate(input: unknown) {
   return orderEntryCreateSchema.parse(input);
 }
 
-export function parseOrderStatusUpdate(input) {
+export function parseOrderStatusUpdate(input: unknown) {
   return orderStatusUpdateSchema.parse(input);
 }
 
-export function parsePaymentUpdate(input) {
+export function parsePaymentUpdate(input: unknown) {
   return paymentUpdateSchema.parse(input);
 }

@@ -5,6 +5,7 @@ import {
   orderListQuerySchema,
   orderProductSchema,
   orderStatusUpdateSchema,
+  parseUuidv7ResourceId,
   paymentStatusQuerySchema,
   paymentUpdateSchema,
 } from '@cocolo/contracts/orders';
@@ -51,6 +52,14 @@ function idempotencyKey(c: Context<OrdersPaymentsApiEnv>) {
   if (key && key.length > 128)
     throw new InputError('Idempotency-Key は128文字以内で指定してください。');
   return key;
+}
+
+function resourceId(c: Context<OrdersPaymentsApiEnv>, name: string) {
+  try {
+    return parseUuidv7ResourceId(c.req.param(name));
+  } catch {
+    throw new InputError(`${name}はUUIDv7形式で指定してください。`);
+  }
 }
 
 class InputError extends Error {
@@ -237,13 +246,14 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   });
 
   app.get('/api/v1/orders/:orderId', async (c) => {
+    const orderId = resourceId(c, 'orderId');
     const auth = c.get('auth');
     try {
       const campaign = await options.ordersRepository.getCampaign({
         tenantId: auth.membership.tenantId,
         actorUserId: auth.userId,
         role: auth.membership.role,
-        orderId: c.req.param('orderId'),
+        orderId,
       });
       return c.json({ data: projectCampaign(campaign) });
     } catch (error) {
@@ -254,6 +264,7 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   });
 
   app.post('/api/v1/orders/:orderId/products', async (c) => {
+    const orderId = resourceId(c, 'orderId');
     const parsed = orderProductSchema.safeParse(await readJson(c));
     if (!parsed.success) throw new InputError('商品の入力値が不正です。');
     const auth = c.get('auth');
@@ -263,7 +274,7 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
           tenantId: auth.membership.tenantId,
           actorUserId: auth.userId,
           role: auth.membership.role,
-          orderId: c.req.param('orderId'),
+          orderId,
           idempotencyKey: idempotencyKey(c),
         },
         parsed.data,
@@ -277,6 +288,7 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   });
 
   app.patch('/api/v1/orders/:orderId/status', async (c) => {
+    const orderId = resourceId(c, 'orderId');
     const parsed = orderStatusUpdateSchema.safeParse(await readJson(c));
     if (!parsed.success)
       throw new InputError('募集案件状態の入力値が不正です。');
@@ -286,7 +298,7 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
         tenantId: auth.membership.tenantId,
         actorUserId: auth.userId,
         role: auth.membership.role,
-        orderId: c.req.param('orderId'),
+        orderId,
         status: parsed.data.status,
         idempotencyKey: idempotencyKey(c),
       });
@@ -299,6 +311,7 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   });
 
   app.get('/api/v1/orders/:orderId/entries', async (c) => {
+    const orderId = resourceId(c, 'orderId');
     const parsed = paymentStatusQuerySchema.safeParse(c.req.query());
     if (!parsed.success) throw new InputError('支払状態の絞り込みが不正です。');
     const auth = c.get('auth');
@@ -307,7 +320,7 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
         tenantId: auth.membership.tenantId,
         actorUserId: auth.userId,
         role: auth.membership.role,
-        orderId: c.req.param('orderId'),
+        orderId,
         paymentStatus: parsed.data.paymentStatus,
       });
       return c.json({ data: entries.map(projectEntry) });
@@ -319,6 +332,7 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   });
 
   app.post('/api/v1/orders/:orderId/entries', async (c) => {
+    const orderId = resourceId(c, 'orderId');
     const parsed = orderEntryCreateSchema.safeParse(await readJson(c));
     if (!parsed.success) throw new InputError('注文の入力値が不正です。');
     const auth = c.get('auth');
@@ -327,7 +341,7 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
         tenantId: auth.membership.tenantId,
         actorUserId: auth.userId,
         role: auth.membership.role,
-        orderId: c.req.param('orderId'),
+        orderId,
         idempotencyKey: idempotencyKey(c),
         entry: parsed.data,
       });
@@ -340,6 +354,8 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   });
 
   app.patch('/api/v1/orders/:orderId/entries/:entryId/payment', async (c) => {
+    const orderId = resourceId(c, 'orderId');
+    const entryId = resourceId(c, 'entryId');
     const parsed = paymentUpdateSchema.safeParse(await readJson(c));
     if (!parsed.success) throw new InputError('支払状態の入力値が不正です。');
     const auth = c.get('auth');
@@ -348,8 +364,8 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
         tenantId: auth.membership.tenantId,
         actorUserId: auth.userId,
         role: auth.membership.role,
-        orderId: c.req.param('orderId'),
-        entryId: c.req.param('entryId'),
+        orderId,
+        entryId,
         status: parsed.data.status,
         idempotencyKey: idempotencyKey(c),
       });
@@ -362,13 +378,14 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   });
 
   app.get('/api/v1/orders/:orderId/summary', async (c) => {
+    const orderId = resourceId(c, 'orderId');
     const auth = c.get('auth');
     try {
       const summary = await options.ordersRepository.summarize({
         tenantId: auth.membership.tenantId,
         actorUserId: auth.userId,
         role: auth.membership.role,
-        orderId: c.req.param('orderId'),
+        orderId,
       });
       return c.json({ data: summary });
     } catch (error) {
@@ -379,13 +396,14 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   });
 
   app.get('/api/v1/orders/:orderId/unpaid', async (c) => {
+    const orderId = resourceId(c, 'orderId');
     const auth = c.get('auth');
     try {
       const entries = await options.ordersRepository.listEntries({
         tenantId: auth.membership.tenantId,
         actorUserId: auth.userId,
         role: auth.membership.role,
-        orderId: c.req.param('orderId'),
+        orderId,
         paymentStatus: 'unpaid',
       });
       return c.json({ data: entries.map(projectEntry) });
@@ -397,13 +415,14 @@ export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
   });
 
   app.get('/api/v1/orders/:orderId/export.csv', async (c) => {
+    const orderId = resourceId(c, 'orderId');
     const auth = c.get('auth');
     try {
       const csv = await options.ordersRepository.exportCsv({
         tenantId: auth.membership.tenantId,
         actorUserId: auth.userId,
         role: auth.membership.role,
-        orderId: c.req.param('orderId'),
+        orderId,
       });
       c.header('Content-Type', 'text/csv; charset=utf-8');
       c.header('Content-Disposition', 'attachment; filename="orders.csv"');

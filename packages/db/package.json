@@ -12,10 +12,10 @@
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
-    "test": "pnpm build && node --test test/*.test.mjs",
-    "test:unit": "pnpm build && node --test test/*.test.mjs",
-    "lint": "node ../../scripts/prisma-validate.mjs",
-    "typecheck": "node ../../scripts/prisma-validate.mjs",
+    "test": "pnpm build && node --test test/*.test.ts",
+    "test:unit": "pnpm build && node --test test/*.test.ts",
+    "lint": "node ../../scripts/prisma-validate.ts",
+    "typecheck": "node ../../scripts/prisma-validate.ts",
     "prisma:validate": "prisma validate",
     "migrate:deploy": "prisma migrate deploy"
   },

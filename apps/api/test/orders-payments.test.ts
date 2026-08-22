@@ -198,3 +198,68 @@ test('注文者の越境を防ぎ、支払状態・集計・CSVを管理者に�
   );
   assert.equal(staffCsv.status, 403);
 });
+
+test('すべての注文URLでUUIDv7でないorderIdをDB処理前に拒否する', async () => {
+  const app = createTestApp();
+  const invalidOrderId = 'not-a-uuidv7';
+  const requests = [
+    { method: 'GET', path: `/api/v1/orders/${invalidOrderId}` },
+    {
+      method: 'POST',
+      path: `/api/v1/orders/${invalidOrderId}/products`,
+      body: '{}',
+    },
+    {
+      method: 'PATCH',
+      path: `/api/v1/orders/${invalidOrderId}/status`,
+      body: JSON.stringify({ status: 'closed' }),
+    },
+    {
+      method: 'GET',
+      path: `/api/v1/orders/${invalidOrderId}/entries`,
+    },
+    {
+      method: 'POST',
+      path: `/api/v1/orders/${invalidOrderId}/entries`,
+      body: '{}',
+    },
+    {
+      method: 'GET',
+      path: `/api/v1/orders/${invalidOrderId}/summary`,
+    },
+    {
+      method: 'GET',
+      path: `/api/v1/orders/${invalidOrderId}/unpaid`,
+    },
+    {
+      method: 'GET',
+      path: `/api/v1/orders/${invalidOrderId}/export.csv`,
+    },
+  ];
+
+  for (const request of requests) {
+    const response = await app.request(request.path, {
+      method: request.method,
+      headers: headers('admin-a'),
+      body: request.body,
+    });
+    assert.equal(response.status, 400, request.path);
+    assert.equal((await json(response)).error.code, 'VALIDATION_ERROR');
+  }
+});
+
+test('支払URLでUUIDv7でないentryIdをDB処理前に拒否する', async () => {
+  const app = createTestApp();
+  const campaign = await createCampaign(app);
+  const response = await app.request(
+    `/api/v1/orders/${campaign.id}/entries/not-a-uuidv7/payment`,
+    {
+      method: 'PATCH',
+      headers: headers('admin-a'),
+      body: JSON.stringify({ status: 'paid' }),
+    },
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal((await json(response)).error.code, 'VALIDATION_ERROR');
+});

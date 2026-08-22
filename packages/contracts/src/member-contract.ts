@@ -1,7 +1,13 @@
 import { z } from 'zod';
 
+export type MemberRole = 'owner' | 'admin' | 'staff' | 'guardian';
+export type MemberListQuery = z.infer<typeof memberListQuerySchema>;
+export type MemberCreateInput = z.infer<typeof memberCreateSchema>;
+export type PromotionMode = 'preview' | 'execute';
+export type PromotionRequest = z.infer<typeof promotionRequestSchema>;
+
 // 任意文字列もtrim後に空文字を許可しないことで、nullと未指定を明確に分ける。
-const optionalTrimmedString = (max) =>
+const optionalTrimmedString = (max: number) =>
   z.string().trim().min(1).max(max).nullable().optional();
 
 // 一覧条件はAPI境界で正規化し、ページサイズと検索語の上限を固定する。
