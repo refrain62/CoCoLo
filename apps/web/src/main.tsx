@@ -1,17 +1,25 @@
 import { AppShell } from '@cocolo/ui';
-import { StrictMode } from 'react';
+import { StrictMode, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AuthProvider, LoginPage, useAuth } from './auth-context.js';
+import { createMemberApi } from './member-api.js';
 import { MemberManagementPage } from './member-management-page.js';
 import './styles.css';
 
 function AuthenticatedApp() {
   const { session } = useAuth();
+  const memberApi = useMemo(
+    () =>
+      createMemberApi({
+        getAccessToken: () => session?.accessToken ?? null,
+      }),
+    [session?.accessToken],
+  );
   if (!session) return <LoginPage />;
 
   return (
     <AppShell>
-      <MemberManagementPage />
+      <MemberManagementPage api={memberApi} />
     </AppShell>
   );
 }
