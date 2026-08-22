@@ -15,7 +15,22 @@ jobs:
     environment: production
     concurrency: production-migration
     steps:
-      - name: staging環境の証跡と成果物をcheckout前に検証
+      - name: production Environmentの保護設定を検証
+        run: |
+          set -euo pipefail
+          response="$(gh api "repos/${GITHUB_REPOSITORY}/environments/production")"
+          echo "$response" | jq -e '
+            (.deployment_branch_policy.protected_branches == true)
+            and ([.protection_rules[]? | select(.type == "required_reviewers" and ((.reviewers // []) | length > 0))] | length > 0)
+          ' >/dev/null
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: 検証済みSHAのリポジトリをcheckout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.artifact_sha }}
+      - name: staging環境の証跡と成果物を検証
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_SHA: ${{ inputs.artifact_sha }}
@@ -30,11 +45,6 @@ jobs:
           jq -e --arg sha "$ARTIFACT_SHA" '(.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success")' .evidence/evidence.json
           test "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)" = "$(cut -d' ' -f1 .release/artifact.sha256)"
           gh attestation verify .release/release.tar.gz --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/staging-deploy.yml" --source-digest "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)"
-      - name: 検証済みSHAのリポジトリをcheckout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          persist-credentials: false
-          ref: ${{ inputs.artifact_sha }}
       - name: pnpmを準備
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:

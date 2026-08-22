@@ -16,6 +16,16 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: staging Environmentの保護設定を検証
+        run: |
+          set -euo pipefail
+          response="$(gh api "repos/${GITHUB_REPOSITORY}/environments/staging")"
+          echo "$response" | jq -e '
+            (.deployment_branch_policy.protected_branches == true)
+            and ([.protection_rules[]? | select(.type == "required_reviewers" and ((.reviewers // []) | length > 0))] | length > 0)
+          ' >/dev/null
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: pnpmを準備
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:

@@ -11,6 +11,7 @@ const workflowFiles = [
   'quality.yml',
   'staging-deploy.yml',
   'production-promote.yml',
+  'pr-trust-gate.yml',
 ] as const;
 type WorkflowName = (typeof workflowFiles)[number];
 type WorkflowRecord = Record<string, unknown>;
@@ -84,6 +85,10 @@ const stagingSteps: readonly StepPolicy[] = [
     kind: 'uses',
     action: `actions/checkout@${actionAllowlist['actions/checkout']}`,
     withValues: { 'persist-credentials': false },
+  },
+  {
+    kind: 'run',
+    envValues: { GH_TOKEN: githubExpression('github.token') },
   },
   {
     kind: 'uses',
@@ -203,10 +208,7 @@ const stagingSteps: readonly StepPolicy[] = [
 const productionSteps: readonly StepPolicy[] = [
   {
     kind: 'run',
-    envValues: {
-      GH_TOKEN: githubExpression('github.token'),
-      ARTIFACT_SHA: githubExpression('inputs.artifact_sha'),
-    },
+    envValues: { GH_TOKEN: githubExpression('github.token') },
   },
   {
     kind: 'uses',
@@ -214,6 +216,13 @@ const productionSteps: readonly StepPolicy[] = [
     withValues: {
       'persist-credentials': false,
       ref: githubExpression('inputs.artifact_sha'),
+    },
+  },
+  {
+    kind: 'run',
+    envValues: {
+      GH_TOKEN: githubExpression('github.token'),
+      ARTIFACT_SHA: githubExpression('inputs.artifact_sha'),
     },
   },
   {
@@ -273,6 +282,23 @@ const productionSteps: readonly StepPolicy[] = [
   },
 ];
 
+const trustedPrSteps: readonly StepPolicy[] = [
+  {
+    kind: 'uses',
+    action: `actions/checkout@${actionAllowlist['actions/checkout']}`,
+    withValues: { 'persist-credentials': false },
+  },
+  {
+    kind: 'uses',
+    action: `actions/setup-node@${actionAllowlist['actions/setup-node']}`,
+    withValues: { 'node-version': 24 },
+  },
+  {
+    kind: 'run',
+    envValues: { GH_TOKEN: githubExpression('github.token') },
+  },
+];
+
 function asRecord(value: unknown, message: string): WorkflowRecord {
   assert.ok(
     value !== null && typeof value === 'object' && !Array.isArray(value),
@@ -320,7 +346,11 @@ function parseWorkflow(name: WorkflowName, content: string): WorkflowRecord {
   );
 }
 
-function assertNoForbiddenValues(value: unknown, location: string): void {
+function assertNoForbiddenValues(
+  value: unknown,
+  location: string,
+  allowTrustedTrigger = false,
+): void {
   if (Array.isArray(value)) {
     for (const [index, item] of value.entries())
       assertNoForbiddenValues(item, `${location}[${String(index)}]`);
@@ -332,11 +362,12 @@ function assertNoForbiddenValues(value: unknown, location: string): void {
     return;
   }
   for (const [key, child] of Object.entries(value)) {
-    assert.notEqual(
-      key,
-      'pull_request_target',
-      `${location}: 禁止されたWorkflow構文です: pull_request_target`,
-    );
+    if (!allowTrustedTrigger)
+      assert.notEqual(
+        key,
+        'pull_request_target',
+        `${location}: 禁止されたWorkflow構文です: pull_request_target`,
+      );
     assert.notEqual(
       key,
       'workflow_run',
@@ -344,7 +375,7 @@ function assertNoForbiddenValues(value: unknown, location: string): void {
     );
     if (key === 'secrets' && child === 'inherit')
       assert.fail(`${location}.secrets: secrets: inheritは禁止です`);
-    assertNoForbiddenValues(child, `${location}.${key}`);
+    assertNoForbiddenValues(child, `${location}.${key}`, allowTrustedTrigger);
   }
 }
 
@@ -414,17 +445,23 @@ function assertNoUntrustedExpressions(value: unknown, location: string): void {
           `${location}: github.shaの用途を許可していません`,
         );
       if (body === 'github.token')
-        assert.equal(
-          location,
-          'production-promote.yml.jobs.production.steps[0].env.GH_TOKEN',
-          `${location}: github.tokenはproductionの読み取り専用CLI用途だけに限定します`,
+        assert.ok(
+          location ===
+              'production-promote.yml.jobs.production.steps[0].env.GH_TOKEN' ||
+            location ===
+              'production-promote.yml.jobs.production.steps[2].env.GH_TOKEN' ||
+            location ===
+              'staging-deploy.yml.jobs.staging.steps[1].env.GH_TOKEN' ||
+            location ===
+              'pr-trust-gate.yml.jobs.trusted-validation.steps[2].env.GH_TOKEN',
+          `${location}: github.tokenはEnvironment保護の読み取り専用CLI用途だけに限定します`,
         );
       if (body === 'inputs.artifact_sha')
         assert.ok(
           location ===
-            'production-promote.yml.jobs.production.steps[0].env.ARTIFACT_SHA' ||
+              'production-promote.yml.jobs.production.steps[2].env.ARTIFACT_SHA' ||
             location ===
-              'production-promote.yml.jobs.production.steps[8].env.ARTIFACT_SHA' ||
+              'production-promote.yml.jobs.production.steps[9].env.ARTIFACT_SHA' ||
             location ===
               'production-promote.yml.jobs.production.steps[1].with.ref',
           `${location}: 手動入力を許可されたproductionのSHA用途以外へ渡せません`,
@@ -532,7 +569,10 @@ function validateQualityServices(job: WorkflowRecord): void {
     ['image', 'env', 'ports', 'options'],
     'quality.yml.jobs.quality.services.postgres',
   );
-  assert.equal(postgres.image, 'postgres:17');
+  assert.equal(
+    postgres.image,
+    'postgres:17@sha256:a65e6a841f6c4dbc4abda3d67fa3bc21824e9611064fcd82e87ea67aad60a0c3',
+  );
   assertExactRecord(
     postgres.env,
     {
@@ -606,6 +646,35 @@ function validateQualityWorkflowDocument(workflow: WorkflowRecord): void {
   validateSteps('quality.yml', quality, qualitySteps);
 }
 
+function assertEnvironmentProtectionStep(
+  workflowName: WorkflowName,
+  job: WorkflowRecord,
+  index: number,
+  environment: 'staging' | 'production',
+) {
+  const steps = asArray(job.steps, `${workflowName}.jobs.steps`);
+  const step = asRecord(
+    steps[index],
+    `${workflowName}.jobs.steps[${String(index)}]`,
+  );
+  const command = String(step.run ?? '');
+  assert.match(
+    command,
+    new RegExp(`gh\\s+api[\\s\\S]+environments/${environment}`),
+    `${workflowName}: ${environment} EnvironmentをAPI検証してください`,
+  );
+  assert.match(
+    command,
+    /required_reviewers[\s\S]+length > 0/,
+    `${workflowName}: required reviewerを必須化してください`,
+  );
+  assert.match(
+    command,
+    /deployment_branch_policy\.protected_branches == true/,
+    `${workflowName}: protected branch policyを必須化してください`,
+  );
+}
+
 function validateStagingWorkflowDocument(workflow: WorkflowRecord): void {
   assertExactKeys(
     workflow,
@@ -646,6 +715,7 @@ function validateStagingWorkflowDocument(workflow: WorkflowRecord): void {
   assert.equal(staging['timeout-minutes'], 15);
   assert.equal(staging.environment, 'staging');
   validateSteps('staging-deploy.yml', staging, stagingSteps);
+  assertEnvironmentProtectionStep('staging-deploy.yml', staging, 1, 'staging');
 }
 
 function validateProductionWorkflowDocument(workflow: WorkflowRecord): void {
@@ -693,16 +763,51 @@ function validateProductionWorkflowDocument(workflow: WorkflowRecord): void {
   assert.equal(production.environment, 'production');
   assert.equal(production.concurrency, 'production-migration');
   validateSteps('production-promote.yml', production, productionSteps);
+  assertEnvironmentProtectionStep(
+    'production-promote.yml',
+    production,
+    0,
+    'production',
+  );
+}
+
+function validateTrustedPrWorkflowDocument(workflow: WorkflowRecord): void {
+  assertExactKeys(
+    workflow,
+    ['name', 'on', 'permissions', 'jobs'],
+    'pr-trust-gate.yml',
+  );
+  assert.equal(workflow.name, 'PR信頼境界ゲート');
+  const triggers = asRecord(workflow.on, 'pr-trust-gate.yml.on');
+  assertExactKeys(triggers, ['pull_request_target'], 'pr-trust-gate.yml.on');
+  assert.equal(triggers.pull_request_target, null);
+  assertExactRecord(
+    workflow.permissions,
+    { contents: 'read' },
+    'pr-trust-gate.yml.permissions',
+  );
+  const jobs = asRecord(workflow.jobs, 'pr-trust-gate.yml.jobs');
+  assertExactKeys(jobs, ['trusted-validation'], 'pr-trust-gate.yml.jobs');
+  const job = asRecord(jobs['trusted-validation'], 'pr-trust-gate.yml.jobs.trusted-validation');
+  assertExactKeys(
+    job,
+    ['runs-on', 'timeout-minutes', 'steps'],
+    'pr-trust-gate.yml.jobs.trusted-validation',
+  );
+  assert.equal(job['runs-on'], 'ubuntu-24.04');
+  assert.equal(job['timeout-minutes'], 10);
+  validateSteps('pr-trust-gate.yml', job, trustedPrSteps);
 }
 
 // 全Workflowの許可構造を検査する。未知のWorkflow名も実行経路の追加とみなして拒否する。
 export function validateWorkflow(name: WorkflowName, content: string): void {
   const workflow = parseWorkflow(name, content);
-  assertNoForbiddenValues(workflow, name);
+  assertNoForbiddenValues(workflow, name, name === 'pr-trust-gate.yml');
   if (name === 'quality.yml') validateQualityWorkflowDocument(workflow);
   if (name === 'staging-deploy.yml') validateStagingWorkflowDocument(workflow);
   if (name === 'production-promote.yml')
     validateProductionWorkflowDocument(workflow);
+  if (name === 'pr-trust-gate.yml') validateTrustedPrWorkflowDocument(workflow);
   assertNoUntrustedExpressions(workflow, name);
 }
 
