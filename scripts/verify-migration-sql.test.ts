@@ -238,9 +238,23 @@ test('RLS policyのUSINGとWITH CHECKにtenant境界を要求する', () => {
   }
 });
 
-test('tenant context未設定を許可するORとrole欠落をfail-closedで拒否する', () => {
+test('所属検索だけは本人一致付きのtenant未設定ORを許可し、弱体化は拒否する', () => {
+  const membershipDiscovery =
+    "CREATE POLICY tenant_memberships_select ON tenant_memberships FOR SELECT USING (user_id = current_setting('app.user_id', true) AND (NULLIF(current_setting('app.tenant_id', true), '') IS NULL OR tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid));";
+  assert.doesNotThrow(() =>
+    validateMigrationSql([
+      safeMigration,
+      {
+        path: '20260823110000_membership-discovery/migration.sql',
+        content: membershipDiscovery,
+      },
+    ]),
+  );
   for (const content of [
-    "CREATE POLICY tenant_memberships_select ON tenant_memberships FOR SELECT USING (user_id = current_setting('app.user_id', true) AND (NULLIF(current_setting('app.tenant_id', true), '') IS NULL OR tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid));",
+    membershipDiscovery.replace(
+      "user_id = current_setting('app.user_id', true) AND ",
+      '',
+    ),
     "CREATE POLICY audit_logs_insert ON audit_logs FOR INSERT WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);",
   ]) {
     assert.throws(() =>

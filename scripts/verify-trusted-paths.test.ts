@@ -29,3 +29,14 @@ test('deploy script改変の悪性fixtureを固定する', async () => {
   assert.match(fixture, /pnpm deploy:production/);
   assert.match(fixture, /DIRECT_URL/);
 });
+
+test('RLS弱体化とcolumn grantの悪性fixtureを固定する', async () => {
+  const fixture = await readFile(
+    path.join(root, 'scripts/fixtures/malicious-tenant-policy.sql'),
+    'utf8',
+  );
+  assert.match(fixture, /tenant_id = tenant_id/);
+  assert.match(fixture, /app\.role[^\n]+IS NOT NULL/);
+  assert.match(fixture, /malicious_missing_user_id/);
+  assert.match(fixture, /WITH GRANT OPTION/);
+});

@@ -73,6 +73,16 @@ const memberSelect = {
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
+// 所属検索は任意引数のSECURITY DEFINERを使わず、RLSが要求する本人contextだけをtransactionへ設定する。
+async function setUserContext(client: DatabaseClient, userId: string) {
+  await client.$queryRaw`
+    SELECT
+      set_config('app.tenant_id', '', true),
+      set_config('app.user_id', ${userId}, true),
+      set_config('app.role', '', true)
+  `;
+}
+
 // tenant・user・roleをtransaction-local設定へまとめて入れ、同じtransaction内の全クエリへRLS境界を適用する。
 async function setRlsContext(
   client: DatabaseClient,
@@ -260,12 +270,12 @@ export function createMemberRepositories(client: PrismaClient) {
       // active所属が複数ある場合はtenantを暗黙選択せず、API側で利用可能な所属なしとして扱う。
       findActiveByUserId: async (userId: string) =>
         client.$transaction(async (tx) => {
-          const memberships = await tx.$queryRaw<
-            Array<{ tenantId: string; role: Role }>
-          >`
-            SELECT tenant_id AS "tenantId", role
-            FROM public.app_resolve_active_membership(${userId})
-          `;
+          await setUserContext(tx, userId);
+          const memberships = await tx.tenantMembership.findMany({
+            where: { status: 'active' },
+            orderBy: { createdAt: 'asc' },
+            select: { tenantId: true, role: true },
+          });
           if (memberships.length !== 1) return null;
           const [membership] = memberships;
           if (!membership) return null;

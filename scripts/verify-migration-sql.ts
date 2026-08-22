@@ -427,12 +427,21 @@ function assertEffectivePolicyFailClosed(
     findPolicyExpression(statement, 'USING') ?? '',
     findPolicyExpression(statement, 'WITH', 'CHECK') ?? '',
   ];
-  for (const expression of expressions)
+  for (const expression of expressions) {
+    const normalized = compactSql(expression).toLowerCase().replace(/\s+/g, '');
+    const isMembershipDiscoveryPolicy =
+      tableName === 'tenant_memberships' &&
+      name === 'tenant_memberships_select' &&
+      command === 'SELECT' &&
+      normalized ===
+        "user_id=current_setting('app.user_id',true)and(nullif(current_setting('app.tenant_id',true),'')isnullortenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid)";
+    if (isMembershipDiscoveryPolicy) continue;
     assert.doesNotMatch(
-      compactSql(expression).toLowerCase(),
+      normalized,
       /\bis\s+null\s+or\b|\bor\s+true\b|\btrue\s+or\b|\b1\s*=\s*1\b/i,
       `${file.path}: ${tableName}.${name}のpolicyはfail-closedでなければなりません。`,
     );
+  }
   if (command !== 'SELECT')
     assert.match(
       statement,
@@ -459,6 +468,10 @@ function assertGrantTarget(file: MigrationSqlFile, statement: string) {
 function assertAllowedStatement(file: MigrationSqlFile, statement: string) {
   const compact = compactSql(statement);
   const membershipResolverBody = /AS\s+\$\$(.*)\$\$/i.exec(compact)?.[1] ?? '';
+  const isMembershipResolverDrop =
+    /^DROP\s+FUNCTION\s+IF\s+EXISTS\s+public\.app_resolve_active_membership\(text\)$/i.test(
+      compact,
+    );
   const isMembershipResolver =
     /^CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?app_resolve_active_membership\s*\(\s*p_user_id\s+text\s*\)/i.test(
       compact,
@@ -475,6 +488,7 @@ function assertAllowedStatement(file: MigrationSqlFile, statement: string) {
       compact,
     ) &&
     !/\bOR\b|current_setting/i.test(membershipResolverBody);
+  if (isMembershipResolverDrop) return;
   assert.doesNotMatch(
     compact,
     new RegExp(
