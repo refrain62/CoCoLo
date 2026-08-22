@@ -3,10 +3,12 @@ import type {
   MemberCreateInput,
   MemberListQuery,
   MemberRole,
+  PromotionMode,
 } from '@cocolo/contracts/member';
 import {
   memberCreateSchema,
   memberListQuerySchema,
+  promotionRequestSchema,
 } from '@cocolo/contracts/member';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
 
@@ -48,10 +50,31 @@ export type MemberRepository = {
   ) => Promise<MemberRecord>;
 };
 
+export type PromotionRecord = {
+  mode: PromotionMode;
+  fiscalYear: number;
+  status: 'preview' | 'completed' | 'failed';
+  previewCount: number;
+  promotedCount: number;
+  result: unknown;
+};
+
+export type PromotionRepository = {
+  run: (input: {
+    tenantId: string;
+    actorUserId: string;
+    role: MemberRole;
+    mode: PromotionMode;
+    fiscalYear: number;
+    idempotencyKey: string | null;
+  }) => Promise<PromotionRecord>;
+};
+
 export type AppOptions = {
   verifyToken?: TokenVerifier;
   membershipRepository?: MembershipRepository;
   memberRepository?: MemberRepository;
+  promotionRepository?: PromotionRepository;
 };
 
 export type ApiEnv = {
@@ -68,7 +91,7 @@ const managerRoles = new Set<MemberRole>(['owner', 'admin']);
 
 function errorResponse(
   c: Context<ApiEnv>,
-  status: 400 | 401 | 403 | 404 | 500 | 503,
+  status: 400 | 401 | 403 | 404 | 409 | 500 | 503,
   code: string,
   message: string,
   details: unknown = {},
@@ -248,6 +271,74 @@ export function createApp(options: AppOptions = {}) {
       parsed.data,
     );
     return c.json({ data: projectMember(member, auth.membership.role) }, 201);
+  });
+
+  app.post('/api/v1/members/promote', async (c) => {
+    if (!options.promotionRepository)
+      return errorResponse(
+        c,
+        503,
+        'DEPENDENCY_UNAVAILABLE',
+        '年度繰り上げデータストアが設定されていません。',
+      );
+    const auth = c.get('auth');
+    if (!managerRoles.has(auth.membership.role))
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        '年度繰り上げを実行する権限がありません。',
+      );
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return errorResponse(c, 400, 'VALIDATION_ERROR', 'JSON入力が不正です。');
+    }
+    const parsed = promotionRequestSchema.safeParse(body);
+    if (!parsed.success)
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        '入力値が不正です。',
+        parsed.error.flatten(),
+      );
+    const idempotencyKey = c.req.header('idempotency-key')?.trim() || null;
+    if (idempotencyKey && idempotencyKey.length > 128)
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        'Idempotency-Keyが長すぎます。',
+      );
+    if (parsed.data.mode === 'execute' && !idempotencyKey)
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        'executeにはIdempotency-Keyが必要です。',
+      );
+    try {
+      const promotion = await options.promotionRepository.run({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        mode: parsed.data.mode,
+        fiscalYear: parsed.data.fiscalYear,
+        idempotencyKey,
+      });
+      return c.json({ data: promotion });
+    } catch (error) {
+      if (error instanceof Error && 'status' in error && error.status === 409)
+        return errorResponse(
+          c,
+          409,
+          'PROMOTION_CONFLICT',
+          '年度繰り上げの実行が競合しました。',
+        );
+      throw error;
+    }
   });
 
   return app;

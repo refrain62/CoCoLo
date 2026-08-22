@@ -16,6 +16,7 @@ import {
   type MemberListFilters,
   type MemberStatus,
   type MemberSummary,
+  type PromotionSummary,
 } from './member-api.js';
 
 const emptyFilters: MemberListFilters = {
@@ -265,6 +266,118 @@ function MemberForm({
   );
 }
 
+function PromotionPanel({ api }: { api: MemberApi }) {
+  const [fiscalYear, setFiscalYear] = useState(() =>
+    String(new Date().getFullYear()),
+  );
+  const [preview, setPreview] = useState<PromotionSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function readFiscalYear() {
+    const parsed = Number(fiscalYear);
+    if (!Number.isInteger(parsed) || parsed < 2000 || parsed > 2100)
+      throw new Error('対象年度は2000〜2100の整数で入力してください');
+    return parsed;
+  }
+
+  async function previewPromotion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+    let year: number;
+    try {
+      year = readFiscalYear();
+    } catch (validationError) {
+      setError(getErrorMessage(validationError));
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      setPreview(await api.promote({ mode: 'preview', fiscalYear: year }));
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function executePromotion() {
+    if (!preview) return;
+    if (
+      !window.confirm(
+        '表示された対象件数を確認し、年度繰り上げを実行しますか？',
+      )
+    )
+      return;
+    setError(null);
+    setSuccess(null);
+    setIsSubmitting(true);
+    try {
+      const result = await api.promote(
+        { mode: 'execute', fiscalYear: preview.fiscalYear },
+        crypto.randomUUID(),
+      );
+      setPreview(result);
+      setSuccess(`${result.promotedCount}名の年度繰り上げを完了しました`);
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="promotion-heading">
+      <h2 id="promotion-heading">年度繰り上げ</h2>
+      <p>
+        管理者向け操作です。在籍中の学生だけを対象にし、一般・停止・退部・学年未設定は対象外です。
+      </p>
+      <p>
+        17以上は「OB /
+        院生」と表示します。卒業・留年は自動判定せず、退部者も変更しません。
+      </p>
+      <form onSubmit={previewPromotion}>
+        <label htmlFor="promotion-fiscal-year">対象年度</label>
+        <input
+          id="promotion-fiscal-year"
+          inputMode="numeric"
+          max="2100"
+          min="2000"
+          type="number"
+          value={fiscalYear}
+          onChange={(event) => {
+            setFiscalYear(event.target.value);
+            setPreview(null);
+            setError(null);
+          }}
+        />
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? '確認中…' : '対象件数を確認'}
+        </button>
+      </form>
+      {preview ? (
+        <div aria-live="polite">
+          <p>
+            {preview.fiscalYear}年度の対象件数: {preview.previewCount}名
+          </p>
+          <button
+            type="button"
+            disabled={isSubmitting || preview.status === 'completed'}
+            onClick={() => void executePromotion()}
+          >
+            {preview.status === 'completed' ? '実行済み' : '確認して実行'}
+          </button>
+        </div>
+      ) : null}
+      {error ? <p role="alert">{error}</p> : null}
+      {success ? <p role="status">{success}</p> : null}
+    </section>
+  );
+}
+
 export function MemberManagementPage({
   api = defaultMemberApi,
 }: {
@@ -387,6 +500,8 @@ export function MemberManagementPage({
           <MemberForm api={api} onCreated={setMembersAfterCreate(setMembers)} />
         ) : null}
       </section>
+
+      <PromotionPanel api={api} />
     </>
   );
 }
