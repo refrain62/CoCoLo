@@ -54,5 +54,5 @@ const result = spawnSync(command, args, {
   shell: process.platform === 'win32' && !dockerContainer,
 });
 if (result.error) throw result.error;
-assert.equal(result.status, 0, 'テストfixtureの投入に失敗しました');
-console.log('テストfixtureを投入しました。');
+assert.equal(result.status, 0, 'テストデータの投入に失敗しました。');
+console.log('テストデータを投入しました。');

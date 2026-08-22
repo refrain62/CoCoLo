@@ -129,7 +129,7 @@ async function assertActiveMembership(
     membership?.status !== 'active' ||
     membership?.role !== (input.role as Role)
   )
-    throw new Error('active membership context changed');
+    throw new Error('有効な所属情報が処理中に変更されました。');
 }
 
 function promotionRequestHash(input: {
@@ -197,7 +197,7 @@ async function lockPromotionTenant(
   client: Prisma.TransactionClient,
   tenantId: string,
 ) {
-  // tenantsはアプリroleに更新policyを与えないため、tenant単位の直列化はtransaction lockで行う。
+  // tenants テーブルにはアプリケーションロール向けの更新ポリシーを与えないため、tenant 単位の直列化はトランザクションロックで行う。
   await client.$executeRaw`
     SELECT pg_advisory_xact_lock(hashtextextended(${tenantId}, 0))
   `;
@@ -401,11 +401,11 @@ export function createMemberRepositories(client: PrismaClient) {
             : null;
           if (sameKey && sameKey.fiscalYear !== input.fiscalYear)
             throw new PromotionConflictError(
-              'Idempotency-Keyが別年度で使用されています',
+              'Idempotency-Key が別の年度で使用されています。',
             );
           if (sameKey && sameKey.requestHash !== requestHash)
             throw new PromotionConflictError(
-              '同じIdempotency-Keyでrequest内容が変更されています',
+              '同じ Idempotency-Key でリクエスト内容が変更されています。',
             );
           if (sameKey && input.mode === 'preview')
             return toPromotionRecord(sameKey, input.mode);
@@ -416,7 +416,7 @@ export function createMemberRepositories(client: PrismaClient) {
           });
           if (run && run.actorUserId !== input.actorUserId)
             throw new PromotionConflictError(
-              '同じ年度の年度繰り上げを別の実行者へ変更できません',
+              '同じ年度の年度繰り上げを別の実行者へ変更できません。',
             );
           if (run?.status !== 'completed') {
             if (
@@ -424,17 +424,17 @@ export function createMemberRepositories(client: PrismaClient) {
               run.idempotencyKey !== input.idempotencyKey
             )
               throw new PromotionConflictError(
-                '同じ年度のIdempotency-Keyは変更できません',
+                '同じ年度の Idempotency-Key は変更できません。',
               );
             if (run?.requestHash && run.requestHash !== requestHash)
               throw new PromotionConflictError(
-                '同じ年度のrequest hashは変更できません',
+                '同じ年度のリクエストハッシュは変更できません。',
               );
           }
           if (input.mode === 'preview') {
             if (run?.status === 'failed')
               throw new PromotionConflictError(
-                'failedの年度繰り上げはexecuteで再試行してください',
+                'failed 状態の年度繰り上げは実行モードで再試行してください。',
               );
             if (run?.status === 'completed')
               return toPromotionRecord(run, input.mode);

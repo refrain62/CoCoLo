@@ -44,5 +44,5 @@ const result = spawnSync(command, args, {
   shell: process.platform === 'win32' && !dockerContainer,
 });
 if (result.error) throw result.error;
-assert.equal(result.status, 0, 'テストDBのRLS role準備に失敗しました');
-console.log('テストDBのcocolo_app/RLS roleを準備しました。');
+assert.equal(result.status, 0, 'テスト DB の RLS 用ロール準備に失敗しました。');
+console.log('テスト DB の cocolo_app ロールと RLS 用ロールを準備しました。');

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseUploadSessionInput } from '../src/upload-contract.mjs';
 
-test('upload sessionは許可MIME・20MiB以下・owner scopeを受け付ける', () => {
+test('アップロードセッションは許可 MIME・20 MiB 以下・所有者の範囲を受け付ける', () => {
   const parsed = parseUploadSessionInput({
     mediaType: 'image/jpeg',
     byteSize: 20 * 1024 * 1024,
@@ -16,7 +16,7 @@ test('upload sessionは許可MIME・20MiB以下・owner scopeを受け付ける'
   });
 });
 
-test('upload sessionはSVG、0 byte、20MiB超過を拒否する', () => {
+test('アップロードセッションは SVG、0 バイト、20 MiB 超過を拒否する', () => {
   for (const input of [
     { mediaType: 'image/svg+xml', byteSize: 1, ownerUserId: 'user-1' },
     { mediaType: 'image/png', byteSize: 0, ownerUserId: 'user-1' },

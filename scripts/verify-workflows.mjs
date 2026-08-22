@@ -23,8 +23,8 @@ for (const file of files.filter(
     assert.match(
       match[2],
       /^[0-9a-f]{40}$/,
-      `${file}: ActionはSHA固定が必要です: ${match[1]}`,
+      `${file}: Action は SHA 固定が必要です: ${match[1]}`,
     );
   }
 }
-console.log('GitHub Actions workflowを検証しました。');
+console.log('GitHub Actions のワークフローを検証しました。');

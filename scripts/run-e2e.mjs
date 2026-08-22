@@ -6,12 +6,12 @@ assert.ok(environment === 'local' || environment === 'staging');
 assert.notEqual(
   process.env.APP_ENV,
   'production',
-  'productionからE2Eを起動できません',
+  'production 環境から E2E テストを起動できません。',
 );
 if (environment === 'staging')
   assert.ok(
     process.env.STAGING_BASE_URL,
-    'staging E2EにはSTAGING_BASE_URLが必要です',
+    'staging 環境の E2E テストには STAGING_BASE_URL が必要です。',
   );
 
 const command = process.platform === 'win32' ? 'playwright.cmd' : 'playwright';

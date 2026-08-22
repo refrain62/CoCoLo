@@ -15,14 +15,14 @@ const allowed = {
 const appEnv = process.env.APP_ENV;
 assert.ok(
   appEnv && appEnv in allowed,
-  'APP_ENV は local / staging / production のいずれかが必要です',
+  'APP_ENV には local / staging / production のいずれかを指定してください。',
 );
 const expectedIndex = process.argv.indexOf('--expected');
 if (expectedIndex !== -1)
   assert.equal(
     appEnv,
     process.argv[expectedIndex + 1],
-    'APP_ENVが期待値と一致しません',
+    'APP_ENV が期待値と一致しません。',
   );
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URL が必要です');
 assert.ok(process.env.DIRECT_URL, 'DIRECT_URL が必要です');
@@ -38,48 +38,48 @@ if (allowed[appEnv].PUBLIC_APP_URL)
 if (appEnv !== 'local') {
   assert.ok(
     process.env.SUPABASE_ALLOWED_URL,
-    `${appEnv}ではSUPABASE_ALLOWED_URLが必要です`,
+    `${appEnv} 環境では SUPABASE_ALLOWED_URL が必要です。`,
   );
   assert.ok(
     process.env.SUPABASE_ALLOWED_JWKS_URL,
-    `${appEnv}ではSUPABASE_ALLOWED_JWKS_URLが必要です`,
+    `${appEnv} 環境では SUPABASE_ALLOWED_JWKS_URL が必要です。`,
   );
   assert.ok(
     process.env.PUBLIC_APP_URL_ALLOWLIST,
-    `${appEnv}ではPUBLIC_APP_URL_ALLOWLISTが必要です`,
+    `${appEnv} 環境では PUBLIC_APP_URL_ALLOWLIST が必要です。`,
   );
 }
 if (process.env.SUPABASE_ALLOWED_URL)
   assert.equal(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ALLOWED_URL,
-    'SUPABASE_URLが許可された環境値と一致しません',
+    'SUPABASE_URL が許可された環境値と一致しません。',
   );
 if (process.env.SUPABASE_ALLOWED_JWKS_URL)
   assert.equal(
     process.env.SUPABASE_JWKS_URL,
     process.env.SUPABASE_ALLOWED_JWKS_URL,
-    'SUPABASE_JWKS_URLが許可された環境値と一致しません',
+    'SUPABASE_JWKS_URL が許可された環境値と一致しません。',
   );
 if (process.env.PUBLIC_APP_URL_ALLOWLIST)
   assert.ok(
     process.env.PUBLIC_APP_URL_ALLOWLIST.split(',')
       .map((value) => value.trim())
       .includes(process.env.PUBLIC_APP_URL),
-    'PUBLIC_APP_URLが許可リストに含まれていません',
+    'PUBLIC_APP_URL が許可リストに含まれていません。',
   );
 if (appEnv === 'production') {
   assert.ok(
     process.env.SUPABASE_SERVICE_ROLE_KEY,
-    'productionではService Role Keyが必要です',
+    'production 環境では Service Role Key が必要です。',
   );
   assert.ok(
     process.env.RETIRED_DATA_RETENTION_DAYS,
-    'productionの保持期間が必要です',
+    'production 環境の退部データ保持期間が必要です。',
   );
   assert.ok(
     process.env.AUDIT_LOG_RETENTION_DAYS,
-    'productionの監査ログ保持期間が必要です',
+    'production 環境の監査ログ保持期間が必要です。',
   );
 }
 console.log(`${appEnv} 環境設定を検証しました。`);

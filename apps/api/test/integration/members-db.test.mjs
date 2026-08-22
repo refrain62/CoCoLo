@@ -12,7 +12,7 @@ assert.ok(process.env.DATABASE_URL, 'DATABASE_URLが必要です');
 const prisma = createPrismaClient();
 const repositories = createMemberRepositories(prisma);
 
-test('実PostgreSQLのRLSがownerのtenant境界を強制する', async () => {
+test('実 PostgreSQL の RLS が owner のテナント境界を強制する', async () => {
   const membership =
     await repositories.membershipRepository.findActiveByUserId('owner-a');
   assert.deepEqual(membership, { tenantId: TENANT_A, role: 'owner' });
@@ -33,7 +33,7 @@ test('実PostgreSQLのRLSがownerのtenant境界を強制する', async () => {
   );
 });
 
-test('実PostgreSQLのRLSがguardianを担当部員だけに限定する', async () => {
+test('実 PostgreSQL の RLS が guardian を担当部員だけに限定する', async () => {
   const membership =
     await repositories.membershipRepository.findActiveByUserId('guardian-a');
   assert.deepEqual(membership, { tenantId: TENANT_A, role: 'guardian' });
@@ -51,7 +51,7 @@ test('実PostgreSQLのRLSがguardianを担当部員だけに限定する', async
   );
 });
 
-test('実PostgreSQLのowner登録は同一transactionで監査される', async () => {
+test('実 PostgreSQL の owner 登録は同じトランザクションで監査される', async () => {
   const created = await repositories.memberRepository.create(
     {
       tenantId: TENANT_A,

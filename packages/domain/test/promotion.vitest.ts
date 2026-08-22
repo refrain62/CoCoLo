@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { planPromotion } from '../src/index.js';
 
 describe('年度繰り上げ', () => {
-  it('activeのstudentだけを一度だけ+1する計画を作る', () => {
+  it('在籍中の学生だけを一度だけ +1 する計画を作る', () => {
     expect(
       planPromotion([
         { id: 'student', category: 'student', gradeLevel: 9, status: 'active' },
