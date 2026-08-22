@@ -664,14 +664,14 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
     rows<{ outcome: string; outbox_id: string | null }>(
       app,
       `SELECT outcome, outbox_id
-         FROM app_process_line_notification_outbox($1::timestamptz, $2)`,
+         FROM app_process_line_notification_outbox($1::timestamptz, $2::integer)`,
       '2099-08-01T00:00:00Z',
       5,
     ),
     rows<{ outcome: string; outbox_id: string | null }>(
       app,
       `SELECT outcome, outbox_id
-         FROM app_process_line_notification_outbox($1::timestamptz, $2)`,
+         FROM app_process_line_notification_outbox($1::timestamptz, $2::integer)`,
       '2099-08-01T00:00:00Z',
       5,
     ),
@@ -722,7 +722,7 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
   }>(
     app,
     `SELECT outcome, outbox_id
-       FROM app_process_line_notification_outbox($1::timestamptz, $2)`,
+       FROM app_process_line_notification_outbox($1::timestamptz, $2::integer)`,
     '2099-08-01T00:00:00Z',
     5,
   );
