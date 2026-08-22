@@ -8,7 +8,7 @@ afterEach(() => {
 });
 
 describe('年度繰り上げAPIクライアント', () => {
-  it('previewは年度だけをJSONで送信する', async () => {
+  it('プレビューは年度だけを JSON で送信する', async () => {
     let request: { url: string; init?: RequestInit } | undefined;
     globalThis.fetch = async (input, init) => {
       request = { url: String(input), init };
@@ -43,7 +43,7 @@ describe('年度繰り上げAPIクライアント', () => {
     );
   });
 
-  it('executeはIdempotency-Keyをヘッダーへ渡す', async () => {
+  it('実行モードは Idempotency-Key をヘッダーへ渡す', async () => {
     let headers: HeadersInit | undefined;
     globalThis.fetch = async (_input, init) => {
       headers = init?.headers;

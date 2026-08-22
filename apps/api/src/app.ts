@@ -317,14 +317,14 @@ export function createApp(options: AppOptions = {}) {
         c,
         400,
         'VALIDATION_ERROR',
-        'Idempotency-Keyが長すぎます。',
+        'Idempotency-Key が長すぎます。',
       );
     if (parsed.data.mode === 'execute' && !idempotencyKey)
       return errorResponse(
         c,
         400,
         'VALIDATION_ERROR',
-        'executeにはIdempotency-Keyが必要です。',
+        '実行モードでは Idempotency-Key が必要です。',
       );
     try {
       const promotion = await options.promotionRepository.run({

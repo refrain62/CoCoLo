@@ -60,10 +60,10 @@ export const openapiDocument = {
           },
         },
         responses: {
-          200: { description: '検証済み添付' },
+          200: { description: '検証済みの添付ファイル' },
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
-          409: { description: 'セッション再利用またはrequest競合' },
+          409: { description: 'セッションの再利用またはリクエストの競合' },
         },
       },
     },
@@ -77,7 +77,8 @@ export const openapiDocument = {
             in: 'header',
             required: false,
             schema: { type: 'string', minLength: 1, maxLength: 128 },
-            description: 'executeでは必須。同一requestの再送を安全に処理する。',
+            description:
+              '実行モードでは必須です。同じリクエストの再送を安全に処理します。',
           },
         ],
         requestBody: {
@@ -100,7 +101,9 @@ export const openapiDocument = {
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
           403: { $ref: '#/components/responses/Forbidden' },
-          409: { description: '同一keyのrequest競合または年度実行競合' },
+          409: {
+            description: '同じキーのリクエスト競合または年度繰り上げの実行競合',
+          },
         },
       },
     },
@@ -200,7 +203,7 @@ export const openapiDocument = {
     },
     responses: {
       BadRequest: {
-        description: '入力不正',
+        description: '入力値が不正です。',
         content: {
           'application/json': {
             schema: { $ref: '#/components/schemas/Error' },
@@ -208,7 +211,7 @@ export const openapiDocument = {
         },
       },
       Unauthorized: {
-        description: '未認証',
+        description: '認証が必要です。',
         content: {
           'application/json': {
             schema: { $ref: '#/components/schemas/Error' },
@@ -216,7 +219,7 @@ export const openapiDocument = {
         },
       },
       Forbidden: {
-        description: '権限不足',
+        description: 'この操作を実行する権限がありません。',
         content: {
           'application/json': {
             schema: { $ref: '#/components/schemas/Error' },

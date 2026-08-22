@@ -4,7 +4,7 @@ import { assertDeploymentRecord } from './deployment-contract.mjs';
 
 // stagingで実行済みのmigration・smoke・E2Eと、配置したartifact SHAをproduction昇格用証跡へ束ねる。
 if (!/^[0-9a-f]{40}$/.test(process.env.ARTIFACT_SHA ?? ''))
-  throw new Error('ARTIFACT_SHAは40桁の小文字SHA-1で指定してください');
+  throw new Error('ARTIFACT_SHA は40桁の小文字 SHA-1 で指定してください。');
 const artifactSha = process.env.ARTIFACT_SHA;
 const deploymentRecordPath =
   process.env.STAGING_DEPLOYMENT_RECORD ??
@@ -19,7 +19,7 @@ if (
   new URL(deploymentRecord.deployedUrl).origin !==
     new URL(expectedBaseUrl).origin
 )
-  throw new Error('配置済みURLがstaging公開URLと一致しません');
+  throw new Error('配置済み URL が staging 環境の公開 URL と一致しません。');
 await mkdir('.evidence', { recursive: true });
 const evidence = {
   workflowName: 'ステージングへデプロイ',
@@ -41,4 +41,4 @@ await writeFile(
   `${JSON.stringify(evidence, null, 2)}\n`,
   'utf8',
 );
-console.log('staging evidenceを作成しました。');
+console.log('staging 環境の配置証跡を作成しました。');

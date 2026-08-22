@@ -61,7 +61,7 @@ for (const file of await filesUnder(root)) {
     content.includes('@cocolo/test-fixtures')
   ) {
     violations.push(
-      `${relative}: production code から test-fixtures を参照しています`,
+      `${relative}: 本番コードから test-fixtures を参照しています`,
     );
   }
   if (
@@ -76,4 +76,4 @@ if (violations.length) {
   console.error(violations.join('\n'));
   process.exit(1);
 }
-console.log('workspace依存境界を検証しました。');
+console.log('ワークスペースの依存境界を検証しました。');

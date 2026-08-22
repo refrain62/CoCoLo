@@ -31,25 +31,25 @@ export const memberCreateSchema = z
       context.addIssue({
         code: 'custom',
         path: ['gradeLevel'],
-        message: 'studentにはgradeLevelが必要です',
+        message: '学生の場合は学年を入力してください。',
       });
     if (value.category === 'student' && value.ageGroup != null)
       context.addIssue({
         code: 'custom',
         path: ['ageGroup'],
-        message: 'studentにはageGroupを指定できません',
+        message: '学生の場合、年代は指定できません。',
       });
     if (value.category === 'adult' && value.ageGroup == null)
       context.addIssue({
         code: 'custom',
         path: ['ageGroup'],
-        message: 'adultにはageGroupが必要です',
+        message: '一般の場合は年代を入力してください。',
       });
     if (value.category === 'adult' && value.gradeLevel != null)
       context.addIssue({
         code: 'custom',
         path: ['gradeLevel'],
-        message: 'adultにはgradeLevelを指定できません',
+        message: '一般の場合、学年は指定できません。',
       });
   });
 

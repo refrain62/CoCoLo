@@ -36,17 +36,17 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: 静的品質検査
         run: pnpm verify:pnpm-config && pnpm lint:workflows && pnpm verify:migration-sql && pnpm lint:biome && pnpm verify:workspace-boundaries
-      - name: テストDBのRLS用roleを準備
+      - name: テストDBのRLS用ロールを準備
         run: pnpm db:prepare:test
         env:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
-      - name: テストDBへmigrationとfixtureを投入
+      - name: テストDBへマイグレーションとテストデータを投入
         run: pnpm --filter @cocolo/db exec prisma migrate deploy && pnpm db:seed:test
         env:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
-      - name: 契約とテスト
+      - name: 契約検証とテスト
         run: pnpm generate:openapi && git diff --exit-code -- packages/contracts/openapi.yaml && pnpm test:unit && pnpm test:integration
         env:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test

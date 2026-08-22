@@ -47,7 +47,7 @@ function assertError(payload, code) {
   assert.ok(payload.error.requestId);
 }
 
-test('ownerは年度繰り上げpreviewで対象件数を確認できる', async () => {
+test('owner は年度繰り上げのプレビューで対象件数を確認できる', async () => {
   const calls = [];
   const response = await createTestApp(calls).request(
     '/api/v1/members/promote',
@@ -80,7 +80,7 @@ test('ownerは年度繰り上げpreviewで対象件数を確認できる', async
   });
 });
 
-test('年度繰り上げexecuteはIdempotency-Keyなしを拒否する', async () => {
+test('年度繰り上げの実行モードは Idempotency-Key なしを拒否する', async () => {
   const response = await createTestApp().request('/api/v1/members/promote', {
     method: 'POST',
     headers: {
@@ -94,7 +94,7 @@ test('年度繰り上げexecuteはIdempotency-Keyなしを拒否する', async (
   assertError(await readJson(response), 'VALIDATION_ERROR');
 });
 
-test('staffは年度繰り上げを実行できない', async () => {
+test('staff は年度繰り上げを実行できない', async () => {
   const calls = [];
   const response = await createTestApp(calls).request(
     '/api/v1/members/promote',
@@ -114,7 +114,7 @@ test('staffは年度繰り上げを実行できない', async () => {
   assert.equal(calls.length, 0);
 });
 
-test('年度繰り上げexecuteはkeyとrequestをrepositoryへ渡す', async () => {
+test('年度繰り上げの実行モードはキーとリクエストをリポジトリへ渡す', async () => {
   const calls = [];
   const response = await createTestApp(calls).request(
     '/api/v1/members/promote',
@@ -149,7 +149,7 @@ test('年度繰り上げの不正な年度とmodeを拒否する', async () => {
   assertError(await readJson(response), 'VALIDATION_ERROR');
 });
 
-test('年度繰り上げのrequest競合は409で返す', async () => {
+test('年度繰り上げのリクエスト競合は409で返す', async () => {
   const app = createApp({
     verifyToken: async () => ({
       userId: 'owner-a',

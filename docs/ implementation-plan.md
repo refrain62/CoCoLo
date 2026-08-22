@@ -4,7 +4,7 @@
 
 実装としてはテスト駆動（TDD）で開発を行ってください。
 
-利用者向けの機能・業務仕様は `docs/functional-specification.md` に分離しています。機能改修は同仕様書の ID を先に変更し、その後に本書の実装タスク・テスト・migration を更新します。
+利用者向けの機能・業務仕様は `docs/functional-specification.md` に分離しています。機能改修は同仕様書の ID を先に変更し、その後に本書の実装タスク・テスト・マイグレーションを更新します。文書の用語と文章表現は `docs/japanese-writing-guidelines.md` に従います。
 
 ---
 
@@ -26,7 +26,7 @@
   * ユニットテスト：Vitest（PlaywrightによるE2Eテストも含む）
   * CI/CD: GitHub Actions
 
-Supabase CLI はローカルの migration / seed / テスト環境操作に使用します。Supabase Service Role Key は Hono のサーバー専用環境変数としてのみ使用し、ブラウザへ渡しません。
+Supabase CLI はローカルのマイグレーション / seed / テスト環境操作に使用します。Supabase Service Role Key は Hono のサーバー専用環境変数としてのみ使用し、ブラウザへ渡しません。
 
 
 主要機能の設計案
@@ -59,8 +59,8 @@ cocolo/
 ├── .github/
 │   └── workflows/
 │       ├── quality.yml            # PR の lint / typecheck / test / build
-│       ├── staging-deploy.yml     # staging migration / deploy / smoke / E2E
-│       └── production-promote.yml # 承認済み staging artifact の本番昇格
+│       ├── staging-deploy.yml     # staging マイグレーション / 配置 / スモークテスト / E2E
+│       └── production-promote.yml # 承認済み staging 成果物の本番昇格
 ├── apps/
 │   ├── web/                     # Webアプリ (Vite + React)
 │   │   └── src/
@@ -75,7 +75,7 @@ cocolo/
 │   ├── contracts/               # Zod DTO・API契約・公開型
 │   ├── domain/                  # Web/APIから独立した業務ルール
 │   ├── ui/                      # Web専用の共有UI（APIから参照しない）
-│   └── test-fixtures/           # local / integration / E2Eの共通fixture
+│   └── test-fixtures/           # local / integration / E2E の共通テストデータ
 ├── docs/
 │   ├── implementation-plan.md   # 技術実装計画
 │   └── functional-specification.md # 機能・業務仕様の正本
@@ -92,9 +92,9 @@ pnpm workspace を採用し、Web と API を同一リポジトリで管理し�
 * `apps/api` は `packages/auth`、`packages/contracts`、`packages/domain`、`packages/db` を利用します。認証、テナント解決、RLS context 設定は API 境界で完結させます。
 * `packages/domain` は Hono、React、Prisma Client、環境変数に依存しない純粋な業務ルールとします。
 * `packages/contracts` は Zod schema と API の入出力型を持ち、DB model をそのまま再公開しません。Zod schema を HTTP 契約の生成元とし、OpenAPI 3.1 は生成・lint・差分検証します。
-* `packages/db` だけが Prisma schema、migration、repositoryを所有します。migration SQLは `packages/db/prisma/migrations` に置きます。
+* `packages/db` だけが Prisma schema、マイグレーション、リポジトリを所有します。マイグレーション SQL は `packages/db/prisma/migrations` に置きます。
 * package 間の循環依存、workspace外の相対import、`apps/*` から別アプリへの直接importを禁止します。公開する依存は各packageの `package.json` に明記します。
-* `verify:workspace-boundaries` は dependency-cruiser の固定設定で、循環依存、`apps/web → packages/db|packages/auth|apps/api`、`packages/domain → Hono|React|Prisma|process.env`、`packages/contracts → packages/db|packages/domain`、production code → `packages/test-fixtures` をエラーにします。テスト専用依存は `devDependencies` に限定します。
+* `verify:workspace-boundaries` は dependency-cruiser の固定設定で、循環依存、`apps/web → packages/db|packages/auth|apps/api`、`packages/domain → Hono|React|Prisma|process.env`、`packages/contracts → packages/db|packages/domain`、本番コードから `packages/test-fixtures` への依存をエラーにします。テスト専用依存は `devDependencies` に限定します。
 
 root の `package.json` は `private: true` とし、`pnpm-workspace.yaml` の対象を `apps/*` と `packages/*` に固定します。root script は `pnpm --filter @cocolo/web ...`、`pnpm --filter @cocolo/api ...`、`pnpm --filter @cocolo/db ...` のように対象 package を明示し、全体検査だけ `pnpm -r` で実行します。各 package は単独で build・test できる構成を目標にします。
 
@@ -106,9 +106,9 @@ Web と API の分離後も、主プロトコルは **HTTPS 上の JSON REST API
 * Web は `Authorization: Bearer <Supabase access token>` で API を呼び出します。API は JWT の issuer、audience、署名、`exp`、`nbf` を検証し、Service Role Key を Web へ渡しません。Supabase Auth は API へ Bearer JWT を送る方式をサポートしています。
 * Web と API が別 origin の間は、環境ごとの明示的な origin allowlist で CORS を設定します。許可メソッドは `GET, POST, PATCH, PUT, DELETE, OPTIONS`、許可ヘッダーは `Authorization, Content-Type, Idempotency-Key, If-Match` に限定し、`Access-Control-Allow-Origin: *`、任意 origin の反射、Bearer 認証での credentials は禁止します。動的 allowlist の場合は `Vary: Origin` を返し、preflight は origin・method・header を検査してから応答します。TLS は managed ingress で終端し、staging / production は HTTP を HTTPS へリダイレクトし、production では HSTS を有効にします。cookie認証を追加する場合は SameSite、CSRF token、origin検証を別途必須化します。
 * 成功・エラー形式、`requestId`、`ETag`、ページング、`Idempotency-Key` を OpenAPI に定義します。部員登録・注文・支払い・年度繰り上げなど再送で二重登録が起きる操作は `Idempotency-Key` を必須または推奨とし、API側で重複実行を抑止します。
-* ファイル本体は Web から API へ中継せず、API が認可済みの短期署名URLを発行し、Web が private R2 へ直接 PUT します。完了通知を API の `POST /api/v1/uploads/:id/complete` で受け、API が実体サイズ・magic bytes・sha256を検証してから `available` に遷移させます。
-* Phase 1 は REST の request/response のみとし、常時接続のリアルタイム通信は導入しません。将来の更新通知は一方向なら SSE、双方向の同時編集が必要になった場合だけ WebSocket を別契約として追加し、既存 REST API の認可・RLSを迂回させません。
-* API の認証、CORS、rate limit、監査、RLS は API 側で強制します。初期の rate limit は認証済み利用者あたり API 60 req/min、upload session 発行 10 req/min とし、超過は `429` と `Retry-After` を返します。Web の表示制御だけを認可根拠にせず、別クライアント・curl・モバイルからの直接呼び出しも同じ契約で扱います。
+* ファイル本体は Web から API へ中継せず、API が認可済みの短期署名 URL を発行し、Web が非公開 R2 へ直接 PUT します。完了通知を API の `POST /api/v1/uploads/:id/complete` で受け、API が実体サイズ・マジックバイト・SHA-256 を検証してから `available` に遷移させます。
+* Phase 1 は REST のリクエスト/レスポンスだけとし、常時接続のリアルタイム通信は導入しません。将来の更新通知は一方向なら SSE、双方向の同時編集が必要になった場合だけ WebSocket を別契約として追加し、既存 REST API の認可・RLS を迂回させません。
+* API の認証、CORS、レート制限、監査、RLS は API 側で強制します。初期のレート制限は認証済み利用者あたり API 60 req/min、アップロードセッション発行 10 req/min とし、超過は `429` と `Retry-After` を返します。Web の表示制御だけを認可根拠にせず、別クライアント・curl・モバイルからの直接呼び出しも同じ契約で扱います。
 ---
 
 ## 2. ORM選定・技術移行の全経緯（Drizzle vs Prisma）
@@ -193,7 +193,7 @@ pnpm --filter @cocolo/db exec prisma migrate dev
 
 ### 4.3 付録A：原案6モデルの参考資料（非権威・実装でコピー禁止）
 
-以下は原案の業務モデルと検討経緯を保存するための参考資料です。Phase 1 の実装、migration、DTO、テストはこのブロックをコピーせず、8.13 と 8.14 の確定契約だけを参照します。旧ID型、旧 `guardianUserId`、公開URL設計は採用しません。
+以下は原案の業務モデルと検討経緯を保存するための参考資料です。Phase 1 の実装、マイグレーション、DTO、テストはこのブロックをコピーせず、8.13 と 8.14 の確定契約だけを参照します。旧 ID 型、旧 `guardianUserId`、公開 URL 設計は採用しません。
 
 ```
 datasource db {
@@ -375,11 +375,11 @@ Stripe等のオンライン決済（見送り）: 決済手数料（3.6%等）�
 
 ### 5.5 画像添付機能（Cloudflare R2）
 
-* アップロード仕様（Phase 4）: Hono バックエンドの `POST /api/v1/uploads` は JSON の upload session 作成専用とします。API がテナント・所有者・object key・許可 MIME・最大20 MiB・TTL 900秒を束ねた署名URLを発行し、Web は private R2 へ直接 PUT します。`POST /api/v1/uploads/:id/complete` は所有者、object key の完全一致、有効期限、未使用、上書き不可、実体サイズ、magic bytes、sha256を検証し、成功時だけ `uploaded` から `available` へ遷移させます。complete の再試行は同一 session で3回までとし、期限切れ・検証失敗は `rejected` にして R2 object を24時間以内に削除します。公開 URL は返却しません。
+* アップロード仕様（Phase 4）: Hono バックエンドの `POST /api/v1/uploads` は JSON のアップロードセッション作成専用とします。API がテナント・所有者・オブジェクトキー・許可 MIME・最大20 MiB・TTL 900秒を束ねた署名 URL を発行し、Web は非公開 R2 へ直接 PUT します。`POST /api/v1/uploads/:id/complete` は所有者、オブジェクトキーの完全一致、有効期限、未使用、上書き不可、実体サイズ、マジックバイト、SHA-256 を検証し、成功時だけ `uploaded` から `available` へ遷移させます。`complete` の再試行は同じセッションで3回までとし、期限切れ・検証失敗は `rejected` にして R2 オブジェクトを24時間以内に削除します。公開 URL は返却しません。
 
 ## 6. CI/CD パイプライン仕様（GitHub Actions）
 
-GitHub にコードが Push された際は、まず staging 環境へ immutable artifact を配置し、staging DB migration・smoke test・E2E が成功した場合だけ、本番承認で同一 artifact を production へ昇格します。production DBへ main push から直接 migration を適用しません。
+GitHub にコードが Push された際は、まず staging 環境へ固定した成果物を配置し、staging DB のマイグレーション・スモークテスト・E2E テストが成功した場合だけ、本番承認で同じ成果物を production 環境へ昇格します。production DB へ main push から直接マイグレーションを適用しません。
 
 PR の `quality.yml`、staging 用の `staging-deploy.yml`、production 用の `production-promote.yml` は分離します。production migration は GitHub Environment の protected secret、手動承認、`concurrency: production-migration`、staging 成功 SHA の一致を必須とし、branch protection で `quality` チェックを必須化します。
 
@@ -445,18 +445,18 @@ jobs:
       - name: ステージング環境境界を検証
         run: pnpm verify:environment --expected staging
 
-      - name: アプリとmigrationのimmutable artifactを作成
+      - name: アプリとマイグレーションの固定リリース成果物を作成
         run: pnpm build && pnpm package:release --artifact-sha "${{ github.sha }}" --include packages/db/prisma/migrations --output .release
 
-      - name: release artifactのchecksumを確認
+      - name: リリース成果物のチェックサムを確認
         run: pnpm verify:release --release-dir .release --artifact-sha "${{ github.sha }}"
 
-      - name: release artifactのprovenanceを生成
+      - name: リリース成果物の出所証明を生成
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: .release/release.tar.gz
 
-      - name: 検証済みrelease artifactを保存
+      - name: 検証済みリリース成果物を保存
         env:
           GH_TOKEN: ${{ github.token }}
         run: pnpm publish:release --release-dir .release --artifact-name "release-${{ github.sha }}"
@@ -466,14 +466,14 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      - name: 検証済みreleaseのstaging migrationを適用
+      - name: 検証済みリリースのstagingマイグレーションを適用
         env:
           APP_ENV: staging
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: pnpm migrate:release --release-dir .release
 
-      - name: 検証済みartifactをステージングへ配置
+      - name: 検証済み成果物をstaging環境へ配置
         run: pnpm deploy:staging --artifact-sha "${{ github.sha }}"
 
       - name: ステージングのsmoke testを実行
@@ -492,7 +492,7 @@ jobs:
         run: pnpm publish:staging-evidence --artifact-sha "${{ github.sha }}" --evidence-artifact-name "staging-evidence-${{ github.sha }}"
 ```
 
-`production-promote.yml` は `workflow_dispatch` と protected `production` Environment からのみ起動し、入力された artifact SHA が staging evidence の成功 SHA と一致することを確認します。production job の最初の処理は、リポジトリ checkout、pnpm install、リポジトリ内 script 実行より前に、固定版の release 取得ツールで証跡・artifact名・SHA-256 manifest・provenance を検証して immutable artifact を取得することです。検証前に untrusted な repository code、migration、production secret を実行しません。検証後に入力 SHA を `ref` として checkout し、同じ artifact を production へ配置し、production migration、health check、smoke test を実行します。migration は expand → application deploy → contract cleanup の後方互換順序を守り、失敗時は直前の application artifact へ戻します。既に適用済みの migration を逆向きに戻す rollback は行わず、修正 migration とデータ復旧手順を別途レビューします。
+`production-promote.yml` は `workflow_dispatch` と保護された `production` Environment からのみ起動し、入力された成果物の SHA が staging 環境の証跡に記録された成功 SHA と一致することを確認します。production job の最初の処理は、リポジトリの checkout、pnpm install、リポジトリ内 script の実行より前に、固定版のリリース取得ツールで証跡・成果物名・SHA-256 マニフェスト・出所証明を検証し、固定した成果物を取得することです。検証前に信頼できないリポジトリコード、マイグレーション、production secret を実行しません。検証後に入力 SHA を `ref` として checkout し、同じ成果物を production 環境へ配置し、production のマイグレーション、ヘルスチェック、スモークテストを実行します。マイグレーションは expand → application deploy → contract cleanup の後方互換順序を守り、失敗時は直前のアプリケーション成果物へ戻します。既に適用済みのマイグレーションを逆向きに戻すロールバックは行わず、修正マイグレーションとデータ復旧手順を別途レビューします。
 
 ```yaml
 # .github/workflows/production-promote.yml
@@ -521,7 +521,7 @@ jobs:
     steps:
       - name: GitHub CLIのバージョンを検証
         run: test "$(gh --version | awk 'NR==1 {print $3}')" = "2.97.0"
-      - name: staging証跡とartifactを検証前に取得
+      - name: staging環境の証跡と成果物を検証前に取得
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_RUN_ID: ${{ inputs.staging_run_id }}
@@ -532,12 +532,12 @@ jobs:
           gh run view "$STAGING_RUN_ID" --json conclusion,headSha,workflowName,event,headBranch > .staging-run.json
           jq -e --arg sha "$ARTIFACT_SHA" '.conclusion == "success" and .headSha == $sha and .workflowName == "ステージングへデプロイ" and .event == "push" and .headBranch == "main"' .staging-run.json
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID/jobs?per_page=100" > .staging-jobs.json
-          jq -e '([.jobs[].steps[] | select(.name == "検証済みreleaseのstaging migrationを適用" or .name == "ステージングのsmoke testを実行" or .name == "ステージングの認証ユーザーでE2Eを実行")] | length) == 3 and ([.jobs[].steps[] | select(.name == "検証済みreleaseのstaging migrationを適用" or .name == "ステージングのsmoke testを実行" or .name == "ステージングの認証ユーザーでE2Eを実行")] | all(.[]; .conclusion == "success"))' .staging-jobs.json
+          jq -e '([.jobs[].steps[] | select(.name == "検証済みリリースのstagingマイグレーションを適用" or .name == "ステージングのスモークテストを実行" or .name == "ステージングの認証ユーザーでE2Eを実行")] | length) == 3 and ([.jobs[].steps[] | select(.name == "検証済みリリースのstagingマイグレーションを適用" or .name == "ステージングのスモークテストを実行" or .name == "ステージングの認証ユーザーでE2Eを実行")] | all(.[]; .conclusion == "success"))' .staging-jobs.json
           test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID" --jq '.path')" = ".github/workflows/staging-deploy.yml"
           gh run download "$STAGING_RUN_ID" --name "release-$ARTIFACT_SHA" --dir .release
           gh run download "$STAGING_RUN_ID" --name "staging-evidence-$ARTIFACT_SHA" --dir .evidence
           jq -e --arg sha "$ARTIFACT_SHA" '.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success"' .evidence/evidence.json
-      - name: artifactのchecksumとprovenanceを検証
+      - name: 成果物のチェックサムと出所証明を検証
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_SHA: ${{ inputs.artifact_sha }}
@@ -576,13 +576,13 @@ jobs:
         run: pnpm verify:database-version --expected-major 17
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - name: 検証済みreleaseのmigrationを適用
+      - name: 検証済みリリースのマイグレーションを適用
         run: pnpm migrate:release --release-dir .release
         env:
           APP_ENV: production
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-      - name: 検証済みartifactを本番へ配置
+      - name: 検証済み成果物を本番環境へ配置
         env:
           APP_ENV: production
           ARTIFACT_SHA: ${{ inputs.artifact_sha }}
@@ -600,8 +600,8 @@ jobs:
         run: pnpm smoke:production --base-url "$BASE_URL"
 ```
 
-`package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、migration checksum manifest を同一の immutable release artifact に含め、`.release/release.tar.gz` と `artifact.sha256` を生成します。staging の `publish:release` は GitHub Actions artifact `release-${{ github.sha }}` として保存し、production は `actions: read` で同名 artifact だけを取得します。staging は GitHub 公式 provenance action をSHA固定で実行し、production は checkout・pnpm install・リポジトリ内 script より前に標準 GitHub CLI の `gh attestation verify` で署名者リポジトリ、workflow、source digest、SHA-256を検証します。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・migration checksum・artifact SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリの migration を参照せず、検証済み `.release` 内の migration だけを `prisma migrate deploy` へ渡します。staging job の強い権限は main push かつ protected staging Environment のこのjobだけに限定し、PRの `quality.yml` は `contents: read` のみとします。将来buildと公開をjob分離する場合も、`actions: write`、`id-token: write`、`attestations: write` は公開・provenance jobにだけ付与します。staging / production の workflow は `APP_ENV`、Supabase URL/JWKS、R2 endpoint/bucket、公開URLの allowlist を `verify:environment` で検証し、production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
-`publish:staging-evidence` は `.evidence/evidence.json`（`workflowName`、`workflowPath`、`event`、`headBranch`、`headSha`、`artifactSha`、`migration`、`smoke`、`e2e`）を生成し、`staging-evidence-${{ github.sha }}` という上書き不可のartifact名で保存します。本番はGitHub runの `conclusion`、job stepの直接結果、REST APIのworkflow pathを権威情報として先に検証し、evidence JSONの詳細値は補助情報として同じstaging runから取得します。checkout前に固定フィールドを検証します。
+`package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、マイグレーションのチェックサムマニフェストを同じ変更不能なリリース成果物に含め、`.release/release.tar.gz` と `artifact.sha256` を生成します。staging の `publish:release` は GitHub Actions の成果物 `release-${{ github.sha }}` として保存し、production は `actions: read` で同名の成果物だけを取得します。staging は GitHub 公式の出所証明アクションを SHA 固定で実行し、production は checkout・pnpm install・リポジトリ内 script より前に標準 GitHub CLI の `gh attestation verify` で署名者リポジトリ、ワークフロー、ソースダイジェスト、SHA-256 を検証します。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・マイグレーションのチェックサム・成果物の SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリのマイグレーションを参照せず、検証済み `.release` 内のマイグレーションだけを `prisma migrate deploy` へ渡します。staging job の強い権限は main push かつ保護された staging Environment のこの job だけに限定し、PR の `quality.yml` は `contents: read` のみとします。将来 build と公開を job 分離する場合も、`actions: write`、`id-token: write`、`attestations: write` は公開・出所証明 job にだけ付与します。staging / production のワークフローは `APP_ENV`、Supabase URL/JWKS、R2 endpoint/bucket、公開 URL の allowlist を `verify:environment` で検証し、production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
+`publish:staging-evidence` は `.evidence/evidence.json`（`workflowName`、`workflowPath`、`event`、`headBranch`、`headSha`、`artifactSha`、`migration`、`smoke`、`e2e`）を生成し、`staging-evidence-${{ github.sha }}` という上書き不可の成果物名で保存します。本番は GitHub run の `conclusion`、job step の直接結果、REST API のワークフロー path を権威情報として先に検証し、evidence JSON の詳細値は補助情報として同じ staging run から取得します。checkout 前に固定フィールドを検証します。
 
 ### 6.1 サプライチェーン攻撃対策
 
@@ -611,8 +611,8 @@ jobs:
 * **依存関係の実行制限:** `blockExoticSubdeps: true` で git・http tarball 等の依存を禁止し、`strictDepBuilds: true` と `onlyBuiltDependencies` の allowlist で install script を明示許可します。allowlist 外の postinstall はインストールを失敗させます。`verify:pnpm-config` は実 lockfile の install script 実行パッケージ集合と allowlist の一致、`pnpm ignored-builds` が空であること、`pnpm config get` の必須値をCIで検査します。
 * **信頼情報の低下防止:** pnpm 10.21 以降では `trustPolicy: no-downgrade` を有効にし、公開者の provenance / trust 情報が以前より弱くなる更新を自動採用しません。pnpm の実バージョンは `packageManager` に完全固定します。
 * **GitHub Actions の SHA 固定:** `uses` は GitHub 公式 action を含めて40桁の commit SHA に固定し、タグ・ブランチ参照を禁止します。リリースタグ、署名、リポジトリ所有者を確認した更新PRだけを取り込みます。GitHub リポジトリ設定でも SHA pinning required と許可 action の allowlist を有効にします。
-* **権限の最小化:** workflow と job ごとに `permissions` を明示し、通常は `contents: read` のみとします。`id-token: write`、artifact 書き込み、production secret は必要な job と protected Environment に限定します。fork のPRでは秘密情報を渡さず、`pull_request_target` と untrusted な式を使いません。
-* **artifact の完全性:** staging で一度だけ build した artifact に SHA-256 manifest、commit SHA、migration checksum、SBOM を含め、production では再ビルドせず同一 artifact を検証して昇格します。可能なら GitHub artifact attestation を追加し、provenance を保存します。
+* **権限の最小化:** ワークフローと job ごとに `permissions` を明示し、通常は `contents: read` のみとします。`id-token: write`、成果物の書き込み、production secret は必要な job と保護された Environment に限定します。fork の PR では秘密情報を渡さず、`pull_request_target` と信頼できない式を使いません。
+* **成果物の完全性:** staging で一度だけ build した成果物に SHA-256 マニフェスト、commit SHA、マイグレーションのチェックサム、SBOM を含め、production では再ビルドせず同じ成果物を検証して昇格します。可能なら GitHub の成果物の出所証明を追加し、証跡を保存します。
 * **脆弱性検査と更新運用:** Dependabot または Renovate で npm と Actions を更新PR化し、`pnpm audit --prod --audit-level high`、依存レビュー、workflow の静的検査（zizmor または同等）を quality gate に追加します。自動更新はテストと人手レビューを通過するまで本番へ反映しません。
 * **ログ・秘密情報保護:** install、build、deploy のログへ token、接続文字列、Service Role Key を出力しません。PR由来のコードを実行する job と staging / production secret を扱う job を分離します。
 
@@ -712,9 +712,9 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * `GET/POST/PATCH/DELETE /api/v1/orders`、`/orders/:id/items`、`/orders/:id/user-items`
 * `PATCH /api/v1/user-order-items/:id/payment`、`GET /api/v1/orders/:id/summary.csv`
 * `GET/POST/PATCH/DELETE /api/v1/events`、`PUT /api/v1/events/:id/attendance`
-* `POST /api/v1/uploads`（Phase 4、JSONでupload sessionを作成し、短期署名URLとAttachmentのresource IDを返却。ファイル本体は受け取らない）
-* `PUT <signed upload URL>`（Phase 4、Webからprivate R2へ直接PUT。署名のobject key・MIME・サイズ制限に一致しない要求を拒否）
-* `POST /api/v1/uploads/:id/complete`（Phase 4、所有者・期限・未使用・object key・実体サイズ・magic bytes・sha256を検証し、成功時だけavailableへ遷移）
+* `POST /api/v1/uploads`（Phase 4、JSON でアップロードセッションを作成し、短期署名 URL と Attachment の資源 ID を返却。ファイル本体は受け取らない）
+* `PUT <signed upload URL>`（Phase 4、Web から非公開 R2 へ直接 PUT。署名のオブジェクトキー・MIME・サイズ制限に一致しない要求を拒否）
+* `POST /api/v1/uploads/:id/complete`（Phase 4、所有者・期限・未使用・オブジェクトキー・実体サイズ・マジックバイト・SHA-256 を検証し、成功時だけ `available` へ遷移）
 * `GET /api/v1/attachments/:id/download`（Phase 4、テナント認可後に短期署名 URL を発行）
 
 ### 8.5 画面・操作仕様
@@ -725,7 +725,7 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * 予定画面: 月間・週間切り替え、練習 / 試合 / イベントの色分け、締切、集合時刻、場所、持ち物、出欠入力と集計。
 * 役員画面: 年度フィルタ、連絡先表示制御、前年度からの役職枠コピー。電話番号は `contactPreference` に従い、権限があっても不要な画面へ表示しません。
 * 購買画面: 商品ごとの任意サイズ選択肢、背番号・背ネーム、注文確認、支払い状態、サイズ別集計、CSV ダウンロード。
-* 共通状態: loading、empty、validation error、network error、権限不足、保存成功をそれぞれ区別して表示します。
+* 共通状態: 読み込み中、データなし、入力エラー、通信エラー、権限不足、保存成功をそれぞれ区別して表示します。
 
 フォームはラベル、必須表示、キーボード操作、フォーカス可視化、エラーの読み上げを備え、色だけで status を伝えません。主要操作には確認ダイアログと取り消し可能性を設けます。
 
@@ -734,18 +734,18 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 実装は Red → Green → Refactor の順で行います。テストを先に追加し、失敗を確認してから最小実装を行い、リファクタリング後に全テストを再実行します。
 
 * **ドメイン単体テスト:** `formatGrade`、入力スキーマ、年度繰り上げ対象、支払い状態、CSV 式インジェクション対策。
-* **API テスト:** 認証なし、別テナント、role 別、正常系、入力不正、競合、transaction 失敗を Hono の `app.request` で検証。
-* **UI テスト:** 部員検索・登録、出欠入力、支払いトグル、権限による表示差分、loading / error / empty 状態を Vitest + Testing Library で検証。
+* **API テスト:** 認証なし、別テナント、ロール別、正常系、入力不正、競合、トランザクション失敗を Hono の `app.request` で検証。
+* **UI テスト:** 部員検索・登録、出欠入力、支払い切り替え、権限による表示差分、読み込み中 / エラー / データなしの状態を Vitest + Testing Library で検証。
 * **E2E テスト:** Playwright でログイン後の主要導線を検証します。外部 LINE / Maps / R2 は実サービスではなくテスト用アダプターを使用します。
 * **CI ゲート:** `pnpm --filter @cocolo/db exec prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:e2e:local`、`pnpm build` を必須にします。staging は `pnpm test:e2e:staging` を追加し、失敗時はマージ・本番マイグレーションを許可しません。
 
 ### 8.7 環境・運用・監視
 
-`.env.example` に変数名だけを記載し、実値はコミットしません。最低限 `DATABASE_URL`、`DIRECT_URL`、Supabase の URL / anon key / server-only service role key、R2 の binding または S3 互換接続情報、アプリの公開 URL を環境別に管理します。
+`.env.example` に変数名と設定内容の説明を記載し、実値はコミットしません。最低限 `DATABASE_URL`、`DIRECT_URL`、Supabase の URL / anon key / サーバー専用 service role key、R2 の binding または S3 互換接続情報、アプリの公開 URL を環境別に管理します。
 
-本番は GitHub Actions の `migrate:release`（検証済み immutable release artifact 内の `pnpm exec prisma migrate deploy`）のみでマイグレーションを適用します。Production の DB URL は GitHub Environment の protected secret とし、main への push だけで無条件に破壊的 SQL が実行されないよう、migration review と手動承認を設けます。Supabase のバックアップ、復旧手順、失敗 migration の検知と停止条件を README に記載します。
+本番は GitHub Actions の `migrate:release`（検証済みの変更不能なリリース成果物内の `pnpm exec prisma migrate deploy`）だけでマイグレーションを適用します。Production の DB URL は GitHub Environment の保護された secret とし、main への push だけで無条件に破壊的 SQL が実行されないよう、マイグレーションレビューと手動承認を設けます。Supabase のバックアップ、復旧手順、失敗したマイグレーションの検知と停止条件を README に記載します。
 
-各リクエストに requestId を付与し、認証失敗、権限拒否、migration 失敗、外部通知失敗を構造化ログへ記録します。個人情報、JWT、秘密鍵、アップロード内容はログへ出しません。
+各リクエストに `requestId` を付与し、認証失敗、権限拒否、マイグレーション失敗、外部通知失敗を構造化ログへ記録します。個人情報、JWT、秘密鍵、アップロード内容はログへ出しません。
 
 ### 8.8 環境分離（ローカル・ステージング・本番）
 
@@ -753,17 +753,17 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 
 | 環境 | 用途 | DB / Auth | R2 | デプロイ・保護 |
 | --- | --- | --- | --- | --- |
-| **local** | 開発・TDD・手動確認 | Docker 上の PostgreSQL と Supabase CLI のローカル Auth。`cocolo_app` / migration owner を再現 | Phase 4 以降は MinIO または local adapter | `pnpm dev`、test-only Auth は local のみ。実データ持込禁止 |
-| **staging** | 結合・E2E・受け入れ確認 | 本番と分離した Supabase project / PostgreSQL。テスト専用ユーザーと seed のみ | staging専用 private bucket | `main` から承認付き deploy。migration、smoke、E2E 成功後に本番候補とする |
-| **production** | 利用者向け本番 | production専用 Supabase project / PostgreSQL。実ユーザー・実データ | production専用 private bucket | protected Environment、手動承認、バックアップ、監査、concurrency lock。test-only Auth 禁止 |
+| **local** | 開発・TDD・手動確認 | Docker 上の PostgreSQL と Supabase CLI のローカル Auth。`cocolo_app` / マイグレーション所有者を再現 | Phase 4 以降は MinIO またはローカル配置アダプター | `pnpm dev`、テスト専用 Auth は local のみ。実データ持込禁止 |
+| **staging** | 結合・E2E・受け入れ確認 | 本番と分離した Supabase project / PostgreSQL。テスト専用ユーザーと seed のみ | staging 専用の非公開バケット | `main` から承認付きで配置。マイグレーション、スモークテスト、E2E 成功後に本番候補とする |
+| **production** | 利用者向け本番 | production 専用 Supabase project / PostgreSQL。実ユーザー・実データ | production 専用の非公開バケット | 保護された Environment、手動承認、バックアップ、監査、同時実行ロック。テスト専用 Auth 禁止 |
 
 共通の `APP_ENV` は `local` / `staging` / `production` のいずれかを必須とし、環境ごとに `DATABASE_URL`、`DIRECT_URL`、`SUPABASE_URL`、`SUPABASE_JWKS_URL`、`R2_BUCKET`、公開 URL を設定します。production では退部後データと AuditLog の保持期間、staging ではテスト用保持期間を必須設定にし、未設定なら起動を拒否します。
 
 環境ごとの secret 名は次で固定します。local は `.env.local`、staging は GitHub `staging` Environment、production は GitHub `production` Environment の同名 secret / variable を使用します。
 
-* **共通必須:** `APP_ENV`、`DATABASE_URL`（`cocolo_app`）、`DIRECT_URL`（migration owner）、`SUPABASE_URL`、`SUPABASE_JWKS_URL`、`SUPABASE_ANON_KEY`、`R2_BUCKET`、`PUBLIC_APP_URL`。
+* **共通必須:** `APP_ENV`、`DATABASE_URL`（`cocolo_app`）、`DIRECT_URL`（マイグレーション所有者）、`SUPABASE_URL`、`SUPABASE_JWKS_URL`、`SUPABASE_ANON_KEY`、`R2_BUCKET`、`PUBLIC_APP_URL`。
 * **サーバー専用:** `SUPABASE_SERVICE_ROLE_KEY`、`R2_ENDPOINT`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`。Service Role Key は Supabase Auth の管理 API 等に限定し、Prisma の `DATABASE_URL` / `DIRECT_URL`、ブラウザ、ログ、bundle には使用しません。
-* **環境固定値:** local は `cocolo-local`、staging は `cocolo-staging-private`、production は `cocolo-production-private` の R2 bucket だけを許可します。Supabase URL、R2 endpoint、`PUBLIC_APP_URL` は `APP_ENV` ごとの allowlist と完全一致しなければ起動を拒否します。
+* **環境固定値:** local は `cocolo-local`、staging は `cocolo-staging-private`、production は `cocolo-production-private` の R2 バケットだけを許可します。Supabase URL、R2 endpoint、`PUBLIC_APP_URL` は `APP_ENV` ごとの許可リストと完全一致しなければ起動を拒否します。
 
 各 DB の migration は `environment_guard(id=1, environment)` を owner 接続で作成し、app role は変更不可とします。起動時に `APP_ENV` と `environment_guard.environment` が一致すること、`current_user = cocolo_app`、`rolbypassrls = false`、test-only Auth が production で無効であることを検証します。local / staging から production の Supabase URL、DB、R2 bucket が設定されていた場合は health check 前に fail-fast します。
 

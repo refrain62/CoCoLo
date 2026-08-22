@@ -30,7 +30,7 @@ async function setMemberGrade(tenantId, userId, memberId, gradeLevel) {
   });
 }
 
-test('年度繰り上げpreviewはactiveなstudentだけを同一tenantで計画する', async () => {
+test('年度繰り上げのプレビューは在籍中の学生だけを同じテナントで計画する', async () => {
   const result = await repositories.promotionRepository.run({
     tenantId: TENANT_A,
     actorUserId: 'owner-a',
@@ -49,7 +49,7 @@ test('年度繰り上げpreviewはactiveなstudentだけを同一tenantで計画
   );
 });
 
-test('年度繰り上げexecuteは一度だけ更新し、同じkeyをno-opにする', async () => {
+test('年度繰り上げの実行は一度だけ更新し、同じキーでは追加変更を行わない', async () => {
   const result = await repositories.promotionRepository.run({
     tenantId: TENANT_A,
     actorUserId: 'owner-a',
@@ -79,7 +79,7 @@ test('年度繰り上げexecuteは一度だけ更新し、同じkeyをno-opに�
       fiscalYear: FISCAL_YEAR,
       idempotencyKey: `promotion-${FISCAL_YEAR}-a`,
     }),
-    /同じIdempotency-Keyでrequest内容が変更されています/,
+    /同じ Idempotency-Key でリクエスト内容が変更されています。/,
   );
 
   const members = await repositories.memberRepository.list({
@@ -120,7 +120,7 @@ test('年度繰り上げexecuteは一度だけ更新し、同じkeyをno-opに�
   );
 });
 
-test('年度繰り上げは別tenantの部員を更新せず、同じ年度を独立して実行できる', async () => {
+test('年度繰り上げは別テナントの部員を更新せず、同じ年度を独立して実行できる', async () => {
   const result = await repositories.promotionRepository.run({
     tenantId: TENANT_B,
     actorUserId: 'owner-b',
@@ -143,7 +143,7 @@ test('年度繰り上げは別tenantの部員を更新せず、同じ年度を�
   );
 });
 
-test('completedのPromotionRunをpreviewへ戻す遷移はDB triggerで拒否する', async () => {
+test('completed 状態の年度繰り上げをプレビューへ戻す遷移は DB トリガーで拒否する', async () => {
   await assert.rejects(
     prisma.$transaction(async (tx) => {
       await tx.$queryRaw`

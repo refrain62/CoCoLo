@@ -62,7 +62,7 @@ export function createAuthClient({
       if (baseUrl && !anonKey)
         throw new AuthApiError(
           503,
-          'Supabase Authの公開キーが設定されていません。',
+          'Supabase Auth の公開鍵が設定されていません。',
         );
       const response = await fetcher(endpoint, {
         method: 'POST',

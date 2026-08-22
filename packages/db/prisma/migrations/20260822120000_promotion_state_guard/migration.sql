@@ -17,7 +17,7 @@ BEGIN
   END IF;
   IF OLD.request_hash IS NOT NULL
     AND OLD.request_hash IS DISTINCT FROM NEW.request_hash THEN
-    RAISE EXCEPTION 'promotion runのrequest hashは変更できません';
+    RAISE EXCEPTION '年度繰り上げ実行のリクエストハッシュは変更できません。';
   END IF;
   IF OLD.idempotency_key IS NOT NULL
     AND OLD.idempotency_key IS DISTINCT FROM NEW.idempotency_key THEN

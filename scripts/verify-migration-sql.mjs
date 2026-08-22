@@ -18,7 +18,7 @@ const migrations = await readdir(migrationsRoot, { withFileTypes: true }).catch(
 const sqlFiles = migrations
   .filter((entry) => entry.isDirectory())
   .map((entry) => path.join(migrationsRoot, entry.name, 'migration.sql'));
-assert.ok(sqlFiles.length > 0, 'migration.sql が1件以上必要です');
+assert.ok(sqlFiles.length > 0, 'migration.sql が1件以上必要です。');
 
 const sqlContents = [];
 for (const file of sqlFiles) {
@@ -34,4 +34,4 @@ assert.match(allSql, /ALTER TABLE\s+[a-z_]+\s+ENABLE ROW LEVEL SECURITY/);
 assert.match(allSql, /ALTER TABLE\s+[a-z_]+\s+FORCE ROW LEVEL SECURITY/);
 assert.match(allSql, /GRANT\s+.*\s+TO\s+cocolo_app/);
 assert.match(allSql, /FOREIGN KEY\s*\([^)]*tenant_id[^)]*\)/i);
-console.log(`migration SQL ${sqlFiles.length}件を検証しました。`);
+console.log(`マイグレーション SQL ${sqlFiles.length} 件を検証しました。`);

@@ -14,7 +14,7 @@ jobs:
     environment: production
     concurrency: production-migration
     steps:
-      - name: staging証跡とartifactをcheckout前に検証
+      - name: staging環境の証跡と成果物をcheckout前に検証
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_SHA: ${{ inputs.artifact_sha }}
@@ -29,7 +29,7 @@ jobs:
           jq -e --arg sha "$ARTIFACT_SHA" '(.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success")' .evidence/evidence.json
           test "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)" = "$(cut -d' ' -f1 .release/artifact.sha256)"
           gh attestation verify .release/release.tar.gz --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/staging-deploy.yml" --source-digest "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)"
-      - name: 検証済みSHAをcheckout
+      - name: 検証済みSHAのリポジトリをcheckout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ inputs.artifact_sha }}
@@ -44,9 +44,9 @@ jobs:
           cache: pnpm
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
-      - name: release artifactを展開
+      - name: リリース成果物を展開
         run: mkdir -p .release/extracted && tar -xzf .release/release.tar.gz -C .release/extracted
-      - name: production環境を検証
+      - name: production環境の設定を検証
         run: pnpm verify:environment --expected production
         env:
           APP_ENV: production
@@ -63,12 +63,12 @@ jobs:
           PUBLIC_APP_URL_ALLOWLIST: ${{ vars.PUBLIC_APP_URL_ALLOWLIST }}
           RETIRED_DATA_RETENTION_DAYS: ${{ vars.RETIRED_DATA_RETENTION_DAYS }}
           AUDIT_LOG_RETENTION_DAYS: ${{ vars.AUDIT_LOG_RETENTION_DAYS }}
-      - name: 検証済みmigrationだけを適用
+      - name: 検証済みマイグレーションだけを適用
         run: pnpm exec prisma migrate deploy --schema .release/extracted/packages/db/prisma/schema.prisma
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-      - name: 本番artifactを配置
+      - name: production環境へ成果物を配置
         run: pnpm deploy:production --artifact-sha "${{ inputs.artifact_sha }}" --release-dir .release
         env:
           PRODUCTION_DEPLOY_ADAPTER: ${{ secrets.PRODUCTION_DEPLOY_ADAPTER }}

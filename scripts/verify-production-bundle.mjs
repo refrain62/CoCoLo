@@ -37,5 +37,5 @@ async function scan(directory) {
   }
 }
 for (const directory of roots) await scan(directory);
-assert.ok(scanned > 0, 'production bundleが見つかりません');
-console.log(`production bundle ${scanned}ファイルを検証しました。`);
+assert.ok(scanned > 0, '本番用バンドルが見つかりません。');
+console.log(`本番用バンドル ${scanned} ファイルを検証しました。`);
