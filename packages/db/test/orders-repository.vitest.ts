@@ -37,6 +37,16 @@ function createRepository() {
   });
 }
 
+function firstProduct(
+  campaign: Awaited<
+    ReturnType<ReturnType<typeof createRepository>['createCampaign']>
+  >,
+) {
+  const product = campaign.products[0];
+  if (!product) throw new Error('テスト用商品がありません。');
+  return product;
+}
+
 describe('共同購買repository', () => {
   it('募集案件・商品はowner/adminだけが登録でき、別テナントから見えない', async () => {
     const repository = createRepository();
@@ -67,7 +77,7 @@ describe('共同購買repository', () => {
       { tenantId: TENANT_A, actorUserId: 'owner-a', role: 'owner' },
       campaignInput,
     );
-    const product = campaign.products[0]!;
+    const product = firstProduct(campaign);
 
     await expect(
       repository.createEntry({
@@ -138,7 +148,7 @@ describe('共同購買repository', () => {
       { tenantId: TENANT_A, actorUserId: 'owner-a', role: 'owner' },
       campaignInput,
     );
-    const product = campaign.products[0]!;
+    const product = firstProduct(campaign);
     const entry = await repository.createEntry({
       tenantId: TENANT_A,
       actorUserId: 'guardian-a',
@@ -148,7 +158,12 @@ describe('共同購買repository', () => {
         memberId: MEMBER_A,
         ordererName: '注文者',
         lines: [
-          { productId: product.id, quantity: 1, selectedOptions: { サイズ: 'S' }, backNumber: '1' },
+          {
+            productId: product.id,
+            quantity: 1,
+            selectedOptions: { サイズ: 'S' },
+            backNumber: '1',
+          },
         ],
       },
     });
@@ -172,7 +187,9 @@ describe('共同購買repository', () => {
     });
     expect(unpaid.paymentConfirmedAt).toBeNull();
     const audits = await repository.listAuditLogs(TENANT_A);
-    expect(audits.filter((audit) => audit.action === 'orders.payment.update')).toHaveLength(2);
+    expect(
+      audits.filter((audit) => audit.action === 'orders.payment.update'),
+    ).toHaveLength(2);
     expect(JSON.stringify(audits)).not.toContain('注文者');
   });
 
@@ -182,7 +199,7 @@ describe('共同購買repository', () => {
       { tenantId: TENANT_A, actorUserId: 'owner-a', role: 'owner' },
       campaignInput,
     );
-    const product = campaign.products[0]!;
+    const product = firstProduct(campaign);
     await repository.createEntry({
       tenantId: TENANT_A,
       actorUserId: 'guardian-a',
@@ -192,14 +209,29 @@ describe('共同購買repository', () => {
         memberId: MEMBER_A,
         ordererName: '=危険な名前',
         lines: [
-          { productId: product.id, quantity: 1, selectedOptions: { サイズ: 'M' }, backNumber: '2' },
+          {
+            productId: product.id,
+            quantity: 1,
+            selectedOptions: { サイズ: 'M' },
+            backNumber: '2',
+          },
         ],
       },
     });
     await expect(
-      repository.exportCsv({ tenantId: TENANT_A, actorUserId: 'staff-a', role: 'staff', orderId: campaign.id }),
+      repository.exportCsv({
+        tenantId: TENANT_A,
+        actorUserId: 'staff-a',
+        role: 'staff',
+        orderId: campaign.id,
+      }),
     ).rejects.toBeInstanceOf(OrdersRepositoryError);
-    const csv = await repository.exportCsv({ tenantId: TENANT_A, actorUserId: 'admin-a', role: 'admin', orderId: campaign.id });
+    const csv = await repository.exportCsv({
+      tenantId: TENANT_A,
+      actorUserId: 'admin-a',
+      role: 'admin',
+      orderId: campaign.id,
+    });
     expect(csv.startsWith('\uFEFF')).toBe(true);
     expect(csv).toContain("'=危険な名前");
   });

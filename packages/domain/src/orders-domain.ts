@@ -93,11 +93,7 @@ export type OrderCsvRow = {
 export class OrdersDomainError extends Error {
   constructor(
     message: string,
-    readonly code:
-      | 'INVALID_INPUT'
-      | 'NOT_FOUND'
-      | 'INVALID_STATE'
-      | 'CONFLICT',
+    readonly code: 'INVALID_INPUT' | 'NOT_FOUND' | 'INVALID_STATE' | 'CONFLICT',
   ) {
     super(message);
     this.name = 'OrdersDomainError';
@@ -113,7 +109,10 @@ export function calculateLineAmount(unitPrice: number, quantity: number) {
   assertQuantity(quantity);
   const amount = unitPrice * quantity;
   if (!Number.isSafeInteger(amount))
-    throw new OrdersDomainError('明細金額が上限を超えています。', 'INVALID_INPUT');
+    throw new OrdersDomainError(
+      '明細金額が上限を超えています。',
+      'INVALID_INPUT',
+    );
   return amount;
 }
 
@@ -123,7 +122,10 @@ export function calculateOrderTotal(lines: Array<Pick<OrderLine, 'amount'>>) {
       throw new OrdersDomainError('明細金額が不正です。', 'INVALID_INPUT');
     const next = sum + line.amount;
     if (!Number.isSafeInteger(next))
-      throw new OrdersDomainError('注文金額が上限を超えています。', 'INVALID_INPUT');
+      throw new OrdersDomainError(
+        '注文金額が上限を超えています。',
+        'INVALID_INPUT',
+      );
     return next;
   }, 0);
   return total;
@@ -146,13 +148,24 @@ export function validateProduct(product: {
   const options = product.options.map((option) => {
     const optionName = requireText(option.name, '選択肢名', 100);
     if (optionNames.has(optionName))
-      throw new OrdersDomainError('同じ選択肢名を重複登録できません。', 'INVALID_INPUT');
+      throw new OrdersDomainError(
+        '同じ選択肢名を重複登録できません。',
+        'INVALID_INPUT',
+      );
     optionNames.add(optionName);
     if (!Array.isArray(option.values) || option.values.length === 0)
-      throw new OrdersDomainError('選択肢には値を1つ以上登録してください。', 'INVALID_INPUT');
-    const values = option.values.map((value) => requireText(value, '選択肢の値', 100));
+      throw new OrdersDomainError(
+        '選択肢には値を1つ以上登録してください。',
+        'INVALID_INPUT',
+      );
+    const values = option.values.map((value) =>
+      requireText(value, '選択肢の値', 100),
+    );
     if (new Set(values).size !== values.length)
-      throw new OrdersDomainError('選択肢の値を重複登録できません。', 'INVALID_INPUT');
+      throw new OrdersDomainError(
+        '選択肢の値を重複登録できません。',
+        'INVALID_INPUT',
+      );
     return { name: optionName, values };
   });
 
@@ -167,7 +180,10 @@ export function validateProduct(product: {
 }
 
 export function validateOrderSelection(
-  product: Pick<OrderProduct, 'options' | 'requiresBackNumber' | 'requiresBackName'>,
+  product: Pick<
+    OrderProduct,
+    'options' | 'requiresBackNumber' | 'requiresBackName'
+  >,
   input: {
     quantity: number;
     selectedOptions?: Record<string, string>;
@@ -177,27 +193,48 @@ export function validateOrderSelection(
 ) {
   assertQuantity(input.quantity);
   const selectedOptions = input.selectedOptions ?? {};
-  const registeredOptions = new Map(product.options.map((option) => [option.name, option.values]));
+  const registeredOptions = new Map(
+    product.options.map((option) => [option.name, option.values]),
+  );
   for (const [name, value] of Object.entries(selectedOptions)) {
     const values = registeredOptions.get(name);
-    if (!values || !values.includes(value))
-      throw new OrdersDomainError('登録済みでない選択肢は指定できません。', 'INVALID_INPUT');
+    if (!values?.includes(value))
+      throw new OrdersDomainError(
+        '登録済みでない選択肢は指定できません。',
+        'INVALID_INPUT',
+      );
   }
   for (const option of product.options) {
     if (!selectedOptions[option.name])
-      throw new OrdersDomainError(`選択肢「${option.name}」を指定してください。`, 'INVALID_INPUT');
+      throw new OrdersDomainError(
+        `選択肢「${option.name}」を指定してください。`,
+        'INVALID_INPUT',
+      );
   }
 
-  const backNumber = input.backNumber == null ? null : requireText(input.backNumber, '背番号', 20);
-  const backName = input.backName == null ? null : requireText(input.backName, '背ネーム', 40);
+  const backNumber =
+    input.backNumber == null
+      ? null
+      : requireText(input.backNumber, '背番号', 20);
+  const backName =
+    input.backName == null ? null : requireText(input.backName, '背ネーム', 40);
   if (product.requiresBackNumber && !backNumber)
     throw new OrdersDomainError('背番号を入力してください。', 'INVALID_INPUT');
   if (product.requiresBackName && !backName)
-    throw new OrdersDomainError('背ネームを入力してください。', 'INVALID_INPUT');
+    throw new OrdersDomainError(
+      '背ネームを入力してください。',
+      'INVALID_INPUT',
+    );
   if (!product.requiresBackNumber && backNumber)
-    throw new OrdersDomainError('この商品では背番号を指定できません。', 'INVALID_INPUT');
+    throw new OrdersDomainError(
+      'この商品では背番号を指定できません。',
+      'INVALID_INPUT',
+    );
   if (!product.requiresBackName && backName)
-    throw new OrdersDomainError('この商品では背ネームを指定できません。', 'INVALID_INPUT');
+    throw new OrdersDomainError(
+      'この商品では背ネームを指定できません。',
+      'INVALID_INPUT',
+    );
 
   return { selectedOptions: { ...selectedOptions }, backNumber, backName };
 }
@@ -210,7 +247,10 @@ export function transitionCampaignStatus(
     (current === 'open' && next === 'closed') ||
     (current === 'closed' && next === 'completed');
   if (!allowed)
-    throw new OrdersDomainError('募集案件の状態遷移が不正です。', 'INVALID_STATE');
+    throw new OrdersDomainError(
+      '募集案件の状態遷移が不正です。',
+      'INVALID_STATE',
+    );
   return next;
 }
 
@@ -271,19 +311,22 @@ export function createOrdersCsv(rows: OrderCsvRow[]) {
     '支払状態',
     '支払確認日時',
   ];
-  const lines = [header, ...rows.map((row) => [
-    row.orderId,
-    row.campaignTitle,
-    row.ordererName,
-    row.memberName,
-    row.productName,
-    row.selectedOptions,
-    row.quantity,
-    row.unitPrice,
-    row.amount,
-    row.paymentStatus,
-    row.paymentConfirmedAt,
-  ])];
+  const lines = [
+    header,
+    ...rows.map((row) => [
+      row.orderId,
+      row.campaignTitle,
+      row.ordererName,
+      row.memberName,
+      row.productName,
+      row.selectedOptions,
+      row.quantity,
+      row.unitPrice,
+      row.amount,
+      row.paymentStatus,
+      row.paymentConfirmedAt,
+    ]),
+  ];
   // CSVは表計算ソフトで開かれるため、式に解釈される先頭文字を文字列化する。
   return `\uFEFF${lines.map((line) => line.map(csvCell).join(',')).join('\n')}\n`;
 }
@@ -299,16 +342,25 @@ function requireText(value: string, label: string, maxLength: number) {
     throw new OrdersDomainError(`${label}が不正です。`, 'INVALID_INPUT');
   const text = value.trim();
   if (text.length === 0 || text.length > maxLength)
-    throw new OrdersDomainError(`${label}は1〜${maxLength}文字で入力してください。`, 'INVALID_INPUT');
+    throw new OrdersDomainError(
+      `${label}は1〜${maxLength}文字で入力してください。`,
+      'INVALID_INPUT',
+    );
   return text;
 }
 
 function assertMoney(value: number, label: string) {
   if (!Number.isSafeInteger(value) || value < 0 || value > 1_000_000_000)
-    throw new OrdersDomainError(`${label}は0〜1000000000円の整数で入力してください。`, 'INVALID_INPUT');
+    throw new OrdersDomainError(
+      `${label}は0〜1000000000円の整数で入力してください。`,
+      'INVALID_INPUT',
+    );
 }
 
 function assertQuantity(value: number) {
   if (!Number.isSafeInteger(value) || value < 1 || value > 10_000)
-    throw new OrdersDomainError('数量は1〜10000の整数で入力してください。', 'INVALID_INPUT');
+    throw new OrdersDomainError(
+      '数量は1〜10000の整数で入力してください。',
+      'INVALID_INPUT',
+    );
 }

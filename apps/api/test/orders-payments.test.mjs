@@ -18,8 +18,12 @@ const memberships = {
 function createTestApp() {
   const repository = createInMemoryOrdersRepository({
     now: () => new Date('2026-08-22T00:00:00.000Z'),
-    members: [{ id: MEMBER_A, tenantId: TENANT_A, name: '部員A', status: 'active' }],
-    guardianAssignments: [{ tenantId: TENANT_A, userId: 'guardian-a', memberId: MEMBER_A }],
+    members: [
+      { id: MEMBER_A, tenantId: TENANT_A, name: '部員A', status: 'active' },
+    ],
+    guardianAssignments: [
+      { tenantId: TENANT_A, userId: 'guardian-a', memberId: MEMBER_A },
+    ],
   });
   return createOrdersPaymentsApp({
     verifyToken: async (token) => {
@@ -43,7 +47,10 @@ async function json(response) {
 }
 
 function headers(token) {
-  return { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+  return {
+    authorization: `Bearer ${token}`,
+    'content-type': 'application/json',
+  };
 }
 
 async function createCampaign(app) {
@@ -53,13 +60,15 @@ async function createCampaign(app) {
     body: JSON.stringify({
       title: '冬季ユニフォーム',
       deadline: '2026-09-01T00:00:00.000Z',
-      products: [{
-        name: 'シャツ',
-        unitPrice: 3000,
-        options: [{ name: 'サイズ', values: ['S', 'M'] }],
-        requiresBackNumber: true,
-        requiresBackName: false,
-      }],
+      products: [
+        {
+          name: 'シャツ',
+          unitPrice: 3000,
+          options: [{ name: 'サイズ', values: ['S', 'M'] }],
+          requiresBackNumber: true,
+          requiresBackName: false,
+        },
+      ],
     }),
   });
   assert.equal(response.status, 201);
@@ -69,6 +78,10 @@ async function createCampaign(app) {
 test('未認証とstaffの管理操作を拒否する', async () => {
   const app = createTestApp();
   assert.equal((await app.request('/api/v1/orders')).status, 401);
+  const staffList = await app.request('/api/v1/orders', {
+    headers: headers('staff-a'),
+  });
+  assert.equal(staffList.status, 403);
   const response = await app.request('/api/v1/orders', {
     method: 'POST',
     headers: headers('staff-a'),
@@ -93,7 +106,14 @@ test('募集案件を作成し、guardianの注文と登録外選択肢拒否を
     body: JSON.stringify({
       memberId: MEMBER_A,
       ordererName: '注文者',
-      lines: [{ productId: product.id, quantity: 1, selectedOptions: { サイズ: 'XL' }, backNumber: '10' }],
+      lines: [
+        {
+          productId: product.id,
+          quantity: 1,
+          selectedOptions: { サイズ: 'XL' },
+          backNumber: '10',
+        },
+      ],
     }),
   });
   assert.equal(invalid.status, 400);
@@ -104,7 +124,14 @@ test('募集案件を作成し、guardianの注文と登録外選択肢拒否を
     body: JSON.stringify({
       memberId: MEMBER_A,
       ordererName: '注文者',
-      lines: [{ productId: product.id, quantity: 2, selectedOptions: { サイズ: 'M' }, backNumber: '10' }],
+      lines: [
+        {
+          productId: product.id,
+          quantity: 2,
+          selectedOptions: { サイズ: 'M' },
+          backNumber: '10',
+        },
+      ],
     }),
   });
   assert.equal(created.status, 201);
@@ -121,27 +148,43 @@ test('注文者の越境を防ぎ、支払状態・集計・CSVを管理者に�
     body: JSON.stringify({
       memberId: MEMBER_A,
       ordererName: '=式として解釈しない',
-      lines: [{ productId: product.id, quantity: 1, selectedOptions: { サイズ: 'S' }, backNumber: '1' }],
+      lines: [
+        {
+          productId: product.id,
+          quantity: 1,
+          selectedOptions: { サイズ: 'S' },
+          backNumber: '1',
+        },
+      ],
     }),
   });
   const entry = (await json(created)).data;
 
-  const crossTenant = await app.request(`/api/v1/orders/${campaign.id}`, { headers: headers('owner-b') });
+  const crossTenant = await app.request(`/api/v1/orders/${campaign.id}`, {
+    headers: headers('owner-b'),
+  });
   assert.equal(crossTenant.status, 404);
 
-  const paid = await app.request(`/api/v1/orders/${campaign.id}/entries/${entry.id}/payment`, {
-    method: 'PATCH',
-    headers: { ...headers('admin-a'), 'idempotency-key': 'payment-1' },
-    body: JSON.stringify({ status: 'paid' }),
-  });
+  const paid = await app.request(
+    `/api/v1/orders/${campaign.id}/entries/${entry.id}/payment`,
+    {
+      method: 'PATCH',
+      headers: { ...headers('admin-a'), 'idempotency-key': 'payment-1' },
+      body: JSON.stringify({ status: 'paid' }),
+    },
+  );
   assert.equal(paid.status, 200);
   assert.equal((await json(paid)).data.paymentConfirmedBy, 'admin-a');
 
-  const summary = await app.request(`/api/v1/orders/${campaign.id}/summary`, { headers: headers('admin-a') });
+  const summary = await app.request(`/api/v1/orders/${campaign.id}/summary`, {
+    headers: headers('admin-a'),
+  });
   assert.equal(summary.status, 200);
   assert.equal((await json(summary)).data.paidAmount, 3000);
 
-  const csv = await app.request(`/api/v1/orders/${campaign.id}/export.csv`, { headers: headers('admin-a') });
+  const csv = await app.request(`/api/v1/orders/${campaign.id}/export.csv`, {
+    headers: headers('admin-a'),
+  });
   assert.equal(csv.status, 200);
   assert.equal(csv.headers.get('content-type'), 'text/csv; charset=utf-8');
   const csvBytes = new Uint8Array(await csv.arrayBuffer());
@@ -149,6 +192,9 @@ test('注文者の越境を防ぎ、支払状態・集計・CSVを管理者に�
   const csvText = new TextDecoder().decode(csvBytes);
   assert.ok(csvText.includes("'=式として解釈しない"));
 
-  const staffCsv = await app.request(`/api/v1/orders/${campaign.id}/export.csv`, { headers: headers('staff-a') });
+  const staffCsv = await app.request(
+    `/api/v1/orders/${campaign.id}/export.csv`,
+    { headers: headers('staff-a') },
+  );
   assert.equal(staffCsv.status, 403);
 });

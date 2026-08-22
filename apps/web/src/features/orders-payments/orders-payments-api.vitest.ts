@@ -12,21 +12,45 @@ describe('共同購買API client', () => {
     let request: { url: string; init?: RequestInit } | undefined;
     globalThis.fetch = async (input, init) => {
       request = { url: String(input), init };
-      return new Response(JSON.stringify({ data: { id: 'entry-1' } }), { status: 201 });
+      return new Response(JSON.stringify({ data: { id: 'entry-1' } }), {
+        status: 201,
+      });
     };
-    await createOrdersPaymentsApi({ getAccessToken: () => 'token' }).createEntry('order-1', {
+    await createOrdersPaymentsApi({
+      getAccessToken: () => 'token',
+    }).createEntry('order-1', {
       memberId: 'member-1',
       ordererName: '注文者',
-      lines: [{ productId: 'product-1', quantity: 1, selectedOptions: {}, backNumber: null, backName: null }],
+      lines: [
+        {
+          productId: 'product-1',
+          quantity: 1,
+          selectedOptions: {},
+          backNumber: null,
+          backName: null,
+        },
+      ],
     });
     expect(request?.url).toBe('/api/v1/orders/order-1/entries');
-    expect(request?.init?.headers).toMatchObject({ Authorization: 'Bearer token' });
-    expect((request?.init?.headers as Record<string, string>)['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
+    expect(request?.init?.headers).toMatchObject({
+      Authorization: 'Bearer token',
+    });
+    const requestHeaders = (request?.init?.headers ?? {}) as Record<
+      string,
+      string
+    >;
+    expect(requestHeaders['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it('CSV出力はJSONとして解釈せずBlobを返す', async () => {
-    globalThis.fetch = async () => new Response('csv', { status: 200, headers: { 'content-type': 'text/csv' } });
-    const blob = await createOrdersPaymentsApi({ getAccessToken: () => 'token' }).exportCsv('order-1');
+    globalThis.fetch = async () =>
+      new Response('csv', {
+        status: 200,
+        headers: { 'content-type': 'text/csv' },
+      });
+    const blob = await createOrdersPaymentsApi({
+      getAccessToken: () => 'token',
+    }).exportCsv('order-1');
     expect(await blob.text()).toBe('csv');
   });
 });

@@ -1,5 +1,3 @@
-export { OrdersPaymentsPage } from './orders-payments-page.js';
-export { createOrdersPaymentsApi } from './orders-payments-api.js';
 export type {
   OrdersCampaign,
   OrdersEntry,
@@ -7,3 +5,5 @@ export type {
   OrdersProduct,
   OrdersSummary,
 } from './orders-payments-api.js';
+export { createOrdersPaymentsApi } from './orders-payments-api.js';
+export { OrdersPaymentsPage } from './orders-payments-page.js';

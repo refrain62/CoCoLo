@@ -53,7 +53,12 @@ export type OrdersSummary = {
     quantity: number;
     amount: number;
   }>;
-  unpaid: Array<{ entryId: string; ordererName: string; memberName: string; amount: number }>;
+  unpaid: Array<{
+    entryId: string;
+    ordererName: string;
+    memberName: string;
+    amount: number;
+  }>;
 };
 
 export type OrdersPaymentsApi = {
@@ -69,25 +74,35 @@ export type OrdersPaymentsApi = {
       requiresBackName: boolean;
     }>;
   }) => Promise<OrdersCampaign>;
-  createEntry: (campaignId: string, input: {
-    memberId: string;
-    ordererName: string;
-    lines: Array<{
-      productId: string;
-      quantity: number;
-      selectedOptions: Record<string, string>;
-      backNumber: string | null;
-      backName: string | null;
-    }>;
-  }) => Promise<OrdersEntry>;
+  createEntry: (
+    campaignId: string,
+    input: {
+      memberId: string;
+      ordererName: string;
+      lines: Array<{
+        productId: string;
+        quantity: number;
+        selectedOptions: Record<string, string>;
+        backNumber: string | null;
+        backName: string | null;
+      }>;
+    },
+  ) => Promise<OrdersEntry>;
   listEntries: (campaignId: string) => Promise<OrdersEntry[]>;
-  updatePayment: (campaignId: string, entryId: string, status: 'unpaid' | 'paid') => Promise<OrdersEntry>;
+  updatePayment: (
+    campaignId: string,
+    entryId: string,
+    status: 'unpaid' | 'paid',
+  ) => Promise<OrdersEntry>;
   getSummary: (campaignId: string) => Promise<OrdersSummary>;
   exportCsv: (campaignId: string) => Promise<Blob>;
 };
 
 export class OrdersPaymentsApiError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
     super(message);
     this.name = 'OrdersPaymentsApiError';
   }
@@ -100,8 +115,13 @@ type ApiOptions = {
 };
 
 async function readError(response: Response) {
-  const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
-  return new OrdersPaymentsApiError(response.status, body.error?.message ?? '共同購買の処理に失敗しました。');
+  const body = (await response.json().catch(() => ({}))) as {
+    error?: { message?: string };
+  };
+  return new OrdersPaymentsApiError(
+    response.status,
+    body.error?.message ?? '共同購買の処理に失敗しました。',
+  );
 }
 
 export function createOrdersPaymentsApi({
@@ -134,34 +154,47 @@ export function createOrdersPaymentsApi({
       return (await json<OrdersCampaign[]>('/api/v1/orders')).data;
     },
     async createCampaign(input) {
-      return (await json<OrdersCampaign>('/api/v1/orders', {
-        method: 'POST',
-        headers: { 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify(input),
-      })).data;
+      return (
+        await json<OrdersCampaign>('/api/v1/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify(input),
+        })
+      ).data;
     },
     async createEntry(campaignId, input) {
-      return (await json<OrdersEntry>(`/api/v1/orders/${campaignId}/entries`, {
-        method: 'POST',
-        headers: { 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify(input),
-      })).data;
+      return (
+        await json<OrdersEntry>(`/api/v1/orders/${campaignId}/entries`, {
+          method: 'POST',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify(input),
+        })
+      ).data;
     },
     async listEntries(campaignId) {
-      return (await json<OrdersEntry[]>(`/api/v1/orders/${campaignId}/entries`)).data;
+      return (await json<OrdersEntry[]>(`/api/v1/orders/${campaignId}/entries`))
+        .data;
     },
     async updatePayment(campaignId, entryId, status) {
-      return (await json<OrdersEntry>(`/api/v1/orders/${campaignId}/entries/${entryId}/payment`, {
-        method: 'PATCH',
-        headers: { 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ status }),
-      })).data;
+      return (
+        await json<OrdersEntry>(
+          `/api/v1/orders/${campaignId}/entries/${entryId}/payment`,
+          {
+            method: 'PATCH',
+            headers: { 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify({ status }),
+          },
+        )
+      ).data;
     },
     async getSummary(campaignId) {
-      return (await json<OrdersSummary>(`/api/v1/orders/${campaignId}/summary`)).data;
+      return (await json<OrdersSummary>(`/api/v1/orders/${campaignId}/summary`))
+        .data;
     },
     async exportCsv(campaignId) {
-      return request(`/api/v1/orders/${campaignId}/export.csv`, { headers: { Accept: 'text/csv' } }).then((response) => response.blob());
+      return request(`/api/v1/orders/${campaignId}/export.csv`, {
+        headers: { Accept: 'text/csv' },
+      }).then((response) => response.blob());
     },
   };
 }

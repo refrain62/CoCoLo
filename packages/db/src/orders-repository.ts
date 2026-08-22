@@ -1,23 +1,23 @@
 import { createHash, randomBytes } from 'node:crypto';
 import {
+  calculateLineAmount,
+  calculateOrderTotal,
+  createOrdersCsv,
+  isOrdersManager,
+  type OrderCsvRow,
   type OrderEntry,
   type OrderLine,
   type OrderProduct,
+  OrdersDomainError,
   type OrdersRole,
-  type OrderCsvRow,
   type OrdersSummary,
+  type PaymentStatus,
   type PurchaseCampaign,
   type PurchaseCampaignStatus,
-  type PaymentStatus,
-  OrdersDomainError,
-  calculateLineAmount,
-  calculateOrderTotal,
-  isOrdersManager,
   summarizeOrders,
   transitionCampaignStatus,
   validateOrderSelection,
   validateProduct,
-  createOrdersCsv,
 } from '@cocolo/domain/orders';
 
 export type OrdersActor = {
@@ -72,15 +72,48 @@ export type OrdersAuditRecord = {
 };
 
 export type OrdersRepository = {
-  listCampaigns: (input: OrdersActor & { status?: PurchaseCampaignStatus }) => Promise<PurchaseCampaign[]>;
-  getCampaign: (input: OrdersActor & { orderId: string }) => Promise<PurchaseCampaign>;
-  createCampaign: (input: OrdersActor & { idempotencyKey?: string | null }, campaign: OrderCampaignInput) => Promise<PurchaseCampaign>;
-  addProduct: (input: OrdersActor & { orderId: string; idempotencyKey?: string | null }, product: OrderProductInput) => Promise<OrderProduct>;
-  updateCampaignStatus: (input: OrdersActor & { orderId: string; status: PurchaseCampaignStatus; idempotencyKey?: string | null }) => Promise<PurchaseCampaign>;
-  createEntry: (input: OrdersActor & { orderId: string; idempotencyKey?: string | null; entry: OrderEntryInput }) => Promise<OrderEntry>;
-  listEntries: (input: OrdersActor & { orderId: string; paymentStatus?: PaymentStatus }) => Promise<OrderEntry[]>;
-  updatePayment: (input: OrdersActor & { orderId: string; entryId: string; status: PaymentStatus; idempotencyKey?: string | null }) => Promise<OrderEntry>;
-  summarize: (input: OrdersActor & { orderId: string }) => Promise<OrdersSummary>;
+  listCampaigns: (
+    input: OrdersActor & { status?: PurchaseCampaignStatus },
+  ) => Promise<PurchaseCampaign[]>;
+  getCampaign: (
+    input: OrdersActor & { orderId: string },
+  ) => Promise<PurchaseCampaign>;
+  createCampaign: (
+    input: OrdersActor & { idempotencyKey?: string | null },
+    campaign: OrderCampaignInput,
+  ) => Promise<PurchaseCampaign>;
+  addProduct: (
+    input: OrdersActor & { orderId: string; idempotencyKey?: string | null },
+    product: OrderProductInput,
+  ) => Promise<OrderProduct>;
+  updateCampaignStatus: (
+    input: OrdersActor & {
+      orderId: string;
+      status: PurchaseCampaignStatus;
+      idempotencyKey?: string | null;
+    },
+  ) => Promise<PurchaseCampaign>;
+  createEntry: (
+    input: OrdersActor & {
+      orderId: string;
+      idempotencyKey?: string | null;
+      entry: OrderEntryInput;
+    },
+  ) => Promise<OrderEntry>;
+  listEntries: (
+    input: OrdersActor & { orderId: string; paymentStatus?: PaymentStatus },
+  ) => Promise<OrderEntry[]>;
+  updatePayment: (
+    input: OrdersActor & {
+      orderId: string;
+      entryId: string;
+      status: PaymentStatus;
+      idempotencyKey?: string | null;
+    },
+  ) => Promise<OrderEntry>;
+  summarize: (
+    input: OrdersActor & { orderId: string },
+  ) => Promise<OrdersSummary>;
   exportCsv: (input: OrdersActor & { orderId: string }) => Promise<string>;
   listAuditLogs: (tenantId: string) => Promise<OrdersAuditRecord[]>;
 };
@@ -89,7 +122,11 @@ export type OrdersRepositorySeed = {
   campaigns?: PurchaseCampaign[];
   entries?: OrderEntry[];
   members?: OrdersMember[];
-  guardianAssignments?: Array<{ userId: string; memberId: string; tenantId: string }>;
+  guardianAssignments?: Array<{
+    userId: string;
+    memberId: string;
+    tenantId: string;
+  }>;
   now?: () => Date;
   idGenerator?: () => string;
 };
@@ -108,7 +145,9 @@ export class OrdersRepositoryError extends Error {
  * 注文系テーブルを追加する前でも、APIと認可境界を実行できる分離adapter。
  * Prisma schemaへモデルを追加する段階では、このrepositoryのメソッド契約をSQL adapterへ移す。
  */
-export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}): OrdersRepository {
+export function createInMemoryOrdersRepository(
+  seed: OrdersRepositorySeed = {},
+): OrdersRepository {
   const now = seed.now ?? (() => new Date());
   const createId = seed.idGenerator ?? uuidv7;
   const campaigns = new Map<string, PurchaseCampaign>();
@@ -118,27 +157,48 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
   const audits: OrdersAuditRecord[] = [];
   const idempotency = new Map<string, { hash: string; resourceId: string }>();
 
-  for (const campaign of seed.campaigns ?? []) campaigns.set(campaign.id, clone(campaign));
+  for (const campaign of seed.campaigns ?? [])
+    campaigns.set(campaign.id, clone(campaign));
   for (const entry of seed.entries ?? []) entries.set(entry.id, clone(entry));
-  for (const member of seed.members ?? []) members.set(member.id, clone(member));
+  for (const member of seed.members ?? [])
+    members.set(member.id, clone(member));
   for (const assignment of seed.guardianAssignments ?? [])
-    assignments.add(`${assignment.tenantId}:${assignment.userId}:${assignment.memberId}`);
+    assignments.add(
+      `${assignment.tenantId}:${assignment.userId}:${assignment.memberId}`,
+    );
 
   function requireManager(role: OrdersRole) {
     if (!isOrdersManager(role))
-      throw new OrdersRepositoryError('FORBIDDEN', '共同購買の管理権限がありません。');
+      throw new OrdersRepositoryError(
+        'FORBIDDEN',
+        '共同購買の管理権限がありません。',
+      );
+  }
+
+  function requireViewer(role: OrdersRole) {
+    if (role === 'staff')
+      throw new OrdersRepositoryError(
+        'FORBIDDEN',
+        '共同購買を閲覧する権限がありません。',
+      );
   }
 
   function requireCampaign(actor: OrdersActor, orderId: string) {
     const campaign = campaigns.get(orderId);
     if (!campaign || campaign.tenantId !== actor.tenantId)
-      throw new OrdersRepositoryError('NOT_FOUND', '募集案件が見つかりません。');
+      throw new OrdersRepositoryError(
+        'NOT_FOUND',
+        '募集案件が見つかりません。',
+      );
     return campaign;
   }
 
   function requireOpen(campaign: PurchaseCampaign) {
     if (campaign.status !== 'open')
-      throw new OrdersRepositoryError('CONFLICT', '募集案件が注文を受け付けていません。');
+      throw new OrdersRepositoryError(
+        'CONFLICT',
+        '募集案件が注文を受け付けていません。',
+      );
     if (Date.parse(campaign.deadline) <= now().getTime())
       throw new OrdersRepositoryError('CONFLICT', '注文締切を過ぎています。');
   }
@@ -146,14 +206,23 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
   function requireMember(actor: OrdersActor, memberId: string) {
     const member = members.get(memberId);
     if (!member || member.tenantId !== actor.tenantId)
-      throw new OrdersRepositoryError('NOT_FOUND', '対象部員が見つかりません。');
+      throw new OrdersRepositoryError(
+        'NOT_FOUND',
+        '対象部員が見つかりません。',
+      );
     if (member.status !== 'active')
-      throw new OrdersRepositoryError('CONFLICT', '停止または退部した部員は注文できません。');
+      throw new OrdersRepositoryError(
+        'CONFLICT',
+        '停止または退部した部員は注文できません。',
+      );
     if (
       actor.role === 'guardian' &&
       !assignments.has(`${actor.tenantId}:${actor.actorUserId}:${memberId}`)
     )
-      throw new OrdersRepositoryError('FORBIDDEN', '担当部員の注文だけを登録できます。');
+      throw new OrdersRepositoryError(
+        'FORBIDDEN',
+        '担当部員の注文だけを登録できます。',
+      );
     return member;
   }
 
@@ -168,13 +237,22 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
     const hash = requestHash(input);
     const previous = idempotency.get(scope);
     if (previous && previous.hash !== hash)
-      throw new OrdersRepositoryError('CONFLICT', '同じIdempotency-Keyで内容を変更できません。');
+      throw new OrdersRepositoryError(
+        'CONFLICT',
+        '同じIdempotency-Keyで内容を変更できません。',
+      );
     if (previous) return previous.resourceId;
     idempotency.set(scope, { hash, resourceId });
     return null;
   }
 
-  function addAudit(actor: OrdersActor, action: string, resourceType: string, resourceId: string | null, metadata: Record<string, unknown>) {
+  function addAudit(
+    actor: OrdersActor,
+    action: string,
+    resourceType: string,
+    resourceId: string | null,
+    metadata: Record<string, unknown>,
+  ) {
     audits.push({
       id: createId(),
       tenantId: actor.tenantId,
@@ -189,17 +267,27 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
 
   return {
     async listCampaigns(input) {
+      requireViewer(input.role);
       const result = [...campaigns.values()]
-        .filter((campaign) => campaign.tenantId === input.tenantId && (!input.status || campaign.status === input.status))
+        .filter(
+          (campaign) =>
+            campaign.tenantId === input.tenantId &&
+            (!input.status || campaign.status === input.status),
+        )
         .sort(compareCreated)
         .map(clone);
-      addAudit(input, 'orders.campaign.list', 'order', null, { status: input.status ?? null });
+      addAudit(input, 'orders.campaign.list', 'order', null, {
+        status: input.status ?? null,
+      });
       return result;
     },
 
     async getCampaign(input) {
+      requireViewer(input.role);
       const campaign = requireCampaign(input, input.orderId);
-      addAudit(input, 'orders.campaign.view', 'order', campaign.id, { containsPersonalData: false });
+      addAudit(input, 'orders.campaign.view', 'order', campaign.id, {
+        containsPersonalData: false,
+      });
       return clone(campaign);
     },
 
@@ -207,12 +295,24 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
       requireManager(input.role);
       const normalized = normalizeCampaign(value);
       if (Date.parse(normalized.deadline) <= now().getTime())
-        throw new OrdersRepositoryError('INVALID_INPUT', '注文締切は現在より後に設定してください。');
+        throw new OrdersRepositoryError(
+          'INVALID_INPUT',
+          '注文締切は現在より後に設定してください。',
+        );
       const id = createId();
-      const replayId = rememberIdempotency(input, input.idempotencyKey, normalized, id);
+      const replayId = rememberIdempotency(
+        input,
+        input.idempotencyKey,
+        normalized,
+        id,
+      );
       if (replayId) {
         const replay = campaigns.get(replayId);
-        if (!replay) throw new OrdersRepositoryError('CONFLICT', '冪等キーの結果を復元できません。');
+        if (!replay)
+          throw new OrdersRepositoryError(
+            'CONFLICT',
+            '冪等キーの結果を復元できません。',
+          );
         return clone(replay);
       }
       const createdAt = now().toISOString();
@@ -241,42 +341,83 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
       requireManager(input.role);
       const campaign = requireCampaign(input, input.orderId);
       if (campaign.status !== 'open')
-        throw new OrdersRepositoryError('CONFLICT', '締切済みの募集案件は変更できません。');
+        throw new OrdersRepositoryError(
+          'CONFLICT',
+          '締切済みの募集案件は変更できません。',
+        );
       const normalized = normalizeProduct(value);
       const id = createId();
-      const replayId = rememberIdempotency(input, input.idempotencyKey, { orderId: input.orderId, product: normalized }, id);
+      const replayId = rememberIdempotency(
+        input,
+        input.idempotencyKey,
+        { orderId: input.orderId, product: normalized },
+        id,
+      );
       if (replayId) {
-        const replay = campaign.products.find((product) => product.id === replayId);
-        if (!replay) throw new OrdersRepositoryError('CONFLICT', '冪等キーの結果を復元できません。');
+        const replay = campaign.products.find(
+          (product) => product.id === replayId,
+        );
+        if (!replay)
+          throw new OrdersRepositoryError(
+            'CONFLICT',
+            '冪等キーの結果を復元できません。',
+          );
         return clone(replay);
       }
-      const product: OrderProduct = { ...normalized, id, campaignId: campaign.id };
+      const product: OrderProduct = {
+        ...normalized,
+        id,
+        campaignId: campaign.id,
+      };
       campaign.products.push(product);
-      addAudit(input, 'orders.product.create', 'order_product', id, { orderId: campaign.id, optionCount: product.options.length });
+      addAudit(input, 'orders.product.create', 'order_product', id, {
+        orderId: campaign.id,
+        optionCount: product.options.length,
+      });
       return clone(product);
     },
 
     async updateCampaignStatus(input) {
       requireManager(input.role);
       const campaign = requireCampaign(input, input.orderId);
-      const nextStatus = transitionCampaignStatus(campaign.status, input.status);
-      const replayId = rememberIdempotency(input, input.idempotencyKey, { orderId: input.orderId, status: input.status }, campaign.id);
+      const nextStatus = transitionCampaignStatus(
+        campaign.status,
+        input.status,
+      );
+      const replayId = rememberIdempotency(
+        input,
+        input.idempotencyKey,
+        { orderId: input.orderId, status: input.status },
+        campaign.id,
+      );
       if (replayId) return clone(campaign);
       const previousStatus = campaign.status;
       campaign.status = nextStatus;
-      addAudit(input, 'orders.campaign.status.update', 'order', campaign.id, { previousStatus, nextStatus });
+      addAudit(input, 'orders.campaign.status.update', 'order', campaign.id, {
+        previousStatus,
+        nextStatus,
+      });
       return clone(campaign);
     },
 
     async createEntry(input) {
       if (input.role !== 'guardian')
-        throw new OrdersRepositoryError('FORBIDDEN', '保護者の注文権限がありません。');
+        throw new OrdersRepositoryError(
+          'FORBIDDEN',
+          '保護者の注文権限がありません。',
+        );
       const campaign = requireCampaign(input, input.orderId);
       requireOpen(campaign);
       const member = requireMember(input, input.entry.memberId);
       const normalizedLines: OrderLine[] = input.entry.lines.map((line) => {
-        const product = campaign.products.find((candidate) => candidate.id === line.productId);
-        if (!product) throw new OrdersRepositoryError('NOT_FOUND', '募集案件に属さない商品です。');
+        const product = campaign.products.find(
+          (candidate) => candidate.id === line.productId,
+        );
+        if (!product)
+          throw new OrdersRepositoryError(
+            'NOT_FOUND',
+            '募集案件に属さない商品です。',
+          );
         try {
           const selection = validateOrderSelection(product, line);
           return {
@@ -289,7 +430,8 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
             amount: calculateLineAmount(product.unitPrice, line.quantity),
           };
         } catch (error) {
-          if (error instanceof OrdersDomainError) throw new OrdersRepositoryError('INVALID_INPUT', error.message);
+          if (error instanceof OrdersDomainError)
+            throw new OrdersRepositoryError('INVALID_INPUT', error.message);
           throw error;
         }
       });
@@ -299,12 +441,24 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
         lines: normalizedLines.map(({ id: _id, ...line }) => line),
       };
       if (!normalized.ordererName)
-        throw new OrdersRepositoryError('INVALID_INPUT', '注文者名を入力してください。');
+        throw new OrdersRepositoryError(
+          'INVALID_INPUT',
+          '注文者名を入力してください。',
+        );
       const id = createId();
-      const replayId = rememberIdempotency(input, input.idempotencyKey, normalized, id);
+      const replayId = rememberIdempotency(
+        input,
+        input.idempotencyKey,
+        normalized,
+        id,
+      );
       if (replayId) {
         const replay = entries.get(replayId);
-        if (!replay) throw new OrdersRepositoryError('CONFLICT', '冪等キーの結果を復元できません。');
+        if (!replay)
+          throw new OrdersRepositoryError(
+            'CONFLICT',
+            '冪等キーの結果を復元できません。',
+          );
         return clone(replay);
       }
       const entry: OrderEntry = {
@@ -328,20 +482,39 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
         memberId: member.id,
         lineCount: entry.lines.length,
         totalAmount: entry.totalAmount,
-        personalDataFields: ['ordererName', 'memberId', 'memberName', 'backName'],
+        personalDataFields: [
+          'ordererName',
+          'memberId',
+          'memberName',
+          'backName',
+        ],
       });
       return clone(entry);
     },
 
     async listEntries(input) {
       if (input.role === 'staff')
-        throw new OrdersRepositoryError('FORBIDDEN', '注文を閲覧する権限がありません。');
+        throw new OrdersRepositoryError(
+          'FORBIDDEN',
+          '注文を閲覧する権限がありません。',
+        );
       const campaign = requireCampaign(input, input.orderId);
       const result = [...entries.values()]
-        .filter((entry) => entry.tenantId === input.tenantId && entry.campaignId === campaign.id && (!input.paymentStatus || entry.paymentStatus === input.paymentStatus) && (input.role !== 'guardian' || entry.ordererUserId === input.actorUserId))
+        .filter(
+          (entry) =>
+            entry.tenantId === input.tenantId &&
+            entry.campaignId === campaign.id &&
+            (!input.paymentStatus ||
+              entry.paymentStatus === input.paymentStatus) &&
+            (input.role !== 'guardian' ||
+              entry.ordererUserId === input.actorUserId),
+        )
         .sort(compareCreated)
         .map(clone);
-      addAudit(input, 'orders.entry.view', 'order_entry', campaign.id, { scope: input.role === 'guardian' ? 'self' : 'tenant', containsPersonalData: true });
+      addAudit(input, 'orders.entry.view', 'order_entry', campaign.id, {
+        scope: input.role === 'guardian' ? 'self' : 'tenant',
+        containsPersonalData: true,
+      });
       return result;
     },
 
@@ -349,14 +522,32 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
       requireManager(input.role);
       const campaign = requireCampaign(input, input.orderId);
       const entry = entries.get(input.entryId);
-      if (!entry || entry.tenantId !== input.tenantId || entry.campaignId !== campaign.id)
-        throw new OrdersRepositoryError('NOT_FOUND', '注文明細が見つかりません。');
-      const replayId = rememberIdempotency(input, input.idempotencyKey, { orderId: input.orderId, entryId: input.entryId, status: input.status }, entry.id);
+      if (
+        !entry ||
+        entry.tenantId !== input.tenantId ||
+        entry.campaignId !== campaign.id
+      )
+        throw new OrdersRepositoryError(
+          'NOT_FOUND',
+          '注文明細が見つかりません。',
+        );
+      const replayId = rememberIdempotency(
+        input,
+        input.idempotencyKey,
+        {
+          orderId: input.orderId,
+          entryId: input.entryId,
+          status: input.status,
+        },
+        entry.id,
+      );
       if (replayId) return clone(entry);
       const previousStatus = entry.paymentStatus;
       entry.paymentStatus = input.status;
-      entry.paymentConfirmedAt = input.status === 'paid' ? now().toISOString() : null;
-      entry.paymentConfirmedBy = input.status === 'paid' ? input.actorUserId : null;
+      entry.paymentConfirmedAt =
+        input.status === 'paid' ? now().toISOString() : null;
+      entry.paymentConfirmedBy =
+        input.status === 'paid' ? input.actorUserId : null;
       addAudit(input, 'orders.payment.update', 'order_entry', entry.id, {
         orderId: entry.campaignId,
         previousStatus,
@@ -370,9 +561,16 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
     async summarize(input) {
       requireManager(input.role);
       const campaign = requireCampaign(input, input.orderId);
-      const campaignEntries = [...entries.values()].filter((entry) => entry.tenantId === input.tenantId && entry.campaignId === campaign.id);
+      const campaignEntries = [...entries.values()].filter(
+        (entry) =>
+          entry.tenantId === input.tenantId && entry.campaignId === campaign.id,
+      );
       const summary = summarizeOrders(campaignEntries);
-      addAudit(input, 'orders.summary.view', 'order', campaign.id, { totalOrders: summary.totalOrders, totalAmount: summary.totalAmount, containsPersonalData: true });
+      addAudit(input, 'orders.summary.view', 'order', campaign.id, {
+        totalOrders: summary.totalOrders,
+        totalAmount: summary.totalAmount,
+        containsPersonalData: true,
+      });
       return clone(summary);
     },
 
@@ -380,7 +578,13 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
       requireManager(input.role);
       const campaign = requireCampaign(input, input.orderId);
       const rows: OrderCsvRow[] = [];
-      for (const entry of [...entries.values()].filter((candidate) => candidate.tenantId === input.tenantId && candidate.campaignId === campaign.id).sort(compareCreated)) {
+      for (const entry of [...entries.values()]
+        .filter(
+          (candidate) =>
+            candidate.tenantId === input.tenantId &&
+            candidate.campaignId === campaign.id,
+        )
+        .sort(compareCreated)) {
         for (const line of entry.lines) {
           rows.push({
             orderId: entry.id,
@@ -388,18 +592,29 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
             ordererName: entry.ordererName,
             memberName: entry.memberName,
             productName: line.productName,
-            selectedOptions: Object.entries(line.selectedOptions).map(([name, value]) => `${name}=${value}`).join(' / '),
+            selectedOptions: Object.entries(line.selectedOptions)
+              .map(([name, value]) => `${name}=${value}`)
+              .join(' / '),
             quantity: line.quantity,
             unitPrice: line.unitPrice,
             amount: line.amount,
-            paymentStatus: entry.paymentStatus === 'paid' ? '支払済み' : '未払い',
+            paymentStatus:
+              entry.paymentStatus === 'paid' ? '支払済み' : '未払い',
             paymentConfirmedAt: entry.paymentConfirmedAt ?? '',
           });
         }
       }
       addAudit(input, 'orders.csv.export', 'order', campaign.id, {
         rowCount: rows.length,
-        columns: ['orderId', 'campaignTitle', 'ordererName', 'memberName', 'productName', 'amount', 'paymentStatus'],
+        columns: [
+          'orderId',
+          'campaignTitle',
+          'ordererName',
+          'memberName',
+          'productName',
+          'amount',
+          'paymentStatus',
+        ],
         containsPersonalData: true,
       });
       return createOrdersCsv(rows);
@@ -412,12 +627,25 @@ export function createInMemoryOrdersRepository(seed: OrdersRepositorySeed = {}):
 }
 
 function normalizeCampaign(value: OrderCampaignInput) {
-  if (typeof value.title !== 'string' || !value.title.trim() || value.title.trim().length > 200)
-    throw new OrdersRepositoryError('INVALID_INPUT', '募集案件名は1〜200文字で入力してください。');
+  if (
+    typeof value.title !== 'string' ||
+    !value.title.trim() ||
+    value.title.trim().length > 200
+  )
+    throw new OrdersRepositoryError(
+      'INVALID_INPUT',
+      '募集案件名は1〜200文字で入力してください。',
+    );
   if (!Number.isFinite(Date.parse(value.deadline)))
-    throw new OrdersRepositoryError('INVALID_INPUT', '注文締切の日時が不正です。');
+    throw new OrdersRepositoryError(
+      'INVALID_INPUT',
+      '注文締切の日時が不正です。',
+    );
   if (!Array.isArray(value.products) || value.products.length === 0)
-    throw new OrdersRepositoryError('INVALID_INPUT', '商品を1件以上登録してください。');
+    throw new OrdersRepositoryError(
+      'INVALID_INPUT',
+      '商品を1件以上登録してください。',
+    );
   return {
     title: value.title.trim(),
     deadline: new Date(value.deadline).toISOString(),
@@ -425,11 +653,14 @@ function normalizeCampaign(value: OrderCampaignInput) {
   };
 }
 
-function normalizeProduct(value: OrderProductInput): Omit<OrderProduct, 'id' | 'campaignId'> {
+function normalizeProduct(
+  value: OrderProductInput,
+): Omit<OrderProduct, 'id' | 'campaignId'> {
   try {
     return validateProduct(value);
   } catch (error) {
-    if (error instanceof OrdersDomainError) throw new OrdersRepositoryError('INVALID_INPUT', error.message);
+    if (error instanceof OrdersDomainError)
+      throw new OrdersRepositoryError('INVALID_INPUT', error.message);
     throw error;
   }
 }
@@ -438,8 +669,13 @@ function requestHash(value: unknown) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
-function compareCreated(left: { createdAt: string; id: string }, right: { createdAt: string; id: string }) {
-  return `${left.createdAt}:${left.id}`.localeCompare(`${right.createdAt}:${right.id}`);
+function compareCreated(
+  left: { createdAt: string; id: string },
+  right: { createdAt: string; id: string },
+) {
+  return `${left.createdAt}:${left.id}`.localeCompare(
+    `${right.createdAt}:${right.id}`,
+  );
 }
 
 function clone<T>(value: T): T {
@@ -452,8 +688,8 @@ function uuidv7() {
   for (let index = 5; index >= 0; index -= 1) {
     bytes[index] = Number(timestamp >> BigInt(index * 8)) & 0xff;
   }
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  bytes[6] = (bytes.readUInt8(6) & 0x0f) | 0x70;
+  bytes[8] = (bytes.readUInt8(8) & 0x3f) | 0x80;
   const hex = bytes.toString('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
