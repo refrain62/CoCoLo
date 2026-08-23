@@ -7,7 +7,10 @@ import {
 } from '../dist/security/rate-limit.js';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
+const MEMBER_ID = '00000000-0000-7000-8000-000000000002';
 const TOKEN = 'owner-a';
+const EXPECTED_RATE_LIMIT_KEY =
+  'user:local:40c041842ccbe556bd30396b6ba8070418afa56119feebd79d2b74a15d176fc8:3141bd6a6db1e7517a8d29683809e31d03ba320df700d5335fef6cb98a4c0bec';
 
 class RecordingRateLimitStore extends InMemoryRateLimitStore {
   readonly keys: string[] = [];
@@ -35,8 +38,10 @@ class RecordingRateLimitStore extends InMemoryRateLimitStore {
 
 function createTestApp(store: RecordingRateLimitStore) {
   let producerCalls = 0;
+  let verifyTokenCalls = 0;
   const app = createApp({
     verifyToken: async (token) => {
+      verifyTokenCalls += 1;
       if (token !== TOKEN) throw new Error('invalid token');
       return {
         userId: TOKEN,
@@ -64,14 +69,18 @@ function createTestApp(store: RecordingRateLimitStore) {
     },
     rateLimit: { localStore: store },
   });
-  return { app, getProducerCalls: () => producerCalls };
+  return {
+    app,
+    getProducerCalls: () => producerCalls,
+    getVerifyTokenCalls: () => verifyTokenCalls,
+  };
 }
 
 const authHeaders = { authorization: `Bearer ${TOKEN}` };
 
 test('認証済みのexact routeにもtenant/user rate limitを適用する', async () => {
   const store = new RecordingRateLimitStore(true);
-  const { app, getProducerCalls } = createTestApp(store);
+  const { app, getProducerCalls, getVerifyTokenCalls } = createTestApp(store);
 
   const members = await app.request('/api/v1/members', {
     headers: authHeaders,
@@ -95,6 +104,7 @@ test('認証済みのexact routeにもtenant/user rate limitを適用する', as
   assert.equal(members.status, 200);
   assert.equal(notification.status, 202);
   assert.equal(store.keys.length, 2);
+  assert.equal(store.keys[0], EXPECTED_RATE_LIMIT_KEY);
   assert.equal(
     store.keys[0],
     createRateLimitKey('local', 'authenticated', {
@@ -106,6 +116,7 @@ test('認証済みのexact routeにもtenant/user rate limitを適用する', as
   assert.equal(store.keys[0], store.keys[1]);
   assert.match(store.keys[0], /^user:local:[a-f0-9]{64}:[a-f0-9]{64}$/);
   assert.doesNotMatch(store.keys[0], new RegExp(`${TENANT_A}|${TOKEN}`));
+  assert.equal(getVerifyTokenCalls(), 2);
   assert.equal(getProducerCalls(), 1);
 });
 
@@ -114,6 +125,25 @@ test('rate limit超過時はexact routeの業務handlerを呼ばず429にする'
   const { app, getProducerCalls } = createTestApp(store);
 
   const members = await app.request('/api/v1/members', {
+    headers: authHeaders,
+  });
+  const memberCreate = await app.request('/api/v1/members', {
+    method: 'POST',
+    headers: authHeaders,
+  });
+  const memberUpdate = await app.request(`/api/v1/members/${MEMBER_ID}`, {
+    method: 'PATCH',
+    headers: authHeaders,
+  });
+  const memberRetire = await app.request(
+    `/api/v1/members/${MEMBER_ID}/retire`,
+    {
+      method: 'POST',
+      headers: authHeaders,
+    },
+  );
+  const memberPromote = await app.request('/api/v1/members/promote', {
+    method: 'POST',
     headers: authHeaders,
   });
   const notification = await app.request('/api/v1/notifications/line', {
@@ -133,7 +163,16 @@ test('rate limit超過時はexact routeの業務handlerを呼ばず429にする'
     }),
   });
 
-  assert.equal(members.status, 429);
+  assert.deepEqual(
+    [
+      members.status,
+      memberCreate.status,
+      memberUpdate.status,
+      memberRetire.status,
+      memberPromote.status,
+    ],
+    [429, 429, 429, 429, 429],
+  );
   assert.equal(notification.status, 429);
   assert.equal(
     notification.headers.get('x-request-id'),

@@ -259,7 +259,6 @@ export function createApp(options: AppOptions = {}) {
     }
   };
 
-  app.use('/api/v1/members', authenticate);
   app.use('/api/v1/members/*', authenticate);
   app.use('/api/v1/notifications/line', authenticate);
 
