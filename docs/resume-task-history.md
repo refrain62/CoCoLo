@@ -193,6 +193,29 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 実Redis adapter、Luaまたは同等の原子処理、複数API instance、TTL、障害時503、非PIIキーをstagingで確認していません。
 
+## API-001-RATE-002
+
+### 実施した変更
+
+- 対象PRは#60です。
+- ブランチは`codex/api-rate-limit-route-coverage`です。
+- `POST /api/v1/notifications/line`へ認証後のtenant/user単位rate limitを接続しました。
+- exact members routeへwildcard middlewareを重ねないようにし、認証middlewareの重複実行を除去しました。
+- rate limit keyの既知ハッシュ値、429応答、Retry-After、request ID、全members業務handlerとLINE producerの未実行をテストで固定しました。
+
+### 検証結果
+
+- `pnpm test`は138件成功しました。
+- `pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm lint:workflows`が成功しました。
+- 最終敵対的レビューはCritical 0、High 0、Medium 0、Low 0でした。
+- CI quality run `32611772876`が成功しました。
+- PR #60は`a13eb4d`として`develop`へスカッシュマージ済みです。
+
+### 残っている条件
+
+- 構造化ログとruntime response schema検証の中央接続はAPI-001の残タスクです。
+- staging、productionの実分散rate limit adapter検証は別の運用タスクとして残っています。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
