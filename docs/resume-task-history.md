@@ -275,6 +275,43 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - 初回CIで発生したtrusted manifest登録漏れ、ハッシュ誤記、pnpmバージョン不一致、pnpm並列実行による依存再構成競合、Prisma値import漏れ、RLS row lock誤用、gh mergeのworktree衝突を`docs/verification-runbook.md`へ追記しました。
 
+## T037
+
+### 実施した変更
+
+- 対象は中央DB schema、機能別migration、RLS、tenant複合制約、監査、状態遷移、UUIDv7契約です。
+- 旧PR #37をそのまま統合せず、現行`origin/develop`を起点にPR #67へ再構成しました。
+- 中央migrationを既存Phase migrationの後段へ配置し、重複するenum、table、policy、DDLを除去しました。
+- Prisma schemaとDB repositoryへ機能別モデル、UUIDv7生成、RLS transaction context、送迎状態遷移を接続しました。
+- LINE通知、Webhook receipt、添付、回覧、注文、送迎、監査のtenant境界と状態制約をDBへ追加しました。
+- `ride_plans`のtriggerで表に存在しない`NEW.plan_id`を参照していた不具合を動的列参照へ修正しました。
+- DB側のride plan初期statusをdraftに固定し、repositoryをdraft INSERT後のopen遷移へ修正しました。
+- 実装PRへ最終敵対的レビュー記録を追加し、手順・失敗履歴はこのdocs-only PRへ分離しました。
+
+### 検証結果
+
+- ローカルの最初のbuildは依存リンク不整合により失敗しましたが、pnpm 10.26.0で依存を再構成後に成功しました。
+- 最終実装HEAD `8279af8`で`pnpm verify:migration-sql`、`pnpm verify:trust-root`、`pnpm build`、`pnpm test`、`pnpm typecheck`、`pnpm lint`、`git diff --check`が成功しました。
+- CI run `32624831166`は、migration、実PostgreSQL RLS統合テスト、契約テスト、型検査、build、release artifact検証を含め成功しました。
+- 最終レビュー記録追加後のCI run `32625018676`も成功しました。
+- Hubbleの最終再レビューはCritical 0、High 0、Medium 1、Low 0でした。
+- Peirceの最終再レビューはCritical 0、High 0、Medium 3、Low 4でした。
+- 残るMediumは、既存UUIDv4行の移行前検査、回覧添付のavailable状態、board contact PIIのDB直接SELECT、Webhook receipt INSERT権限の専用actor限定です。
+- CriticalとHighは0件であるため、T037の実装完了条件を満たしました。
+
+### GitHub反映
+
+- 実装PR #67はready化後、squash commit `c31d61a0fab8d9419ddd66fa767060614e0bb3a9`として`develop`へ統合しました。
+- 実装PRの最終HEADは`b28c51e2244cb34a454c21d62832d2c31b86ab11`です。
+- マージ後の`origin/develop`は`c31d61a`です。
+- 実装PRと手順・履歴更新を同一PRへ混在させず、docs-only PRで別管理します。
+
+### 再発防止
+
+- T037で発生した依存導入、検証順序、migration重複、trusted manifest、RLS fixture、UUID型、trigger列、状態遷移、cleanup、merge後処理の失敗を`docs/verification-runbook.md`へ追記しました。
+- 実DB接続情報がないローカル実行は、build・unit test成功だけでDB統合成功と判定しません。
+- 今後の機能は、同手順書のT037再発防止チェックリストを実装PRとdocs-only PRの完了条件へ適用します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
