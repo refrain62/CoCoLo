@@ -14,6 +14,13 @@ import {
   memberUpdateSchema,
   promotionRequestSchema,
 } from '@cocolo/contracts/member';
+import type { StructuredLogEntry } from '@cocolo/contracts/observability';
+import {
+  lineDeliveryResponseSchema,
+  memberListResponseSchemaForRole,
+  memberMutationResponseSchemaForRole,
+  promotionResponseSchema,
+} from '@cocolo/contracts/runtime-response';
 import type { LineDeliveryProducer } from '@cocolo/db';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
 import { type CorsOptions, createCorsMiddleware } from './security/cors.js';
@@ -28,6 +35,16 @@ import {
   type RateLimitEnvironment,
   type RateLimitStoreMode,
 } from './security/rate-limit-adapter.js';
+import { resolveRequestId } from './security/request-id.js';
+import {
+  createResponseContractMiddleware,
+  type ResponseContract,
+} from './security/response-contract.js';
+import {
+  createRequestLoggerMiddleware,
+  createStructuredLogger,
+  type StructuredLogger,
+} from './security/structured-logger.js';
 
 export type MembershipContext = {
   tenantId: string;
@@ -107,6 +124,11 @@ export type AppOptions = {
   promotionRepository?: PromotionRepository;
   lineDeliveryProducer?: LineDeliveryProducer;
   cors?: CorsOptions;
+  observability?: {
+    environment?: RateLimitEnvironment;
+    logger?: StructuredLogger;
+    pathResolver?: (context: Context<ApiEnv>) => string;
+  };
   rateLimit?: {
     environment?: RateLimitEnvironment;
     mode?: RateLimitStoreMode;
@@ -164,14 +186,16 @@ function projectMember(member: MemberRecord, role: MemberRole) {
   };
   if (role === 'guardian') return common;
   if (role === 'staff') return { ...common, ageGroup: member.ageGroup };
-  return {
-    ...common,
-    ageGroup: member.ageGroup,
-    createdAt:
-      member.createdAt instanceof Date
-        ? member.createdAt.toISOString()
-        : member.createdAt,
-  };
+  if (managerRoles.has(role))
+    return {
+      ...common,
+      ageGroup: member.ageGroup,
+      createdAt:
+        member.createdAt instanceof Date
+          ? member.createdAt.toISOString()
+          : member.createdAt,
+    };
+  throw new Error('部員公開projectionのroleが不正です。');
 }
 
 // APIの依存性と認証middlewareを組み立て、tenant/roleは認証後の所属解決結果だけを利用する。
@@ -193,14 +217,104 @@ export function createApp(options: AppOptions = {}) {
     timeoutMs: rateLimitOptions.timeoutMs,
   });
 
-  if (options.cors) app.use('*', createCorsMiddleware(options.cors));
-
   app.use('*', async (c, next) => {
-    const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+    const requestId = resolveRequestId(c.req.raw);
     c.set('requestId', requestId);
     c.header('x-request-id', requestId);
     await next();
   });
+
+  const logger =
+    options.observability?.logger ?? createStructuredLogger(() => {});
+  app.use(
+    '*',
+    createRequestLoggerMiddleware({
+      logger,
+      environment: options.observability?.environment ?? rateLimitEnvironment,
+      pathResolver: options.observability?.pathResolver,
+    }),
+  );
+  if (options.cors) app.use('*', createCorsMiddleware(options.cors));
+
+  const responseContracts: ResponseContract[] = [
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/members$/,
+      status: 200,
+      schema: (c) =>
+        memberListResponseSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/members$/,
+      status: 201,
+      schema: (c) =>
+        memberMutationResponseSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
+    },
+    {
+      method: 'PATCH',
+      path: /^\/api\/v1\/members\/[^/]+$/,
+      status: 200,
+      schema: (c) =>
+        memberMutationResponseSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/members\/[^/]+\/retire$/,
+      status: 200,
+      schema: (c) =>
+        memberMutationResponseSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/members\/promote$/,
+      status: 200,
+      schema: promotionResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/notifications\/line$/,
+      status: 202,
+      schema: lineDeliveryResponseSchema,
+    },
+  ];
+  app.use(
+    '*',
+    createResponseContractMiddleware({
+      contracts: responseContracts,
+      allowedNonJson: [
+        {
+          method: 'OPTIONS',
+          path: /^\/api\/v1(?:\/.*)?$/,
+          status: 204,
+        },
+      ],
+      onViolation: (violation) => {
+        logger.write({
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          event: 'dependency.failure',
+          service: 'api',
+          environment:
+            options.observability?.environment ?? rateLimitEnvironment,
+          requestId: violation.requestId,
+          method: violation.method as StructuredLogEntry['method'],
+          path: violation.path,
+          status: violation.status,
+          durationMs: 0,
+          errorCode: 'RESPONSE_CONTRACT_VIOLATION',
+        });
+      },
+    }),
+  );
 
   // 予期せぬ例外は詳細を隠し、クライアントにはrequestId付きの共通500だけを返す。
   app.onError((error, c) => {
@@ -212,6 +326,10 @@ export function createApp(options: AppOptions = {}) {
       '予期しないエラーが発生しました。',
     );
   });
+
+  app.notFound((c) =>
+    errorResponse(c, 404, 'NOT_FOUND', '指定されたAPIが見つかりません。'),
+  );
 
   app.get('/health', (c) => c.json({ status: 'ok', service: 'api' }));
 
@@ -228,27 +346,9 @@ export function createApp(options: AppOptions = {}) {
     if (!token)
       return errorResponse(c, 401, 'UNAUTHENTICATED', '認証が必要です。');
 
+    let claims: Awaited<ReturnType<NonNullable<AppOptions['verifyToken']>>>;
     try {
-      const claims = await options.verifyToken(token);
-      if (claims.expiresAt <= Math.floor(Date.now() / 1000))
-        return errorResponse(
-          c,
-          401,
-          'UNAUTHENTICATED',
-          '認証の有効期限が切れています。',
-        );
-      const membership = await options.membershipRepository.findActiveByUserId(
-        claims.userId,
-      );
-      if (!membership)
-        return errorResponse(
-          c,
-          403,
-          'FORBIDDEN',
-          '利用可能な所属がありません。',
-        );
-      c.set('auth', { userId: claims.userId, membership });
-      await next();
+      claims = await options.verifyToken(token);
     } catch {
       return errorResponse(
         c,
@@ -257,6 +357,30 @@ export function createApp(options: AppOptions = {}) {
         '認証情報を確認できません。',
       );
     }
+    if (claims.expiresAt <= Math.floor(Date.now() / 1000))
+      return errorResponse(
+        c,
+        401,
+        'UNAUTHENTICATED',
+        '認証の有効期限が切れています。',
+      );
+    let membership: MembershipContext | null;
+    try {
+      membership = await options.membershipRepository.findActiveByUserId(
+        claims.userId,
+      );
+    } catch {
+      return errorResponse(
+        c,
+        503,
+        'DEPENDENCY_UNAVAILABLE',
+        '所属情報を確認できません。',
+      );
+    }
+    if (!membership)
+      return errorResponse(c, 403, 'FORBIDDEN', '利用可能な所属がありません。');
+    c.set('auth', { userId: claims.userId, membership });
+    await next();
   };
 
   app.use('/api/v1/members/*', authenticate);

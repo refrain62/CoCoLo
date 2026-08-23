@@ -4,6 +4,7 @@ import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
 import { readRuntimeEnvironment } from './runtime-environment.js';
 import { loadDistributedRateLimitAdapter } from './security/rate-limit-adapter.js';
+import { createStructuredLogger } from './security/structured-logger.js';
 
 // 起動時に環境境界を検証してから、JWT検証とRLS付きrepositoryを組み立てる。
 const runtime = readRuntimeEnvironment(process.env);
@@ -25,6 +26,11 @@ const app = createApp({
     adapter: distributedRateLimitAdapter,
   },
   cors: { origins: runtime.publicAppUrlAllowlist },
+  observability: {
+    environment: runtime.appEnv,
+    logger: createStructuredLogger(),
+    pathResolver: (context) => context.req.path,
+  },
   ...repositories,
 });
 serve({ fetch: app.fetch, port });

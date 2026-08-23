@@ -49,7 +49,10 @@ export const openapiDocument = {
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
           403: { $ref: '#/components/responses/Forbidden' },
-          409: { description: '同じsourceのpayloadまたは冪等キーが競合' },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
         },
       },
     },
@@ -105,7 +108,7 @@ export const openapiDocument = {
           200: { description: '検証済みの添付ファイル' },
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
-          409: { description: 'セッションの再利用またはリクエストの競合' },
+          409: { $ref: '#/components/responses/Conflict' },
           422: { description: '添付本体の検証失敗' },
           503: { $ref: '#/components/responses/ServiceUnavailable' },
         },
@@ -203,9 +206,10 @@ export const openapiDocument = {
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
           403: { $ref: '#/components/responses/Forbidden' },
-          409: {
-            description: '同じキーのリクエスト競合または年度繰り上げの実行競合',
-          },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
         },
       },
     },
@@ -235,10 +239,12 @@ export const openapiDocument = {
       LineDeliveryPublishResponse: {
         type: 'object',
         required: ['data'],
+        additionalProperties: false,
         properties: {
           data: {
             type: 'object',
             required: ['notificationId', 'status'],
+            additionalProperties: false,
             properties: {
               notificationId: { type: 'string', format: 'uuid' },
               status: { type: 'string', const: 'pending' },
@@ -315,6 +321,7 @@ export const openapiDocument = {
       PromotionResponse: {
         type: 'object',
         required: ['data'],
+        additionalProperties: false,
         properties: {
           data: {
             type: 'object',
@@ -326,6 +333,7 @@ export const openapiDocument = {
               'promotedCount',
               'result',
             ],
+            additionalProperties: false,
             properties: {
               mode: { type: 'string', enum: ['preview', 'execute'] },
               fiscalYear: { type: 'integer', minimum: 2000, maximum: 2100 },
@@ -335,7 +343,52 @@ export const openapiDocument = {
               },
               previewCount: { type: 'integer', minimum: 0 },
               promotedCount: { type: 'integer', minimum: 0 },
-              result: { type: ['object', 'null'] },
+              result: {
+                oneOf: [
+                  { type: 'null' },
+                  {
+                    type: 'object',
+                    required: ['promotedCount', 'changes'],
+                    additionalProperties: false,
+                    properties: {
+                      promotedCount: { type: 'integer', minimum: 0 },
+                      changes: {
+                        type: 'array',
+                        maxItems: 10000,
+                        items: {
+                          type: 'object',
+                          required: ['id', 'fromGradeLevel', 'toGradeLevel'],
+                          additionalProperties: false,
+                          properties: {
+                            id: { type: 'string', format: 'uuid' },
+                            fromGradeLevel: {
+                              type: 'integer',
+                              minimum: 1,
+                              maximum: 99,
+                            },
+                            toGradeLevel: {
+                              type: 'integer',
+                              minimum: 1,
+                              maximum: 99,
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  {
+                    type: 'object',
+                    required: ['errorCode'],
+                    additionalProperties: false,
+                    properties: {
+                      errorCode: {
+                        type: 'string',
+                        enum: ['PROMOTION_GRADE_LIMIT'],
+                      },
+                    },
+                  },
+                ],
+              },
             },
           },
         },
@@ -343,8 +396,19 @@ export const openapiDocument = {
       Error: {
         type: 'object',
         required: ['error'],
+        additionalProperties: false,
         properties: {
-          error: { type: 'object' },
+          error: {
+            type: 'object',
+            required: ['code', 'message', 'details', 'requestId'],
+            additionalProperties: false,
+            properties: {
+              code: { type: 'string', minLength: 1, maxLength: 128 },
+              message: { type: 'string', minLength: 1, maxLength: 512 },
+              details: {},
+              requestId: { type: 'string', format: 'uuid' },
+            },
+          },
         },
       },
     },
@@ -367,6 +431,38 @@ export const openapiDocument = {
       },
       Forbidden: {
         description: 'この操作を実行する権限がありません。',
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/Error' },
+          },
+        },
+      },
+      Conflict: {
+        description: 'リクエストが現在の状態と競合しました。',
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/Error' },
+          },
+        },
+      },
+      NotFound: {
+        description: '指定されたリソースが見つかりません。',
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/Error' },
+          },
+        },
+      },
+      TooManyRequests: {
+        description: 'リクエスト数の上限を超えました。',
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/Error' },
+          },
+        },
+      },
+      InternalServerError: {
+        description: '内部エラーが発生しました。',
         content: {
           'application/json': {
             schema: { $ref: '#/components/schemas/Error' },
