@@ -335,7 +335,52 @@ export const openapiDocument = {
               },
               previewCount: { type: 'integer', minimum: 0 },
               promotedCount: { type: 'integer', minimum: 0 },
-              result: { type: ['object', 'null'] },
+              result: {
+                oneOf: [
+                  { type: 'null' },
+                  {
+                    type: 'object',
+                    required: ['promotedCount', 'changes'],
+                    additionalProperties: false,
+                    properties: {
+                      promotedCount: { type: 'integer', minimum: 0 },
+                      changes: {
+                        type: 'array',
+                        maxItems: 10000,
+                        items: {
+                          type: 'object',
+                          required: ['id', 'fromGradeLevel', 'toGradeLevel'],
+                          additionalProperties: false,
+                          properties: {
+                            id: { type: 'string', format: 'uuid' },
+                            fromGradeLevel: {
+                              type: 'integer',
+                              minimum: 1,
+                              maximum: 99,
+                            },
+                            toGradeLevel: {
+                              type: 'integer',
+                              minimum: 1,
+                              maximum: 99,
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  {
+                    type: 'object',
+                    required: ['errorCode'],
+                    additionalProperties: false,
+                    properties: {
+                      errorCode: {
+                        type: 'string',
+                        enum: ['PROMOTION_GRADE_LIMIT'],
+                      },
+                    },
+                  },
+                ],
+              },
             },
           },
         },

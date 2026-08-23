@@ -15,7 +15,10 @@ type PromotionPayload = {
   error?: { code: string; requestId?: string };
 };
 
-function createTestApp(calls: PromotionInput[] = []) {
+function createTestApp(
+  calls: PromotionInput[] = [],
+  promotionResult: unknown = null,
+) {
   return createApp({
     verifyToken: async (token) => {
       if (!memberships[token]) throw new Error('invalid token');
@@ -38,7 +41,10 @@ function createTestApp(calls: PromotionInput[] = []) {
           status: input.mode === 'preview' ? 'preview' : 'completed',
           previewCount: input.mode === 'preview' ? 2 : 0,
           promotedCount: input.mode === 'execute' ? 2 : 0,
-          result: input.mode === 'execute' ? { promotedMemberIds: [] } : null,
+          result:
+            input.mode === 'execute'
+              ? { promotedCount: 2, changes: [] }
+              : promotionResult,
         };
       },
     },
@@ -88,6 +94,25 @@ test('owner は年度繰り上げのプレビューで対象件数を確認で�
     fiscalYear: 2026,
     idempotencyKey: null,
   });
+});
+
+test('年度繰り上げの内部JSON結果を公開レスポンスへ流出させない', async () => {
+  const response = await createTestApp([], { secret: 'private-data' }).request(
+    '/api/v1/members/promote',
+    {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer owner-a',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ mode: 'preview', fiscalYear: 2026 }),
+    },
+  );
+
+  assert.equal(response.status, 500);
+  const payload = await readJson(response);
+  assert.equal(payload.error?.code, 'INTERNAL_SERVER_ERROR');
+  assert.equal(JSON.stringify(payload).includes('private-data'), false);
 });
 
 test('年度繰り上げの実行モードは Idempotency-Key なしを拒否する', async () => {
