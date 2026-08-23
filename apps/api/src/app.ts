@@ -259,7 +259,6 @@ export function createApp(options: AppOptions = {}) {
     }
   };
 
-  app.use('/api/v1/members', authenticate);
   app.use('/api/v1/members/*', authenticate);
   app.use('/api/v1/notifications/line', authenticate);
 
@@ -281,6 +280,7 @@ export function createApp(options: AppOptions = {}) {
     },
   });
   app.use('/api/v1/members/*', authenticatedRateLimit);
+  app.use('/api/v1/notifications/line', authenticatedRateLimit);
 
   // tenantIdはリクエストから受け取らず、authenticateが設定した所属をrepositoryへ渡す。
   app.get('/api/v1/members', async (c) => {
