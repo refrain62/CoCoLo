@@ -63,6 +63,15 @@ test('実DBの予定・出欠repositoryがtenant境界と一意回答を守る',
     memberId: MEMBER_A,
     response: 'attending',
   });
+  const managerCorrection = await repository.upsertAttendance({
+    tenantId: TENANT_A,
+    actorUserId: 'owner-a',
+    role: 'owner',
+    eventId: created.id,
+    memberId: MEMBER_A,
+    response: 'absent',
+  });
+  assert.equal(managerCorrection.id, first.id);
   const second = await repository.upsertAttendance({
     tenantId: TENANT_A,
     actorUserId: 'guardian-a',

@@ -1,5 +1,6 @@
 import { createSupabaseTokenVerifier } from '@cocolo/auth';
 import { createMemberRepositories, createPrismaClient } from '@cocolo/db';
+import { createEventRepository } from '@cocolo/db/events';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
 import { readRuntimeEnvironment } from './runtime-environment.js';
@@ -11,6 +12,7 @@ const runtime = readRuntimeEnvironment(process.env);
 const port = Number(process.env.PORT ?? 8787);
 const prisma = createPrismaClient();
 const repositories = createMemberRepositories(prisma);
+const eventRepository = createEventRepository(prisma);
 const distributedRateLimitAdapter = runtime.rateLimitAdapterModule
   ? await loadDistributedRateLimitAdapter(runtime.rateLimitAdapterModule)
   : undefined;
@@ -32,6 +34,7 @@ const app = createApp({
     pathResolver: (context) => context.req.path,
   },
   ...repositories,
+  eventRepository,
 });
 serve({ fetch: app.fetch, port });
 console.log(`CoCoLo API listening on ${port}`);

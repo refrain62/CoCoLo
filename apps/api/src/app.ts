@@ -16,13 +16,20 @@ import {
 } from '@cocolo/contracts/member';
 import type { StructuredLogEntry } from '@cocolo/contracts/observability';
 import {
+  attendanceResponseSchema,
+  attendanceSummaryResponseSchema,
+  authContextResponseSchema,
+  eventListResponseSchema,
+  eventMutationResponseSchema,
   lineDeliveryResponseSchema,
   memberListResponseSchemaForRole,
   memberMutationResponseSchemaForRole,
   promotionResponseSchema,
 } from '@cocolo/contracts/runtime-response';
 import type { LineDeliveryProducer } from '@cocolo/db';
+import type { EventRepository } from '@cocolo/db/events';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
+import { createEventsApp } from './features/events/event-api.js';
 import { type CorsOptions, createCorsMiddleware } from './security/cors.js';
 import {
   createRateLimitMiddleware,
@@ -122,6 +129,7 @@ export type AppOptions = {
   membershipRepository?: MembershipRepository;
   memberRepository?: MemberRepository;
   promotionRepository?: PromotionRepository;
+  eventRepository?: EventRepository;
   lineDeliveryProducer?: LineDeliveryProducer;
   cors?: CorsOptions;
   observability?: {
@@ -285,6 +293,42 @@ export function createApp(options: AppOptions = {}) {
       status: 202,
       schema: lineDeliveryResponseSchema,
     },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/events$/,
+      status: 200,
+      schema: eventListResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/events$/,
+      status: 201,
+      schema: eventMutationResponseSchema,
+    },
+    {
+      method: 'PATCH',
+      path: /^\/api\/v1\/events\/[^/]+$/,
+      status: 200,
+      schema: eventMutationResponseSchema,
+    },
+    {
+      method: 'PUT',
+      path: /^\/api\/v1\/events\/[^/]+\/attendance$/,
+      status: 200,
+      schema: attendanceResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/events\/[^/]+\/attendance\/summary$/,
+      status: 200,
+      schema: attendanceSummaryResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/auth\/context$/,
+      status: 200,
+      schema: authContextResponseSchema,
+    },
   ];
   app.use(
     '*',
@@ -385,6 +429,11 @@ export function createApp(options: AppOptions = {}) {
 
   app.use('/api/v1/members/*', authenticate);
   app.use('/api/v1/notifications/line', authenticate);
+  app.use('/api/v1/auth/context', authenticate);
+  if (options.eventRepository) {
+    app.use('/api/v1/events', authenticate);
+    app.use('/api/v1/events/*', authenticate);
+  }
 
   // 認証後のtenant/userだけをキーに使い、production系では起動時に分散adapterを要求する。
   const authenticatedRateLimit = createRateLimitMiddleware({
@@ -405,6 +454,28 @@ export function createApp(options: AppOptions = {}) {
   });
   app.use('/api/v1/members/*', authenticatedRateLimit);
   app.use('/api/v1/notifications/line', authenticatedRateLimit);
+  app.use('/api/v1/auth/context', authenticatedRateLimit);
+  if (options.eventRepository) {
+    app.use('/api/v1/events', authenticatedRateLimit);
+    app.use('/api/v1/events/*', authenticatedRateLimit);
+    app.route(
+      '/api/v1/events',
+      createEventsApp({
+        eventRepository: options.eventRepository,
+        useCentralAuth: true,
+      }),
+    );
+  }
+
+  app.get('/api/v1/auth/context', (c) => {
+    const auth = c.get('auth');
+    return c.json({
+      data: {
+        tenantId: auth.membership.tenantId,
+        role: auth.membership.role,
+      },
+    });
+  });
 
   // tenantIdはリクエストから受け取らず、authenticateが設定した所属をrepositoryへ渡す。
   app.get('/api/v1/members', async (c) => {

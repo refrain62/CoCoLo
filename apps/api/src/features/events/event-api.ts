@@ -9,6 +9,7 @@ import {
 import {
   EventAuthorizationError,
   type EventRepository,
+  EventValidationError,
 } from '@cocolo/db/events';
 import {
   AttendancePolicyError,
@@ -41,10 +42,11 @@ type EventUpdateInput = Partial<EventCreateInput>;
 
 type EventApiOptions = {
   verifyToken?: TokenVerifier;
-  membershipRepository: {
+  membershipRepository?: {
     findActiveByUserId: (userId: string) => Promise<Membership | null>;
   };
   eventRepository: EventRepository;
+  useCentralAuth?: boolean;
 };
 
 type EventApiEnv = {
@@ -88,6 +90,8 @@ function inputError(c: Context<EventApiEnv>, error: unknown) {
   }
   if (error instanceof EventAuthorizationError)
     return errorResponse(c, 403, 'FORBIDDEN', error.message);
+  if (error instanceof EventValidationError)
+    return errorResponse(c, 400, 'VALIDATION_ERROR', error.message);
   if (
     error &&
     typeof error === 'object' &&
@@ -153,26 +157,27 @@ function projectAttendance(
 // Phase 2の登録点をfeature単位へ閉じ込め、既存createAppへは統合メモ記載のapp.routeで接続する。
 export function createEventsApp(options: EventApiOptions) {
   const app = new Hono<EventApiEnv>();
-  app.use('*', async (c, next) => {
-    const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
-    c.set('requestId', requestId);
-    c.header('x-request-id', requestId);
-    await next();
-  });
+  if (!options.useCentralAuth)
+    app.use('*', async (c, next) => {
+      const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+      c.set('requestId', requestId);
+      c.header('x-request-id', requestId);
+      await next();
+    });
   app.onError((error, c) => {
     const response = inputError(c, error);
     if (response) return response;
     return errorResponse(
       c,
-      500,
-      'INTERNAL_SERVER_ERROR',
-      '予期しないエラーが発生しました。',
+      503,
+      'DEPENDENCY_UNAVAILABLE',
+      '予定データストアを利用できません。',
     );
   });
 
   const authenticate: MiddlewareHandler<EventApiEnv> = async (c, next) => {
     const token = extractBearerToken(c.req.header('authorization') ?? null);
-    if (!options.verifyToken)
+    if (!options.verifyToken || !options.membershipRepository)
       return errorResponse(
         c,
         503,
@@ -212,7 +217,7 @@ export function createEventsApp(options: EventApiOptions) {
     }
   };
 
-  app.use('*', authenticate);
+  if (!options.useCentralAuth) app.use('*', authenticate);
 
   app.get('/', async (c) => {
     const parsed = eventListQuerySchema.safeParse(c.req.query());

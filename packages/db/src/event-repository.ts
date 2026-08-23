@@ -7,7 +7,7 @@ import {
   type EventType,
   summarizeAttendance,
 } from '@cocolo/domain/event';
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 
 export type EventRecord = {
   id: string;
@@ -68,6 +68,15 @@ export class EventAuthorizationError extends Error {
   }
 }
 
+export class EventValidationError extends Error {
+  readonly status = 400;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'EventValidationError';
+  }
+}
+
 export type EventRepository = {
   list: (
     input: EventRepositoryInput & { from: Date; to: Date },
@@ -109,6 +118,8 @@ export type EventWriteInput = {
 };
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
+
+const MAX_EVENT_LIST_RANGE_MS = 93 * 24 * 60 * 60 * 1000;
 
 type EventRow = {
   id: string;
@@ -172,17 +183,47 @@ async function assertActiveMembership(
   client: Prisma.TransactionClient,
   input: EventRepositoryInput,
 ) {
-  const membership = await client.tenantMembership.findUnique({
-    where: {
-      tenantId_userId: {
-        tenantId: input.tenantId,
-        userId: input.actorUserId,
-      },
-    },
-    select: { role: true, status: true },
-  });
-  if (membership?.status !== 'active' || membership.role !== input.role)
+  const membershipLockKey = `${input.tenantId}:${input.actorUserId}`;
+  await client.$executeRaw`
+    SELECT pg_advisory_xact_lock(hashtextextended(${membershipLockKey}, 0))
+  `;
+  const memberships = await client.$queryRaw<Array<{ active: boolean }>>`
+    SELECT app_lock_active_membership(
+      ${input.tenantId}::uuid,
+      ${input.actorUserId},
+      ${input.role}
+    ) AS active
+  `;
+  if (memberships[0]?.active !== true)
     throw new Error('有効な所属情報が処理中に変更されました。');
+}
+
+async function lockEvent(
+  client: Prisma.TransactionClient,
+  input: EventRepositoryInput,
+  eventId: string,
+) {
+  const eventLockKey = `event:${input.tenantId}:${eventId}`;
+  await client.$executeRaw`
+    SELECT pg_advisory_xact_lock(hashtextextended(${eventLockKey}, 0))
+  `;
+}
+
+async function assertAvailableAttachment(
+  client: Prisma.TransactionClient,
+  input: EventRepositoryInput,
+  attachmentId: string | null | undefined,
+) {
+  if (!attachmentId) return;
+  const rows = await client.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM attachments
+    WHERE tenant_id = ${input.tenantId}::uuid
+      AND id = ${attachmentId}::uuid
+      AND status = 'available'::attachment_status
+  `;
+  if (!rows[0])
+    throw new EventNotFoundError('利用可能な添付が見つかりません。');
 }
 
 function toEventRecord(row: EventRow): EventRecord {
@@ -244,22 +285,29 @@ async function findAssignedMember(
   memberId: string,
 ) {
   if (input.role !== 'guardian') return true;
-  const rows = await client.$queryRaw<Array<{ exists: boolean }>>`
-    SELECT EXISTS (
-      SELECT 1 FROM guardian_members
-      WHERE tenant_id = ${input.tenantId}::uuid
-        AND user_id = ${input.actorUserId}
-        AND member_id = ${memberId}::uuid
-    ) AS exists
+  const rows = await client.$queryRaw<Array<{ member_id: string }>>`
+    SELECT member_id
+    FROM guardian_members
+    WHERE tenant_id = ${input.tenantId}::uuid
+      AND user_id = ${input.actorUserId}
+      AND member_id = ${memberId}::uuid
+    LIMIT 1
   `;
-  return rows[0]?.exists === true;
+  return rows.length > 0;
 }
 
 // イベントと回答を同一transactionで更新し、締切判定・担当部員・監査をDB境界内で確定する。
 export function createEventRepository(client: PrismaClient): EventRepository {
   return {
-    list: (input) =>
-      client.$transaction(async (tx) => {
+    list: (input) => {
+      const rangeMs = input.to.getTime() - input.from.getTime();
+      if (
+        !Number.isFinite(rangeMs) ||
+        rangeMs <= 0 ||
+        rangeMs > MAX_EVENT_LIST_RANGE_MS
+      )
+        throw new EventValidationError('検索期間は93日以内にしてください。');
+      return client.$transaction(async (tx) => {
         await setRlsContext(tx, input);
         await assertActiveMembership(tx, input);
         const rows = await tx.$queryRaw<EventRow[]>`
@@ -272,13 +320,19 @@ export function createEventRepository(client: PrismaClient): EventRepository {
             AND starts_at < ${input.to}
             AND ends_at > ${input.from}
           ORDER BY starts_at ASC, id ASC
+          LIMIT 501
         `;
+        if (rows.length > 500)
+          throw new EventValidationError(
+            '検索結果が多すぎます。検索期間を狭めてください。',
+          );
         await audit(tx, input, 'event.list', 'event', input.tenantId, {
           from: input.from.toISOString(),
           to: input.to.toISOString(),
         });
         return rows.map(toEventRecord);
-      }),
+      });
+    },
     create: (input) =>
       client.$transaction(async (tx) => {
         await setRlsContext(tx, input);
@@ -286,6 +340,11 @@ export function createEventRepository(client: PrismaClient): EventRepository {
         if (!['owner', 'admin', 'staff'].includes(input.role))
           throw new EventAuthorizationError('予定を登録する権限がありません。');
         assertValidEventSchedule(input, input.type, input.opponent);
+        await assertAvailableAttachment(
+          tx,
+          input,
+          input.announcementImageAttachmentId,
+        );
         const id = uuidV7();
         const rows = await tx.$queryRaw<EventRow[]>`
           INSERT INTO events (
@@ -324,6 +383,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
         await assertActiveMembership(tx, input);
         if (!['owner', 'admin', 'staff'].includes(input.role))
           throw new EventAuthorizationError('予定を編集する権限がありません。');
+        await lockEvent(tx, input, input.eventId);
         const currentRows = await tx.$queryRaw<EventRow[]>`
           SELECT id, tenant_id, title, event_type, starts_at, ends_at,
                  location, items_to_bring, fee, announcement_image_attachment_id,
@@ -363,6 +423,11 @@ export function createEventRepository(client: PrismaClient): EventRepository {
             input.attendanceDeadline ?? current.attendance_deadline,
         };
         assertValidEventSchedule(next, next.type, next.opponent);
+        await assertAvailableAttachment(
+          tx,
+          input,
+          next.announcementImageAttachmentId,
+        );
         const rows = await tx.$queryRaw<EventRow[]>`
           UPDATE events SET
             title = ${next.title}, event_type = ${next.type}::event_type,
@@ -399,6 +464,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
       client.$transaction(async (tx) => {
         await setRlsContext(tx, input);
         await assertActiveMembership(tx, input);
+        await lockEvent(tx, input, input.eventId);
         const eventRows = await tx.$queryRaw<
           Array<{ attendance_deadline: Date }>
         >`
@@ -421,7 +487,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           input.memberId,
         );
         const deadlineRows = await tx.$queryRaw<Array<{ passed: boolean }>>`
-          SELECT now() > ${event.attendance_deadline} AS passed
+          SELECT now() >= ${event.attendance_deadline} AS passed
         `;
         const deadlinePassed = deadlineRows[0]?.passed === true;
         assertAttendanceChangeAllowed({
@@ -437,8 +503,10 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           WHERE tenant_id = ${input.tenantId}::uuid
             AND event_id = ${input.eventId}::uuid
             AND member_id = ${input.memberId}::uuid
-            AND (${input.role} = 'guardian' AND user_id = ${input.actorUserId}
-                 OR ${input.role} <> 'guardian')
+            AND (
+              (${input.role} = 'guardian' AND user_id = ${input.actorUserId})
+              OR ${input.role} <> 'guardian'
+            )
           ORDER BY updated_at DESC, id DESC
           LIMIT 1
           FOR UPDATE
@@ -489,58 +557,72 @@ export function createEventRepository(client: PrismaClient): EventRepository {
         return toAttendanceRecord(row);
       }),
     summary: (input) =>
-      client.$transaction(async (tx) => {
-        await setRlsContext(tx, input);
-        await assertActiveMembership(tx, input);
-        if (input.role === 'guardian')
-          throw new EventAuthorizationError(
-            '出欠集計を閲覧する権限がありません。',
-          );
-        const eventRows = await tx.$queryRaw<Array<{ id: string }>>`
+      client.$transaction(
+        async (tx) => {
+          await setRlsContext(tx, input);
+          await assertActiveMembership(tx, input);
+          if (input.role === 'guardian')
+            throw new EventAuthorizationError(
+              '出欠集計を閲覧する権限がありません。',
+            );
+          await lockEvent(tx, input, input.eventId);
+          const eventRows = await tx.$queryRaw<Array<{ id: string }>>`
           SELECT id
           FROM events
           WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
+          FOR UPDATE
         `;
-        if (!eventRows[0]) throw new EventNotFoundError();
-        const totalRows = await tx.$queryRaw<Array<{ count: bigint }>>`
+          if (!eventRows[0]) throw new EventNotFoundError();
+          const totalRows = await tx.$queryRaw<Array<{ count: bigint }>>`
           SELECT count(*)::bigint AS count
           FROM members
           WHERE tenant_id = ${input.tenantId}::uuid AND status <> 'retired'::member_status
         `;
-        const responseRows = await tx.$queryRaw<
-          Array<{ response: AttendanceResponse; member_id: string }>
-        >`
-          SELECT response, member_id
+          const responseRows = await tx.$queryRaw<
+            Array<{
+              response: AttendanceResponse;
+              member_id: string;
+              updated_at: Date;
+              id: string;
+            }>
+          >`
+          SELECT DISTINCT ON (member_id) id, response, member_id, updated_at
           FROM attendance_responses
           WHERE tenant_id = ${input.tenantId}::uuid AND event_id = ${input.eventId}::uuid
+          ORDER BY member_id, updated_at DESC, id DESC
         `;
-        const totalMembers = Number(totalRows[0]?.count ?? 0n);
-        const counts = summarizeAttendance(
-          totalMembers,
-          responseRows.map((row) => row.response),
-        );
-        const answeredIds = new Set(responseRows.map((row) => row.member_id));
-        const memberRows = await tx.$queryRaw<Array<{ id: string }>>`
+          const totalMembers = Number(totalRows[0]?.count ?? 0n);
+          const latestResponses = new Map<string, AttendanceResponse>();
+          for (const row of responseRows)
+            if (!latestResponses.has(row.member_id))
+              latestResponses.set(row.member_id, row.response);
+          const counts = summarizeAttendance(totalMembers, [
+            ...latestResponses.values(),
+          ]);
+          const answeredIds = new Set(latestResponses.keys());
+          const memberRows = await tx.$queryRaw<Array<{ id: string }>>`
           SELECT id
           FROM members
           WHERE tenant_id = ${input.tenantId}::uuid AND status <> 'retired'::member_status
           ORDER BY id
         `;
-        await audit(
-          tx,
-          input,
-          'attendance.summary',
-          'event',
-          input.eventId,
-          {},
-        );
-        return {
-          ...counts,
-          totalMembers,
-          unansweredMemberIds: memberRows
-            .map((row) => row.id)
-            .filter((id) => !answeredIds.has(id)),
-        };
-      }),
+          await audit(
+            tx,
+            input,
+            'attendance.summary',
+            'event',
+            input.eventId,
+            {},
+          );
+          return {
+            ...counts,
+            totalMembers,
+            unansweredMemberIds: memberRows
+              .map((row) => row.id)
+              .filter((id) => !answeredIds.has(id)),
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+      ),
   };
 }

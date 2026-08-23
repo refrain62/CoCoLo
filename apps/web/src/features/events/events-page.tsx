@@ -35,6 +35,14 @@ function monthRange(now = new Date()) {
   return { from: from.toISOString(), to: to.toISOString() };
 }
 
+function weekRange(now = new Date()) {
+  const from = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+  const to = new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000);
+  return { from: from.toISOString(), to: to.toISOString() };
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('ja-JP', {
     dateStyle: 'medium',
@@ -305,7 +313,10 @@ export function EventsPage({
   const [transportationRequired, setTransportationRequired] = useState(false);
   const [type, setType] = useState<'practice' | 'match' | 'event'>('practice');
 
-  const range = useMemo(() => monthRange(), []);
+  const range = useMemo(
+    () => (viewMode === 'month' ? monthRange() : weekRange()),
+    [viewMode],
+  );
   const loadEvents = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -324,9 +335,12 @@ export function EventsPage({
 
   const displayedEvents = useMemo(() => {
     if (viewMode === 'month') return events;
-    const weekEnd = Date.now() + 7 * 24 * 60 * 60 * 1000;
-    return events.filter((event) => Date.parse(event.startsAt) <= weekEnd);
-  }, [events, viewMode]);
+    return events.filter(
+      (event) =>
+        Date.parse(event.startsAt) >= Date.parse(range.from) &&
+        Date.parse(event.startsAt) < Date.parse(range.to),
+    );
+  }, [events, range.from, range.to, viewMode]);
 
   async function createEvent(eventSubmit: FormEvent<HTMLFormElement>) {
     eventSubmit.preventDefault();

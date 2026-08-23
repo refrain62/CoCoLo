@@ -100,6 +100,15 @@ export const eventListQuerySchema = z
         path: ['to'],
         message: '検索終了時刻は開始時刻より後にしてください。',
       });
+    if (
+      Date.parse(value.to) - Date.parse(value.from) >
+      93 * 24 * 60 * 60 * 1000
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['to'],
+        message: '検索期間は93日以内にしてください。',
+      });
   });
 
 export const attendanceResponseSchema = z.enum([
