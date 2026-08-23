@@ -216,6 +216,32 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - 構造化ログとruntime response schema検証の中央接続はAPI-001の残タスクです。
 - staging、productionの実分散rate limit adapter検証は別の運用タスクとして残っています。
 
+## API-001-OBS-003
+
+### 実施した変更
+
+- 対象PRは#62です。
+- ブランチは`codex/api-structured-response-contracts`です。
+- 構造化request logger、requestId相関、role別strict response schema、共通error response、response契約middlewareを現行中央APIへ接続しました。
+- 非JSON成功responseはallowlist外を500へ収束し、OPTIONSの204だけを明示的に許可しました。
+- promotion内部result、LINE response、未知role、client指定requestIdの公開境界をfail-closedにしました。
+- OpenAPI生成元と生成物をruntime契約へ同期しました。
+- 旧PR #29はそのまま統合せず、現行developへ必要な中央API hardeningだけを再構成しました。
+
+### 検証結果
+
+- rootの`pnpm test`は150件成功しました。
+- `pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm lint:workflows`、`pnpm lint:openapi`が成功しました。
+- 実DB統合テストは`DATABASE_URL`未設定のため5件失敗・1件skipとなり、RLSとtenant境界の実DB検証は別環境で再実行が必要です。
+- 最終敵対的レビューは、対象差分のCritical 0、High 0、Medium 0、Low 0でした。
+- 現行develop由来の別スコープとして、LINE feature appの中央mount、複数tenant所属時の明示的チーム選択、Auth session lifecycleが残っています。
+- CI quality runは`32614821124`です。
+
+### GitHub反映
+
+- PR #62は`2ce3dbe`として`develop`へスカッシュマージ済みです。
+- `origin/develop`の再開基準を`2ce3dbe`へ更新しました。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。

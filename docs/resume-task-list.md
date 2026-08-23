@@ -20,13 +20,13 @@
 
 ## 1. 停止時点の基準
 
-再開時点の`origin/develop`は`a13eb4d`（通知APIのレート制限と認証経路重複除去を含むPR #60のスカッシュマージ）です。
+再開時点の`origin/develop`は`2ce3dbe`（中央APIの構造化ログと公開response契約を含むPR #62のスカッシュマージ）です。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
 Draft PRに実装が存在しても、`develop`へ統合されていない機能は現行環境では未実装として扱います。
 
-再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、docs-only PR #55、#56、#57、#58は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
+再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、docs-only PR #55、#56、#57、#58、#61は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
 
 ### 1.1 再開時のGitHub同期結果
 
@@ -215,7 +215,8 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
 - `[~]` **API-001：共通API hardeningを中央APIへ接続する。**
   - 対象：PR #29、`feature/api-hardening`
   - CORS allowlistはPR #59、認証後のtenantとuser単位rate limitはPR #60で`develop`へ接続済みです。
-  - 構造化ログとruntime response schema検証を`apps/api/src/app.ts`へ接続する作業が残っています。
+  - 構造化ログとruntime response schema検証はPR #62で`apps/api/src/app.ts`へ接続済みです。
+  - LINE feature app、複数tenant所属時の明示的チーム選択、Auth session lifecycleの中央mountは別タスクとして残っています。
   - staging、productionでは分散rate limit adapterを必須にし、in-memory fallbackを許可しません。
 
 - `[ ]` **API-002：WebとAPIの中央mountを統合する。**
