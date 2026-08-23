@@ -20,7 +20,6 @@ BEGIN
 END
 $$;
 GRANT USAGE ON SCHEMA public TO cocolo_app;
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO cocolo_app;
 GRANT USAGE ON SCHEMA public TO line_delivery_worker;
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM line_delivery_worker;
 `;
