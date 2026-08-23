@@ -262,3 +262,122 @@ mergeコマンドが失敗した場合は再実行せず、`gh pr view <番号> 
 EVT-001の最終CI runは`32619201261`で、実PostgreSQL統合テスト、型検査、build、release artifact検査が成功しました。
 
 最終PR #65はCritical 0、High 0の敵対的レビュー後、squash commit `5f5a592`としてdevelopへ統合しました。
+
+### 追加記録：T037中央DB統合で発生した検証順序・migration・fixture漏れ（2026-08-23）
+
+T037では、実装PR #67の初期案をそのままマージせず、現行`develop`を起点に再構成してから検証しました。
+
+ローカルの`pnpm`は`11.19.0`で、`package.json`の`pnpm@10.26.0`と不一致でした。
+
+依存リンクが壊れた状態で`pnpm build`を先に実行し、`zod`の`json-schema.js`欠落で失敗しました。
+
+検証開始前にNode.jsと`packageManager`指定を確認し、`$env:CI='true'; pnpm dlx pnpm@10.26.0 install --frozen-lockfile`で依存を再構成してから検証します。
+
+依存導入なしで`pnpm test`を実行すると、`@cocolo/domain/dist`が存在せず`ERR_MODULE_NOT_FOUND`になりました。
+
+実行順序を「依存導入、migration静的検査、trust manifest検査、build、test、typecheck、lint、DB統合テスト、CI」と固定し、前段の終了コードを確認してから次へ進みます。
+
+pnpmのinstall、build、testを並列実行すると、`node_modules`再構成が競合して`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`になりました。
+
+pnpmを使う検証は同時に一つだけ実行し、非対話環境では`CI=true`を設定します。
+
+Prisma clientの戻り値型推論で`TS2742`が発生し、`createPrismaClient`へ明示的な戻り値型を付けました。
+
+その後、Honoのfactory関数でも`TS2742`が発生したため、8個のAPI factoryへ公開戻り値型を付けました。
+
+公開factory、Prisma client、repositoryの型を変更したときは、package単位のtypecheckだけでなくrootのbuildとtypecheckを再実行します。
+
+event API fixtureのBiome整形漏れでlintが失敗しました。
+
+新規fixtureやSQLテストを追加した直後に対象ファイルのBiome検査を行い、全体lintの前に整形差分を解消します。
+
+新規migrationをtrusted manifestへ登録し忘れ、manifest検査でCIが停止しました。
+
+SQLを一文字でも変更した場合は、`Get-FileHash <migration> -Algorithm SHA256`でハッシュを再計算し、manifest、`pnpm verify:trust-root`、`git diff --check`を同じコミット前に実行します。
+
+ハッシュを手入力して64桁のhexを誤記したため、manifest形式検査でも停止しました。
+
+ハッシュはコピーした実計算値をlowercaseで反映し、形式検査と実ファイル再計算の両方が成功するまでcommitしません。
+
+既存Phaseと中央migrationが同じenumを作成し、CI run `32620791346`で`event_type already exists`が発生しました。
+
+既存Phaseと中央migrationが同じattachment policyを作成し、CI run `32621007796`で重複policyエラーが発生しました。
+
+既存Phaseと中央migrationが同じannouncement enumを作成し、CI run `32621155766`で`announcement_status already exists`が発生しました。
+
+中央migrationの作成前に全migrationのDDL、policy、trigger、適用順を一覧化し、既存オブジェクトは再作成せず、必要な差分だけを後段migrationへ置きます。
+
+RLS fixtureでuploaded添付にsha256と`complete_attempts`を同時設定し、CI run `32621642247`で状態triggerに拒否されました。
+
+fixtureはuploadedで作成し、実体検証結果を反映してからavailableへ遷移させます。
+
+guardian fixtureのmembership userと参照userが異なり、CI run `32621743800`で担当境界テストが失敗しました。
+
+fixtureのidentity表を先に作成し、membership、guardian_members、events、orders、ridesのuser/member参照を同じ表から転記します。
+
+guardianとownerのfixture操作を同一transactionへ混在させ、CI run `32621888205`で実行roleが残りました。
+
+role境界を検証するfixtureはroleごとに`withContext` transactionを分離し、各transactionの開始時にRLS contextを設定します。
+
+memberの割当先を取り違え、CI run `32622189948`でguardian対象件数が0になりました。
+
+注文entryと送迎requestのmember IDを別のfixture memberへ設定し、CI run `32622366819`でorder entry件数が0になりました。
+
+出欠、注文、送迎のfixtureは、作成後にtenant、member、user、resourceの関連をcountと所属queryで確認してから権限テストへ進みます。
+
+ride fixtureのBiome整形漏れと、raw audit IDをuuid列へ渡すcast漏れがCI run `32622446624`で同時に発生しました。
+
+raw SQLでuuid列へ値を渡すときは`::uuid`を明示し、UUID生成器、audit insert、cleanupを同じ型境界で検査します。
+
+LINE workerがUUIDv4のaudit IDを生成し、UUIDv7制約追加後にAPIが500になりました。
+
+既存worker関数を中央migrationでUUIDv7生成へ置換し、migration適用後のLINE成功・失敗・unknown全経路を実DBで確認します。
+
+監査ログを直接DELETEしてfixture cleanupを行い、CI run `32622850560`でappend-only triggerに拒否されました。
+
+本番のappend-only制約を無効化するcleanupを許可せず、実DBテスト専用transaction内で明示的にcleanup境界を管理し、cleanup自体も検証対象として記録します。
+
+UUIDv7のprovider retry keyをscheduler正規表現が拒否し、同じCI run `32622850560`でLINE claim応答が不正になりました。
+
+外部仕様のUUID versionを固定値で制限するときは、実際に生成するversion、fixture、正規表現、契約テストを同時に更新します。
+
+CI run `32623139581`で、上記のRLS fixture、UUID、LINE、cleanup修正後の品質ゲートが成功しました。
+
+trust rootとride state guardを追加したCI run `32623387388`も成功しました。
+
+共通trigger関数から表固有の`NEW.plan_id`を直接参照し、CI run `32624315536`で`ride_plans`更新時にPostgreSQL `42703`が発生しました。
+
+異なる表へ付けるtrigger関数では表固有列を直接参照せず、`TG_TABLE_NAME`と`to_jsonb(NEW)`などの安全な動的境界を使い、各対象表のINSERT・UPDATEを実DBで実行します。
+
+DB側でride planの初期statusをdraftに固定した後、repositoryがopenで直接INSERTしている不一致を検出できていませんでした。
+
+repositoryはdraft INSERT後に同一transactionでopenへ遷移させ、DB状態遷移triggerと実装の初期状態を一致させます。
+
+実DB統合テストが無効なローカルではこの二つのtrigger不具合を検出できなかったため、`DATABASE_URL`と`DIRECT_URL`を確認できない場合は、実DB検証未実施として成功扱いにしません。
+
+最終実装HEAD `8279af8`のCI run `32624831166`で、migration、RLS統合テスト、build、typecheck、release artifact検証が成功しました。
+
+最終レビュー記録追加後のHEAD `b28c51e`でも、CI run `32625018676`が成功しました。
+
+最終敵対的レビューはCritical 0、High 0であり、Mediumは既存データのUUIDv7移行、添付available状態のDB保証、board contactのPII直接SELECT、Webhook receipt INSERT権限の専用actor限定として後続タスクへ記録しました。
+
+最終検証では、`pnpm verify:migration-sql`、`pnpm verify:trust-root`、`pnpm build`、`pnpm test`、`pnpm typecheck`、`pnpm lint`、`git diff --check`を同じ実装HEADで成功させました。
+
+実装PRのmerge後に`gh pr merge --squash --delete-branch`がローカルworktreeで失敗する場合は、再実行せず、`gh pr view <番号> --json state,mergedAt,mergeCommit`でリモート状態を確認します。
+
+リモートがMERGEDなら、merge commitを正本として`origin/develop`をfetchし、ローカルbranch削除エラーを追加のmerge失敗と扱いません。
+
+T037ではPR #67をsquash commit `c31d61a`としてdevelopへ統合し、実装PRとこの手順・履歴更新を別のdocs-only PRへ分離しました。
+
+#### T037の再発防止チェックリスト
+
+1. `pnpm --version`と`package.json`の`packageManager`が一致していることを確認します。
+2. 依存導入を完了し、生成物が存在することを確認してからbuildを実行します。
+3. `verify:migration-sql`、trust manifest、`verify:trust-root`をmigration変更ごとに実行します。
+4. build、test、typecheck、lint、DB統合テストを並列実行しません。
+5. fixtureのtenant、user、member、role、status、cleanup条件を表にしてから実DBテストを実行します。
+6. triggerごとに対象表のINSERTとUPDATEを実DBで実行し、表固有`NEW`列参照を検索します。
+7. repositoryの初期status、DBの初期status、状態遷移trigger、API契約を同じfixtureで照合します。
+8. CI成功だけで完了扱いにせず、最新HEADを対象に独立した敵対的レビューを2系統実施します。
+9. CriticalとHighが0件であること、残るMediumを履歴と後続タスクへ記録したことを確認します。
+10. merge後は必ずリモートPR状態とmerge commitを確認し、同じmergeを再実行しません。

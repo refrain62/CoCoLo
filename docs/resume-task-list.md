@@ -20,25 +20,25 @@
 
 ## 1. 停止時点の基準
 
-再開時点の`origin/develop`は`a3a735b`（docs-only PR #63のスカッシュマージ）です。
+再開時点の`origin/develop`は`c31d61a`（T037実装PR #67のスカッシュマージ）です。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
 Draft PRに実装が存在しても、`develop`へ統合されていない機能は現行環境では未実装として扱います。
 
-再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、docs-only PR #55、#56、#57、#58、#61、#63は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
+再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、docs-only PR #55、#56、#57、#58、#61、#63、#66は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
 
 ### 1.1 再開時のGitHub同期結果
 
 GitHubの最新状態は、次のルールで扱います。
 
 - `develop`へ未統合のDraft PRは、CIが成功していても「未実装」として扱います。
-- #36、#37、#43は、現行`develop`に既に存在するmigration、LINE webhook、release/trust-root検査と重複または契約不一致があるため、現PRをそのままマージしません。
+- #36、#43は、現行`develop`に既に存在するmigration、LINE webhook、release/trust-root検査と重複または契約不一致があるため、現PRをそのままマージしません。
 - #41、#42、#48は、古いbaseまたはtrusted rootへの依存が残るため、現行`develop`から再検証できる専用の小さなPRへ分解します。
 - #40、#49はLINE outboxと予定詳細の依存関係を先に確定し、#36の旧Webhook契約を前提にしません。
 - #51と#6は`main`向けまたは`main`をbaseとするPRであり、`develop`向けの機能マージ候補から除外します。
 
-再開時点で`develop`向けに未マージの主なPRは、#29、#36、#37、#40、#41、#42、#43、#48、#49です。各PRの最新head、CI、レビュー結果を確認してから、同じ責務を持つ新規PRを作成します。
+再開時点で`develop`向けに未マージの主なPRは、#29、#35、#36、#40、#41、#42、#43です。各PRの最新head、CI、レビュー結果を確認してから、同じ責務を持つ新規PRを作成します。
 
 ### 状態記号
 
@@ -227,10 +227,9 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - `apps/web/src/main.tsx`と`apps/api/src/app.ts`へ各機能を登録します。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証、Webのloading、empty、error、権限不足表示を確認します。
 
-- `[ ]` **DB-001：中央DB schemaと機能別migrationを統合する。**
-  - 対象：PR #37、`feature/central-db-schema`
-  - feature PRが個別に持つmigration、RLS、複合制約、監査、状態遷移を中央schemaへ統合します。
-  - migration適用順、checksum、rollback不可の差分、tenant複合キーを確認します。
+- `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**
+  - 対象：既存UUIDv4行の移行前検査、回覧添付のavailable状態、board contact PIIのDB直接SELECT、Webhook receipt INSERT権限の専用actor限定です。
+  - 各項目は機能mountの専用PRへ分離し、CriticalとHighを0件にしてから統合します。
 
 - `[ ]` **RELEASE-001：release artifactの環境境界を統合する。**
   - 対象：PR #38、`feature/release-artifact-env-boundary`
