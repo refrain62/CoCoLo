@@ -200,13 +200,17 @@ function sameDatabase(left: DatabaseTarget, right: DatabaseTarget): boolean {
 // staging / productionでは同一hostも拒否し、同一PostgreSQLクラスタの誤指定を避ける。
 export function validateShadowDatabaseConfig(
   shadowDatabaseUrl = process.env.SHADOW_DATABASE_URL,
-  environment = process.env.APP_ENV ?? 'local',
+  environment = process.env.APP_ENV,
   databaseUrl = process.env.DATABASE_URL,
   directUrl = process.env.DIRECT_URL,
   expectedRole = process.env.SHADOW_DATABASE_ROLE,
   allowedHosts = process.env.SHADOW_DATABASE_ALLOWED_HOSTS,
   allowedDatabases = process.env.SHADOW_DATABASE_ALLOWED_DATABASES,
 ): void {
+  assert.ok(
+    environment,
+    'APP_ENVが必要です。local、staging、productionのいずれかを指定してください。',
+  );
   const primary = parseDatabaseTarget(databaseUrl, 'DATABASE_URL');
   const direct = parseDatabaseTarget(directUrl, 'DIRECT_URL');
   const shadow = parseDatabaseTarget(shadowDatabaseUrl, 'SHADOW_DATABASE_URL');
@@ -294,8 +298,47 @@ export async function verifyMigrationIntegrity(
 export function assertSchemaDriftWorkflowConnected(content: string): void {
   assert.match(
     content,
-    /pnpm\s+verify:schema-drift\b/,
-    'schema-drift Workflowからverify:schema-driftを実行してください。',
+    /^on:\s*\r?\n\s+pull_request:\s*$/m,
+    'schema-drift Workflowはpull_requestで実行してください。',
+  );
+  const runMatch = /^\s*run:\s*pnpm verify:schema-drift\s*$/m.exec(content);
+  assert.ok(
+    runMatch,
+    'schema-drift Workflowからverify:schema-driftを直接実行してください。',
+  );
+  const beforeRun = content.slice(0, runMatch.index);
+  const stepStarts = [...beforeRun.matchAll(/^\s*-\s+name:\s*[^\r\n]*$/gm)];
+  const stepStart = stepStarts.at(-1)?.index;
+  assert.ok(stepStart !== undefined, 'verify:schema-driftのstep名が必要です。');
+  const afterRun = content.slice(runMatch.index + runMatch[0].length);
+  const nextStepOffset = afterRun.search(/^\s*-\s+name:\s*/m);
+  const step = content.slice(
+    stepStart,
+    nextStepOffset < 0
+      ? content.length
+      : runMatch.index + runMatch[0].length + nextStepOffset,
+  );
+  assert.match(step, /^\s+env:\s*$/m, '検査stepにenvが必要です。');
+  assert.match(
+    step,
+    /BASE_SHA:\s*\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\}\}/,
+    '検査stepはPRのbase SHAを使ってください。',
+  );
+  assert.match(step, /CI:\s*true/, '検査stepではCI=trueが必要です。');
+  assert.match(
+    step,
+    /APP_ENV:\s*local/,
+    'PRのschema drift検査はlocalの固定DBで実行してください。',
+  );
+  assert.doesNotMatch(
+    step,
+    /(?:^|\n)\s*if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/m,
+    'schema drift検査stepを無効化してはいけません。',
+  );
+  assert.doesNotMatch(
+    step,
+    /continue-on-error:\s*true/,
+    'schema drift検査の失敗を無視してはいけません。',
   );
   assert.match(
     content,
@@ -496,6 +539,11 @@ export async function verifySchemaDrift(
   const migrationCount = await assertMigrationLayout(paths);
   await integrityVerifier(paths);
   const redactedShadowUrl = redactDatabaseUrl(shadowDatabaseUrl);
+  assert.equal(
+    redactedShadowUrl.password,
+    '',
+    'SHADOW_DATABASE_URLにパスワードを含めず、専用の外部認証を設定してください。',
+  );
   const result = runner(
     process.execPath,
     [
@@ -510,7 +558,6 @@ export async function verifySchemaDrift(
       env: {
         ...process.env,
         SHADOW_DATABASE_URL: shadowDatabaseUrl,
-        PGPASSWORD: redactedShadowUrl.password,
       },
     },
   );

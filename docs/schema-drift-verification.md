@@ -15,7 +15,9 @@
 4. Prismaのmigrationからshadow DBへ再構築した結果とschema datamodelに構造差分がない。
 5. `SHADOW_DATABASE_URL` が `DATABASE_URL` / `DIRECT_URL` と同じ host・port・database を指さず、専用role・host・databaseの許可リストに一致する。`staging` / `production` ではアプリDB・migration DBと別hostも必須とする。
 
-shadow DB URLはPrisma CLIの引数へ渡さず、検査プロセスの環境変数からのみ参照する。ログに接続URLや認証情報を出力してはいけない。
+Prisma CLIへ渡すShadow DB URLにはパスワードを含めず、認証情報をargvへ出さない。
+local CIはPostgreSQL serviceのtrust認証を使い、staging / productionはmTLSなどの外部認証を使う。
+ログに接続URLや認証情報を出力してはいけない。
 
 ## CI接続
 
