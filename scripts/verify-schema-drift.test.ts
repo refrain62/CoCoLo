@@ -349,7 +349,7 @@ test('差分なしではPrisma CLIをexit-code付きで実行して成功する'
       received[0]?.args,
     );
     assert.equal(received[0]?.command, process.execPath);
-    assert.equal(received[0]?.env?.SHADOW_DATABASE_URL, shadowDatabaseUrl);
+    assert.equal(received[0]?.env?.SHADOW_DATABASE_URL, shadowConfig.directUrl);
     assert.equal(received[0]?.env?.PGPASSWORD, undefined);
     assert.equal(
       received[0]?.args.includes(shadowDatabaseUrlWithPassword),

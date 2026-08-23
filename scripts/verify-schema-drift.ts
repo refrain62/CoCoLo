@@ -647,6 +647,7 @@ export async function verifySchemaDrift(
         ...directEnv,
         DATABASE_URL: shadowDatabaseUrl,
         DIRECT_URL: shadowDatabaseUrl,
+        SHADOW_DATABASE_URL: directUrl,
         PRISMA_HIDE_UPDATE_MESSAGE: '1',
       },
     },
