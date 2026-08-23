@@ -201,7 +201,7 @@ async function seedFixture(client: PrismaClient) {
       entryA,
       tenantA,
       orderA,
-      memberA,
+      memberA2,
     );
     await execute(
       transaction as unknown as PrismaClient,
@@ -291,10 +291,10 @@ async function seedFixture(client: PrismaClient) {
     client,
     `INSERT INTO ride_requests (id, tenant_id, plan_id, member_id, requester_user_id, passenger_count, status)
        VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'guardian-a2', 1, 'pending')`,
-    rideRequestA,
-    tenantA,
-    ridePlanA,
-    memberA,
+      rideRequestA,
+      tenantA,
+      ridePlanA,
+      memberA2,
   );
   await execute(
     client,
