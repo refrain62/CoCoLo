@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   assertDatabaseSecurity,
   type DatabaseSecurityInspection,
+  REQUIRED_POLICIES,
   REQUIRED_TABLE_PRIVILEGES,
   verifyDatabaseSecurity,
 } from './verify-database-security.ts';
@@ -53,7 +54,7 @@ function createValidInspection(): DatabaseSecurityInspection {
     enabled: true,
     forced: true,
   }));
-  const policies = [
+  const basePolicies = [
     {
       schema: 'public',
       table: 'tenants',
@@ -171,6 +172,34 @@ function createValidInspection(): DatabaseSecurityInspection {
     permissive: 'PERMISSIVE',
     roles: ['public'],
   }));
+  const basePolicyKeys = new Set(
+    basePolicies.map((policy) => `${policy.table}.${policy.name}`),
+  );
+  const policies = [
+    ...basePolicies,
+    ...REQUIRED_POLICIES.filter(
+      (required) => !basePolicyKeys.has(`${required.table}.${required.name}`),
+    ).map((required) => {
+      const tokens = required.usingTokens ??
+        required.withCheckTokens ?? ['tenant_id'];
+      const expression = policyExpression(tokens);
+      return {
+        schema: 'public',
+        table: required.table,
+        name: required.name,
+        command: required.command,
+        usingExpression: required.command === 'INSERT' ? null : expression,
+        withCheckExpression:
+          required.command === 'INSERT' ||
+          required.command === 'UPDATE' ||
+          required.command === 'ALL'
+            ? expression
+            : null,
+        permissive: 'PERMISSIVE',
+        roles: ['public'],
+      };
+    }),
+  ];
 
   return {
     connection: {
