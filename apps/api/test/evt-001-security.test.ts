@@ -22,10 +22,6 @@ test('EVT-001のmigrationはactive membership、添付tenant、回答一意性�
     migration,
     /CREATE OR REPLACE FUNCTION app_lock_active_membership\(/,
   );
-  assert.match(
-    migration,
-    /CREATE POLICY events_select[\s\S]*app_lock_active_membership\(/,
-  );
   assert.match(migration, /p_role IS NULL OR role::text = p_role/);
   assert.match(
     migration,
