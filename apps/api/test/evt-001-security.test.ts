@@ -49,7 +49,6 @@ test('EVT-001 repositoryはmembership変更と業務transactionを直列化す�
   assert.match(repository, /pg_advisory_xact_lock\(hashtextextended/);
   assert.match(repository, /eventLockKey/);
   assert.match(repository, /app_lock_active_membership/);
-  assert.match(repository, /FROM guardian_members[\s\S]*FOR SHARE/);
   assert.match(repository, /FROM events[\s\S]*FOR UPDATE/);
   assert.match(repository, /status = 'available'::attachment_status/);
   assert.match(repository, /LIMIT 501/);

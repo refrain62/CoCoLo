@@ -292,7 +292,6 @@ async function findAssignedMember(
       AND user_id = ${input.actorUserId}
       AND member_id = ${memberId}::uuid
     LIMIT 1
-    FOR SHARE
   `;
   return rows.length > 0;
 }
