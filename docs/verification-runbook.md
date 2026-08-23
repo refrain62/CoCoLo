@@ -172,3 +172,31 @@ Node.js 24の`node --test`はstrip-only実行のため、`.test.ts`でTypeScript
 経路追加のテストでは、認証済みの許可、429応答契約、ハッシュ済みtenant/userキー、生の個人情報を含まないこと、429時の全業務handlerと外部producerの未実行を同時に確認します。
 
 検証失敗を修正した後は、失敗したコマンドだけで終わらせず、`pnpm test`、`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm lint:workflows`を同じHEADで再実行し、CI成功と照合します。
+
+### 追加記録：中央API hardening実装時の手順漏れ（2026-08-23）
+
+新規テストfixtureの型を`Record<string, unknown>`のまま作成し、`MemberRepository`の`MemberRecord`戻り値契約に適合せず、`pnpm lint`のtest typecheckで`TS2322`が発生しました。
+
+新規fixtureは最初に既存repository型をimportし、固定fixtureへ明示的な型注釈を付けてから専用typecheckを実行します。
+
+新規contractsテストのimport拡張子を既存規約の`.ts`ではなく`.js`にしたため、Node.js 24のstrip-onlyテスト実行で`ERR_MODULE_NOT_FOUND`が発生しました。
+
+新規テストを追加するときは、同じpackageの既存テストのimport拡張子、`tsconfig`の`allowImportingTsExtensions`、実行scriptを先に確認します。
+
+requestId共通化でstructured loggerから旧control-character helperを削除した際、path検証の参照を置換し忘れてAPI buildが失敗しました。
+
+rate-limitへ同じ共通化を適用した際、requestId以外のidentity検証で旧helperを参照しており、API buildが失敗しました。
+
+共通helperを削除または移動する変更では、削除前に`rg -n "helperName" apps packages`で全参照を検索し、変更後にpackage buildを実行します。
+
+requestIdをUUID形式へ厳格化した後、rate-limit回帰テストの期待値だけが旧文字列のまま残り、API専用テストが1件失敗しました。
+
+公開形式や固定値を変更したときは、実装、fixture、レスポンスheader、JSON bodyの期待値を同時に検索し、専用テストを再実行します。
+
+実DB統合テストを環境変数なしで実行したため、`attachments-db`、`events-db`、`line-delivery-db`、`members-db`、`promotion-db`の5件が`DATABASE_URLが必要です`で失敗し、実DB検証は未実施となりました。
+
+実DB統合テストの前には、`$env:DATABASE_URL`の存在、接続先が検証用DBであること、migration適用状態、RLS検証用roleを確認し、未設定時はテストを開始せず環境前提として停止します。
+
+今回の最終検証では、rootの`pnpm test`が150件成功し、`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm lint:workflows`、`pnpm lint:openapi`も同じHEADで成功しました。
+
+CI quality run `32614821124`が成功し、実装PR #62は`2ce3dbe`としてdevelopへスカッシュマージされました。
