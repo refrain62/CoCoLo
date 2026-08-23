@@ -459,7 +459,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           SELECT attendance_deadline
           FROM events
           WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
-          FOR UPDATE
+          FOR SHARE
         `;
         const event = eventRows[0];
         if (!event) throw new EventNotFoundError();
