@@ -243,7 +243,11 @@ CREATE POLICY events_select ON events
   FOR SELECT
   USING (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-    AND app_is_active_member(tenant_id, current_setting('app.user_id', true))
+    AND app_lock_active_membership(
+      tenant_id,
+      current_setting('app.user_id', true),
+      current_setting('app.role', true)
+    )
   );
 
 DROP POLICY events_insert ON events;
@@ -251,7 +255,11 @@ CREATE POLICY events_insert ON events
   FOR INSERT
   WITH CHECK (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-    AND app_is_active_member_with_role(tenant_id, current_setting('app.user_id', true), current_setting('app.role', true))
+    AND app_lock_active_membership(
+      tenant_id,
+      current_setting('app.user_id', true),
+      current_setting('app.role', true)
+    )
     AND current_setting('app.role', true) IN ('owner', 'admin', 'staff')
     AND created_by_user_id = current_setting('app.user_id', true)
     AND updated_by_user_id = current_setting('app.user_id', true)
@@ -262,12 +270,20 @@ CREATE POLICY events_update ON events
   FOR UPDATE
   USING (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-    AND app_is_active_member_with_role(tenant_id, current_setting('app.user_id', true), current_setting('app.role', true))
+    AND app_lock_active_membership(
+      tenant_id,
+      current_setting('app.user_id', true),
+      current_setting('app.role', true)
+    )
     AND current_setting('app.role', true) IN ('owner', 'admin', 'staff')
   )
   WITH CHECK (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-    AND app_is_active_member_with_role(tenant_id, current_setting('app.user_id', true), current_setting('app.role', true))
+    AND app_lock_active_membership(
+      tenant_id,
+      current_setting('app.user_id', true),
+      current_setting('app.role', true)
+    )
     AND current_setting('app.role', true) IN ('owner', 'admin', 'staff')
     AND updated_by_user_id = current_setting('app.user_id', true)
   );

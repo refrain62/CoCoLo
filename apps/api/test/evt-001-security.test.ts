@@ -24,6 +24,10 @@ test('EVT-001のmigrationはactive membership、添付tenant、回答一意性�
   );
   assert.match(
     migration,
+    /CREATE POLICY events_select[\s\S]*app_lock_active_membership\(/,
+  );
+  assert.match(
+    migration,
     /REVOKE ALL ON FUNCTION app_is_live_member\(uuid, uuid\) FROM PUBLIC/,
   );
   assert.match(migration, /events_tenant_attachment_fk/);
