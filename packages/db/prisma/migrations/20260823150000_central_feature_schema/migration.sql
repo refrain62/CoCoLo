@@ -15,7 +15,9 @@ RETURNS boolean
 LANGUAGE sql
 IMMUTABLE
 AS $$
-  SELECT value IS NOT NULL AND ((get_byte(uuid_send(value), 6) >> 4) = 7)
+  SELECT value IS NOT NULL
+    AND ((get_byte(uuid_send(value), 6) >> 4) = 7)
+    AND ((get_byte(uuid_send(value), 8) & 192) = 128)
 $$;
 
 CREATE OR REPLACE FUNCTION app_uuidv7()
