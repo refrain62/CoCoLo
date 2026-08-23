@@ -94,6 +94,37 @@ Draft PRに実装が存在しても、`develop`へ統合されていない機能
 - 停止時点では全体`pnpm test`とGitHub Actions CIを再実行していません。
 - trusted rootのbootstrap後に、app role、BYPASSRLS、membership、ACL、RLS policy、SECURITY DEFINER function、migration履歴、deploy前後DB検査を同一artifact SHAで再検証する必要があります。
 
+## T014-DB-001（現行develop再構成）
+
+### 実施した変更
+
+- 現行`origin/develop` `a51e441534c6850123406057ea4540fc907fd620`を起点に、T014 DB整合性ゲートを再構成しました。
+- 実装ブランチは`codex/t014-db-integrity-current`です。
+- 実装PR #69はDraft作成後にReady化し、developへsquash commit `daa20025b9c5926fc4070901dcca15d96025a148`として統合しました。
+- migration checksum、baseline、履歴、危険SQL、table ACL、RLS、policy、membership関数実体、completed payload不変性を検査対象へ追加しました。
+- 実装PRと手順・失敗履歴を混在させず、このdocs-only PRへ分離しました。
+
+### 検証結果
+
+- ローカルのDB整合性fixtureは最終24件成功しました。
+- ローカルのmigration SQL検査、workflow検査、trust root検査、Biome、scripts型検査を実行しました。
+- CI run `32629376920`のdatabase-integrityが成功しました。
+- CI run `32629376984`のqualityが成功しました。
+- 実DBCIではPostgreSQL 17への全migration適用、role準備、権限・RLS・policy検査、seedを実行しました。
+- 最終敵対的レビューは今回PR由来のCritical 0、High 0でした。
+
+### 失敗から明文化したルール
+
+- DB version検証の引数、role準備順序、migration最終権限、catalogの型cast、監査ログmembership policyを手順書へ固定しました。
+- RLS検査は`OR true`、`IS NULL`、`IS NOT NULL`による境界無効化と、membership関数の再定義を拒否します。
+- ローカルで`minimumReleaseAge`により全体pnpm検証が開始前に停止した場合は、lockfileを変更せず、CIを正本として記録します。
+- 既存のowner-only trust bootstrapがbaseへ反映されていない場合は、実装PRへ混ぜず、owner先行作業を停止条件として残します。
+
+### 残存条件
+
+- T014-PR-001の既存trust bootstrap・PR trust gate展開は別タスクとして継続します。
+- T014-DB-002の悪性fixture拡充と、残るMedium以下の後続検証は残タスク台帳で管理します。
+
 ## T014-DRIFT-001
 
 ### 実施した変更

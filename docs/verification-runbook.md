@@ -381,3 +381,56 @@ T037ではPR #67をsquash commit `c31d61a`としてdevelopへ統合し、実装P
 8. CI成功だけで完了扱いにせず、最新HEADを対象に独立した敵対的レビューを2系統実施します。
 9. CriticalとHighが0件であること、残るMediumを履歴と後続タスクへ記録したことを確認します。
 10. merge後は必ずリモートPR状態とmerge commitを確認し、同じmergeを再実行しません。
+
+### 追加記録：T014 DB整合性ゲートで発生したCI手順漏れと実DB検査不足（2026-08-23）
+
+T014の現行develop向け再構成は、Draft PR #69として実装し、最終的にsquash commit `daa20025b9c5926fc4070901dcca15d96025a148`でdevelopへ統合しました。
+
+初回CI run `32627658299`では、`verify-database-version`へ`--expected-major 17`を渡し忘れ、既定値の引数解釈が壊れて失敗しました。
+
+DBバージョン検証コマンドは、必ず`pnpm verify:database-version --expected-major 17`の形式で実行します。
+
+実DB用roleを作成する`db:prepare:test`より先にapp roleへ接続し、CI run `32627783973`でpassword authentication failureになりました。
+
+実DB検証の順序は、role準備、PostgreSQL major version検証、migration適用、migration履歴検証、実DB権限検証、seedの順に固定します。
+
+テストDB準備で全テーブルへ初期`SELECT/INSERT/UPDATE`を付与し、migrationの最小権限allowlistと衝突しました。
+
+テストDB準備ではschema usageとrole作成だけを行い、table権限は正本migrationへ委譲します。
+
+中央migrationの実効権限とallowlistが一致せず、`announcement*`のUPDATE権限検査でCI run `32628010543`が失敗しました。
+
+権限allowlistは意図ではなく、全migration適用後の`has_table_privilege`実測値と照合して更新します。
+
+PostgreSQLのpolicy catalogは`current_setting('app.tenant_id'::text, true)`や括弧を正規化して返すため、SQL正本だけでなくcatalog表現をfixtureへ固定します。
+
+監査ログINSERT policyが`app_has_active_membership(tenant_id)`へ置換されているのに旧`app.tenant_id`トークンを要求し、CI run `32628366460`で失敗しました。
+
+allowlistのpolicy要件は、対象migrationの最終policy本文と同じtenant境界方式へ更新します。
+
+RLS検査は`OR true`、`tenant_id IS NOT NULL`、`tenant_id IS NULL`による境界無効化を拒否し、membership関数のowner、language、SECURITY DEFINER、本体のtenant・user・role・active status条件を実DBcatalogで検証します。
+
+実装PRへdocsを混在させず、失敗内容とルールはこの手順書を含むdocs-only PRへ分離します。
+
+ローカルにPostgreSQLがない場合は、実DB検証を成功扱いにせず、CI run `32629376920`を実DB検証の正本として記録します。
+
+ローカルのpnpmがpackageManager指定と不一致の場合は、`$env:CI='true'; pnpm dlx pnpm@10.26.0 install --frozen-lockfile`を最初に一度だけ実行します。
+
+既存lockfileが`minimumReleaseAge`により現在時刻基準で拒否された場合は、lockfileの再生成やポリシー緩和を行わず、CIを正本として記録します。
+
+trust root検査、manifest hash検査、migration SQL検査は依存関係installより先に実行し、未信頼PRのinstall scriptをtrust検証前に動かしません。
+
+manifestのhashは手入力せず、`Get-FileHash <path> -Algorithm SHA256`の実値をlowercaseで反映し、64桁検査と`pnpm verify:trust-root`を同じcommit前に実行します。
+
+`bootstrap-extension.json`のowner-only bootstrapがbaseへ未反映の環境では、trust gateの判定を実装PRへ混在させず、owner先行のbootstrap作業を停止条件として台帳へ記録します。
+
+#### T014 DB整合性ゲートの完了ルール
+
+1. `pnpm`の固定版、CI環境、依存lockfileの状態を最初に記録します。
+2. trust root、workflow、migration正本、manifest hashをinstall前に検証します。
+3. role準備なしにapp role接続のDB検証を開始しません。
+4. test DBへ全テーブルの初期権限を付与せず、migrationが付与する最小権限だけを検査します。
+5. policy検査はSQL正本、PostgreSQL catalogの正規化表現、tenant越境悪性fixtureの3点で確認します。
+6. membership境界関数は関数名の文字列だけでなく、owner、language、SECURITY DEFINER、本体条件を実DBで確認します。
+7. CIのdatabase-integrityとqualityが同じ最新HEADで成功するまでReady化やmergeを行いません。
+8. merge後はPRのstate、mergedAt、mergeCommitを確認し、同一mergeを再実行しません。
