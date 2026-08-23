@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
+import {
+  type PrismaClientLike,
+  withPostgresClient,
+} from './postgres-client.ts';
 
 export type ShadowRoleInspection = Readonly<{
   roleName: string;
@@ -12,6 +14,42 @@ export type ShadowRoleInspection = Readonly<{
   canCreateRole: boolean;
   canReplicate: boolean;
   hasMembership: boolean;
+  canLogin: boolean;
+  hasPassword: boolean;
+  passwordHashPrefix: string | null;
+}>;
+
+export type ShadowAclEntry = Readonly<{
+  objectType: 'default' | 'schema' | 'table' | 'sequence' | 'enum';
+  objectName: string;
+  grantee: string;
+  privilege: string;
+}>;
+
+export type ShadowObjectOwner = Readonly<{
+  objectType: 'table' | 'sequence' | 'enum';
+  objectName: string;
+  owner: string;
+}>;
+
+export type ShadowMembership = Readonly<{
+  roleName: string;
+  memberName: string;
+}>;
+
+export type ShadowRlsInspection = Readonly<{
+  tableName: string;
+  enabled: boolean;
+  forced: boolean;
+}>;
+
+export type ShadowDatabaseInspection = Readonly<{
+  databaseOwner: string;
+  objectOwners: readonly ShadowObjectOwner[];
+  aclEntries: readonly ShadowAclEntry[];
+  defaultAclEntries: readonly ShadowAclEntry[];
+  memberships: readonly ShadowMembership[];
+  rls: readonly ShadowRlsInspection[];
 }>;
 
 // Shadow roleはDDLを実行できるが、管理者権限・RLS迂回権限・他roleへの所属を持たないことを実DBで確認する。
@@ -59,53 +97,289 @@ export function assertShadowRoleAttributes(
     false,
     'Shadow roleにrole membershipがあります。',
   );
+  assert.equal(
+    inspection.canLogin,
+    true,
+    'Shadow roleにLOGIN属性がありません。',
+  );
+  assert.equal(
+    inspection.hasPassword,
+    true,
+    'Shadow roleにpassword認証情報がありません。',
+  );
+  assert.equal(
+    inspection.passwordHashPrefix === 'SCRAM-SHA-256' ||
+      inspection.passwordHashPrefix === '********',
+    true,
+    'Shadow roleはSCRAM-SHA-256 password認証を使用してください。',
+  );
 }
 
-type PrismaClientLike = Readonly<{
-  $queryRawUnsafe: <T>(query: string, ...values: unknown[]) => Promise<T>;
-  $disconnect: () => Promise<void>;
-}>;
-
-type PrismaClientConstructor = new (options: {
-  datasources: { db: { url: string } };
-}) => PrismaClientLike;
-
-function loadPrismaClient(): PrismaClientConstructor {
-  const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-  const require = createRequire(
-    path.join(root, 'packages', 'db', 'package.json'),
-  );
-  try {
-    const loaded = require('@prisma/client') as {
-      PrismaClient: PrismaClientConstructor;
-    };
-    return loaded.PrismaClient;
-  } catch (error) {
-    throw new Error('Shadow role検査用のPrisma Clientを読み込めません。', {
-      cause: error,
-    });
+function expectedAclEntries(
+  objectOwners: readonly ShadowObjectOwner[],
+): ShadowAclEntry[] {
+  const entries: ShadowAclEntry[] = [];
+  entries.push({
+    objectType: 'schema',
+    objectName: 'public',
+    grantee: 'cocolo_app',
+    privilege: 'USAGE',
+  });
+  for (const objectName of [
+    'public.tenants',
+    'public.tenant_memberships',
+    'public.members',
+    'public.guardian_members',
+    'public.audit_logs',
+    'public.promotion_runs',
+  ]) {
+    for (const privilege of ['INSERT', 'SELECT', 'UPDATE'])
+      entries.push({
+        objectType: 'table',
+        objectName,
+        grantee: 'cocolo_app',
+        privilege,
+      });
   }
+  for (const objectName of new Set(
+    objectOwners
+      .filter((entry) => entry.objectType === 'sequence')
+      .map((entry) => entry.objectName),
+  )) {
+    for (const privilege of ['SELECT', 'USAGE'])
+      entries.push({
+        objectType: 'sequence',
+        objectName,
+        grantee: 'cocolo_app',
+        privilege,
+      });
+  }
+  for (const objectName of [
+    'public.role',
+    'public.membership_status',
+    'public.member_category',
+    'public.member_status',
+    'public.promotion_run_status',
+  ])
+    entries.push({
+      objectType: 'enum',
+      objectName,
+      grantee: 'cocolo_app',
+      privilege: 'USAGE',
+    });
+  return entries;
+}
+
+function aclKey(entry: ShadowAclEntry): string {
+  return `${entry.objectType}:${entry.objectName}:${entry.grantee}:${entry.privilege}`;
+}
+
+function objectOwnerKey(entry: ShadowObjectOwner): string {
+  return `${entry.objectType}:${entry.objectName}`;
+}
+
+const expectedObjectOwnerKeys = [
+  'table:public._prisma_migrations',
+  'table:public.tenants',
+  'table:public.tenant_memberships',
+  'table:public.members',
+  'table:public.guardian_members',
+  'table:public.audit_logs',
+  'table:public.promotion_runs',
+  'enum:public.role',
+  'enum:public.membership_status',
+  'enum:public.member_category',
+  'enum:public.member_status',
+  'enum:public.promotion_run_status',
+];
+
+// PostgreSQL 17の初期クラスタが持つ監視用membershipだけを許可し、Shadow/app roleを含む追加行を拒否する。
+const allowedMembershipKeys = [
+  'pg_read_all_settings:pg_monitor',
+  'pg_read_all_stats:pg_monitor',
+  'pg_stat_scan_tables:pg_monitor',
+];
+
+function assertExactSet(
+  actual: readonly string[],
+  expected: readonly string[],
+  label: string,
+): void {
+  assert.deepEqual(
+    [...new Set(actual)].sort(),
+    [...new Set(expected)].sort(),
+    `${label}の許可集合が不一致です。`,
+  );
+}
+
+export function assertShadowDatabaseSecurity(
+  inspection: ShadowDatabaseInspection,
+  expectedRole: string,
+): void {
+  assert.equal(
+    inspection.databaseOwner,
+    expectedRole,
+    'Shadow DBのownerはShadow roleでなければなりません。',
+  );
+  assert.ok(
+    inspection.objectOwners.length > 0,
+    'Shadow DBの検査対象objectがありません。',
+  );
+  assertExactSet(
+    inspection.objectOwners.map(objectOwnerKey),
+    expectedObjectOwnerKeys,
+    'Shadow DB objectの種類・名前',
+  );
+  assertExactSet(
+    inspection.objectOwners.map((entry) => entry.owner),
+    inspection.objectOwners.map(() => expectedRole),
+    'Shadow DB object owner',
+  );
+  assertExactSet(
+    inspection.defaultAclEntries.map(aclKey),
+    [],
+    'Shadow DB default privileges',
+  );
+  assertExactSet(
+    inspection.memberships.map(
+      (entry) => `${entry.roleName}:${entry.memberName}`,
+    ),
+    allowedMembershipKeys,
+    'Shadow DB pg_auth_members',
+  );
+  assert.deepEqual(
+    [...new Set(inspection.aclEntries.map(aclKey))].sort(),
+    expectedAclEntries(inspection.objectOwners).map(aclKey).sort(),
+    'Shadow DB ACLの許可集合が不一致です。PUBLIC grantや過剰権限を拒否します。',
+  );
+  assert.ok(
+    inspection.aclEntries.every((entry) => entry.grantee !== 'PUBLIC'),
+    'Shadow DB objectへのPUBLIC grantを拒否します。',
+  );
+  assert.ok(inspection.rls.length > 0, 'RLS検査対象tableがありません。');
+  for (const table of inspection.rls) {
+    assert.equal(
+      table.enabled,
+      true,
+      `${table.tableName}: RLS無効化を拒否します。`,
+    );
+    assert.equal(
+      table.forced,
+      true,
+      `${table.tableName}: FORCE RLS未設定を拒否します。`,
+    );
+  }
+}
+
+export function assertMigrationSqlSafe(
+  sql: string,
+  file = 'migration.sql',
+): void {
+  const dangerousPatterns = [
+    /\bDROP\s+(?:TABLE|SCHEMA|DATABASE)\b/i,
+    /\bTRUNCATE\b/i,
+    /\bDELETE\s+FROM\s+[^;]+;/is,
+    /\b(?:CREATE|ALTER|DROP)\s+ROLE\b/i,
+    /\bALTER\s+DATABASE\b/i,
+    /\bDISABLE\s+ROW\s+LEVEL\s+SECURITY\b/i,
+    /\bGRANT\b[^;]+\bTO\s+PUBLIC\b/is,
+  ];
+  for (const pattern of dangerousPatterns)
+    assert.doesNotMatch(sql, pattern, `${file}: 危険なDDLを拒否します。`);
+}
+
+async function inspectShadowDatabase(
+  client: PrismaClientLike,
+): Promise<ShadowDatabaseInspection> {
+  const [
+    databaseRows,
+    objectOwners,
+    aclEntries,
+    defaultAclEntries,
+    memberships,
+    rls,
+  ] = await Promise.all([
+    client.$queryRawUnsafe<readonly [{ databaseOwner: string }]>(
+      'SELECT pg_get_userbyid(datdba) AS "databaseOwner" FROM pg_database WHERE datname = current_database()',
+    ),
+    client.$queryRawUnsafe<ShadowObjectOwner[]>(
+      `SELECT 'table'::text AS "objectType", n.nspname || '.' || c.relname AS "objectName", pg_get_userbyid(c.relowner) AS owner
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public' AND c.relkind IN ('r', 'v', 'm', 'f', 'p')
+          UNION ALL
+         SELECT 'sequence'::text, n.nspname || '.' || c.relname, pg_get_userbyid(c.relowner)
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public' AND c.relkind = 'S'
+          UNION ALL
+         SELECT 'enum'::text, n.nspname || '.' || t.typname, pg_get_userbyid(t.typowner)
+           FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+          WHERE n.nspname = 'public' AND t.typtype = 'e'`,
+    ),
+    client.$queryRawUnsafe<ShadowAclEntry[]>(
+      `SELECT 'schema'::text AS "objectType", n.nspname AS "objectName",
+                CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END AS grantee, x.privilege_type AS privilege
+           FROM pg_namespace n
+           CROSS JOIN LATERAL aclexplode(n.nspacl) x
+          WHERE n.nspname = 'public' AND x.grantee <> n.nspowner
+          UNION ALL
+         SELECT 'table'::text, n.nspname || '.' || c.relname,
+                CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END AS grantee, x.privilege_type AS privilege
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+           CROSS JOIN LATERAL aclexplode(c.relacl) x
+           WHERE n.nspname = 'public' AND c.relkind IN ('r', 'v', 'm', 'f', 'p') AND x.grantee <> c.relowner
+          UNION ALL
+         SELECT 'sequence'::text, n.nspname || '.' || c.relname, CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END, x.privilege_type
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+           CROSS JOIN LATERAL aclexplode(c.relacl) x
+          WHERE n.nspname = 'public' AND c.relkind = 'S' AND x.grantee <> c.relowner
+          UNION ALL
+         SELECT 'enum'::text, n.nspname || '.' || t.typname, CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END, x.privilege_type
+           FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+           CROSS JOIN LATERAL aclexplode(t.typacl) x
+           WHERE n.nspname = 'public' AND t.typtype = 'e' AND x.grantee <> t.typowner`,
+    ),
+    client.$queryRawUnsafe<ShadowAclEntry[]>(
+      `SELECT 'default'::text AS "objectType", COALESCE(n.nspname, '*') AS "objectName",
+                COALESCE(pg_get_userbyid(x.grantee), 'PUBLIC') AS grantee, x.privilege_type AS privilege
+           FROM pg_default_acl d
+           LEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace
+           CROSS JOIN LATERAL aclexplode(d.defaclacl) x`,
+    ),
+    client.$queryRawUnsafe<ShadowMembership[]>(
+      `SELECT pg_get_userbyid(roleid) AS "roleName", pg_get_userbyid(member) AS "memberName"
+           FROM pg_auth_members`,
+    ),
+    client.$queryRawUnsafe<ShadowRlsInspection[]>(
+      `SELECT n.nspname || '.' || c.relname AS "tableName", c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname <> '_prisma_migrations'
+          ORDER BY c.relname`,
+    ),
+  ]);
+  return {
+    databaseOwner: databaseRows[0]?.databaseOwner ?? '',
+    objectOwners,
+    aclEntries,
+    defaultAclEntries,
+    memberships,
+    rls,
+  };
 }
 
 export async function inspectShadowRole(
   shadowDatabaseUrl = process.env.SHADOW_DATABASE_URL,
   expectedRole = process.env.SHADOW_DATABASE_ROLE,
+  adminDatabaseUrl = process.env.SHADOW_DATABASE_ADMIN_URL,
 ): Promise<void> {
   assert.ok(shadowDatabaseUrl, 'SHADOW_DATABASE_URLが必要です。');
   assert.ok(expectedRole, 'SHADOW_DATABASE_ROLEが必要です。');
-  const parsed = new URL(shadowDatabaseUrl);
-  assert.equal(
-    parsed.password,
-    '',
-    'SHADOW_DATABASE_URLにパスワードを含めず、専用の外部認証を設定してください。',
+  assert.ok(
+    adminDatabaseUrl,
+    'SCRAM password方式の実DB検証にはSHADOW_DATABASE_ADMIN_URLが必要です。',
   );
   assert.match(expectedRole, /^[a-z_][a-z0-9_]*$/, 'Shadow role名が不正です。');
 
-  const PrismaClient = loadPrismaClient();
-  const prisma = new PrismaClient({
-    datasources: { db: { url: shadowDatabaseUrl } },
-  });
-  try {
+  await withPostgresClient(shadowDatabaseUrl, async (prisma) => {
     const rows = await prisma.$queryRawUnsafe<ShadowRoleInspection[]>(
       `SELECT r.rolname AS "roleName",
               current_user AS "currentUser",
@@ -114,6 +388,9 @@ export async function inspectShadowRole(
               r.rolcreatedb AS "canCreateDatabase",
               r.rolcreaterole AS "canCreateRole",
               r.rolreplication AS "canReplicate",
+              r.rolcanlogin AS "canLogin",
+              (r.rolpassword IS NOT NULL) AS "hasPassword",
+              split_part(r.rolpassword, '$', 1) AS "passwordHashPrefix",
               EXISTS (
                 SELECT 1
                   FROM pg_auth_members m
@@ -125,9 +402,24 @@ export async function inspectShadowRole(
     );
     assert.equal(rows.length, 1, 'Shadow roleが見つかりません。');
     assertShadowRoleAttributes(rows[0] as ShadowRoleInspection, expectedRole);
-  } finally {
-    await prisma.$disconnect();
-  }
+    const adminRows = await withPostgresClient(adminDatabaseUrl, (admin) =>
+      admin.$queryRawUnsafe<readonly [{ passwordHashPrefix: string | null }]>(
+        `SELECT split_part(rolpassword, '$', 1) AS "passwordHashPrefix"
+           FROM pg_authid
+          WHERE rolname = $1`,
+        expectedRole,
+      ),
+    );
+    assert.equal(
+      adminRows[0]?.passwordHashPrefix,
+      'SCRAM-SHA-256',
+      'Shadow roleの実password hashはSCRAM-SHA-256でなければなりません。',
+    );
+    assertShadowDatabaseSecurity(
+      await inspectShadowDatabase(prisma),
+      expectedRole,
+    );
+  });
 }
 
 async function main(): Promise<void> {
