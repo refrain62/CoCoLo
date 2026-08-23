@@ -39,6 +39,8 @@ class RecordingRateLimitStore extends InMemoryRateLimitStore {
 function createTestApp(store: RecordingRateLimitStore) {
   let producerCalls = 0;
   let verifyTokenCalls = 0;
+  let memberHandlerCalls = 0;
+  let promotionHandlerCalls = 0;
   const app = createApp({
     verifyToken: async (token) => {
       verifyTokenCalls += 1;
@@ -56,10 +58,30 @@ function createTestApp(store: RecordingRateLimitStore) {
     memberRepository: {
       list: async () => [],
       create: async () => {
+        memberHandlerCalls += 1;
         throw new Error('not used');
       },
-      update: async () => null,
-      retire: async () => null,
+      update: async () => {
+        memberHandlerCalls += 1;
+        return null;
+      },
+      retire: async () => {
+        memberHandlerCalls += 1;
+        return null;
+      },
+    },
+    promotionRepository: {
+      run: async (input) => {
+        promotionHandlerCalls += 1;
+        return {
+          mode: input.mode,
+          fiscalYear: input.fiscalYear,
+          status: input.mode === 'preview' ? 'preview' : 'completed',
+          previewCount: 0,
+          promotedCount: 0,
+          result: null,
+        };
+      },
     },
     lineDeliveryProducer: {
       publish: async () => {
@@ -73,6 +95,8 @@ function createTestApp(store: RecordingRateLimitStore) {
     app,
     getProducerCalls: () => producerCalls,
     getVerifyTokenCalls: () => verifyTokenCalls,
+    getMemberHandlerCalls: () => memberHandlerCalls,
+    getPromotionHandlerCalls: () => promotionHandlerCalls,
   };
 }
 
@@ -122,7 +146,12 @@ test('認証済みのexact routeにもtenant/user rate limitを適用する', as
 
 test('rate limit超過時はexact routeの業務handlerを呼ばず429にする', async () => {
   const store = new RecordingRateLimitStore(false);
-  const { app, getProducerCalls } = createTestApp(store);
+  const {
+    app,
+    getProducerCalls,
+    getMemberHandlerCalls,
+    getPromotionHandlerCalls,
+  } = createTestApp(store);
 
   const members = await app.request('/api/v1/members', {
     headers: authHeaders,
@@ -189,5 +218,7 @@ test('rate limit超過時はexact routeの業務handlerを呼ばず429にする'
       requestId: 'rate-limit-request-002',
     },
   });
+  assert.equal(getMemberHandlerCalls(), 0);
+  assert.equal(getPromotionHandlerCalls(), 0);
   assert.equal(getProducerCalls(), 0);
 });
