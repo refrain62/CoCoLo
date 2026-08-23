@@ -95,3 +95,46 @@ GitHub CLIの差分確認では、`gh pr diff <番号> --patch`のオプショ�
 release artifactの専用テストで、公開Supabase設定を必須化した実装に対してテスト環境変数を渡しておらず、`VITE_SUPABASE_URL が未設定です`で失敗しました。必須環境変数を追加した実装では、テストにも実値ではない検証用ダミー値を明示し、専用テストを再実行してから全体検証へ進みます。
 
 同じ公開設定必須化をCIのrelease artifact検証stepへ反映し忘れ、`pnpm package:release`がCIだけ環境変数不足で失敗しました。ローカル専用テストとworkflowの実行stepを別々に確認し、workflow側にも秘密でない固定ダミー値を設定してからCIを再実行します。
+
+### 追加記録：protected検査器変更時のowner-only境界（2026-08-23）
+
+`scripts/verify-trusted-pr.ts`を変更し、追加した`verify-trusted-pr.test.ts`をmanifestへ登録する前に`pnpm verify:trust-root`を実行したところ、manifest欠落で停止しました。
+
+protectedなscript、workflow、package設定を変更するときは、実装を先にコミットせず、次の順序を守ります。
+
+1. 変更対象がtrusted manifestの保護対象か確認する。
+2. 新規または変更した全ファイルのSHA-256をmanifestへ同期する。
+3. `pnpm verify:trust-root`を単独実行する。
+4. `pull_request_target`が読むbase側のowner-only extensionと、変更PRのhead/base SHAが一致することを確認する。
+5. extensionが古い、対象ファイルが欠落している、またはowner-only bootstrapが未実施なら、通常PRとして進めずowner操作待ちにする。
+
+`pnpm verify:trust-root`が成功しても、現行checkoutのowner-only extensionがstaleでないことや、PR信頼ゲートが最新baseの正本を読んでいることは別途確認します。検査器自身の保護境界を、同じPRの変更内容だけで自己承認しません。
+
+保護対象のGitHub files API差分は`filename`だけで判定せず、`previous_filename`も検査します。protected pathから保護外pathへのrename、protected pathの削除、保護対象のpath変更は、owner-only extensionなしではfail-closedにします。
+
+### 追加記録：検証途中のworkspace依存リンク欠落（2026-08-23）
+
+`pnpm build`と`pnpm test`が成功した直後の`pnpm lint`で、Prismaの`@prisma/engines`が見つからず生成処理が停止しました。その後の`pnpm build`ではworkspaceの`tsc`が未検出になりました。
+
+コードの修正へ進まず、次のコマンドを単独で実行して依存リンクを再構成し、失敗した検証コマンドを最初から再実行します。
+
+```powershell
+pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+pnpm build
+```
+
+今回のローカル実行環境はNode.js `v24.18.0`、pnpm `9.15.9`で、`package.json`が要求するpnpm `10.26.0`と一致していません。Node.js要件は満たしていても、pnpmの不一致は成功判定の前提から外し、CIのpnpm `10.26.0`で再検証します。
+
+### 追加記録：追加テストのBiome検査漏れ（2026-08-23）
+
+rename境界の追加テストを作成した直後、`pnpm lint`がBiomeのformat差分だけで失敗しました。追加テストを作成したら、全体検証前に対象ファイルへBiome検査を実行し、整形・typecheck・専用テストを通してからworkspace検証へ進みます。
+
+### 追加記録：スカッシュマージ前後の再確認（2026-08-23）
+
+次のPRをスカッシュマージする前に、`origin/develop`の最新SHA、PRのbase/head SHA、`mergeStateStatus`、最新headに対する必須CI、Critical/Highのレビュー結果を同じ時点で確認します。
+
+マージ後は、実際のスカッシュコミットSHA、trusted rootの祖先判定、trusted manifest、OpenAPI生成差分、台帳を同期してから後続PRを検証します。古いbaseが`CLEAN`でも、重複migration・旧route・旧trust contractの意味検査を省略しません。
+
+### 追加記録：台帳・運用記録の分離（2026-08-23）
+
+resume-task-list、resume-task-history、verification-runbookの更新は実装PRへ混在させず、develop起点のdocs-only Draft PRで管理します。実装PRにはコード、テスト、必要なmanifest同期だけを含め、作業順・失敗原因・レビュー記録はdocs-only PRへ記録します。
