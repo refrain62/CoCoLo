@@ -4,7 +4,7 @@
 
 対象ブランチ: `feature/central-db-schema`
 
-対象: `20260822140000_central_feature_schema`、Prisma schema、中央RLS fixture、統合契約。
+対象: `20260823150000_central_feature_schema`、Prisma schema、中央RLS fixture、統合契約。
 
 ## 結論
 
@@ -12,7 +12,7 @@ Criticalは0件である。
 
 Highは0件である。
 
-実PostgreSQLのfresh DBへPhase 1と中央migrationを適用し、tenant越境、role境界、担当部員境界、状態遷移、監査、個人情報、LINE metadata、送迎定員をfixtureで確認した。
+実PostgreSQLのfresh DBへ既存Phase migrationと中央migrationを適用し、tenant越境、role境界、担当部員境界、状態遷移、監査、個人情報、LINE metadata、送迎定員をfixtureで確認した。
 
 ## 指摘と対応
 

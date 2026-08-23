@@ -1,7 +1,6 @@
 -- FS-EVT、FS-BRD、FS-ORD、FS-FIL、FS-ANN、FS-NOT、FS-RIDEの中央DB契約。
 -- 新規IDはUUIDv7とし、LINE通知キューだけは既存repository互換のためSQL defaultで生成する。
 
-CREATE TYPE announcement_status AS ENUM ('published', 'archived');
 CREATE TYPE purchase_order_status AS ENUM ('open', 'closed', 'completed');
 CREATE TYPE payment_status AS ENUM ('unpaid', 'paid');
 CREATE TYPE line_connection_status AS ENUM ('connected', 'disconnected');
@@ -47,6 +46,15 @@ ALTER TABLE guardian_members ADD CONSTRAINT guardian_members_id_uuidv7 CHECK (ap
 ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_id_uuidv7 CHECK (app_is_uuidv7(id));
 ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_resource_id_uuidv7 CHECK (resource_id IS NULL OR app_is_uuidv7(resource_id));
 ALTER TABLE promotion_runs ADD CONSTRAINT promotion_runs_id_uuidv7 CHECK (app_is_uuidv7(id));
+ALTER TABLE attachments ADD CONSTRAINT attachments_id_uuidv7 CHECK (app_is_uuidv7(id));
+ALTER TABLE events ADD CONSTRAINT events_id_uuidv7 CHECK (app_is_uuidv7(id));
+ALTER TABLE attendance_responses ADD CONSTRAINT attendance_responses_id_uuidv7 CHECK (app_is_uuidv7(id));
+ALTER TABLE announcements ADD CONSTRAINT announcements_id_uuidv7 CHECK (app_is_uuidv7(id));
+ALTER TABLE announcement_attachments
+  ADD CONSTRAINT announcement_attachments_tenant_attachment_fk
+  FOREIGN KEY (tenant_id, attachment_id)
+  REFERENCES attachments(tenant_id, id)
+  ON DELETE RESTRICT;
 
 CREATE INDEX attachments_tenant_status_expiry_idx ON attachments(tenant_id, status, expires_at);
 
@@ -173,43 +181,6 @@ CREATE TABLE order_idempotency_keys (
 CREATE INDEX order_idempotency_keys_tenant_resource_idx
   ON order_idempotency_keys(tenant_id, resource_type, resource_id);
 
-CREATE TABLE announcements (
-  id uuid PRIMARY KEY,
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-  author_user_id varchar(128) NOT NULL,
-  title varchar(200) NOT NULL,
-  body varchar(20000) NOT NULL,
-  status announcement_status NOT NULL DEFAULT 'published',
-  published_at timestamptz NOT NULL,
-  UNIQUE (tenant_id, id),
-  CHECK (app_is_uuidv7(id))
-);
-CREATE INDEX announcements_tenant_status_published_idx ON announcements(tenant_id, status, published_at, id);
-
-CREATE TABLE announcement_attachments (
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-  announcement_id uuid NOT NULL,
-  attachment_id uuid NOT NULL,
-  position integer NOT NULL,
-  media_type varchar(64) NOT NULL,
-  byte_size integer NOT NULL,
-  PRIMARY KEY (tenant_id, announcement_id, attachment_id),
-  UNIQUE (tenant_id, announcement_id, position),
-  FOREIGN KEY (tenant_id, announcement_id) REFERENCES announcements(tenant_id, id) ON DELETE RESTRICT,
-  FOREIGN KEY (tenant_id, attachment_id) REFERENCES attachments(tenant_id, id) ON DELETE RESTRICT,
-  CHECK (position BETWEEN 0 AND 9),
-  CHECK (media_type IN ('image/jpeg', 'image/png', 'application/pdf')),
-  CHECK (byte_size BETWEEN 1 AND 20971520)
-);
-
-CREATE TABLE announcement_reads (
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-  announcement_id uuid NOT NULL,
-  user_id varchar(128) NOT NULL,
-  read_at timestamptz NOT NULL,
-  PRIMARY KEY (tenant_id, announcement_id, user_id),
-  FOREIGN KEY (tenant_id, announcement_id) REFERENCES announcements(tenant_id, id) ON DELETE RESTRICT
-);
 CREATE INDEX announcement_reads_tenant_user_read_idx ON announcement_reads(tenant_id, user_id, read_at);
 
 CREATE TABLE line_connections (
@@ -334,8 +305,12 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF TG_OP = 'INSERT' AND NEW.status <> 'uploaded'::attachment_status THEN
-    RAISE EXCEPTION '添付セッションはuploadedで開始する必要があります';
+  IF TG_OP = 'INSERT' AND (
+    NEW.status <> 'uploaded'::attachment_status
+    OR NEW.sha256 IS NOT NULL
+    OR NEW.available_at IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION '添付セッションはuploadedかつ未検証で開始する必要があります';
   END IF;
   IF TG_OP = 'UPDATE' THEN
     IF OLD.tenant_id <> NEW.tenant_id OR OLD.id <> NEW.id OR OLD.owner_user_id <> NEW.owner_user_id
@@ -355,11 +330,20 @@ BEGIN
     IF OLD.status = 'deleted'::attachment_status AND NEW.status <> 'deleted'::attachment_status THEN
       RAISE EXCEPTION 'deletedから状態を戻せません';
     END IF;
+    IF NEW.status = 'available'::attachment_status
+      AND (NEW.sha256 IS NULL OR NEW.available_at IS NULL OR NEW.complete_attempts > 3) THEN
+      RAISE EXCEPTION 'availableには検証済み情報と時刻が必要です';
+    END IF;
+    IF NEW.status = 'rejected'::attachment_status
+      AND (NEW.available_at IS NOT NULL OR NEW.deleted_at IS NOT NULL) THEN
+      RAISE EXCEPTION 'rejectedに配信・削除済み時刻は設定できません';
+    END IF;
   END IF;
   RETURN NEW;
 END;
 $$;
-CREATE TRIGGER attachments_state_guard
+DROP TRIGGER IF EXISTS attachment_state_guard ON attachments;
+CREATE TRIGGER attachment_state_guard
 BEFORE INSERT OR UPDATE ON attachments
 FOR EACH ROW EXECUTE FUNCTION app_guard_attachment_state();
 
@@ -368,6 +352,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended('purchase-order:' || NEW.tenant_id::text || ':' || NEW.id::text, 0));
   IF TG_OP = 'INSERT' AND NEW.status <> 'open'::purchase_order_status THEN
     RAISE EXCEPTION '募集案件はopenで開始する必要があります';
   END IF;
@@ -419,6 +404,7 @@ DECLARE
   order_deadline timestamptz;
   current_member_status member_status;
 BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended('purchase-order:' || NEW.tenant_id::text || ':' || NEW.order_id::text, 0));
   SELECT status, deadline INTO order_status, order_deadline
     FROM purchase_orders
    WHERE tenant_id = NEW.tenant_id AND id = NEW.order_id;
@@ -558,6 +544,9 @@ BEGIN
     IF NEW.status = 'sending'::line_notification_status AND NEW.attempts <> OLD.attempts + 1 THEN
       RAISE EXCEPTION 'LINE通知のclaim時はattemptsを1増加させます';
     END IF;
+    IF NEW.attempts < OLD.attempts OR NEW.attempts > 5 THEN
+      RAISE EXCEPTION 'LINE通知のattemptsは減少または上限超過できません';
+    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -572,14 +561,16 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   request_count integer;
+  request_status ride_request_status;
   offer_capacity integer;
   assigned_seats integer;
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended(NEW.tenant_id::text || ':' || NEW.plan_id::text, 0));
-  SELECT passenger_count INTO request_count
+  SELECT passenger_count, status INTO request_count, request_status
     FROM ride_requests
    WHERE tenant_id = NEW.tenant_id AND id = NEW.request_id AND plan_id = NEW.plan_id;
-  IF request_count IS NULL OR request_count <> NEW.passenger_count THEN
+  IF request_count IS NULL OR request_status NOT IN ('pending'::ride_request_status, 'unassigned'::ride_request_status)
+    OR request_count <> NEW.passenger_count THEN
     RAISE EXCEPTION '割当人数は乗車希望人数と一致させてください';
   END IF;
   SELECT capacity INTO offer_capacity
@@ -600,6 +591,25 @@ $$;
 CREATE TRIGGER ride_assignments_capacity_guard
 BEFORE INSERT OR UPDATE ON ride_assignments
 FOR EACH ROW EXECUTE FUNCTION app_guard_ride_assignment();
+
+CREATE OR REPLACE FUNCTION app_lock_ride_state()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended(NEW.tenant_id::text || ':' || NEW.plan_id::text, 0));
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER ride_plan_state_lock
+BEFORE UPDATE ON ride_plans
+FOR EACH ROW EXECUTE FUNCTION app_lock_ride_state();
+CREATE TRIGGER ride_offer_state_lock
+BEFORE UPDATE ON ride_offers
+FOR EACH ROW EXECUTE FUNCTION app_lock_ride_state();
+CREATE TRIGGER ride_request_state_lock
+BEFORE UPDATE ON ride_requests
+FOR EACH ROW EXECUTE FUNCTION app_lock_ride_state();
 
 CREATE OR REPLACE FUNCTION app_has_active_membership(target_tenant_id uuid)
 RETURNS boolean
@@ -632,6 +642,31 @@ STABLE
 AS $$
   SELECT current_setting('app.role', true) IN ('owner', 'admin', 'staff')
 $$;
+
+DROP POLICY attachments_select ON attachments;
+CREATE POLICY attachments_select ON attachments
+  FOR SELECT
+  USING (
+    app_has_active_membership(tenant_id)
+    AND (owner_user_id = current_setting('app.user_id', true) OR app_is_event_manager())
+  );
+DROP POLICY attachments_insert ON attachments;
+CREATE POLICY attachments_insert ON attachments
+  FOR INSERT
+  WITH CHECK (
+    app_has_active_membership(tenant_id)
+    AND owner_user_id = current_setting('app.user_id', true)
+    AND app_is_event_manager()
+  );
+DROP POLICY attachments_update ON attachments;
+CREATE POLICY attachments_update ON attachments
+  FOR UPDATE
+  USING (app_has_active_membership(tenant_id) AND (owner_user_id = current_setting('app.user_id', true) OR app_is_event_manager()))
+  WITH CHECK (app_has_active_membership(tenant_id));
+DROP POLICY attachments_delete ON attachments;
+CREATE POLICY attachments_delete ON attachments
+  FOR DELETE
+  USING (app_has_active_membership(tenant_id) AND app_is_event_manager());
 
 ALTER TABLE attachments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attachments FORCE ROW LEVEL SECURITY;
@@ -737,23 +772,6 @@ CREATE POLICY order_idempotency_read ON order_idempotency_keys FOR SELECT
   USING (app_has_active_membership(tenant_id) AND (app_is_manager() OR actor_user_id = current_setting('app.user_id', true)));
 CREATE POLICY order_idempotency_insert ON order_idempotency_keys FOR INSERT
   WITH CHECK (app_has_active_membership(tenant_id) AND actor_user_id = current_setting('app.user_id', true));
-
-CREATE POLICY announcements_read ON announcements FOR SELECT
-  USING (app_has_active_membership(tenant_id) AND status = 'published'::announcement_status);
-CREATE POLICY announcements_insert ON announcements FOR INSERT
-  WITH CHECK (app_has_active_membership(tenant_id) AND app_is_event_manager() AND author_user_id = current_setting('app.user_id', true));
-CREATE POLICY announcement_attachments_read ON announcement_attachments FOR SELECT USING (app_has_active_membership(tenant_id));
-CREATE POLICY announcement_attachments_insert ON announcement_attachments FOR INSERT
-  WITH CHECK (app_has_active_membership(tenant_id) AND app_is_event_manager());
-CREATE POLICY announcement_reads_read ON announcement_reads FOR SELECT
-  USING (
-    app_has_active_membership(tenant_id)
-    AND (user_id = current_setting('app.user_id', true)
-        OR (announcement_id = NULLIF(current_setting('app.announcement_id', true), '')::uuid
-        AND EXISTS (SELECT 1 FROM announcements a WHERE a.tenant_id = announcement_reads.tenant_id AND a.id = announcement_reads.announcement_id AND a.author_user_id = current_setting('app.user_id', true))))
-  );
-CREATE POLICY announcement_reads_insert ON announcement_reads FOR INSERT
-  WITH CHECK (app_has_active_membership(tenant_id) AND user_id = current_setting('app.user_id', true));
 
 CREATE POLICY line_connections_read ON line_connections FOR SELECT USING (app_has_active_membership(tenant_id));
 CREATE POLICY line_connections_write ON line_connections FOR INSERT

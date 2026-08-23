@@ -1,10 +1,12 @@
 # 中央DBスキーマの統合契約
 
-この文書は、`origin/develop`の`d7e5f16`を起点に追加した中央DBスキーマの契約を記録する。
+この文書は、`origin/develop`の`61ec4f8`を起点に追加した中央DBスキーマの契約を記録する。
 
 対象はFS-EVT、FS-BRD、FS-ORD、FS-FIL、FS-ANN、FS-NOT、FS-RIDEである。
 
-既存のPhase 1 migration（Tenant、TenantMembership、Member、GuardianMember、AuditLog、PromotionRun）を先に適用し、その後に`20260822140000_central_feature_schema`を適用する。
+既存のPhase 1、Phase 2、Phase 4、LINE security migrationを先に適用し、その後に`20260823150000_central_feature_schema`を適用する。
+
+既存Phaseで作成済みのevents、attendance_responses、attachments、announcements系は中央migrationで再作成せず、既存DDLを正本として追加index、UUIDv7制約、RLS境界だけを適用する。
 
 ## 参照した機能契約
 
