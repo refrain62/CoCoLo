@@ -187,17 +187,14 @@ async function assertActiveMembership(
   await client.$executeRaw`
     SELECT pg_advisory_xact_lock(hashtextextended(${membershipLockKey}, 0))
   `;
-  const memberships = await client.$queryRaw<
-    Array<{ role: string; status: string }>
-  >`
-    SELECT role::text, status::text
-    FROM tenant_memberships
-    WHERE tenant_id = ${input.tenantId}::uuid
-      AND user_id = ${input.actorUserId}
-    FOR SHARE
+  const memberships = await client.$queryRaw<Array<{ active: boolean }>>`
+    SELECT app_lock_active_membership(
+      ${input.tenantId}::uuid,
+      ${input.actorUserId},
+      ${input.role}
+    ) AS active
   `;
-  const membership = memberships[0];
-  if (membership?.status !== 'active' || membership.role !== input.role)
+  if (memberships[0]?.active !== true)
     throw new Error('有効な所属情報が処理中に変更されました。');
 }
 

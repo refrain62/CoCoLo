@@ -23,7 +23,7 @@
     "packages/db/prisma/migrations/20260822130000_phase2_events_attendance/migration.sql": "b938ab1544f35ffef21c93b0d46da83caa35111259d37eb42655a6268af29a0e",
     "packages/db/prisma/migrations/20260822130000_phase4_attachments/migration.sql": "8df7a85c99ce04eef033a80a5bfc822214e5bf6283c525d726e49ed44aeccde4",
     "packages/db/prisma/migrations/20260822140000_phase4_bulletin_board/migration.sql": "48b1941dc6387f9ccf210f66ab0985607c8afb1e6d012f59fa373a8815f7c5c0",
-    "packages/db/prisma/migrations/20260823140000_phase2_event_security_hardening/migration.sql": "33ff9028376dd48e0c26aeb6187c184a1c11b2ab70005ae1279f3093f7033d25",
+    "packages/db/prisma/migrations/20260823140000_phase2_event_security_hardening/migration.sql": "e74f29a76d6713f840d2c2f332328c76f6ea84ff60d7eb2daeeb8f62cb5594aa",
     "packages/db/prisma/migrations/20260823100000_line_delivery_scheduler/migration.sql": "3d0a95211e007622abc200d6ca1a6b3b85666ac4a1f48625650d0bf9c799d91f",
     "packages/db/prisma/migrations/20260823110000_line_delivery_security_hardening/migration.sql": "9885ff7df2555be97c3cfb7ebb18ce88f6e3df844e46edf9b3c1b27855099769",
     "packages/db/prisma/migrations/20260823120000_line_delivery_provider_retry_key/migration.sql": "c91c29c1d809136763db78c85424cebbaf68a77356f475396977b81737bc330c",
