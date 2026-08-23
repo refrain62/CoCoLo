@@ -41,8 +41,6 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
-      - name: 依存関係を固定インストール
-        run: pnpm install --frozen-lockfile
       - name: trust rootとmigrationの正本を検証
         run: >-
           pnpm verify:trust-root &&
@@ -53,6 +51,8 @@ jobs:
           pnpm verify:migration-sql
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+      - name: 依存関係を固定インストール
+        run: pnpm install --frozen-lockfile
       - name: checksum検証のfixtureを実行
         run: pnpm test:database-integrity
       - name: PostgreSQLのバージョンとroleを検証

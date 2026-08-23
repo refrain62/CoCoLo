@@ -194,6 +194,11 @@ function assertPolicyTenantBoundaries(file: MigrationSqlFile) {
       /\b(?:USING|WITH\s+CHECK)\s*\(\s*true\s*\)/i,
       `${file.path}: ${table} policyの無条件許可は禁止です。`,
     );
+    assert.doesNotMatch(
+      statement,
+      /\b(?:OR|AND)\s+true\b|\btrue\s+(?:OR|AND)\b/i,
+      `${file.path}: ${table} policyのtrueによる境界無効化は禁止です。`,
+    );
   }
 }
 

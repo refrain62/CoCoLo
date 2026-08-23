@@ -426,4 +426,18 @@ test('RLS ENABLE/FORCEと必須policyの弱体化を拒否する', () => {
     ),
   };
   assert.throws(() => assertDatabaseSecurity(permissivePolicy), /常にtrue/);
+
+  const bypassPolicy = {
+    ...validWithPermissivePolicy,
+    policies: validWithPermissivePolicy.policies.map((policy) =>
+      policy.name === 'tenants_select'
+        ? {
+            ...policy,
+            usingExpression:
+              "id = NULLIF(current_setting('app.tenant_id', true), '')::uuid OR true",
+          }
+        : policy,
+    ),
+  };
+  assert.throws(() => assertDatabaseSecurity(bypassPolicy), /trueとのOR/);
 });

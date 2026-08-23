@@ -838,6 +838,11 @@ function assertExpression(
     'true',
     `${message}: 常にtrueのpolicyは許可しません。`,
   );
+  assert.doesNotMatch(
+    normalized,
+    /\b(?:or|and)\s+true\b|\btrue\s+(?:or|and)\b/i,
+    `${message}: trueとのOR/ANDで境界を無効化するpolicyは許可しません。`,
+  );
   for (const token of tokens)
     assert.ok(
       normalized.includes(token.toLowerCase()),
