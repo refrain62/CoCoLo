@@ -172,17 +172,39 @@ async function assertActiveMembership(
   client: Prisma.TransactionClient,
   input: EventRepositoryInput,
 ) {
-  const membership = await client.tenantMembership.findUnique({
-    where: {
-      tenantId_userId: {
-        tenantId: input.tenantId,
-        userId: input.actorUserId,
-      },
-    },
-    select: { role: true, status: true },
-  });
+  const membershipLockKey = `${input.tenantId}:${input.actorUserId}`;
+  await client.$executeRaw`
+    SELECT pg_advisory_xact_lock(hashtextextended(${membershipLockKey}, 0))
+  `;
+  const memberships = await client.$queryRaw<
+    Array<{ role: string; status: string }>
+  >`
+    SELECT role::text, status::text
+    FROM tenant_memberships
+    WHERE tenant_id = ${input.tenantId}::uuid
+      AND user_id = ${input.actorUserId}
+    FOR UPDATE
+  `;
+  const membership = memberships[0];
   if (membership?.status !== 'active' || membership.role !== input.role)
     throw new Error('有効な所属情報が処理中に変更されました。');
+}
+
+async function assertAvailableAttachment(
+  client: Prisma.TransactionClient,
+  input: EventRepositoryInput,
+  attachmentId: string | null | undefined,
+) {
+  if (!attachmentId) return;
+  const rows = await client.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM attachments
+    WHERE tenant_id = ${input.tenantId}::uuid
+      AND id = ${attachmentId}::uuid
+      AND status = 'available'::attachment_status
+  `;
+  if (!rows[0])
+    throw new EventNotFoundError('利用可能な添付が見つかりません。');
 }
 
 function toEventRecord(row: EventRow): EventRecord {
@@ -286,6 +308,11 @@ export function createEventRepository(client: PrismaClient): EventRepository {
         if (!['owner', 'admin', 'staff'].includes(input.role))
           throw new EventAuthorizationError('予定を登録する権限がありません。');
         assertValidEventSchedule(input, input.type, input.opponent);
+        await assertAvailableAttachment(
+          tx,
+          input,
+          input.announcementImageAttachmentId,
+        );
         const id = uuidV7();
         const rows = await tx.$queryRaw<EventRow[]>`
           INSERT INTO events (
@@ -363,6 +390,11 @@ export function createEventRepository(client: PrismaClient): EventRepository {
             input.attendanceDeadline ?? current.attendance_deadline,
         };
         assertValidEventSchedule(next, next.type, next.opponent);
+        await assertAvailableAttachment(
+          tx,
+          input,
+          next.announcementImageAttachmentId,
+        );
         const rows = await tx.$queryRaw<EventRow[]>`
           UPDATE events SET
             title = ${next.title}, event_type = ${next.type}::event_type,
@@ -437,8 +469,6 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           WHERE tenant_id = ${input.tenantId}::uuid
             AND event_id = ${input.eventId}::uuid
             AND member_id = ${input.memberId}::uuid
-            AND (${input.role} = 'guardian' AND user_id = ${input.actorUserId}
-                 OR ${input.role} <> 'guardian')
           ORDER BY updated_at DESC, id DESC
           LIMIT 1
           FOR UPDATE
