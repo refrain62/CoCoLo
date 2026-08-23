@@ -57,6 +57,11 @@ export type MigrationIntegrityVerifier = (
   paths: SchemaDriftPaths,
 ) => Promise<void>;
 
+export type RedactedDatabaseUrl = Readonly<{
+  argvUrl: string;
+  password: string;
+}>;
+
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.dirname(scriptDirectory);
 
@@ -76,7 +81,18 @@ export function resolveSchemaDriftPaths(
 
 export function buildPrismaDiffArgs(
   paths: SchemaDriftPaths,
+  shadowDatabaseUrlForArgv: string,
 ): readonly string[] {
+  assert.ok(
+    shadowDatabaseUrlForArgv,
+    'Prisma CLIへ渡すShadow DB URLが必要です。',
+  );
+  const parsed = new URL(shadowDatabaseUrlForArgv);
+  assert.equal(
+    parsed.password,
+    '',
+    'Shadow DBのパスワードをPrisma CLIのargvへ渡してはいけません。',
+  );
   return [
     'migrate',
     'diff',
@@ -84,9 +100,26 @@ export function buildPrismaDiffArgs(
     paths.migrationsDirectory,
     '--to-schema-datamodel',
     paths.schemaFile,
+    '--shadow-database-url',
+    shadowDatabaseUrlForArgv,
     '--script',
     '--exit-code',
   ];
+}
+
+export function redactDatabaseUrl(
+  value: string | undefined,
+): RedactedDatabaseUrl {
+  assert.ok(value, 'Shadow DB URLが必要です。');
+  const parsed = new URL(value);
+  assert.ok(
+    parsed.protocol === 'postgresql:' || parsed.protocol === 'postgres:',
+    'Shadow DB URLはPostgreSQL URLで指定してください。',
+  );
+  const password = decodeURIComponent(parsed.password);
+  parsed.password = '';
+  parsed.searchParams.delete('password');
+  return { argvUrl: parsed.toString(), password };
 }
 
 function outputText(value: string | Buffer | null | undefined): string {
@@ -462,9 +495,13 @@ export async function verifySchemaDrift(
   assertMigrationLock(lockContent);
   const migrationCount = await assertMigrationLayout(paths);
   await integrityVerifier(paths);
+  const redactedShadowUrl = redactDatabaseUrl(shadowDatabaseUrl);
   const result = runner(
     process.execPath,
-    [prismaEntryPoint(paths), ...buildPrismaDiffArgs(paths)],
+    [
+      prismaEntryPoint(paths),
+      ...buildPrismaDiffArgs(paths, redactedShadowUrl.argvUrl),
+    ],
     {
       cwd: paths.dbDirectory,
       encoding: 'utf8',
@@ -473,6 +510,7 @@ export async function verifySchemaDrift(
       env: {
         ...process.env,
         SHADOW_DATABASE_URL: shadowDatabaseUrl,
+        PGPASSWORD: redactedShadowUrl.password,
       },
     },
   );
