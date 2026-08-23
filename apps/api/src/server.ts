@@ -29,6 +29,7 @@ const app = createApp({
   observability: {
     environment: runtime.appEnv,
     logger: createStructuredLogger(),
+    pathResolver: (context) => context.req.path,
   },
   ...repositories,
 });

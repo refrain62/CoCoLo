@@ -14,10 +14,11 @@ import {
   memberUpdateSchema,
   promotionRequestSchema,
 } from '@cocolo/contracts/member';
+import type { StructuredLogEntry } from '@cocolo/contracts/observability';
 import {
   lineDeliveryResponseSchema,
-  memberListResponseSchema,
-  memberMutationResponseSchema,
+  memberListResponseSchemaForRole,
+  memberMutationResponseSchemaForRole,
   promotionResponseSchema,
 } from '@cocolo/contracts/runtime-response';
 import type { LineDeliveryProducer } from '@cocolo/db';
@@ -34,6 +35,7 @@ import {
   type RateLimitEnvironment,
   type RateLimitStoreMode,
 } from './security/rate-limit-adapter.js';
+import { resolveRequestId } from './security/request-id.js';
 import {
   createResponseContractMiddleware,
   type ResponseContract,
@@ -151,14 +153,6 @@ export type ApiEnv = {
 
 const managerRoles = new Set<MemberRole>(['owner', 'admin']);
 
-function hasUnsafeControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    if (code <= 31 || code === 127) return true;
-  }
-  return false;
-}
-
 // エラー形式とrequestIdを全エンドポイントで統一し、内部例外の詳細は外部へ返さない。
 function errorResponse(
   c: Context<ApiEnv>,
@@ -222,13 +216,7 @@ export function createApp(options: AppOptions = {}) {
   });
 
   app.use('*', async (c, next) => {
-    const candidate = c.req.header('x-request-id')?.trim();
-    const requestId =
-      candidate &&
-      candidate.length <= 128 &&
-      !hasUnsafeControlCharacter(candidate)
-        ? candidate
-        : crypto.randomUUID();
+    const requestId = resolveRequestId(c.req.raw);
     c.set('requestId', requestId);
     c.header('x-request-id', requestId);
     await next();
@@ -251,25 +239,37 @@ export function createApp(options: AppOptions = {}) {
       method: 'GET',
       path: /^\/api\/v1\/members$/,
       status: 200,
-      schema: memberListResponseSchema,
+      schema: (c) =>
+        memberListResponseSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
     },
     {
       method: 'POST',
       path: /^\/api\/v1\/members$/,
       status: 201,
-      schema: memberMutationResponseSchema,
+      schema: (c) =>
+        memberMutationResponseSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
     },
     {
       method: 'PATCH',
       path: /^\/api\/v1\/members\/[^/]+$/,
       status: 200,
-      schema: memberMutationResponseSchema,
+      schema: (c) =>
+        memberMutationResponseSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
     },
     {
       method: 'POST',
       path: /^\/api\/v1\/members\/[^/]+\/retire$/,
       status: 200,
-      schema: memberMutationResponseSchema,
+      schema: (c) =>
+        memberMutationResponseSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
     },
     {
       method: 'POST',
@@ -286,7 +286,32 @@ export function createApp(options: AppOptions = {}) {
   ];
   app.use(
     '*',
-    createResponseContractMiddleware({ contracts: responseContracts }),
+    createResponseContractMiddleware({
+      contracts: responseContracts,
+      allowedNonJson: [
+        {
+          method: 'OPTIONS',
+          path: /^\/api\/v1(?:\/.*)?$/,
+          status: 204,
+        },
+      ],
+      onViolation: (violation) => {
+        logger.write({
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          event: 'dependency.failure',
+          service: 'api',
+          environment:
+            options.observability?.environment ?? rateLimitEnvironment,
+          requestId: violation.requestId,
+          method: violation.method as StructuredLogEntry['method'],
+          path: violation.path,
+          status: violation.status,
+          durationMs: 0,
+          errorCode: 'RESPONSE_CONTRACT_VIOLATION',
+        });
+      },
+    }),
   );
 
   // 予期せぬ例外は詳細を隠し、クライアントにはrequestId付きの共通500だけを返す。

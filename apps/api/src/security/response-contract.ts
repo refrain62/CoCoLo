@@ -2,47 +2,37 @@ import {
   errorResponseSchema,
   type RuntimeResponseSchema,
 } from '@cocolo/contracts/runtime-response';
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
+import { contextRequestId } from './request-id.js';
 
 export type ResponseContract = {
   method: string;
   path: RegExp;
   status: number;
-  schema: RuntimeResponseSchema;
+  schema: RuntimeResponseSchema | ((context: Context) => RuntimeResponseSchema);
 };
 
 export type ResponseContractViolation = {
   method: string;
   path: string;
   status: number;
+  requestId: string;
+};
+
+export type NonJsonResponseContract = {
+  method: string;
+  path: RegExp;
+  status: number;
 };
 
 export type ResponseContractOptions = {
   contracts: readonly ResponseContract[];
+  allowedNonJson?: readonly NonJsonResponseContract[];
   onViolation?: (violation: ResponseContractViolation) => void;
 };
 
-function requestId(request: Request): string {
-  const candidate = request.headers.get('x-request-id')?.trim();
-  if (
-    candidate &&
-    candidate.length <= 128 &&
-    !hasUnsafeControlCharacter(candidate)
-  )
-    return candidate;
-  return crypto.randomUUID();
-}
-
-function hasUnsafeControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    if (code <= 31 || code === 127) return true;
-  }
-  return false;
-}
-
 function internalError(c: Parameters<MiddlewareHandler>[0]) {
-  const id = requestId(c.req.raw);
+  const id = contextRequestId(c);
   c.res = new Response(
     JSON.stringify({
       error: {
@@ -76,6 +66,19 @@ function matchesPath(pattern: RegExp, value: string): boolean {
   return pattern.test(value);
 }
 
+function matchesResponse(
+  response: NonJsonResponseContract,
+  method: string,
+  path: string,
+  status: number,
+): boolean {
+  return (
+    response.method.toUpperCase() === method.toUpperCase() &&
+    response.status === status &&
+    matchesPath(response.path, path)
+  );
+}
+
 // 公開JSONを送信前に検証し、契約不一致や未登録routeは内部エラーへ置換する。
 export function createResponseContractMiddleware(
   options: ResponseContractOptions,
@@ -86,12 +89,25 @@ export function createResponseContractMiddleware(
   return async (c, next) => {
     await next();
     const path = new URL(c.req.url).pathname;
+    if (!path.startsWith('/api/v1')) return;
+
+    const violation = {
+      method: c.req.method,
+      path,
+      status: c.res.status,
+      requestId: contextRequestId(c),
+    };
     if (
-      !path.startsWith('/api/v1') ||
-      c.res.status === 204 ||
-      !isJsonResponse(c.res)
-    )
+      !isJsonResponse(c.res) &&
+      !options.allowedNonJson?.some((item) =>
+        matchesResponse(item, c.req.method, path, c.res.status),
+      )
+    ) {
+      options.onViolation?.(violation);
+      internalError(c);
       return;
+    }
+    if (!isJsonResponse(c.res)) return;
 
     const contract = options.contracts.find(
       (item) =>
@@ -100,8 +116,10 @@ export function createResponseContractMiddleware(
         matchesPath(item.path, path),
     );
     const schema =
-      contract?.schema ?? (c.res.status >= 400 ? errorResponseSchema : null);
-    const violation = { method: c.req.method, path, status: c.res.status };
+      typeof contract?.schema === 'function'
+        ? contract.schema(c)
+        : (contract?.schema ??
+          (c.res.status >= 400 ? errorResponseSchema : null));
     if (!schema) {
       options.onViolation?.(violation);
       internalError(c);

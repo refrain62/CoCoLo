@@ -3,6 +3,7 @@ import {
   structuredLogEntrySchema,
 } from '@cocolo/contracts/observability';
 import type { Context, MiddlewareHandler } from 'hono';
+import { contextRequestId, hasUnsafeControlCharacter } from './request-id.js';
 
 export type LogSink = (line: string) => void;
 
@@ -28,27 +29,8 @@ export function createStructuredLogger(
   };
 }
 
-function requestId(c: Context): string {
-  const candidate = c.req.header('x-request-id')?.trim();
-  if (
-    candidate &&
-    candidate.length <= 128 &&
-    !hasUnsafeControlCharacter(candidate)
-  )
-    return candidate;
-  return crypto.randomUUID();
-}
-
-function hasUnsafeControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    if (code <= 31 || code === 127) return true;
-  }
-  return false;
-}
-
 function path(c: Context, resolver?: (context: Context) => string): string {
-  const value = resolver?.(c) ?? '/unresolved-route';
+  const value = resolver?.(c) ?? c.req.path;
   if (
     value.length <= 512 &&
     value.startsWith('/') &&
@@ -85,14 +67,15 @@ export function createRequestLoggerMiddleware(
       options.logger.write({
         timestamp: new Date().toISOString(),
         level: status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info',
-        event: failed
-          ? 'dependency.failure'
-          : [401, 403, 429].includes(status)
-            ? 'security.denied'
-            : 'request.completed',
+        event:
+          status >= 500
+            ? 'dependency.failure'
+            : [401, 403, 429].includes(status)
+              ? 'security.denied'
+              : 'request.completed',
         service: 'api',
         environment: options.environment,
-        requestId: requestId(c),
+        requestId: contextRequestId(c),
         method: c.req.method as StructuredLogEntry['method'],
         path: path(c, options.pathResolver),
         status,

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { MemberRole } from './member-contract.js';
 
 const uuidV7 = z
   .string()
@@ -37,6 +38,12 @@ export const memberPublicResponseSchema = z.union([
   managerMemberResponseSchema,
 ]);
 
+export function memberPublicResponseSchemaForRole(role: MemberRole) {
+  if (role === 'guardian') return guardianMemberResponseSchema;
+  if (role === 'staff') return staffMemberResponseSchema;
+  return managerMemberResponseSchema;
+}
+
 export const memberListResponseSchema = z
   .object({
     data: z.array(memberPublicResponseSchema),
@@ -49,6 +56,45 @@ export const memberMutationResponseSchema = z
   .object({ data: memberPublicResponseSchema })
   .strict();
 
+export function memberListResponseSchemaForRole(role: MemberRole) {
+  return z
+    .object({
+      data: z.array(memberPublicResponseSchemaForRole(role)),
+      page: z.number().int().min(1),
+      pageSize: z.number().int().min(1).max(100),
+    })
+    .strict();
+}
+
+export function memberMutationResponseSchemaForRole(role: MemberRole) {
+  return z.object({ data: memberPublicResponseSchemaForRole(role) }).strict();
+}
+
+const promotionChangeSchema = z
+  .object({
+    id: z.string().uuid(),
+    fromGradeLevel: z.number().int().min(1).max(99),
+    toGradeLevel: z.number().int().min(1).max(99),
+  })
+  .strict();
+
+const promotionSuccessResultSchema = z
+  .object({
+    promotedCount: z.number().int().min(0),
+    changes: z.array(promotionChangeSchema).max(10000),
+  })
+  .strict();
+
+const promotionFailureResultSchema = z
+  .object({ errorCode: z.literal('PROMOTION_GRADE_LIMIT') })
+  .strict();
+
+const promotionResultSchema = z.union([
+  z.null(),
+  promotionSuccessResultSchema,
+  promotionFailureResultSchema,
+]);
+
 export const promotionResponseSchema = z
   .object({
     data: z
@@ -58,7 +104,7 @@ export const promotionResponseSchema = z
         status: z.enum(['preview', 'completed', 'failed']),
         previewCount: z.number().int().min(0),
         promotedCount: z.number().int().min(0),
-        result: z.unknown(),
+        result: promotionResultSchema,
       })
       .strict(),
   })
