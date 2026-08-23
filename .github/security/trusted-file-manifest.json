@@ -11,7 +11,7 @@
     ".github/workflows/e2e-daily.yml": "dfbbb098c27cb4bff8312cc16e4cb507f4517b615443f36484223b477185d100",
     ".github/workflows/e2e-manual.yml": "e5ce35b92c6e19997123c81c75056805c98360030089852db9793aad6b73ed5a",
     ".github/workflows/e2e-weekly.yml": "1c1e3154428be8a31f93633fd2a99d750741914623118da9fc9493e936971bfd",
-    ".github/workflows/database-integrity.yml": "e4f0e7593b6b353c51c391820bef5e6b89a8b3de96bbedde4eca82a48e96aaeb",
+    ".github/workflows/database-integrity.yml": "9b84dcd7d3df8d8d1c5a0ae4a870f08af7d4afddf276cd1e312c3ef882906918",
     ".github/workflows/pr-trust-gate.yml": "2ceac57c4586f633f02cc1363821b1218c2b94e9b15775422807907839870e3c",
     ".github/workflows/production-promote.yml": "a5cf0aa90c57f4d0196b94fda93c2275080fbb0ad3bb0e0defbf7e0ceada589b",
     ".github/workflows/quality.yml": "78aa0741a7b7aadb5a1ca01856026564c00693008997404f97386b8656bab790",
