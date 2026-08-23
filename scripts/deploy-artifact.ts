@@ -2,6 +2,10 @@ import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { assertDeploymentRecord } from './deployment-contract.ts';
+import {
+  verifyDeployPostconditions,
+  verifyDeployPreconditions,
+} from './deployment-preconditions.ts';
 
 // provider固有処理は外部adapterへ委譲し、検証済みartifactと配置記録を確認できない場合は配置成功にしない。
 const environment = process.argv[2];
@@ -19,6 +23,8 @@ const releaseDir =
   '.release';
 if (!artifactSha || !/^[0-9a-f]{40}$/.test(artifactSha))
   throw new Error('成果物の SHA は40桁の小文字 SHA-1 で指定してください。');
+
+await verifyDeployPreconditions(environment, artifactSha, releaseDir);
 
 const adapter = process.env[`${environment.toUpperCase()}_DEPLOY_ADAPTER`];
 if (!adapter)
@@ -44,4 +50,5 @@ if (result.status !== 0) throw new Error('配置アダプターが失敗しま�
 const recordPath = path.join(releaseDir, 'deployment-record.json');
 const record = JSON.parse(await readFile(recordPath, 'utf8'));
 assertDeploymentRecord(record, { artifactSha, environment });
+await verifyDeployPostconditions(environment);
 console.log(`${environment} 環境へ成果物 ${artifactSha} を配置しました。`);

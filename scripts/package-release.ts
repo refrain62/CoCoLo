@@ -4,6 +4,7 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPublicBuildConfigFromEnv } from './release-public-config.ts';
+import { verifyMigrationChecksum } from './verify-migration-checksum.ts';
 
 // API/WebとDB schema・migrationを同一artifactへ梱包し、SHA-256を後続環境でも再検証できる形にする。
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -15,6 +16,18 @@ const artifactSha =
   process.env.ARTIFACT_SHA;
 if (!artifactSha || !/^[0-9a-f]{40}$/.test(artifactSha))
   throw new Error('成果物の SHA は40桁の小文字 SHA-1 で指定してください。');
+
+await verifyMigrationChecksum(root);
+const migrationChecksumFile = path.join(
+  root,
+  'packages',
+  'db',
+  'prisma',
+  'migrations.sha256',
+);
+const migrationChecksumSha256 = createHash('sha256')
+  .update(await readFile(migrationChecksumFile))
+  .digest('hex');
 
 await mkdir(output, { recursive: true });
 const runtimePackages = [
@@ -62,6 +75,7 @@ const files = [
     ...runtimeFiles,
     'packages/db/prisma/schema.prisma',
     'packages/db/prisma/migrations',
+    'packages/db/prisma/migrations.sha256',
     'package.json',
     'pnpm-lock.yaml',
     'pnpm-workspace.yaml',
@@ -69,6 +83,7 @@ const files = [
 ];
 const manifest = {
   artifactSha,
+  migrationChecksumSha256,
   publicBuildConfig: createPublicBuildConfigFromEnv(),
   workerEntrypoint: 'apps/api/dist/line-delivery-worker.js',
   runtimePackages,

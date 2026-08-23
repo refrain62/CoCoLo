@@ -50,21 +50,27 @@ export function verifyMigrationHistory(
     assert.ok(expectedByName.has(name), `${name}: manifestにないDB履歴です`);
 }
 
-async function main() {
+export async function verifyMigrationHistoryAtDatabase(
+  directUrl: string,
+  rootDirectory = path.dirname(path.dirname(fileURLToPath(import.meta.url))),
+): Promise<void> {
   // migration履歴はapp roleから参照せず、明示したowner接続だけを使う。
-  const directUrl = process.env.DIRECT_URL;
-  assert.ok(directUrl, 'migration履歴検証にはDIRECT_URLが必要です');
-  const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
   const manifestContent = await import('node:fs/promises').then(
     ({ readFile }) =>
       readFile(
-        path.join(root, 'packages', 'db', 'prisma', 'migrations.sha256'),
+        path.join(
+          rootDirectory,
+          'packages',
+          'db',
+          'prisma',
+          'migrations.sha256',
+        ),
         'utf8',
       ),
   );
   const expected = parseMigrationManifest(await manifestContent);
   const require = createRequire(
-    path.join(root, 'packages', 'db', 'package.json'),
+    path.join(rootDirectory, 'packages', 'db', 'package.json'),
   );
   const { PrismaClient } = require('@prisma/client') as {
     PrismaClient: new (options: {
@@ -89,6 +95,12 @@ async function main() {
     await prisma.$disconnect();
   }
   console.log(`DB migration履歴 ${expected.length}件を検証しました。`);
+}
+
+async function main() {
+  const directUrl = process.env.DIRECT_URL;
+  assert.ok(directUrl, 'migration履歴検証にはDIRECT_URLが必要です');
+  await verifyMigrationHistoryAtDatabase(directUrl);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)

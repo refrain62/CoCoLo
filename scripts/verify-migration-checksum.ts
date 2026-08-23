@@ -96,18 +96,39 @@ export function verifyMigrationManifest(
   );
 }
 
-async function readMigrationChecksums() {
-  const directories = await readdir(migrationsRoot, { withFileTypes: true });
+async function readMigrationChecksums(
+  migrationsDirectory = migrationsRoot,
+) {
+  const directories = await readdir(migrationsDirectory, { withFileTypes: true });
   const migrationDirectories = directories
     .filter((entry) => entry.isDirectory())
     .sort((left, right) => left.name.localeCompare(right.name));
   const entries: MigrationChecksum[] = [];
   for (const directory of migrationDirectories) {
     const relativePath = `${directory.name}/migration.sql`;
-    const bytes = await readFile(path.join(migrationsRoot, relativePath));
+    const bytes = await readFile(path.join(migrationsDirectory, relativePath));
     entries.push({ path: relativePath, sha256: sha256(bytes) });
   }
   return entries;
+}
+
+export async function verifyMigrationChecksum(rootDirectory = root): Promise<void> {
+  const migrationsDirectory = path.join(
+    rootDirectory,
+    'packages',
+    'db',
+    'prisma',
+    'migrations',
+  );
+  const manifestFile = path.join(
+    rootDirectory,
+    'packages',
+    'db',
+    'prisma',
+    'migrations.sha256',
+  );
+  const actual = await readMigrationChecksums(migrationsDirectory);
+  verifyMigrationManifest(actual, await readFile(manifestFile, 'utf8'));
 }
 
 async function main() {
