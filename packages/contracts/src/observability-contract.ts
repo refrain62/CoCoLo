@@ -26,7 +26,7 @@ export const structuredLogEntrySchema = z
     ]),
     service: z.literal('api'),
     environment: z.enum(['local', 'staging', 'production']),
-    requestId: safeLogString,
+    requestId: z.string().uuid(),
     method: z.enum([
       'GET',
       'POST',

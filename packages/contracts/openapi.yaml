@@ -366,6 +366,7 @@
         "required": [
           "data"
         ],
+        "additionalProperties": false,
         "properties": {
           "data": {
             "type": "object",
@@ -373,6 +374,7 @@
               "notificationId",
               "status"
             ],
+            "additionalProperties": false,
             "properties": {
               "notificationId": {
                 "type": "string",
@@ -663,8 +665,7 @@
               "details": {},
               "requestId": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 128
+                "format": "uuid"
               }
             }
           }

@@ -186,14 +186,16 @@ function projectMember(member: MemberRecord, role: MemberRole) {
   };
   if (role === 'guardian') return common;
   if (role === 'staff') return { ...common, ageGroup: member.ageGroup };
-  return {
-    ...common,
-    ageGroup: member.ageGroup,
-    createdAt:
-      member.createdAt instanceof Date
-        ? member.createdAt.toISOString()
-        : member.createdAt,
-  };
+  if (managerRoles.has(role))
+    return {
+      ...common,
+      ageGroup: member.ageGroup,
+      createdAt:
+        member.createdAt instanceof Date
+          ? member.createdAt.toISOString()
+          : member.createdAt,
+    };
+  throw new Error('部員公開projectionのroleが不正です。');
 }
 
 // APIの依存性と認証middlewareを組み立て、tenant/roleは認証後の所属解決結果だけを利用する。

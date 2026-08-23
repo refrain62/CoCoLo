@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  errorResponseSchema,
   memberListResponseSchemaForRole,
   promotionResponseSchema,
 } from '../src/runtime-response-contract.ts';
@@ -30,6 +31,7 @@ test('runtime responseは認証roleにない部員項目を受け付けない', 
 
   assert.equal(guardian.success, false);
   assert.equal(manager.success, true);
+  assert.throws(() => memberListResponseSchemaForRole('unknown' as never));
 });
 
 test('promotionの公開resultは既知の形状だけを受け付ける', () => {
@@ -65,4 +67,26 @@ test('promotionの公開resultは既知の形状だけを受け付ける', () =>
 
   assert.equal(safe.success, true);
   assert.equal(unsafe.success, false);
+});
+
+test('共通error responseのrequestIdはopaque UUIDだけを受け付ける', () => {
+  const valid = errorResponseSchema.safeParse({
+    error: {
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'error',
+      details: {},
+      requestId: '00000000-0000-4000-8000-000000000001',
+    },
+  });
+  const invalid = errorResponseSchema.safeParse({
+    error: {
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'error',
+      details: {},
+      requestId: 'not-a-uuid',
+    },
+  });
+
+  assert.equal(valid.success, true);
+  assert.equal(invalid.success, false);
 });

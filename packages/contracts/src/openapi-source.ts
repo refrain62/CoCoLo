@@ -239,10 +239,12 @@ export const openapiDocument = {
       LineDeliveryPublishResponse: {
         type: 'object',
         required: ['data'],
+        additionalProperties: false,
         properties: {
           data: {
             type: 'object',
             required: ['notificationId', 'status'],
+            additionalProperties: false,
             properties: {
               notificationId: { type: 'string', format: 'uuid' },
               status: { type: 'string', const: 'pending' },
@@ -404,7 +406,7 @@ export const openapiDocument = {
               code: { type: 'string', minLength: 1, maxLength: 128 },
               message: { type: 'string', minLength: 1, maxLength: 512 },
               details: {},
-              requestId: { type: 'string', minLength: 1, maxLength: 128 },
+              requestId: { type: 'string', format: 'uuid' },
             },
           },
         },

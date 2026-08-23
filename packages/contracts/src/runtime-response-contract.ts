@@ -41,7 +41,8 @@ export const memberPublicResponseSchema = z.union([
 export function memberPublicResponseSchemaForRole(role: MemberRole) {
   if (role === 'guardian') return guardianMemberResponseSchema;
   if (role === 'staff') return staffMemberResponseSchema;
-  return managerMemberResponseSchema;
+  if (role === 'owner' || role === 'admin') return managerMemberResponseSchema;
+  throw new Error('公開response schemaのroleが不正です。');
 }
 
 export const memberListResponseSchema = z
@@ -128,7 +129,7 @@ export const errorResponseSchema = z
         code: z.string().min(1).max(128),
         message: z.string().min(1).max(512),
         details: z.unknown(),
-        requestId: z.string().min(1).max(128),
+        requestId: z.string().uuid(),
       })
       .strict(),
   })

@@ -225,3 +225,14 @@ test('所属解決の依存障害は401ではなく503とdependency.failureに�
   assert.equal(body.error.code, 'DEPENDENCY_UNAVAILABLE');
   assert.equal(JSON.parse(logs[0] ?? '').event, 'dependency.failure');
 });
+
+test('未知roleは管理者向けprojectionへfail-openしない', async () => {
+  const app = createMemberApp(validMember, [], 'unknown' as MemberRole);
+
+  const response = await app.request('/api/v1/members', {
+    headers: { authorization: `Bearer ${TOKEN}` },
+  });
+
+  assert.equal(response.status, 500);
+  assert.equal((await response.json()).error.code, 'INTERNAL_SERVER_ERROR');
+});
