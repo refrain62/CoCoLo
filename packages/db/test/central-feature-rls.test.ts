@@ -275,9 +275,14 @@ async function seedFixture(client: PrismaClient) {
   await execute(
     client,
     `INSERT INTO ride_plans (id, tenant_id, title, departure_at, status)
-     VALUES ($1::uuid, $2::uuid, '送迎A', '2099-06-01T08:00:00Z', 'open')`,
+     VALUES ($1::uuid, $2::uuid, '送迎A', '2099-06-01T08:00:00Z', 'draft')`,
     ridePlanA,
     tenantA,
+  );
+  await execute(
+    client,
+    `UPDATE ride_plans SET status = 'open' WHERE id = $1::uuid`,
+    ridePlanA,
   );
   await execute(
     client,

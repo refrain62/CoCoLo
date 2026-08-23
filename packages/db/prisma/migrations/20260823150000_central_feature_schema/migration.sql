@@ -231,7 +231,8 @@ CREATE TABLE line_webhook_receipts (
   group_id varchar(128) NOT NULL,
   webhook_event_id varchar(128) NOT NULL,
   received_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (group_id, webhook_event_id)
+  PRIMARY KEY (group_id, webhook_event_id),
+  FOREIGN KEY (tenant_id, group_id) REFERENCES line_connections(tenant_id, group_id) ON DELETE RESTRICT
 );
 CREATE INDEX line_webhook_receipts_tenant_received_idx ON line_webhook_receipts(tenant_id, received_at);
 
@@ -725,8 +726,14 @@ CREATE OR REPLACE FUNCTION app_lock_ride_state()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
+DECLARE
+  plan_id uuid;
 BEGIN
-  PERFORM pg_advisory_xact_lock(hashtextextended(NEW.tenant_id::text || ':' || NEW.plan_id::text, 0));
+  plan_id := CASE
+    WHEN TG_TABLE_NAME = 'ride_plans' THEN NEW.id
+    ELSE NEW.plan_id
+  END;
+  PERFORM pg_advisory_xact_lock(hashtextextended(NEW.tenant_id::text || ':' || plan_id::text, 0));
   RETURN NEW;
 END;
 $$;
@@ -745,6 +752,17 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF TG_TABLE_NAME = 'ride_plans' AND NEW.status::text <> 'draft' THEN
+      RAISE EXCEPTION '送迎予定はdraftから開始してください';
+    END IF;
+    IF TG_TABLE_NAME = 'ride_offers' AND NEW.status::text <> 'open' THEN
+      RAISE EXCEPTION '送迎提供はopenから開始してください';
+    END IF;
+    IF TG_TABLE_NAME = 'ride_requests' AND NEW.status::text <> 'pending' THEN
+      RAISE EXCEPTION '乗車希望はpendingから開始してください';
+    END IF;
+  END IF;
   IF TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status THEN
     IF TG_TABLE_NAME = 'ride_plans' AND NOT (
       (OLD.status::text = 'draft' AND NEW.status::text = 'open')
@@ -769,13 +787,13 @@ BEGIN
 END;
 $$;
 CREATE TRIGGER ride_plan_state_transition_guard
-BEFORE UPDATE ON ride_plans
+BEFORE INSERT OR UPDATE ON ride_plans
 FOR EACH ROW EXECUTE FUNCTION app_guard_ride_state_transition();
 CREATE TRIGGER ride_offer_state_transition_guard
-BEFORE UPDATE ON ride_offers
+BEFORE INSERT OR UPDATE ON ride_offers
 FOR EACH ROW EXECUTE FUNCTION app_guard_ride_state_transition();
 CREATE TRIGGER ride_request_state_transition_guard
-BEFORE UPDATE ON ride_requests
+BEFORE INSERT OR UPDATE ON ride_requests
 FOR EACH ROW EXECUTE FUNCTION app_guard_ride_state_transition();
 
 CREATE OR REPLACE FUNCTION app_has_active_membership(target_tenant_id uuid)
@@ -1013,6 +1031,9 @@ CREATE TRIGGER audit_logs_append_only_guard
 BEFORE UPDATE OR DELETE ON audit_logs
 FOR EACH ROW EXECUTE FUNCTION app_reject_audit_mutation();
 REVOKE UPDATE, DELETE ON audit_logs FROM cocolo_app;
+DROP POLICY IF EXISTS audit_logs_insert ON audit_logs;
+CREATE POLICY audit_logs_insert ON audit_logs FOR INSERT
+  WITH CHECK (app_has_active_membership(tenant_id) AND actor_user_id = current_setting('app.user_id', true));
 
 GRANT USAGE ON TYPE event_type, attendance_response, attachment_status, announcement_status,
   purchase_order_status, payment_status, line_connection_status, line_notification_source,
