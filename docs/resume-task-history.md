@@ -243,6 +243,38 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - docs-only PR #63は`a3a735b`として`develop`へスカッシュマージ済みです。
 - `origin/develop`の再開基準を`a3a735b`へ更新しました。
 
+## EVT-001
+
+### 実施した変更
+
+- 対象PRは#65です。
+- ブランチは`codex/evt-001-central-events-mount`です。
+- 中央APIへ予定・出欠のlist、create、update、attendance、summaryを接続しました。
+- Webへ認証context、member pagination、月間・週間のevents取得を接続しました。
+- runtime response契約、OpenAPI、rate limit、tenant非公開projectionを接続しました。
+- DB migrationへactive membership、同一tenant添付、回答一意性、締切後修正理由、一覧上限、集計snapshotの境界を追加しました。
+- membership確認はSECURITY DEFINER関数、event競合はtransaction advisory lock、guardian担当判定はRLSの通常SELECTへ分離しました。
+
+### 検証結果
+
+- rootの`pnpm test`は全workspaceで成功しました。
+- rootの`pnpm build`は全workspaceで成功しました。
+- API単体テスト157件、contracts 20件、domain 12件、DB 4件が成功しました。
+- `pnpm verify:trust-root`、`pnpm verify:migration-sql`、Biome検査が成功しました。
+- CI quality run `32619201261`は実PostgreSQL統合テスト、型検査、build、release artifact検査を含め成功しました。
+- Pascalの最終敵対的レビューはCritical 0、High 0、Medium 0、Low 2でした。
+- Zenoの最終契約・統合レビューはCritical 0、High 0、Medium 4、Low 4でした。
+
+### GitHub反映
+
+- PR #65は`5f5a592`として`develop`へスカッシュマージ済みです。
+- マージ後の`origin/develop`は`5f5a592`です。
+- PR信頼ゲート未展開の判定境界はdocs-only PR #66で別管理しています。
+
+### 再発防止
+
+- 初回CIで発生したtrusted manifest登録漏れ、ハッシュ誤記、pnpmバージョン不一致、pnpm並列実行による依存再構成競合、Prisma値import漏れ、RLS row lock誤用、gh mergeのworktree衝突を`docs/verification-runbook.md`へ追記しました。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。

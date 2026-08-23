@@ -216,3 +216,49 @@ requestIdをUUID形式へ厳格化した後、rate-limit回帰テストの期待
 今回の最終検証では、rootの`pnpm test`が150件成功し、`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm lint:workflows`、`pnpm lint:openapi`も同じHEADで成功しました。
 
 CI quality run `32614821124`が成功し、実装PR #62は`2ce3dbe`としてdevelopへスカッシュマージされました。
+
+### 追加記録：EVT-001中央接続の実DB検証漏れとRLSロック境界（2026-08-23）
+
+EVT-001では、実装PRの初回CIで新規migrationをtrusted manifestへ登録し忘れ、品質ゲートのmanifest検査で停止しました。
+
+migrationを追加または変更したときは、コミット前にSHA-256を再計算してmanifestへ同期し、`pnpm verify:trust-root`を単独実行します。
+
+manifest更新時にハッシュ文字列を誤記し、検証が64桁hex形式エラーになりました。
+
+ハッシュ更新後は値の形式検査と実ファイルの再計算を行い、検証が成功するまでcommitへ進みません。
+
+membership検証で`tenant_memberships`へ直接`FOR UPDATE`を使ったところ、SELECT-only RLS境界と衝突して実DBテストが失敗しました。
+
+その後`FOR SHARE`へ変更しても同じ失敗が続いたため、RLS対象表の直接row lockを認可確認に使わず、SECURITY DEFINERのactive membership検証関数とtransaction advisory lockへ分離しました。
+
+guardianの予定参照で`SELECT ... FOR UPDATE`を使ったところ、予定更新権限を持たないguardianから行が不可視になりました。
+
+予定更新・出欠更新・集計はevent単位のadvisory lockを同じ順序で取得し、guardianの予定参照は通常SELECTで行います。
+
+guardian_membersの担当判定でも`FOR SHARE`がRLSのSELECT-only境界と衝突したため、担当判定は通常SELECTに限定しました。
+
+RLS対象表へrow lock句を追加するときは、対象roleのSELECT、UPDATE、FORCE RLS、policy commandを実DBで確認し、認可確認と競合制御を同じSQL句へ混在させません。
+
+summaryへRepeatable Readを追加した際、`Prisma`をtype-only importして型検査に失敗しました。
+
+runtime enumやtransaction isolation levelを使う変更では、値importとtype importを分け、package typecheckを直後に実行します。
+
+events migrationの初期レビューでは、無条件DELETE、tenantを含まない添付参照、`NOT VALID`制約、過大な一覧取得が検出されました。
+
+migrationは適用前データ検査、同一tenant複合制約、許可状態trigger、上限付きquery、rollback不可の影響をレビューし、破壊的SQLを含めません。
+
+ローカルでは通常のpnpmバージョンがpackageManagerの10.26.0と一致せず、依存リンク再構成が発生しました。
+
+`pnpm --version`を記録し、検証はpackageManagerと同じ`pnpm@10.26.0`を使い、複数のpnpm検証を同時実行しません。
+
+pnpm test、build、installを並列実行した際、node_modulesの再構成が競合して非対話環境の`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`になりました。
+
+依存導入、build、test、lint、typecheckは一つずつ完了と終了コードを確認してから次へ進みます。
+
+GitHub CLIのsquash mergeは、別worktreeがdevelopを使用中だとローカル後処理だけ失敗することがあります。
+
+mergeコマンドが失敗した場合は再実行せず、`gh pr view <番号> --json state,mergedAt,mergeCommit`でリモート状態を確認し、MERGEDならdevelopをfetchして先へ進みます。
+
+EVT-001の最終CI runは`32619201261`で、実PostgreSQL統合テスト、型検査、build、release artifact検査が成功しました。
+
+最終PR #65はCritical 0、High 0の敵対的レビュー後、squash commit `5f5a592`としてdevelopへ統合しました。
