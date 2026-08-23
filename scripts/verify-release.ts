@@ -9,7 +9,54 @@ export type ReleaseManifest = Readonly<{
   artifactSha: string;
   files: readonly string[];
   migrationChecksumSha256: string;
+  runtimePackages: readonly {
+    name: string;
+    directory: string;
+    entrypoint: string;
+  }[];
+  workerEntrypoint: string;
 }>;
+
+const requiredRuntimePackages = [
+  { name: '@cocolo/api', directory: 'apps/api', entrypoint: 'dist/server.js' },
+  {
+    name: '@cocolo/auth',
+    directory: 'packages/auth',
+    entrypoint: 'dist/index.js',
+  },
+  {
+    name: '@cocolo/contracts',
+    directory: 'packages/contracts',
+    entrypoint: 'dist/index.js',
+  },
+  { name: '@cocolo/db', directory: 'packages/db', entrypoint: 'dist/index.js' },
+  {
+    name: '@cocolo/domain',
+    directory: 'packages/domain',
+    entrypoint: 'dist/index.js',
+  },
+] as const;
+
+const requiredReleaseFiles = [
+  'apps/api/dist',
+  'apps/api/dist/line-delivery-worker.js',
+  'apps/api/package.json',
+  'apps/web/dist',
+  'packages/auth/dist',
+  'packages/auth/package.json',
+  'packages/contracts/dist',
+  'packages/contracts/package.json',
+  'packages/db/dist',
+  'packages/db/package.json',
+  'packages/db/prisma/schema.prisma',
+  'packages/db/prisma/migrations',
+  'packages/db/prisma/migrations.sha256',
+  'packages/domain/dist',
+  'packages/domain/package.json',
+  'package.json',
+  'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
+] as const;
 
 function normalizedEntry(value: string): string {
   return value.replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/$/, '');
@@ -61,6 +108,21 @@ export async function verifyReleaseArtifact(
     Array.isArray(manifest.files),
     'release manifestのfilesが不正です。',
   );
+  assert.deepEqual(
+    manifest.runtimePackages,
+    requiredRuntimePackages,
+    'release manifestのruntime package正本が不一致です。',
+  );
+  assert.equal(
+    manifest.workerEntrypoint,
+    'apps/api/dist/line-delivery-worker.js',
+    'release manifestのworker entrypointが不一致です。',
+  );
+  for (const file of requiredReleaseFiles)
+    assert.ok(
+      manifest.files.includes(file),
+      `release manifestに必須ファイル ${file} がありません。`,
+    );
   assert.ok(
     typeof manifest.migrationChecksumSha256 === 'string' &&
       /^[0-9a-f]{64}$/.test(manifest.migrationChecksumSha256),

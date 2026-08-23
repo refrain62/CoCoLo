@@ -13,6 +13,13 @@ const deploymentRecordPath =
 const releaseDir =
   process.env.RELEASE_DIR ?? path.dirname(deploymentRecordPath);
 const releaseManifest = await verifyReleaseArtifact(releaseDir, artifactSha);
+const schemaDriftRunId = process.env.SCHEMA_DRIFT_RUN_ID;
+if (!schemaDriftRunId || !/^\d+$/.test(schemaDriftRunId))
+  throw new Error(
+    'SCHEMA_DRIFT_RUN_ID は成功したGitHub Actions run IDが必要です。',
+  );
+if (process.env.SCHEMA_DRIFT_STATUS !== 'success')
+  throw new Error('schema-drift成功runを確認できないため証跡を作成しません。');
 const artifactChecksum = (
   await readFile(path.join(releaseDir, 'artifact.sha256'), 'utf8')
 )
@@ -39,6 +46,8 @@ const evidence = {
   artifactSha,
   artifactSha256: artifactChecksum,
   migrationChecksumSha256: releaseManifest.migrationChecksumSha256,
+  schemaDriftRunId,
+  schemaDrift: 'success',
   deployment: {
     deployedUrl: deploymentRecord.deployedUrl,
     deployedAt: deploymentRecord.deployedAt,

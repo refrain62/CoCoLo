@@ -71,6 +71,7 @@ for (const file of [
 const files = [
   ...new Set([
     'apps/api/dist',
+    'apps/api/dist/line-delivery-worker.js',
     'apps/web/dist',
     ...runtimeFiles,
     'packages/db/prisma/schema.prisma',

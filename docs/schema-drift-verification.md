@@ -41,7 +41,7 @@ PostgreSQLを起動し、`DATABASE_URL`、`DIRECT_URL`、専用DBのpasswordful`
 
 ```text
 pnpm test:schema-drift
-pnpm test:migration-integrity
+pnpm test:database-integrity
 pnpm verify:schema-drift
 ```
 

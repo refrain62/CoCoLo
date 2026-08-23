@@ -20,6 +20,8 @@ type StagingEvidence = Readonly<{
   artifactSha: string;
   artifactSha256: string;
   migrationChecksumSha256: string;
+  schemaDriftRunId: string;
+  schemaDrift: string;
   migration: string;
   smoke: string;
   e2e: string;
@@ -80,6 +82,16 @@ export function assertStagingEvidence(
     expectedMigrationChecksumSha256,
     'staging証跡のmigration checksumが不一致です。',
   );
+  assert.match(
+    evidence.schemaDriftRunId ?? '',
+    /^\d+$/,
+    'staging証跡のschema-drift run IDが不正です。',
+  );
+  assert.equal(
+    evidence.schemaDrift,
+    'success',
+    'staging証跡のschema-driftがsuccessではありません。',
+  );
   for (const key of ['migration', 'smoke', 'e2e'] as const)
     assert.equal(
       evidence[key],
@@ -87,6 +99,42 @@ export function assertStagingEvidence(
       `staging証跡の${key}がsuccessではありません。`,
     );
   return evidence as StagingEvidence;
+}
+
+function assertGitHubDeploymentProvenance(
+  environment: DeploymentEnvironment,
+  artifactSha: string,
+): void {
+  assert.equal(
+    process.env.GITHUB_ACTIONS,
+    'true',
+    'deployはGitHub Actions上でのみ実行できます。',
+  );
+  assert.match(
+    process.env.GITHUB_REPOSITORY ?? '',
+    /^[^/]+\/[^/]+$/,
+    'GitHub repository provenanceがありません。',
+  );
+  assert.match(
+    process.env.GITHUB_RUN_ID ?? '',
+    /^\d+$/,
+    'GitHub Actions run IDがありません。',
+  );
+  assert.ok(
+    process.env.GITHUB_WORKFLOW,
+    'GitHub Actions workflow provenanceがありません。',
+  );
+  assert.equal(
+    process.env.ARTIFACT_ATTESTATION_VERIFIED,
+    'true',
+    '成果物のGitHub attestation検証が完了していません。',
+  );
+  if (environment === 'staging')
+    assert.equal(
+      process.env.GITHUB_SHA,
+      artifactSha,
+      'staging artifactとGitHub commit SHAが不一致です。',
+    );
 }
 
 async function readArtifactChecksum(releaseDir: string): Promise<string> {
@@ -101,6 +149,7 @@ export async function verifyDeployPreconditions(
   releaseDir: string,
 ): Promise<ReleaseManifest> {
   assertDeploymentEnvironment(environment);
+  assertGitHubDeploymentProvenance(environment, artifactSha);
   const manifest = await verifyReleaseArtifact(releaseDir, artifactSha);
   await verifyMigrationChecksum();
   const artifactSha256 = await readArtifactChecksum(releaseDir);

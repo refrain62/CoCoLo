@@ -14,6 +14,8 @@ const cleanEvidence = {
   artifactSha: sha,
   artifactSha256,
   migrationChecksumSha256,
+  schemaDriftRunId: '123456789',
+  schemaDrift: 'success',
   migration: 'success',
   smoke: 'success',
   e2e: 'success',
