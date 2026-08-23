@@ -55,6 +55,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: checksum検証のfixtureを実行
         run: pnpm test:database-integrity
+      - name: Prisma Clientを生成
+        run: pnpm --filter @cocolo/db exec prisma generate
       - name: PostgreSQLのバージョンとroleを検証
         run: pnpm db:prepare:test && pnpm verify:database-version --expected-major 17
         env:

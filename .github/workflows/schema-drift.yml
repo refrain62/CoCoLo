@@ -108,7 +108,7 @@ jobs:
           PGPASSFILE: ${{ runner.temp }}/cocolo.pgpass
           DATABASE_URL: postgresql://cocolo_shadow:cocolo_shadow@localhost:5433/cocolo_shadow?sslmode=disable
           DIRECT_URL: postgresql://cocolo_shadow:cocolo_shadow@localhost:5433/cocolo_shadow?sslmode=disable
-          SHADOW_DATABASE_URL: postgresql://cocolo_shadow:cocolo_shadow@localhost:5433/cocolo_shadow?sslmode=disable
+          SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
       - name: Shadow DB role属性を検査
         run: pnpm verify:shadow-role
         env:
