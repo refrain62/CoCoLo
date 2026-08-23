@@ -349,8 +349,8 @@ export async function verifyMigrationIntegrity(
 export function assertSchemaDriftWorkflowConnected(content: string): void {
   assert.match(
     content,
-    /^on:\s*\r?\n\s+pull_request:\s*$/m,
-    'schema-drift Workflowはpull_requestで実行してください。',
+    /^on:\s*\r?\n\s+pull_request:\s*\r?\n\s+push:\s*$/m,
+    'schema-drift Workflowはpull_requestとmain pushで実行してください。',
   );
   const runMatch = /^\s*run:\s*pnpm verify:schema-drift\s*$/m.exec(content);
   assert.ok(
@@ -372,8 +372,8 @@ export function assertSchemaDriftWorkflowConnected(content: string): void {
   assert.match(step, /^\s+env:\s*$/m, '検査stepにenvが必要です。');
   assert.match(
     step,
-    /BASE_SHA:\s*\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\}\}/,
-    '検査stepはPRのbase SHAを使ってください。',
+    /BASE_SHA:\s*\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\|\|\s*github\.event\.before\s*\}\}/,
+    '検査stepはPRのbase SHAまたはpushの直前SHAを使ってください。',
   );
   assert.match(step, /CI:\s*true/, '検査stepではCI=trueが必要です。');
   assert.match(
@@ -677,28 +677,27 @@ export async function verifySchemaDrift(
   }
   await integrityVerifier(paths);
   const directUrl = config.directUrl ?? process.env.DIRECT_URL;
+  const shadowDatabaseArg = redactDatabaseUrl(shadowDatabaseUrl).argvUrl;
   const directEnv = {
     ...process.env,
     DATABASE_URL: directUrl,
     DIRECT_URL: directUrl,
     SHADOW_DATABASE_URL: shadowDatabaseUrl,
   };
-  const databaseDiffEnv: NodeJS.ProcessEnv = { ...directEnv };
-  delete databaseDiffEnv.SHADOW_DATABASE_URL;
-  databaseDiffEnv.PRISMA_HIDE_UPDATE_MESSAGE = '1';
+  const shadowDiffEnv: NodeJS.ProcessEnv = {
+    ...directEnv,
+    PGPASSWORD: process.env.SHADOW_DATABASE_PASSWORD,
+    PRISMA_HIDE_UPDATE_MESSAGE: '1',
+  };
   const result = runner(
     process.execPath,
-    [prismaEntryPoint(paths), ...buildDirectDatabaseDiffArgs(paths)],
+    [prismaEntryPoint(paths), ...buildPrismaDiffArgs(paths, shadowDatabaseArg)],
     {
       cwd: paths.dbDirectory,
       encoding: 'utf8',
       shell: false,
       windowsHide: true,
-      env: {
-        ...databaseDiffEnv,
-        DATABASE_URL: shadowDatabaseUrl,
-        DIRECT_URL: shadowDatabaseUrl,
-      },
+      env: shadowDiffEnv,
     },
   );
   assertPrismaDiffClean(result);
@@ -710,7 +709,7 @@ export async function verifySchemaDrift(
       encoding: 'utf8',
       shell: false,
       windowsHide: true,
-      env: databaseDiffEnv,
+      env: { ...directEnv, PRISMA_HIDE_UPDATE_MESSAGE: '1' },
     },
   );
   assertPrismaDiffClean(directResult);

@@ -115,7 +115,66 @@ export function assertShadowRoleAttributes(
   );
 }
 
-function expectedAclEntries(
+const expectedTablePrivileges = new Map<string, readonly string[]>([
+  ['tenants', ['INSERT', 'SELECT', 'UPDATE']],
+  ['tenant_memberships', ['INSERT', 'SELECT', 'UPDATE']],
+  ['members', ['INSERT', 'SELECT', 'UPDATE']],
+  ['guardian_members', ['INSERT', 'SELECT', 'UPDATE']],
+  ['audit_logs', ['INSERT', 'SELECT']],
+  ['promotion_runs', ['INSERT', 'SELECT', 'UPDATE']],
+  ['attachments', ['DELETE', 'INSERT', 'SELECT', 'UPDATE']],
+  ['events', ['INSERT', 'SELECT', 'UPDATE']],
+  ['attendance_responses', ['INSERT', 'SELECT', 'UPDATE']],
+  ['announcements', ['INSERT', 'SELECT', 'UPDATE']],
+  ['announcement_attachments', ['INSERT', 'SELECT', 'UPDATE']],
+  ['announcement_reads', ['INSERT', 'SELECT', 'UPDATE']],
+  ['board_contacts', ['DELETE', 'INSERT', 'SELECT', 'UPDATE']],
+  ['purchase_orders', ['INSERT', 'SELECT', 'UPDATE']],
+  ['order_products', ['INSERT', 'SELECT', 'UPDATE']],
+  ['order_entries', ['INSERT', 'SELECT', 'UPDATE']],
+  ['order_lines', ['INSERT', 'SELECT', 'UPDATE']],
+  ['order_idempotency_keys', ['INSERT', 'SELECT', 'UPDATE']],
+  ['line_connections', ['INSERT', 'SELECT', 'UPDATE']],
+  ['line_notification_queue', ['INSERT', 'SELECT', 'UPDATE']],
+  ['line_webhook_receipts', ['INSERT', 'SELECT', 'UPDATE']],
+  ['ride_plans', ['INSERT', 'SELECT', 'UPDATE']],
+  ['ride_offers', ['INSERT', 'SELECT', 'UPDATE']],
+  ['ride_requests', ['INSERT', 'SELECT', 'UPDATE']],
+  ['ride_assignments', ['DELETE', 'INSERT', 'SELECT', 'UPDATE']],
+]);
+
+const expectedEnumNames = [
+  'role',
+  'membership_status',
+  'member_category',
+  'member_status',
+  'promotion_run_status',
+  'event_type',
+  'attendance_response',
+  'attachment_status',
+  'announcement_status',
+  'purchase_order_status',
+  'payment_status',
+  'line_connection_status',
+  'line_notification_source',
+  'line_notification_status',
+  'ride_plan_status',
+  'ride_offer_status',
+  'ride_request_status',
+];
+
+export const expectedShadowObjectOwnerKeys = [
+  'table:public._prisma_migrations',
+  ...[...expectedTablePrivileges.keys()].map((name) => `table:public.${name}`),
+  ...expectedEnumNames.map((name) => `enum:public.${name}`),
+];
+
+export const expectedShadowRlsTableNames = [
+  ...[...expectedTablePrivileges.keys()].map((name) => `public.${name}`),
+  'public.line_delivery_outbox',
+];
+
+export function buildExpectedShadowAclEntries(
   objectOwners: readonly ShadowObjectOwner[],
 ): ShadowAclEntry[] {
   const entries: ShadowAclEntry[] = [];
@@ -125,18 +184,17 @@ function expectedAclEntries(
     grantee: 'cocolo_app',
     privilege: 'USAGE',
   });
-  for (const objectName of [
-    'public.tenants',
-    'public.tenant_memberships',
-    'public.members',
-    'public.guardian_members',
-    'public.audit_logs',
-    'public.promotion_runs',
-  ]) {
-    for (const privilege of ['INSERT', 'SELECT', 'UPDATE'])
+  entries.push({
+    objectType: 'schema',
+    objectName: 'public',
+    grantee: 'line_delivery_worker',
+    privilege: 'USAGE',
+  });
+  for (const [tableName, privileges] of expectedTablePrivileges) {
+    for (const privilege of privileges)
       entries.push({
         objectType: 'table',
-        objectName,
+        objectName: `public.${tableName}`,
         grantee: 'cocolo_app',
         privilege,
       });
@@ -154,16 +212,10 @@ function expectedAclEntries(
         privilege,
       });
   }
-  for (const objectName of [
-    'public.role',
-    'public.membership_status',
-    'public.member_category',
-    'public.member_status',
-    'public.promotion_run_status',
-  ])
+  for (const typeName of expectedEnumNames)
     entries.push({
       objectType: 'enum',
-      objectName,
+      objectName: `public.${typeName}`,
       grantee: 'cocolo_app',
       privilege: 'USAGE',
     });
@@ -177,21 +229,6 @@ function aclKey(entry: ShadowAclEntry): string {
 function objectOwnerKey(entry: ShadowObjectOwner): string {
   return `${entry.objectType}:${entry.objectName}`;
 }
-
-const expectedObjectOwnerKeys = [
-  'table:public._prisma_migrations',
-  'table:public.tenants',
-  'table:public.tenant_memberships',
-  'table:public.members',
-  'table:public.guardian_members',
-  'table:public.audit_logs',
-  'table:public.promotion_runs',
-  'enum:public.role',
-  'enum:public.membership_status',
-  'enum:public.member_category',
-  'enum:public.member_status',
-  'enum:public.promotion_run_status',
-];
 
 // PostgreSQL 17の初期クラスタが持つ監視用membershipだけを許可し、Shadow/app roleを含む追加行を拒否する。
 const allowedMembershipKeys = [
@@ -227,7 +264,7 @@ export function assertShadowDatabaseSecurity(
   );
   assertExactSet(
     inspection.objectOwners.map(objectOwnerKey),
-    expectedObjectOwnerKeys,
+    expectedShadowObjectOwnerKeys,
     'Shadow DB objectの種類・名前',
   );
   assertExactSet(
@@ -249,14 +286,18 @@ export function assertShadowDatabaseSecurity(
   );
   assert.deepEqual(
     [...new Set(inspection.aclEntries.map(aclKey))].sort(),
-    expectedAclEntries(inspection.objectOwners).map(aclKey).sort(),
+    buildExpectedShadowAclEntries(inspection.objectOwners).map(aclKey).sort(),
     'Shadow DB ACLの許可集合が不一致です。PUBLIC grantや過剰権限を拒否します。',
   );
   assert.ok(
     inspection.aclEntries.every((entry) => entry.grantee !== 'PUBLIC'),
     'Shadow DB objectへのPUBLIC grantを拒否します。',
   );
-  assert.ok(inspection.rls.length > 0, 'RLS検査対象tableがありません。');
+  assertExactSet(
+    inspection.rls.map((table) => table.tableName),
+    expectedShadowRlsTableNames,
+    'Shadow DB RLS検査対象table',
+  );
   for (const table of inspection.rls) {
     assert.equal(
       table.enabled,
@@ -281,6 +322,7 @@ export function assertMigrationSqlSafe(
     /\bDELETE\s+FROM\s+[^;]+;/is,
     /\b(?:CREATE|ALTER|DROP)\s+ROLE\b/i,
     /\bALTER\s+DATABASE\b/i,
+    /\bALTER\s+DEFAULT\s+PRIVILEGES\b/i,
     /\bDISABLE\s+ROW\s+LEVEL\s+SECURITY\b/i,
     /\bGRANT\b[^;]+\bTO\s+PUBLIC\b/is,
   ];

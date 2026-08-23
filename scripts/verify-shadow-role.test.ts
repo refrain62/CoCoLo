@@ -4,8 +4,11 @@ import {
   assertMigrationSqlSafe,
   assertShadowDatabaseSecurity,
   assertShadowRoleAttributes,
-  type ShadowAclEntry,
+  buildExpectedShadowAclEntries,
+  expectedShadowObjectOwnerKeys,
+  expectedShadowRlsTableNames,
   type ShadowDatabaseInspection,
+  type ShadowObjectOwner,
   type ShadowRoleInspection,
 } from './verify-shadow-role.ts';
 
@@ -49,114 +52,31 @@ for (const [label, change, message] of [
   });
 }
 
+const cleanObjectOwners: ShadowObjectOwner[] =
+  expectedShadowObjectOwnerKeys.map((key) => {
+    const [objectType, ...objectName] = key.split(':');
+    return {
+      objectType: objectType as ShadowObjectOwner['objectType'],
+      objectName: objectName.join(':'),
+      owner: 'cocolo_shadow',
+    };
+  });
+
 const cleanDatabase: ShadowDatabaseInspection = {
   databaseOwner: 'cocolo_shadow',
-  objectOwners: [
-    {
-      objectType: 'table',
-      objectName: 'public._prisma_migrations',
-      owner: 'cocolo_shadow',
-    },
-    {
-      objectType: 'table',
-      objectName: 'public.tenants',
-      owner: 'cocolo_shadow',
-    },
-    {
-      objectType: 'table',
-      objectName: 'public.tenant_memberships',
-      owner: 'cocolo_shadow',
-    },
-    {
-      objectType: 'table',
-      objectName: 'public.members',
-      owner: 'cocolo_shadow',
-    },
-    {
-      objectType: 'table',
-      objectName: 'public.guardian_members',
-      owner: 'cocolo_shadow',
-    },
-    {
-      objectType: 'table',
-      objectName: 'public.audit_logs',
-      owner: 'cocolo_shadow',
-    },
-    {
-      objectType: 'table',
-      objectName: 'public.promotion_runs',
-      owner: 'cocolo_shadow',
-    },
-    { objectType: 'enum', objectName: 'public.role', owner: 'cocolo_shadow' },
-    {
-      objectType: 'enum',
-      objectName: 'public.membership_status',
-      owner: 'cocolo_shadow',
-    },
-    {
-      objectType: 'enum',
-      objectName: 'public.member_category',
-      owner: 'cocolo_shadow',
-    },
-    {
-      objectType: 'enum',
-      objectName: 'public.member_status',
-      owner: 'cocolo_shadow',
-    },
-    {
-      objectType: 'enum',
-      objectName: 'public.promotion_run_status',
-      owner: 'cocolo_shadow',
-    },
-  ],
-  aclEntries: (
-    [
-      {
-        objectType: 'schema' as const,
-        objectName: 'public',
-        grantee: 'cocolo_app',
-        privilege: 'USAGE',
-      },
-    ] as ShadowAclEntry[]
-  )
-    .concat(
-      [
-        'tenants',
-        'tenant_memberships',
-        'members',
-        'guardian_members',
-        'audit_logs',
-        'promotion_runs',
-      ].flatMap((table) =>
-        ['INSERT', 'SELECT', 'UPDATE'].map((privilege) => ({
-          objectType: 'table' as const,
-          objectName: `public.${table}`,
-          grantee: 'cocolo_app',
-          privilege,
-        })),
-      ) as ShadowAclEntry[],
-    )
-    .concat(
-      [
-        'role',
-        'membership_status',
-        'member_category',
-        'member_status',
-        'promotion_run_status',
-      ].map((type) => ({
-        objectType: 'enum' as const,
-        objectName: `public.${type}`,
-        grantee: 'cocolo_app',
-        privilege: 'USAGE',
-      })),
-    ),
+  objectOwners: cleanObjectOwners,
+  aclEntries: buildExpectedShadowAclEntries(cleanObjectOwners),
   defaultAclEntries: [],
   memberships: [
     { roleName: 'pg_read_all_settings', memberName: 'pg_monitor' },
     { roleName: 'pg_read_all_stats', memberName: 'pg_monitor' },
     { roleName: 'pg_stat_scan_tables', memberName: 'pg_monitor' },
   ],
-  rls: [{ tableName: 'public.tenants', enabled: true, forced: true }],
+  rls: expectedShadowRlsTableNames.map((tableName) => ({
+    tableName,
+    enabled: true,
+    forced: true,
+  })),
 };
 
 test('Shadow DBのowner・ACL・RLSの許可集合を受理する', () => {
@@ -208,7 +128,13 @@ for (const [label, change, message] of [
   ],
   [
     'RLS disabled',
-    { rls: [{ tableName: 'public.tenants', enabled: false, forced: true }] },
+    {
+      rls: cleanDatabase.rls.map((table) =>
+        table.tableName === 'public.tenants'
+          ? { ...table, enabled: false }
+          : table,
+      ),
+    },
     /RLS無効化/,
   ],
 ] as const) {

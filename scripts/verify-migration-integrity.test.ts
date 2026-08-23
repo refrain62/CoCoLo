@@ -53,7 +53,7 @@ test('既存migrationの変更・削除・改名をbaselineで拒否する', () 
 
 test('CIのBASE_SHA欠落をfail-closedにする', () => {
   assert.throws(
-    () => verifyMigrationBaseline(undefined, 'C:\\repo', true),
+    () => verifyMigrationBaseline('', 'C:\\repo', true),
     /40桁のBASE_SHA/,
   );
   assert.doesNotThrow(() =>
@@ -63,7 +63,7 @@ test('CIのBASE_SHA欠落をfail-closedにする', () => {
 
 test('schema drift検査がCIへ接続されていないfixtureを拒否する', () => {
   const disconnected =
-    'on:\n  pull_request:\njobs:\n  check:\n    steps:\n      - run: pnpm test:schema-drift\n';
+    'on:\n  pull_request:\n  push:\n    branches: [main]\njobs:\n  check:\n    steps:\n      - run: pnpm test:schema-drift\n';
   assert.throws(
     () => assertSchemaDriftWorkflowConnected(disconnected),
     /verify:schema-drift/,
@@ -71,6 +71,8 @@ test('schema drift検査がCIへ接続されていないfixtureを拒否する',
   const disabled = `
 on:
   pull_request:
+  push:
+    branches: [main]
 jobs:
   check:
     steps:
@@ -78,7 +80,7 @@ jobs:
         if: false
         run: pnpm verify:schema-drift
         env:
-          BASE_SHA: \${{ github.event.pull_request.base.sha }}
+          BASE_SHA: \${{ github.event.pull_request.base.sha || github.event.before }}
           CI: true
           APP_ENV: local
 `;
