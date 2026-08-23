@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type { MemberRole } from '@cocolo/contracts/member';
 import type { MemberRecord } from '../dist/app.js';
 import { createApp } from '../dist/app.js';
 import { createStructuredLogger } from '../dist/security/structured-logger.js';
@@ -8,7 +9,11 @@ const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const MEMBER_A = '00000000-0000-7000-8000-000000000002';
 const TOKEN = 'owner-a';
 
-function createMemberApp(member: MemberRecord, logs: string[] = []) {
+function createMemberApp(
+  member: MemberRecord,
+  logs: string[] = [],
+  role: MemberRole = 'owner',
+) {
   return createApp({
     verifyToken: async (token) => {
       if (token !== TOKEN) throw new Error('invalid token');
@@ -20,7 +25,7 @@ function createMemberApp(member: MemberRecord, logs: string[] = []) {
       };
     },
     membershipRepository: {
-      findActiveByUserId: async () => ({ tenantId: TENANT_A, role: 'owner' }),
+      findActiveByUserId: async () => ({ tenantId: TENANT_A, role }),
     },
     memberRepository: {
       list: async () => [member],
@@ -137,4 +142,55 @@ test('中央APIの未知routeは共通404契約とrequestIdを返す', async () 
       requestId: 'central-request-004',
     },
   });
+});
+
+test('中央APIの非JSON成功レスポンスは契約未登録として500に収束する', async () => {
+  const app = createMemberApp(validMember);
+  app.get('/api/v1/plain', (c) => c.text('secret-response'));
+
+  const response = await app.request('/api/v1/plain');
+
+  assert.equal(response.status, 500);
+  const body = await response.json();
+  assert.equal(body.error.code, 'INTERNAL_SERVER_ERROR');
+  assert.equal(JSON.stringify(body).includes('secret-response'), false);
+});
+
+test('CORSのAPI preflightに限って204を非JSON契約のallowlistへ通す', async () => {
+  const app = createMemberApp(validMember, [], 'owner');
+  app.options('/api/v1/plain', (c) => c.body(null, 204));
+
+  const response = await app.request('/api/v1/plain', { method: 'OPTIONS' });
+
+  assert.equal(response.status, 204);
+});
+
+test('requestIdを再生成せずレスポンスとログで同じ相関値を使う', async () => {
+  const logs: string[] = [];
+  const app = createMemberApp(validMember, logs);
+  const response = await app.request('/api/v1/unknown', {
+    headers: { 'x-request-id': 'x'.repeat(129) },
+  });
+
+  assert.equal(response.status, 404);
+  const body = await response.json();
+  const entry = JSON.parse(logs.at(-1) ?? '') as Record<string, unknown>;
+  assert.equal(response.headers.get('x-request-id'), body.error.requestId);
+  assert.equal(entry.requestId, body.error.requestId);
+});
+
+test('pathResolver未指定でもstructured loggerはqueryなしの実pathを記録する', async () => {
+  const logs: string[] = [];
+  const app = createApp({
+    observability: {
+      logger: createStructuredLogger((line) => logs.push(line)),
+    },
+  });
+
+  const response = await app.request('/health?secret=do-not-log');
+
+  assert.equal(response.status, 200);
+  const entry = JSON.parse(logs[0] ?? '') as Record<string, unknown>;
+  assert.equal(entry.path, '/health');
+  assert.equal(logs[0]?.includes('do-not-log'), false);
 });
