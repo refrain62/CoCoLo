@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   schema-drift:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
       postgres:
@@ -35,7 +35,7 @@ jobs:
         with:
           version: 10.26.0
       - name: Node.js環境を準備
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d682002e
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
           cache: pnpm
@@ -47,9 +47,11 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           CI: true
       - name: Shadow DB専用roleとDBを作成
+        env:
+          PGPASSWORD: postgres
         run: |
-          psql --no-psqlrc --dbname postgresql://postgres:postgres@localhost:5432/postgres --command "CREATE ROLE cocolo_shadow LOGIN PASSWORD 'cocolo_shadow'"
-          psql --no-psqlrc --dbname postgresql://postgres:postgres@localhost:5432/postgres --command "CREATE DATABASE cocolo_shadow OWNER cocolo_shadow"
+          psql --no-psqlrc --host localhost --port 5432 --username postgres --dbname cocolo_test --command "CREATE ROLE cocolo_shadow LOGIN PASSWORD 'cocolo_shadow' NOSUPERUSER NOBYPASSRLS"
+          psql --no-psqlrc --host localhost --port 5432 --username postgres --dbname cocolo_test --command "CREATE DATABASE cocolo_shadow OWNER cocolo_shadow"
       - name: テストDBのroleを準備してmigrationを適用
         run: pnpm db:prepare:test && pnpm --filter @cocolo/db exec prisma migrate deploy && pnpm --filter @cocolo/db exec prisma generate
         env:
