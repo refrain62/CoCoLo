@@ -431,6 +431,16 @@ export function assertSchemaDriftWorkflowConnected(content: string): void {
     /pnpm test:database-integrity/,
     'schema-drift Workflowから現行DB整合性テストを実行してください。',
   );
+  const staticCheckIndex = content.indexOf(
+    'run: pnpm verify:migration-checksum',
+  );
+  const installIndex = content.indexOf('run: pnpm install --frozen-lockfile');
+  assert.ok(
+    staticCheckIndex >= 0 &&
+      installIndex >= 0 &&
+      staticCheckIndex < installIndex,
+    'schema-drift Workflowは依存関係のinstall前に静的検査を実行してください。',
+  );
   assert.match(
     content,
     /CREATE ROLE cocolo_shadow LOGIN PASSWORD\s+:'shadow_password' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION/,

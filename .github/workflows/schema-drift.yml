@@ -52,13 +52,13 @@ jobs:
         with:
           node-version: 24.12.0
           cache: pnpm
-      - name: 依存関係を固定インストール
-        run: pnpm install --frozen-lockfile
       - name: 静的migration検査
         run: pnpm verify:migration-checksum && pnpm verify:migration-baseline && pnpm test:database-integrity && pnpm test:schema-drift
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           CI: true
+      - name: 依存関係を固定インストール
+        run: pnpm install --frozen-lockfile
       - name: DB接続credential fileを作成
         run: pnpm create:pgpass
         env:
