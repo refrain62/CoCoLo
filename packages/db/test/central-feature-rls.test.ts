@@ -154,7 +154,7 @@ async function seedFixture(client: PrismaClient) {
        VALUES ('00000000-0000-7000-8000-000000000411', $1::uuid, $2::uuid, 'guardian-a2', $3::uuid, 'attending')`,
       tenantA,
       eventA,
-      memberA,
+      memberA2,
     );
   });
   await withContext(client, tenantA, 'owner-a', 'owner', async (tx) => {
@@ -165,7 +165,7 @@ async function seedFixture(client: PrismaClient) {
        VALUES ('00000000-0000-7000-8000-000000000412', $1::uuid, $2::uuid, 'owner-a', $3::uuid, 'absent')`,
       tenantA,
       eventA,
-      memberA2,
+      memberA,
     );
   });
   await execute(
@@ -538,7 +538,7 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
              VALUES ('00000000-0000-7000-8000-000000000413', $1::uuid, $2::uuid, 'guardian-a2', $3::uuid, 'absent')`,
         tenantA,
         eventA,
-        memberA2,
+        memberA,
       ),
     );
   });
