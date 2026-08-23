@@ -136,6 +136,14 @@ const cleanDatabase: ShadowDatabaseInspection = {
         })),
       ) as ShadowAclEntry[],
     )
+    .concat([
+      {
+        objectType: 'function' as const,
+        objectName: 'public.app_guard_promotion_run_transition()',
+        grantee: 'cocolo_app',
+        privilege: 'EXECUTE',
+      },
+    ])
     .concat(
       [
         'role',
