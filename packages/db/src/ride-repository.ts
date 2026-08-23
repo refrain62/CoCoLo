@@ -385,13 +385,21 @@ export function createRideRepository(client: PrismaClient): RideRepository {
         throw new RideRepositoryForbiddenError();
       return runInRideTransaction(client, actor, async (tx) => {
         const rows = await tx.$queryRaw<PlanRow[]>`
-          INSERT INTO ride_plans (
-            tenant_id, title, departure_at, pickup_maps_url,
-            destination_maps_url, status
-          ) VALUES (
-            ${actor.tenantId}::uuid, ${title}, ${departureAt},
-            ${pickupMapsUrl}, ${destinationMapsUrl}, 'open'
+          WITH created AS (
+            INSERT INTO ride_plans (
+              tenant_id, title, departure_at, pickup_maps_url,
+              destination_maps_url, status
+            ) VALUES (
+              ${actor.tenantId}::uuid, ${title}, ${departureAt},
+              ${pickupMapsUrl}, ${destinationMapsUrl}, 'draft'
+            )
+            RETURNING id
           )
+          UPDATE ride_plans
+             SET status = 'open'
+            FROM created
+           WHERE ride_plans.tenant_id = ${actor.tenantId}::uuid
+             AND ride_plans.id = created.id
           RETURNING id, tenant_id, title, departure_at, pickup_maps_url,
                     destination_maps_url, status, created_at
         `;
