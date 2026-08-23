@@ -16,6 +16,7 @@ import {
 } from '@cocolo/contracts/member';
 import type { LineDeliveryProducer } from '@cocolo/db';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
+import { type CorsOptions, createCorsMiddleware } from './security/cors.js';
 import {
   createRateLimitMiddleware,
   type InMemoryRateLimitStore,
@@ -105,6 +106,7 @@ export type AppOptions = {
   memberRepository?: MemberRepository;
   promotionRepository?: PromotionRepository;
   lineDeliveryProducer?: LineDeliveryProducer;
+  cors?: CorsOptions;
   rateLimit?: {
     environment?: RateLimitEnvironment;
     mode?: RateLimitStoreMode;
@@ -190,6 +192,8 @@ export function createApp(options: AppOptions = {}) {
     localStore: rateLimitOptions.localStore,
     timeoutMs: rateLimitOptions.timeoutMs,
   });
+
+  if (options.cors) app.use('*', createCorsMiddleware(options.cors));
 
   app.use('*', async (c, next) => {
     const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
