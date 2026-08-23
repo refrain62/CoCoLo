@@ -55,7 +55,7 @@
     "scripts/run-periodic-e2e.ts": "43ca9cbae6026895063ede23ff15aad0679fec4bb28f686ddd03d960c9565540",
     "scripts/trust-root.ts": "7e7e79ba79a1d9d162c231b771f20162fe5890cb4f255fc71be2568b94e0c214",
     "scripts/verify-database-security.test.ts": "b534800bfa11d477843dcc4f826465b2c26d861923b3219752f06ebdcc34f735",
-    "scripts/verify-database-security.ts": "c8693c3bc967f827098f04b07d1a443d5bcf813ba7a8a19ff07434e4f9e538cb",
+    "scripts/verify-database-security.ts": "9110cbca74ff89fc5ad8db8ab1ebca2bc9c0a85991395234b68b30e206164d79",
     "scripts/verify-database-version.ts": "98ccc1f3512ae4c87a21752b5e4eefbcc30caf1c118eb6f4d72290d1703beb40",
     "scripts/verify-e2e-report.ts": "a32020d6dacdc13638221abc7f440cf7396ffdd4177a3b57c2ca871df90edfd2",
     "scripts/verify-environment.ts": "a641d129f3eb1debaec7d066be449c5eb195adf2d2ea6334e5a0da7d8151fc62",
