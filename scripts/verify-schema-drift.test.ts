@@ -211,18 +211,15 @@ test('Shadow DBの認証情報をargvへ渡さない', () => {
   assert.equal(redacted.argvUrl, shadowDatabaseArg);
   assert.equal(redacted.password, 'cocolo_shadow');
   assert.ok(
-    buildPrismaDiffArgs(
-      fixturePaths('C:\\schema-drift-fixture'),
+    buildPrismaDiffArgs(fixturePaths('C:\\schema-drift-fixture')).includes(
       shadowDatabaseArg,
-    ).includes(shadowDatabaseArg),
+    ) === false,
   );
-  assert.throws(
-    () =>
-      buildPrismaDiffArgs(
-        fixturePaths('C:\\schema-drift-fixture'),
-        shadowDatabaseUrlWithPassword,
-      ),
-    /パスワードをPrisma CLIのargvへ渡してはいけません/,
+  assert.equal(
+    buildPrismaDiffArgs(fixturePaths('C:\\schema-drift-fixture')).includes(
+      shadowDatabaseUrlWithPassword,
+    ),
+    false,
   );
 });
 
@@ -362,7 +359,7 @@ test('差分なしではPrisma CLIをexit-code付きで実行して成功する'
           'build',
           'index.js',
         ),
-        ...buildPrismaDiffArgs(fixture.paths, shadowDatabaseArg),
+        ...buildPrismaDiffArgs(fixture.paths),
       ],
       received[0]?.args,
     );

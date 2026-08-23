@@ -16,7 +16,7 @@
 5. `SHADOW_DATABASE_URL` が `DATABASE_URL` / `DIRECT_URL` と同じ host・port・database を指さず、専用role・host・database・host/port/databaseペアの許可リストに一致する。`staging` / `production` ではアプリDB・migration DBと別host、TLSを必須とする。
 6. Shadow roleのSCRAM password、DB/object owner、ACL、default privileges、`pg_auth_members`、RLSを実DBから許可集合と両方向で照合する。PUBLIC grant、RLS無効化、危険DDLは失敗する。
 
-Prisma 6.10のRust engineは`PGPASSFILE`を認証情報として解決しないため、Prisma CLIのSCRAM URLはpasswordを含めた環境変数として注入し、argvには渡さない。`psql`と接続ライブラリは共通の0600 pgpassを使う。Shadow DBはPrisma `migrate deploy`で空DBへ再構築してから、`--from-schema-datasource`でmigration後の実体とschemaを比較する。`DIRECT_URL`もargvへ渡さず、schema datasourceの環境変数で比較する。staging / productionはTLSを有効にした外部認証方式を別途構成する。
+Prisma 6.10のRust engineは`PGPASSFILE`を認証情報として解決しないため、Prisma CLIのSCRAM URLはpasswordを含めた環境変数として注入し、argvには渡さない。`psql`と接続ライブラリは共通の0600 pgpassを使う。Shadow DBはPrisma `migrate deploy`で空DBへ再構築し、schema datasourceの`SHADOW_DATABASE_URL`を使った`--from-migrations`でmigrationとschemaを比較する。`DIRECT_URL`もargvへ渡さず、schema datasourceの環境変数で実DBとschemaを比較する。staging / productionはTLSを有効にした外部認証方式を別途構成する。
 ログに接続URLや認証情報を出力してはいけない。
 
 ## CI接続

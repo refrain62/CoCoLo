@@ -83,18 +83,7 @@ export function resolveSchemaDriftPaths(
 
 export function buildPrismaDiffArgs(
   paths: SchemaDriftPaths,
-  shadowDatabaseUrlForArgv: string,
 ): readonly string[] {
-  assert.ok(
-    shadowDatabaseUrlForArgv,
-    'Prisma CLIへ渡すShadow DB URLが必要です。',
-  );
-  const parsed = new URL(shadowDatabaseUrlForArgv);
-  assert.equal(
-    parsed.password,
-    '',
-    'Shadow DBのパスワードをPrisma CLIのargvへ渡してはいけません。',
-  );
   return [
     'migrate',
     'diff',
@@ -102,8 +91,6 @@ export function buildPrismaDiffArgs(
     paths.migrationsDirectory,
     '--to-schema-datamodel',
     paths.schemaFile,
-    '--shadow-database-url',
-    shadowDatabaseUrlForArgv,
     '--script',
     '--exit-code',
   ];
@@ -677,27 +664,21 @@ export async function verifySchemaDrift(
   }
   await integrityVerifier(paths);
   const directUrl = config.directUrl ?? process.env.DIRECT_URL;
-  const shadowDatabaseArg = redactDatabaseUrl(shadowDatabaseUrl).argvUrl;
   const directEnv = {
     ...process.env,
     DATABASE_URL: directUrl,
     DIRECT_URL: directUrl,
     SHADOW_DATABASE_URL: shadowDatabaseUrl,
   };
-  const shadowDiffEnv: NodeJS.ProcessEnv = {
-    ...directEnv,
-    PGPASSWORD: process.env.SHADOW_DATABASE_PASSWORD,
-    PRISMA_HIDE_UPDATE_MESSAGE: '1',
-  };
   const result = runner(
     process.execPath,
-    [prismaEntryPoint(paths), ...buildPrismaDiffArgs(paths, shadowDatabaseArg)],
+    [prismaEntryPoint(paths), ...buildPrismaDiffArgs(paths)],
     {
       cwd: paths.dbDirectory,
       encoding: 'utf8',
       shell: false,
       windowsHide: true,
-      env: shadowDiffEnv,
+      env: { ...directEnv, PRISMA_HIDE_UPDATE_MESSAGE: '1' },
     },
   );
   assertPrismaDiffClean(result);
