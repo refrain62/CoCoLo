@@ -76,7 +76,7 @@ BEGIN
   FROM public.tenant_memberships
   WHERE tenant_id = p_tenant_id
     AND user_id = p_user_id
-    AND role::text = p_role
+    AND (p_role IS NULL OR role::text = p_role)
     AND status = 'active'::public.membership_status
   LIMIT 1
   FOR SHARE;
@@ -96,7 +96,7 @@ GRANT EXECUTE ON FUNCTION app_lock_active_membership(uuid, varchar(128), varchar
 COMMENT ON FUNCTION app_is_active_member(uuid, varchar(128)) IS 'RLSからactive membershipの存在だけを判定するsecurity definer関数';
 COMMENT ON FUNCTION app_is_active_member_with_role(uuid, varchar(128), varchar(32)) IS 'RLSからactive membershipとDB上のrole一致を判定するsecurity definer関数';
 COMMENT ON FUNCTION app_is_live_member(uuid, uuid) IS 'RLSから退部済みでない部員の存在だけを判定するsecurity definer関数';
-COMMENT ON FUNCTION app_lock_active_membership(uuid, varchar(128), varchar(32)) IS 'active membershipを検証し、状態変更と業務処理を同一transaction内で直列化するsecurity definer関数';
+COMMENT ON FUNCTION app_lock_active_membership(uuid, varchar(128), varchar(32)) IS 'active membershipを検証し、状態変更と業務処理を同一transaction内で直列化するsecurity definer関数。p_roleがNULLならroleを問わず確認する';
 
 DO $$
 DECLARE
@@ -246,7 +246,7 @@ CREATE POLICY events_select ON events
     AND app_lock_active_membership(
       tenant_id,
       current_setting('app.user_id', true),
-      current_setting('app.role', true)
+      NULL::varchar
     )
   );
 
