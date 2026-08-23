@@ -144,3 +144,31 @@ resume-task-list、resume-task-history、verification-runbookの更新は実装P
 `gh pr merge --squash --delete-branch`はリモートのスカッシュマージ後にローカル`develop`をcheckoutして後処理するため、別worktreeが`develop`を使用中だとローカル側だけが失敗します。
 
 このエラーを見たときは再度マージせず、最初に`gh pr view <番号> --json state,mergedAt,mergeCommit`でリモート状態を確認します。`state=MERGED`なら、`git fetch origin develop --prune`で実際のスカッシュSHAを同期し、ローカルworktreeの削除やbranch cleanupだけを必要に応じて別途行います。
+
+### 追加記録：レート制限経路実装時の検証漏れ（2026-08-23）
+
+ブランチ切替後に依存リンクを再構成する前の`pnpm test`で、`@prisma/engines`が見つからず失敗しました。
+
+pnpmのworkspace状態が変わった検証では、次のコマンドを最初に単独実行し、終了コード0を確認してから対象テストを開始します。
+
+```powershell
+pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+```
+
+通常実行のpnpmがpackage.jsonの`packageManager`と異なる場合、依存再構成後の`.modules.yaml`を別バージョンが再利用して再インストールを要求することがあります。
+
+`pnpm --version`、`node --version`、`package.json`の`packageManager`、`.modules.yaml`の`packageManager`を同じ検証記録へ残し、CIのpnpm 10.26.0を正本として扱います。
+
+通常およびofflineの依存再構成がregistryのEACCESや無出力の長時間実行になった場合、同じコマンドを重ねて実行せず、プロセスを安全に中断してから、権限が承認された環境でlockfile固定のinstallを一度だけ実行します。
+
+Node.js 24の`node --test`はstrip-only実行のため、`.test.ts`でTypeScriptのparameter propertyを使うと`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`になります。
+
+テストfixtureのclassは、parameter propertyではなく明示的なフィールド宣言とconstructor代入を使います。
+
+認証済みmembers routeへrate limitを追加するとき、既存の`/api/v1/members/*`はexactの`/api/v1/members`にも適用されるため、exact middlewareを重ねて登録してはいけません。
+
+同じ理由で、`authenticate`のexact登録とwildcard登録も二重実行になり得るため、routeごとのmiddleware呼び出し回数をテストし、重複する登録を削除します。
+
+経路追加のテストでは、認証済みの許可、429応答契約、ハッシュ済みtenant/userキー、生の個人情報を含まないこと、429時の全業務handlerと外部producerの未実行を同時に確認します。
+
+検証失敗を修正した後は、失敗したコマンドだけで終わらせず、`pnpm test`、`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm lint:workflows`を同じHEADで再実行し、CI成功と照合します。
