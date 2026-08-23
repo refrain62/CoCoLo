@@ -102,10 +102,13 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - 対象：PR #48
   - ブランチ：`feature/t014-security-scanners`
   - 最新commit：`00e24ff`
+  - 現行developからの再構成コミット：`codex/t014-scanner-protected-paths@7601d08`（ローカル保存済み、未push）
   - base：`feature/t014-trust-root-bootstrap`
   - 最新成功CI：品質ゲート run `32596118308`
   - 未コミット差分：`.github/security/fixtures/malicious-scanner-pr.json`、`.github/workflows/security-scanners.yml`、`scripts/security-scanner.test.ts`、`scripts/verify-security-trust.ts`、`scripts/verify-workflows.test.ts`、`scripts/verify-workflows.ts`
   - 直前レビューのHigh：`.gitleaks.toml`、`.semgrep/ci.yml`、`.trivy-secret.yaml`がprotected pathsに列挙されていても、`isProtectedPath`と差分hash検査の対象から漏れることです。
+  - 再構成では3ファイルのprotected判定と`previous_filename`を実装し、renameをfail-closedにしました。Critical/Highのコード指摘は解消済みです。
+  - 停止条件：`scripts/verify-trusted-pr.ts`、manifest、quality workflow、package scriptがprotected対象のため、現行baseのowner-only extensionを更新する所有者操作が完了するまでpush、CI、マージを行いません。
   - 完了条件：3ファイルを変更する悪性fixtureが検査で拒否され、manifest、CODEOWNERS、trust root、scanner workflowの許可対象が一致することです。
 
 - `[~]` **T014-SCAN-002：scanner初回導入時のpush境界を成立させる。**
