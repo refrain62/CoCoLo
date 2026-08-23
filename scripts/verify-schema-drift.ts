@@ -137,6 +137,7 @@ function parseDatabaseTarget(
   const database = decodeURIComponent(url.pathname.slice(1));
   assert.ok(database, `${label}にデータベース名がありません。`);
   assert.ok(url.hostname, `${label}にhostがありません。`);
+  assert.ok(url.username, `${label}にroleがありません。`);
   return {
     host: url.hostname.toLowerCase(),
     port: Number(url.port || 5432),
