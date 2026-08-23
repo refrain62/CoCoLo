@@ -15,7 +15,7 @@
     ".github/workflows/pr-trust-gate.yml": "2ceac57c4586f633f02cc1363821b1218c2b94e9b15775422807907839870e3c",
     ".github/workflows/production-promote.yml": "138717fece6db45a4b05f045143cc7907add70e3c73c64655f616a124f1b4c44",
     ".github/workflows/quality.yml": "126a481cb816d78783f1ce00ad24f13c53f8c77a62cd50f88ef710b3dbb2838f",
-    ".github/workflows/schema-drift.yml": "99b1f1e0ca87485e732b40a7b4ee957618535b54d2e70f3b3b9eee1339d664e9",
+    ".github/workflows/schema-drift.yml": "1c3983a592c150d10ea2fce80913b95bc4d5eb85122d4bf5ce8c0135e1015536",
     ".github/workflows/staging-deploy.yml": "eee12adb0715dd343d6d1b35e19ec412941c6d08bfd8d101f1e4e2239c877e30",
     "biome.json": "74437b5c2be07576e44847a3e94549625d5ce290698c56a3754b1759352a7124",
     "package.json": "bf9e5aa260510adf52f7a9b4a7142618cf8c8e433298b84eb8248e9356ea4f05",

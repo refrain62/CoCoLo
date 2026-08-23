@@ -109,6 +109,10 @@ jobs:
           DATABASE_URL: postgresql://cocolo_shadow:cocolo_shadow@localhost:5433/cocolo_shadow?sslmode=disable
           DIRECT_URL: postgresql://cocolo_shadow:cocolo_shadow@localhost:5433/cocolo_shadow?sslmode=disable
           SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+      - name: Shadow DBのenum PUBLIC権限を除去
+        run: psql --no-psqlrc --set=ON_ERROR_STOP=1 --host localhost --port 5433 --username postgres --dbname cocolo_shadow --command "REVOKE USAGE ON ALL TYPES IN SCHEMA public FROM PUBLIC;"
+        env:
+          PGPASSFILE: ${{ runner.temp }}/cocolo.pgpass
       - name: Shadow DB role属性を検査
         run: pnpm verify:shadow-role
         env:
