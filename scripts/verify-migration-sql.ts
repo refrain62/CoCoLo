@@ -186,7 +186,7 @@ function assertPolicyTenantBoundaries(file: MigrationSqlFile) {
     );
     assert.match(
       statement,
-      /(?:\b(?:tenant_id|id)\s*=\s*(?:nullif\s*\(\s*)?current_setting\s*\(\s*'app\.tenant_id'|current_setting\s*\(\s*'app\.tenant_id'[^)]*\)\s*\)?\s*::?\w*\s*=\s*(?:tenant_id|id)|app_has_active_membership\s*\(\s*tenant_id\s*\))/i,
+      /(?:\b(?:tenant_id|id)\s*=\s*(?:nullif\s*\(\s*)?current_setting\s*\(\s*'app\.tenant_id'(?:\s*::\w+)?|current_setting\s*\(\s*'app\.tenant_id'(?:\s*::\w+)?[^)]*\)\s*\)?\s*::?\w*\s*=\s*(?:tenant_id|id)|app_has_active_membership\s*\(\s*tenant_id\s*\))/i,
       `${file.path}: ${table} policyにtenant contextとの実際の一致またはmembership検証が必要です。`,
     );
     assert.doesNotMatch(
