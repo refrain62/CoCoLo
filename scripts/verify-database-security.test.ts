@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   assertDatabaseSecurity,
   type DatabaseSecurityInspection,
+  REQUIRED_POLICIES,
   REQUIRED_TABLE_PRIVILEGES,
   verifyDatabaseSecurity,
 } from './verify-database-security.ts';
@@ -18,9 +19,18 @@ const tablePrivilegeNames = [
 ] as const;
 
 function policyExpression(tokens: readonly string[]) {
-  return tokens
-    .map((token) => `current_setting('${token}', true)`)
-    .join(' AND ');
+  const tenantColumn = tokens.includes('id') ? 'id' : 'tenant_id';
+  const tenantBoundary = `${tenantColumn} = NULLIF(current_setting('app.tenant_id', true), '')::uuid`;
+  return [
+    tenantBoundary,
+    ...tokens
+      .filter((token) => token !== 'id' && token !== 'tenant_id')
+      .map((token) =>
+        token === 'app_has_active_membership'
+          ? 'app_has_active_membership(tenant_id)'
+          : `current_setting('${token}', true)`,
+      ),
+  ].join(' AND ');
 }
 
 function requireAppRole(inspection: DatabaseSecurityInspection) {
@@ -53,13 +63,14 @@ function createValidInspection(): DatabaseSecurityInspection {
     enabled: true,
     forced: true,
   }));
-  const policies = [
+  const basePolicies = [
     {
       schema: 'public',
       table: 'tenants',
       name: 'tenants_select',
       command: 'SELECT',
-      usingExpression: policyExpression(['id', 'app.tenant_id']),
+      usingExpression:
+        "(id = (nullif(current_setting('app.tenant_id'::text, true), ''::text))::uuid)",
       withCheckExpression: null,
     },
     {
@@ -140,7 +151,7 @@ function createValidInspection(): DatabaseSecurityInspection {
       command: 'INSERT',
       usingExpression: null,
       withCheckExpression: policyExpression([
-        'app.tenant_id',
+        'app_has_active_membership',
         'app.user_id',
         'tenant_id',
         'actor_user_id',
@@ -171,6 +182,34 @@ function createValidInspection(): DatabaseSecurityInspection {
     permissive: 'PERMISSIVE',
     roles: ['public'],
   }));
+  const basePolicyKeys = new Set(
+    basePolicies.map((policy) => `${policy.table}.${policy.name}`),
+  );
+  const policies = [
+    ...basePolicies,
+    ...REQUIRED_POLICIES.filter(
+      (required) => !basePolicyKeys.has(`${required.table}.${required.name}`),
+    ).map((required) => {
+      const tokens = required.usingTokens ??
+        required.withCheckTokens ?? ['tenant_id'];
+      const expression = policyExpression(tokens);
+      return {
+        schema: 'public',
+        table: required.table,
+        name: required.name,
+        command: required.command,
+        usingExpression: required.command === 'INSERT' ? null : expression,
+        withCheckExpression:
+          required.command === 'INSERT' ||
+          required.command === 'UPDATE' ||
+          required.command === 'ALL'
+            ? expression
+            : null,
+        permissive: 'PERMISSIVE',
+        roles: ['public'],
+      };
+    }),
+  ];
 
   return {
     connection: {
@@ -197,11 +236,38 @@ function createValidInspection(): DatabaseSecurityInspection {
     tablePrivileges,
     rlsTables,
     policies,
+    securityFunctions: [
+      {
+        name: 'app_has_active_membership',
+        owner: 'postgres',
+        language: 'sql',
+        securityDefiner: false,
+        source: [
+          "SELECT target_tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid",
+          'AND EXISTS (SELECT 1 FROM tenant_memberships',
+          "WHERE tenant_id = target_tenant_id AND user_id = current_setting('app.user_id', true)",
+          "AND status = 'active'::membership_status AND role::text = current_setting('app.role', true))",
+        ].join(' '),
+      },
+    ],
   };
 }
 
 test('有効なPostgreSQL security boundaryを受け入れる', () => {
   assert.doesNotThrow(() => assertDatabaseSecurity(createValidInspection()));
+});
+
+test('membership関数の再定義とSECURITY DEFINERを拒否する', () => {
+  const valid = createValidInspection();
+  const spoofed = {
+    ...valid,
+    securityFunctions: valid.securityFunctions.map((fn) => ({
+      ...fn,
+      securityDefiner: true,
+      source: 'SELECT true',
+    })),
+  };
+  assert.throws(() => assertDatabaseSecurity(spoofed), /SECURITY DEFINER/);
 });
 
 test('DATABASE_URL未設定と非PostgreSQL URLを成功扱いにしない', () => {
@@ -387,4 +453,32 @@ test('RLS ENABLE/FORCEと必須policyの弱体化を拒否する', () => {
     ),
   };
   assert.throws(() => assertDatabaseSecurity(permissivePolicy), /常にtrue/);
+
+  const bypassPolicy = {
+    ...validWithPermissivePolicy,
+    policies: validWithPermissivePolicy.policies.map((policy) =>
+      policy.name === 'tenants_select'
+        ? {
+            ...policy,
+            usingExpression:
+              "id = NULLIF(current_setting('app.tenant_id', true), '')::uuid OR true",
+          }
+        : policy,
+    ),
+  };
+  assert.throws(() => assertDatabaseSecurity(bypassPolicy), /trueとのOR/);
+
+  const nullBypassPolicy = {
+    ...validWithPermissivePolicy,
+    policies: validWithPermissivePolicy.policies.map((policy) =>
+      policy.name === 'tenants_select'
+        ? {
+            ...policy,
+            usingExpression:
+              "id IS NOT NULL OR id = NULLIF(current_setting('app.tenant_id', true), '')::uuid",
+          }
+        : policy,
+    ),
+  };
+  assert.throws(() => assertDatabaseSecurity(nullBypassPolicy), /trueとのOR/);
 });

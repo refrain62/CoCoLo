@@ -3,12 +3,32 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 export const REQUIRED_TABLE_PRIVILEGES = {
-  tenants: ['SELECT'],
-  tenant_memberships: ['SELECT'],
+  tenants: ['SELECT', 'INSERT', 'UPDATE'],
+  tenant_memberships: ['SELECT', 'INSERT', 'UPDATE'],
   members: ['SELECT', 'INSERT', 'UPDATE'],
-  guardian_members: ['SELECT'],
+  guardian_members: ['SELECT', 'INSERT', 'UPDATE'],
   audit_logs: ['SELECT', 'INSERT'],
   promotion_runs: ['SELECT', 'INSERT', 'UPDATE'],
+  attachments: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
+  events: ['SELECT', 'INSERT', 'UPDATE'],
+  attendance_responses: ['SELECT', 'INSERT', 'UPDATE'],
+  board_contacts: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
+  purchase_orders: ['SELECT', 'INSERT', 'UPDATE'],
+  order_products: ['SELECT', 'INSERT', 'UPDATE'],
+  order_entries: ['SELECT', 'INSERT', 'UPDATE'],
+  order_lines: ['SELECT', 'INSERT', 'UPDATE'],
+  order_idempotency_keys: ['SELECT', 'INSERT', 'UPDATE'],
+  announcements: ['SELECT', 'INSERT', 'UPDATE'],
+  announcement_attachments: ['SELECT', 'INSERT', 'UPDATE'],
+  announcement_reads: ['SELECT', 'INSERT', 'UPDATE'],
+  line_connections: ['SELECT', 'INSERT', 'UPDATE'],
+  line_notification_queue: ['SELECT', 'INSERT', 'UPDATE'],
+  line_webhook_receipts: ['SELECT', 'INSERT', 'UPDATE'],
+  ride_plans: ['SELECT', 'INSERT', 'UPDATE'],
+  ride_offers: ['SELECT', 'INSERT', 'UPDATE'],
+  ride_requests: ['SELECT', 'INSERT', 'UPDATE'],
+  ride_assignments: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
+  line_delivery_outbox: [],
 } as const;
 
 const TABLE_PRIVILEGE_NAMES = [
@@ -24,14 +44,14 @@ const TABLE_PRIVILEGE_NAMES = [
 type TablePrivilegeName = (typeof TABLE_PRIVILEGE_NAMES)[number];
 
 type RequiredPolicy = Readonly<{
-  table: keyof typeof REQUIRED_TABLE_PRIVILEGES;
+  table: string;
   name: string;
-  command: 'SELECT' | 'INSERT' | 'ALL';
+  command: 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ALL';
   usingTokens?: readonly string[];
   withCheckTokens?: readonly string[];
 }>;
 
-const REQUIRED_POLICIES: readonly RequiredPolicy[] = [
+export const REQUIRED_POLICIES: readonly RequiredPolicy[] = [
   {
     table: 'tenants',
     name: 'tenants_select',
@@ -106,8 +126,8 @@ const REQUIRED_POLICIES: readonly RequiredPolicy[] = [
     name: 'audit_logs_insert',
     command: 'INSERT',
     withCheckTokens: [
+      'app_has_active_membership',
       'current_setting',
-      'app.tenant_id',
       'app.user_id',
       'tenant_id',
       'actor_user_id',
@@ -133,6 +153,93 @@ const REQUIRED_POLICIES: readonly RequiredPolicy[] = [
       'owner',
       'admin',
     ],
+  },
+  {
+    table: 'tenant_memberships',
+    name: 'tenant_memberships_announcement_author_select',
+    command: 'SELECT',
+    usingTokens: ['tenant_id', 'current_setting', 'app.announcement_id'],
+  },
+  ...(
+    [
+      ['attachments', 'attachments_select', 'SELECT'],
+      ['attachments', 'attachments_insert', 'INSERT'],
+      ['attachments', 'attachments_update', 'UPDATE'],
+      ['attachments', 'attachments_delete', 'DELETE'],
+      ['events', 'events_select', 'SELECT'],
+      ['events', 'events_insert', 'INSERT'],
+      ['events', 'events_update', 'UPDATE'],
+      ['attendance_responses', 'attendance_select', 'SELECT'],
+      ['attendance_responses', 'attendance_insert', 'INSERT'],
+      ['attendance_responses', 'attendance_update', 'UPDATE'],
+      ['board_contacts', 'board_contacts_read', 'SELECT'],
+      ['board_contacts', 'board_contacts_write', 'INSERT'],
+      ['board_contacts', 'board_contacts_update', 'UPDATE'],
+      ['board_contacts', 'board_contacts_delete', 'DELETE'],
+      ['purchase_orders', 'purchase_orders_read', 'SELECT'],
+      ['purchase_orders', 'purchase_orders_write', 'INSERT'],
+      ['purchase_orders', 'purchase_orders_update', 'UPDATE'],
+      ['order_products', 'order_products_read', 'SELECT'],
+      ['order_products', 'order_products_write', 'INSERT'],
+      ['order_products', 'order_products_update', 'UPDATE'],
+      ['order_entries', 'order_entries_read', 'SELECT'],
+      ['order_entries', 'order_entries_insert', 'INSERT'],
+      ['order_entries', 'order_entries_update', 'UPDATE'],
+      ['order_lines', 'order_lines_read', 'SELECT'],
+      ['order_lines', 'order_lines_insert', 'INSERT'],
+      ['order_lines', 'order_lines_update', 'UPDATE'],
+      ['order_idempotency_keys', 'order_idempotency_read', 'SELECT'],
+      ['order_idempotency_keys', 'order_idempotency_insert', 'INSERT'],
+      ['announcements', 'announcements_select', 'SELECT'],
+      ['announcements', 'announcements_insert', 'INSERT'],
+      ['announcement_attachments', 'announcement_attachments_select', 'SELECT'],
+      ['announcement_attachments', 'announcement_attachments_insert', 'INSERT'],
+      ['announcement_reads', 'announcement_reads_select', 'SELECT'],
+      ['announcement_reads', 'announcement_reads_insert', 'INSERT'],
+      ['line_connections', 'line_connections_read', 'SELECT'],
+      ['line_connections', 'line_connections_write', 'INSERT'],
+      ['line_connections', 'line_connections_update', 'UPDATE'],
+      ['line_notification_queue', 'line_queue_read', 'SELECT'],
+      ['line_notification_queue', 'line_queue_insert', 'INSERT'],
+      ['line_notification_queue', 'line_queue_update', 'UPDATE'],
+      ['line_webhook_receipts', 'line_receipts_read', 'SELECT'],
+      ['line_webhook_receipts', 'line_receipts_insert', 'INSERT'],
+      ['ride_plans', 'ride_plans_read', 'SELECT'],
+      ['ride_plans', 'ride_plans_insert', 'INSERT'],
+      ['ride_plans', 'ride_plans_update', 'UPDATE'],
+      ['ride_offers', 'ride_offers_read', 'SELECT'],
+      ['ride_offers', 'ride_offers_insert', 'INSERT'],
+      ['ride_offers', 'ride_offers_update', 'UPDATE'],
+      ['ride_requests', 'ride_requests_read', 'SELECT'],
+      ['ride_requests', 'ride_requests_insert', 'INSERT'],
+      ['ride_requests', 'ride_requests_update', 'UPDATE'],
+      ['ride_assignments', 'ride_assignments_read', 'SELECT'],
+      ['ride_assignments', 'ride_assignments_write', 'INSERT'],
+      ['ride_assignments', 'ride_assignments_update', 'UPDATE'],
+      ['ride_assignments', 'ride_assignments_delete', 'DELETE'],
+    ] as const
+  ).map(([table, name, command]) => ({
+    table,
+    name,
+    command,
+    ...(command === 'SELECT' || command === 'UPDATE'
+      ? { usingTokens: ['tenant_id'] as const }
+      : {}),
+    ...(command === 'INSERT' || command === 'UPDATE'
+      ? { withCheckTokens: ['tenant_id'] as const }
+      : {}),
+  })),
+  {
+    table: 'line_delivery_outbox',
+    name: 'line_delivery_outbox_select',
+    command: 'SELECT',
+    usingTokens: ['tenant_id', 'current_setting', 'app.tenant_id'],
+  },
+  {
+    table: 'line_delivery_outbox',
+    name: 'line_delivery_outbox_insert',
+    command: 'INSERT',
+    withCheckTokens: ['tenant_id', 'current_setting', 'app.tenant_id'],
   },
 ];
 
@@ -190,6 +297,13 @@ export type DatabaseSecurityInspection = Readonly<{
     command: string;
     usingExpression: string | null;
     withCheckExpression: string | null;
+  }>[];
+  securityFunctions: readonly Readonly<{
+    name: string;
+    owner: string;
+    language: string;
+    securityDefiner: boolean;
+    source: string;
   }>[];
 }>;
 
@@ -372,6 +486,24 @@ SELECT json_build_object(
     )
     FROM pg_policies policies
     WHERE policies.schemaname = 'public'
+  ), '[]'::json),
+  'securityFunctions', COALESCE((
+    SELECT json_agg(
+      json_build_object(
+        'name', p.proname,
+        'owner', owner.rolname,
+        'language', language.lanname,
+        'securityDefiner', p.prosecdef,
+        'source', p.prosrc
+      )
+      ORDER BY p.proname, pg_get_function_identity_arguments(p.oid)
+    )
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    JOIN pg_roles owner ON owner.oid = p.proowner
+    JOIN pg_language language ON language.oid = p.prolang
+    WHERE n.nspname = 'public'
+      AND p.proname = 'app_has_active_membership'
   ), '[]'::json)
 )::text;
 `;
@@ -731,11 +863,21 @@ function assertExpression(
     'true',
     `${message}: 常にtrueのpolicyは許可しません。`,
   );
+  assert.doesNotMatch(
+    normalized,
+    /\b(?:or|and)\s+true\b|\btrue\s+(?:or|and)\b|\b(?:tenant_id|id)\s+is\s+(?:not\s+)?null\b/i,
+    `${message}: trueとのOR/ANDで境界を無効化するpolicyは許可しません。`,
+  );
   for (const token of tokens)
     assert.ok(
       normalized.includes(token.toLowerCase()),
       `${message}: ${token}の境界条件がありません。`,
     );
+  assert.match(
+    normalized,
+    /(?:\b(?:tenant_id|id)\s*=\s*(?:\(*\s*)?(?:nullif\s*\(\s*)?current_setting\s*\(\s*'app\.tenant_id'(?:\s*::\w+)?|current_setting\s*\(\s*'app\.tenant_id'(?:\s*::\w+)?[^)]*\)\s*\)?\s*::?\w*\s*=\s*(?:tenant_id|id)|app_has_active_membership\s*\(\s*tenant_id\s*\))/i,
+    `${message}: tenant contextとの実際の一致またはmembership検証がありません。`,
+  );
 }
 
 function assertPolicies(inspection: DatabaseSecurityInspection) {
@@ -744,7 +886,6 @@ function assertPolicies(inspection: DatabaseSecurityInspection) {
   const requiredKeys = new Set(
     REQUIRED_POLICIES.map((policy) => `public.${policy.table}.${policy.name}`),
   );
-  const requiredTableNames = new Set(Object.keys(REQUIRED_TABLE_PRIVILEGES));
   for (const policy of inspection.policies) {
     const record = assertRecord(policy, 'policyの行が不正です。');
     assertString(record.schema, 'policy schema名がありません。');
@@ -765,11 +906,7 @@ function assertPolicies(inspection: DatabaseSecurityInspection) {
     const key = `${record.schema}.${record.table}.${record.name}`;
     assert.ok(!seen.has(key), `${key}: policyが重複しています。`);
     seen.add(key);
-    if (
-      record.schema === 'public' &&
-      requiredTableNames.has(record.table) &&
-      !requiredKeys.has(key)
-    )
+    if (record.schema === 'public' && !requiredKeys.has(key))
       assert.fail(`${key}: allowlist外のpolicyを許可してはいけません。`);
     if (record.schema === 'public' && requiredKeys.has(key)) {
       assert.ok(
@@ -819,6 +956,62 @@ function assertPolicies(inspection: DatabaseSecurityInspection) {
   }
 }
 
+function assertSecurityFunctions(inspection: DatabaseSecurityInspection) {
+  assert.ok(
+    Array.isArray(inspection.securityFunctions),
+    'security function検査結果が不正です。',
+  );
+  const functions = inspection.securityFunctions.filter(
+    (candidate) => candidate.name === 'app_has_active_membership',
+  );
+  assert.equal(
+    functions.length,
+    1,
+    'app_has_active_membershipは検査可能な1定義だけが必要です。',
+  );
+  const membershipFunction = functions[0];
+  assertString(
+    membershipFunction.owner,
+    'membership function ownerがありません。',
+  );
+  assert.notEqual(
+    membershipFunction.owner,
+    'cocolo_app',
+    'membership functionをapp roleが所有してはいけません。',
+  );
+  assertString(
+    membershipFunction.language,
+    'membership function languageがありません。',
+  );
+  assert.equal(membershipFunction.language, 'sql');
+  assertBoolean(
+    membershipFunction.securityDefiner,
+    'membership functionのSECURITY DEFINER情報が不正です。',
+  );
+  assert.equal(
+    membershipFunction.securityDefiner,
+    false,
+    'membership functionはSECURITY DEFINERにしてはいけません。',
+  );
+  assertString(
+    membershipFunction.source,
+    'membership function本体がありません。',
+  );
+  const source = membershipFunction.source.toLowerCase();
+  for (const token of [
+    'target_tenant_id',
+    "current_setting('app.tenant_id'",
+    'from tenant_memberships',
+    "current_setting('app.user_id'",
+    "status = 'active'",
+    "current_setting('app.role'",
+  ])
+    assert.ok(
+      source.includes(token),
+      `membership functionに${token}の検証がありません。`,
+    );
+}
+
 // 実接続の観測結果をallowlistと照合し、欠落・過剰権限・RLS弱体化を成功扱いにしない。
 export function assertDatabaseSecurity(inspection: DatabaseSecurityInspection) {
   assertConnection(inspection);
@@ -828,6 +1021,7 @@ export function assertDatabaseSecurity(inspection: DatabaseSecurityInspection) {
   assertSchemaPrivileges(inspection);
   assertTablePrivileges(inspection);
   assertRls(inspection);
+  assertSecurityFunctions(inspection);
   assertPolicies(inspection);
 }
 

@@ -1,0 +1,80 @@
+name: DB整合性ゲート
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: database-integrity-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  database-integrity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17@sha256:a65e6a841f6c4dbc4abda3d67fa3bc21824e9611064fcd82e87ea67aad60a0c3
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cocolo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cocolo_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: pnpmを準備
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.26.0
+      - name: Node.js環境を準備
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: trust rootとmigrationの正本を検証
+        run: >-
+          pnpm verify:trust-root &&
+          pnpm verify:pnpm-config &&
+          pnpm lint:workflows &&
+          pnpm verify:migration-baseline &&
+          pnpm verify:migration-checksum &&
+          pnpm verify:migration-sql
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+      - name: 依存関係を固定インストール
+        run: pnpm install --frozen-lockfile
+      - name: checksum検証のfixtureを実行
+        run: pnpm test:database-integrity
+      - name: PostgreSQLのバージョンとroleを検証
+        run: pnpm db:prepare:test && pnpm verify:database-version --expected-major 17
+        env:
+          DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+      - name: 空DBへmigrationを適用
+        run: pnpm --filter @cocolo/db exec prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+      - name: DB migration履歴をchecksumと照合
+        run: pnpm --filter @cocolo/db exec prisma generate && pnpm verify:migration-history
+        env:
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+      - name: 実DBのrole・権限・RLS・policyを検証
+        run: pnpm verify:database-security
+        env:
+          DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+      - name: schemaとfixtureを検証
+        run: pnpm --filter @cocolo/db exec prisma validate && pnpm db:seed:test
+        env:
+          DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
