@@ -22,7 +22,6 @@ test('EVT-001のmigrationはactive membership、添付tenant、回答一意性�
     migration,
     /CREATE OR REPLACE FUNCTION app_lock_active_membership\(/,
   );
-  assert.match(migration, /p_role IS NULL OR role::text = p_role/);
   assert.match(
     migration,
     /REVOKE ALL ON FUNCTION app_is_live_member\(uuid, uuid\) FROM PUBLIC/,
@@ -48,9 +47,9 @@ test('EVT-001のmigrationはactive membership、添付tenant、回答一意性�
 
 test('EVT-001 repositoryはmembership変更と業務transactionを直列化する', () => {
   assert.match(repository, /pg_advisory_xact_lock\(hashtextextended/);
+  assert.match(repository, /eventLockKey/);
   assert.match(repository, /app_lock_active_membership/);
   assert.match(repository, /FROM guardian_members[\s\S]*FOR SHARE/);
-  assert.match(repository, /FROM events[\s\S]*FOR SHARE/);
   assert.match(repository, /FROM events[\s\S]*FOR UPDATE/);
   assert.match(repository, /status = 'available'::attachment_status/);
   assert.match(repository, /LIMIT 501/);

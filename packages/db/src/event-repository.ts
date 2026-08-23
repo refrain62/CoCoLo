@@ -198,6 +198,17 @@ async function assertActiveMembership(
     throw new Error('有効な所属情報が処理中に変更されました。');
 }
 
+async function lockEvent(
+  client: Prisma.TransactionClient,
+  input: EventRepositoryInput,
+  eventId: string,
+) {
+  const eventLockKey = `event:${input.tenantId}:${eventId}`;
+  await client.$executeRaw`
+    SELECT pg_advisory_xact_lock(hashtextextended(${eventLockKey}, 0))
+  `;
+}
+
 async function assertAvailableAttachment(
   client: Prisma.TransactionClient,
   input: EventRepositoryInput,
@@ -373,6 +384,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
         await assertActiveMembership(tx, input);
         if (!['owner', 'admin', 'staff'].includes(input.role))
           throw new EventAuthorizationError('予定を編集する権限がありません。');
+        await lockEvent(tx, input, input.eventId);
         const currentRows = await tx.$queryRaw<EventRow[]>`
           SELECT id, tenant_id, title, event_type, starts_at, ends_at,
                  location, items_to_bring, fee, announcement_image_attachment_id,
@@ -453,13 +465,13 @@ export function createEventRepository(client: PrismaClient): EventRepository {
       client.$transaction(async (tx) => {
         await setRlsContext(tx, input);
         await assertActiveMembership(tx, input);
+        await lockEvent(tx, input, input.eventId);
         const eventRows = await tx.$queryRaw<
           Array<{ attendance_deadline: Date }>
         >`
           SELECT attendance_deadline
           FROM events
           WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
-          FOR SHARE
         `;
         const event = eventRows[0];
         if (!event) throw new EventNotFoundError();
@@ -554,6 +566,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
             throw new EventAuthorizationError(
               '出欠集計を閲覧する権限がありません。',
             );
+          await lockEvent(tx, input, input.eventId);
           const eventRows = await tx.$queryRaw<Array<{ id: string }>>`
           SELECT id
           FROM events
