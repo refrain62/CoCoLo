@@ -19,6 +19,7 @@ export type RuntimeEnvironment = {
   supabaseIssuer: string;
   r2Endpoint: string;
   r2Bucket: string;
+  publicAppUrl: string;
   rateLimitNamespace: AppEnvironment;
   rateLimitStoreMode: RateLimitStoreMode;
   rateLimitFailClosed: true;
@@ -164,6 +165,7 @@ export function readRuntimeEnvironment(
     supabaseIssuer,
     r2Endpoint,
     r2Bucket,
+    publicAppUrl,
     rateLimitNamespace: appEnv,
     rateLimitStoreMode,
     rateLimitFailClosed: true,
