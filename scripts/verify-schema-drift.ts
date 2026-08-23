@@ -3,6 +3,17 @@ import { spawnSync } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  migrationPaths,
+  parseMigrationManifest,
+  readMigrationChecksums,
+  verifyMigrationManifest,
+} from './verify-migration-checksum.ts';
+import { verifyMigrationBaseline } from './verify-migration-baseline.ts';
+import {
+  verifyMigrationHistory,
+  readMigrationHistory,
+} from './verify-migration-history.ts';
 
 export type SchemaDriftPaths = Readonly<{
   dbDirectory: string;
@@ -24,6 +35,7 @@ export type PrismaDiffOptions = Readonly<{
   encoding: 'utf8';
   shell: boolean;
   windowsHide: boolean;
+  env?: NodeJS.ProcessEnv;
 }>;
 
 export type PrismaDiffRunner = (
@@ -31,6 +43,19 @@ export type PrismaDiffRunner = (
   args: readonly string[],
   options: PrismaDiffOptions,
 ) => PrismaDiffResult;
+
+export type ShadowDatabaseConfig = Readonly<{
+  environment?: string;
+  databaseUrl?: string;
+  directUrl?: string;
+  expectedRole?: string;
+  allowedHosts?: string;
+  allowedDatabases?: string;
+}>;
+
+export type MigrationIntegrityVerifier = (
+  paths: SchemaDriftPaths,
+) => Promise<void>;
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.dirname(scriptDirectory);
@@ -51,12 +76,7 @@ export function resolveSchemaDriftPaths(
 
 export function buildPrismaDiffArgs(
   paths: SchemaDriftPaths,
-  shadowDatabaseUrl = process.env.SHADOW_DATABASE_URL,
 ): readonly string[] {
-  assert.ok(
-    shadowDatabaseUrl,
-    'schema drift検査には専用のSHADOW_DATABASE_URLが必要です。',
-  );
   return [
     'migrate',
     'diff',
@@ -64,8 +84,6 @@ export function buildPrismaDiffArgs(
     paths.migrationsDirectory,
     '--to-schema-datamodel',
     paths.schemaFile,
-    '--shadow-database-url',
-    shadowDatabaseUrl,
     '--script',
     '--exit-code',
   ];
@@ -90,6 +108,202 @@ export function runPrismaDiff(
     stderr: outputText(result.stderr),
     ...(result.error ? { error: result.error } : {}),
   };
+}
+
+type DatabaseTarget = Readonly<{
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+}>;
+
+function parseDatabaseTarget(
+  value: string | undefined,
+  label: string,
+): DatabaseTarget {
+  assert.ok(value, `${label}が必要です。`);
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch (error) {
+    throw new Error(`${label}はPostgreSQL URLで指定してください。`, {
+      cause: error,
+    });
+  }
+  assert.ok(
+    url.protocol === 'postgresql:' || url.protocol === 'postgres:',
+    `${label}はPostgreSQL URLで指定してください。`,
+  );
+  const database = decodeURIComponent(url.pathname.slice(1));
+  assert.ok(database, `${label}にデータベース名がありません。`);
+  assert.ok(url.hostname, `${label}にhostがありません。`);
+  return {
+    host: url.hostname.toLowerCase(),
+    port: Number(url.port || 5432),
+    database,
+    user: decodeURIComponent(url.username),
+  };
+}
+
+function csvValues(value: string | undefined, label: string): string[] {
+  const values = (value ?? '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  assert.ok(values.length > 0, `${label}が必要です。`);
+  return values;
+}
+
+function sameDatabase(left: DatabaseTarget, right: DatabaseTarget): boolean {
+  return (
+    left.host === right.host &&
+    left.port === right.port &&
+    left.database === right.database
+  );
+}
+
+// Shadow DBはアプリ接続先と分離し、専用role・許可済みhost・DB名を満たす場合だけ使う。
+// staging / productionでは同一hostも拒否し、同一PostgreSQLクラスタの誤指定を避ける。
+export function validateShadowDatabaseConfig(
+  shadowDatabaseUrl = process.env.SHADOW_DATABASE_URL,
+  environment = process.env.APP_ENV ?? 'local',
+  databaseUrl = process.env.DATABASE_URL,
+  directUrl = process.env.DIRECT_URL,
+  expectedRole = process.env.SHADOW_DATABASE_ROLE,
+  allowedHosts = process.env.SHADOW_DATABASE_ALLOWED_HOSTS,
+  allowedDatabases = process.env.SHADOW_DATABASE_ALLOWED_DATABASES,
+): void {
+  const primary = parseDatabaseTarget(databaseUrl, 'DATABASE_URL');
+  const direct = parseDatabaseTarget(directUrl, 'DIRECT_URL');
+  const shadow = parseDatabaseTarget(shadowDatabaseUrl, 'SHADOW_DATABASE_URL');
+  assert.ok(expectedRole, 'SHADOW_DATABASE_ROLEが必要です。');
+  assert.equal(
+    shadow.user,
+    expectedRole,
+    'SHADOW_DATABASE_URLは専用roleを使用してください。',
+  );
+  assert.notEqual(
+    shadow.user,
+    primary.user,
+    'Shadow DB roleをアプリ接続roleと共有できません。',
+  );
+  assert.notEqual(
+    shadow.user,
+    direct.user,
+    'Shadow DB roleをmigration ownerと共有できません。',
+  );
+  assert.equal(
+    sameDatabase(shadow, primary),
+    false,
+    'SHADOW_DATABASE_URLをDATABASE_URLと同じhost・port・DBへ設定できません。',
+  );
+  assert.equal(
+    sameDatabase(shadow, direct),
+    false,
+    'SHADOW_DATABASE_URLをDIRECT_URLと同じhost・port・DBへ設定できません。',
+  );
+
+  const hosts = csvValues(allowedHosts, 'SHADOW_DATABASE_ALLOWED_HOSTS');
+  const databases = csvValues(
+    allowedDatabases,
+    'SHADOW_DATABASE_ALLOWED_DATABASES',
+  );
+  assert.ok(
+    hosts.includes(shadow.host),
+    'SHADOW_DATABASE_URLのhostが許可リストにありません。',
+  );
+  assert.ok(
+    databases.includes(shadow.database.toLowerCase()),
+    'SHADOW_DATABASE_URLのDB名が許可リストにありません。',
+  );
+
+  if (environment === 'staging' || environment === 'production') {
+    assert.notEqual(
+      shadow.host,
+      primary.host,
+      'staging / productionのShadow DBはアプリDBと別hostにしてください。',
+    );
+    assert.notEqual(
+      shadow.host,
+      direct.host,
+      'staging / productionのShadow DBはmigration DBと別hostにしてください。',
+    );
+  } else {
+    assert.equal(
+      environment,
+      'local',
+      'APP_ENVはlocal、staging、productionのいずれかにしてください。',
+    );
+  }
+}
+
+export async function verifyMigrationIntegrity(
+  paths: SchemaDriftPaths,
+  baseSha = process.env.BASE_SHA,
+  ci = process.env.CI === 'true',
+): Promise<void> {
+  const root = path.dirname(path.dirname(paths.dbDirectory));
+  const { manifestPath } = migrationPaths(root);
+  const actual = await readMigrationChecksums(root);
+  const manifestContent = await readFile(manifestPath, 'utf8');
+  verifyMigrationManifest(actual, manifestContent);
+  verifyMigrationBaseline(baseSha, root, ci);
+  const directUrl = process.env.DIRECT_URL;
+  assert.ok(directUrl, 'migration履歴検証にはDIRECT_URLが必要です。');
+  verifyMigrationHistory(
+    parseMigrationManifest(manifestContent),
+    await readMigrationHistory(directUrl),
+  );
+}
+
+// schema drift WorkflowはPR secretに依存せず、base SHAとShadow DB検査を必ず実行する。
+export function assertSchemaDriftWorkflowConnected(content: string): void {
+  assert.match(
+    content,
+    /pnpm\s+verify:schema-drift\b/,
+    'schema-drift Workflowからverify:schema-driftを実行してください。',
+  );
+  assert.match(
+    content,
+    /BASE_SHA:/,
+    'schema-drift WorkflowにBASE_SHAが必要です。',
+  );
+  assert.match(
+    content,
+    /SHADOW_DATABASE_URL:/,
+    'schema-drift WorkflowにSHADOW_DATABASE_URLが必要です。',
+  );
+  assert.match(
+    content,
+    /SHADOW_DATABASE_ROLE:/,
+    'schema-drift Workflowに専用role設定が必要です。',
+  );
+  assert.match(
+    content,
+    /SHADOW_DATABASE_ALLOWED_HOSTS:/,
+    'schema-drift WorkflowにShadow DB host許可リストが必要です。',
+  );
+  assert.match(
+    content,
+    /SHADOW_DATABASE_ALLOWED_DATABASES:/,
+    'schema-drift WorkflowにShadow DB名許可リストが必要です。',
+  );
+  assert.match(
+    content,
+    /fetch-depth:\s*0/,
+    'base SHA取得用のfetch-depthが必要です。',
+  );
+  assert.match(
+    content,
+    /persist-credentials:\s*false/,
+    'checkout credentialを保持してはいけません。',
+  );
+  assert.match(content, /CI:\s*true/, 'CI実行ではCI=trueが必要です。');
+  assert.doesNotMatch(
+    content,
+    /\bsecrets(?:\.|\s*:)/,
+    'PR secretをschema drift検査へ渡してはいけません。',
+  );
 }
 
 export function assertMigrationLock(content: string): void {
@@ -227,7 +441,18 @@ export async function verifySchemaDrift(
   paths: SchemaDriftPaths = resolveSchemaDriftPaths(),
   runner: PrismaDiffRunner = runPrismaDiff,
   shadowDatabaseUrl = process.env.SHADOW_DATABASE_URL,
+  config: ShadowDatabaseConfig = {},
+  integrityVerifier: MigrationIntegrityVerifier = verifyMigrationIntegrity,
 ): Promise<number> {
+  validateShadowDatabaseConfig(
+    shadowDatabaseUrl,
+    config.environment,
+    config.databaseUrl,
+    config.directUrl,
+    config.expectedRole,
+    config.allowedHosts,
+    config.allowedDatabases,
+  );
   const lockBytes = await readRequiredFile(
     paths.migrationLockFile,
     'migration_lock.toml',
@@ -235,14 +460,19 @@ export async function verifySchemaDrift(
   const lockContent = lockBytes.toString('utf8');
   assertMigrationLock(lockContent);
   const migrationCount = await assertMigrationLayout(paths);
+  await integrityVerifier(paths);
   const result = runner(
     process.execPath,
-    [prismaEntryPoint(paths), ...buildPrismaDiffArgs(paths, shadowDatabaseUrl)],
+    [prismaEntryPoint(paths), ...buildPrismaDiffArgs(paths)],
     {
       cwd: paths.dbDirectory,
       encoding: 'utf8',
       shell: false,
       windowsHide: true,
+      env: {
+        ...process.env,
+        SHADOW_DATABASE_URL: shadowDatabaseUrl,
+      },
     },
   );
   assertPrismaDiffClean(result);
