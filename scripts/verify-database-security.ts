@@ -126,8 +126,8 @@ export const REQUIRED_POLICIES: readonly RequiredPolicy[] = [
     name: 'audit_logs_insert',
     command: 'INSERT',
     withCheckTokens: [
+      'app_has_active_membership',
       'current_setting',
-      'app.tenant_id',
       'app.user_id',
       'tenant_id',
       'actor_user_id',

@@ -25,7 +25,11 @@ function policyExpression(tokens: readonly string[]) {
     tenantBoundary,
     ...tokens
       .filter((token) => token !== 'id' && token !== 'tenant_id')
-      .map((token) => `current_setting('${token}', true)`),
+      .map((token) =>
+        token === 'app_has_active_membership'
+          ? 'app_has_active_membership(tenant_id)'
+          : `current_setting('${token}', true)`,
+      ),
   ].join(' AND ');
 }
 
@@ -147,7 +151,7 @@ function createValidInspection(): DatabaseSecurityInspection {
       command: 'INSERT',
       usingExpression: null,
       withCheckExpression: policyExpression([
-        'app.tenant_id',
+        'app_has_active_membership',
         'app.user_id',
         'tenant_id',
         'actor_user_id',
