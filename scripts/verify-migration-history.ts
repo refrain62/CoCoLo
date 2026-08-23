@@ -69,6 +69,15 @@ export async function verifyMigrationHistoryAtDatabase(
       ),
   );
   const expected = parseMigrationManifest(await manifestContent);
+  const rows = await readMigrationHistory(directUrl, rootDirectory);
+  verifyMigrationHistory(expected, rows);
+  console.log(`DB migration履歴 ${expected.length}件を検証しました。`);
+}
+
+export async function readMigrationHistory(
+  directUrl: string,
+  rootDirectory = path.dirname(path.dirname(fileURLToPath(import.meta.url))),
+): Promise<MigrationHistory[]> {
   const require = createRequire(
     path.join(rootDirectory, 'packages', 'db', 'package.json'),
   );
@@ -82,19 +91,17 @@ export async function verifyMigrationHistoryAtDatabase(
   };
   const prisma = new PrismaClient({ datasources: { db: { url: directUrl } } });
   try {
-    const rows = await prisma.$queryRawUnsafe(
+    return await prisma.$queryRawUnsafe(
       `SELECT migration_name AS "migrationName",
               checksum,
               finished_at AS "finishedAt",
               rolled_back_at AS "rolledBackAt"
-         FROM "_prisma_migrations"
+        FROM "_prisma_migrations"
         ORDER BY migration_name`,
     );
-    verifyMigrationHistory(expected, rows);
   } finally {
     await prisma.$disconnect();
   }
-  console.log(`DB migration履歴 ${expected.length}件を検証しました。`);
 }
 
 async function main() {

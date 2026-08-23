@@ -428,6 +428,11 @@ export function assertSchemaDriftWorkflowConnected(content: string): void {
   );
   assert.match(
     content,
+    /pnpm test:database-integrity/,
+    'schema-drift Workflowから現行DB整合性テストを実行してください。',
+  );
+  assert.match(
+    content,
     /CREATE ROLE cocolo_shadow LOGIN PASSWORD\s+:'shadow_password' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION/,
     'schema-drift WorkflowはShadow roleへSCRAM passwordと管理者権限無効化を設定してください。',
   );

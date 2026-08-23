@@ -37,6 +37,18 @@ test('既存migrationの変更・削除・改名をbaselineで拒否する', () 
       'A\tpackages/db/prisma/migrations/20260823000000_new/migration.sql',
     ),
   );
+  assert.doesNotThrow(() =>
+    assertNoExistingMigrationChanges(
+      'A\tpackages/db/prisma/migrations/migration_lock.toml',
+    ),
+  );
+  assert.throws(
+    () =>
+      assertNoExistingMigrationChanges(
+        'M\tpackages/db/prisma/migrations/migration_lock.toml',
+      ),
+    /lockfile/,
+  );
 });
 
 test('CIのBASE_SHA欠落をfail-closedにする', () => {
