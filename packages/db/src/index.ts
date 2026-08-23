@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import {
   type PromotionMember,
   PromotionPlanningError,
@@ -11,6 +11,7 @@ import {
   PrismaClient,
   type Role,
 } from '@prisma/client';
+import { uuidv7 } from './uuidv7.js';
 
 export type MemberRole = 'owner' | 'admin' | 'staff' | 'guardian';
 export type PromotionMode = 'preview' | 'execute';
@@ -404,7 +405,7 @@ export function createLineDeliveryProducer(
         let notificationId: string;
         try {
           notificationId = await enqueueLineDelivery(tx, {
-            id: randomUUID(),
+            id: uuidv7(),
             tenantId: input.tenantId,
             actorUserId: input.actorUserId,
             role: input.role,

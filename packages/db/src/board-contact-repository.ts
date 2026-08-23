@@ -203,7 +203,7 @@ async function writeAudit(
       resource_id,
       metadata
     ) VALUES (
-      ${uuidv7()},
+      ${uuidv7()}::uuid,
       ${input.tenantId}::uuid,
       ${input.actorUserId},
       ${action},
@@ -316,7 +316,7 @@ export function createBoardContactRepository(client: PrismaClient) {
             phone,
             contact_preference
           ) VALUES (
-            ${uuidv7()},
+            ${uuidv7()}::uuid,
             ${input.tenantId}::uuid,
             ${input.contact.fiscalYear},
             ${input.contact.roleName},
@@ -476,7 +476,7 @@ export function createBoardContactRepository(client: PrismaClient) {
             contact_preference
           )
           SELECT
-            ${uuidv7()},
+            ${uuidv7()}::uuid,
             tenant_id,
             ${input.toFiscalYear},
             role_name,

@@ -555,6 +555,133 @@ CREATE TRIGGER line_notification_state_guard
 BEFORE INSERT OR UPDATE ON line_notification_queue
 FOR EACH ROW EXECUTE FUNCTION app_guard_line_notification_state();
 
+-- 監査ログIDはcentral migrationのUUIDv7制約に合わせ、既存LINE worker関数も同じ生成器を使う。
+CREATE OR REPLACE FUNCTION app_mark_line_delivery_sent(
+  p_tenant_id uuid,
+  p_notification_id uuid,
+  p_attempt_token uuid,
+  p_provider_message_id varchar(256)
+)
+RETURNS TABLE (outcome text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  updated boolean;
+BEGIN
+  IF session_user <> 'line_delivery_worker' THEN
+    RAISE EXCEPTION 'LINE通知workerの接続roleが不正です';
+  END IF;
+  WITH changed AS (
+    UPDATE line_delivery_outbox AS o
+       SET status = 'sent', provider_message_id = trim(p_provider_message_id),
+           sent_at = clock_timestamp(), lease_expires_at = NULL,
+           next_retry_at = NULL, provider_checked_at = clock_timestamp()
+     WHERE o.tenant_id = p_tenant_id AND o.id = p_notification_id
+       AND status = 'sending' AND attempt_token = p_attempt_token
+       AND lease_expires_at > clock_timestamp()
+       AND p_provider_message_id IS NOT NULL
+       AND length(trim(p_provider_message_id)) BETWEEN 1 AND 256
+    RETURNING id
+  )
+  SELECT EXISTS (SELECT 1 FROM changed) INTO updated;
+  IF updated THEN
+    INSERT INTO audit_logs (id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata)
+    VALUES (app_uuidv7(), p_tenant_id, 'line-delivery-worker', 'line_delivery.sent', 'line_delivery', p_notification_id, jsonb_build_object('status', 'sent'));
+    RETURN QUERY SELECT 'sent'::text;
+  ELSE
+    RETURN QUERY SELECT 'stale'::text;
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION app_mark_line_delivery_failed(
+  p_tenant_id uuid,
+  p_notification_id uuid,
+  p_attempt_token uuid,
+  p_error_code varchar(32),
+  p_retry_delay_ms integer
+)
+RETURNS TABLE (outcome text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  updated boolean;
+  db_now timestamptz := clock_timestamp();
+  retry_at timestamptz;
+BEGIN
+  IF session_user <> 'line_delivery_worker' THEN
+    RAISE EXCEPTION 'LINE通知workerの接続roleが不正です';
+  END IF;
+  IF p_error_code NOT IN ('provider_failure') OR p_retry_delay_ms NOT BETWEEN 0 AND 3600000 THEN
+    RAISE EXCEPTION 'LINE通知の失敗理由または再試行時刻が不正です';
+  END IF;
+  retry_at := db_now + make_interval(secs => p_retry_delay_ms / 1000.0);
+  WITH changed AS (
+    UPDATE line_delivery_outbox AS o
+       SET status = 'failed', last_error_code = p_error_code,
+           next_retry_at = retry_at, lease_expires_at = NULL
+     WHERE o.tenant_id = p_tenant_id AND o.id = p_notification_id
+       AND status = 'sending' AND attempt_token = p_attempt_token
+       AND lease_expires_at > db_now
+    RETURNING id
+  )
+  SELECT EXISTS (SELECT 1 FROM changed) INTO updated;
+  IF updated THEN
+    INSERT INTO audit_logs (id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata)
+    VALUES (app_uuidv7(), p_tenant_id, 'line-delivery-worker', 'line_delivery.failed', 'line_delivery', p_notification_id, jsonb_build_object('status', 'failed', 'error_code', p_error_code));
+    RETURN QUERY SELECT 'failed'::text;
+  ELSE
+    RETURN QUERY SELECT 'stale'::text;
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION app_mark_line_delivery_unknown(
+  p_tenant_id uuid,
+  p_notification_id uuid,
+  p_attempt_token uuid,
+  p_error_code varchar(32)
+)
+RETURNS TABLE (outcome text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  updated boolean;
+BEGIN
+  IF session_user <> 'line_delivery_worker' THEN
+    RAISE EXCEPTION 'LINE通知workerの接続roleが不正です';
+  END IF;
+  IF p_error_code NOT IN ('aborted', 'timeout', 'provider_id_missing') THEN
+    RAISE EXCEPTION 'LINE通知の照合待ち理由が不正です';
+  END IF;
+  WITH changed AS (
+    UPDATE line_delivery_outbox AS o
+       SET status = 'unknown', last_error_code = p_error_code,
+           next_retry_at = NULL, lease_expires_at = NULL,
+           provider_checked_at = NULL
+     WHERE o.tenant_id = p_tenant_id AND o.id = p_notification_id
+       AND status = 'sending'
+       AND attempt_token = p_attempt_token
+       AND lease_expires_at > clock_timestamp()
+    RETURNING id
+  )
+  SELECT EXISTS (SELECT 1 FROM changed) INTO updated;
+  IF updated THEN
+    INSERT INTO audit_logs (id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata)
+    VALUES (app_uuidv7(), p_tenant_id, 'line-delivery-worker', 'line_delivery.unknown', 'line_delivery', p_notification_id, jsonb_build_object('status', 'unknown', 'error_code', p_error_code));
+    RETURN QUERY SELECT 'unknown'::text;
+  ELSE
+    RETURN QUERY SELECT 'stale'::text;
+  END IF;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION app_guard_ride_assignment()
 RETURNS trigger
 LANGUAGE plpgsql
