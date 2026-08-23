@@ -122,6 +122,73 @@ export const lineDeliveryResponseSchema = z
   })
   .strict();
 
+const eventPublicResponseSchema = z
+  .object({
+    id: uuidV7,
+    title: z.string().min(1).max(200),
+    type: z.enum(['practice', 'match', 'event']),
+    startsAt: z.string().datetime({ offset: true }),
+    endsAt: z.string().datetime({ offset: true }),
+    location: z.string().max(500).nullable(),
+    itemsToBring: z.string().max(2000).nullable(),
+    fee: z.number().int().min(0),
+    announcementImageAttachmentId: uuidV7.nullable(),
+    opponent: z.string().max(200).nullable(),
+    meetingTime: z.string().datetime({ offset: true }).nullable(),
+    transportationRequired: z.boolean(),
+    attendanceDeadline: z.string().datetime({ offset: true }),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
+export const eventListResponseSchema = z
+  .object({ data: z.array(eventPublicResponseSchema) })
+  .strict();
+
+export const eventMutationResponseSchema = z
+  .object({ data: eventPublicResponseSchema })
+  .strict();
+
+export const attendanceResponseSchema = z
+  .object({
+    data: z
+      .object({
+        eventId: uuidV7,
+        memberId: uuidV7,
+        response: z.enum(['attending', 'absent', 'pending']),
+        updatedAt: z.string().datetime({ offset: true }),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const attendanceSummaryResponseSchema = z
+  .object({
+    data: z
+      .object({
+        totalMembers: z.number().int().min(0),
+        attending: z.number().int().min(0),
+        absent: z.number().int().min(0),
+        pending: z.number().int().min(0),
+        unanswered: z.number().int().min(0),
+        unansweredMemberIds: z.array(uuidV7),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const authContextResponseSchema = z
+  .object({
+    data: z
+      .object({
+        tenantId: uuidV7,
+        role: z.enum(['owner', 'admin', 'staff', 'guardian']),
+      })
+      .strict(),
+  })
+  .strict();
+
 export const errorResponseSchema = z
   .object({
     error: z

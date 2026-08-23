@@ -41,10 +41,11 @@ type EventUpdateInput = Partial<EventCreateInput>;
 
 type EventApiOptions = {
   verifyToken?: TokenVerifier;
-  membershipRepository: {
+  membershipRepository?: {
     findActiveByUserId: (userId: string) => Promise<Membership | null>;
   };
   eventRepository: EventRepository;
+  useCentralAuth?: boolean;
 };
 
 type EventApiEnv = {
@@ -153,12 +154,13 @@ function projectAttendance(
 // Phase 2の登録点をfeature単位へ閉じ込め、既存createAppへは統合メモ記載のapp.routeで接続する。
 export function createEventsApp(options: EventApiOptions) {
   const app = new Hono<EventApiEnv>();
-  app.use('*', async (c, next) => {
-    const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
-    c.set('requestId', requestId);
-    c.header('x-request-id', requestId);
-    await next();
-  });
+  if (!options.useCentralAuth)
+    app.use('*', async (c, next) => {
+      const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+      c.set('requestId', requestId);
+      c.header('x-request-id', requestId);
+      await next();
+    });
   app.onError((error, c) => {
     const response = inputError(c, error);
     if (response) return response;
@@ -172,7 +174,7 @@ export function createEventsApp(options: EventApiOptions) {
 
   const authenticate: MiddlewareHandler<EventApiEnv> = async (c, next) => {
     const token = extractBearerToken(c.req.header('authorization') ?? null);
-    if (!options.verifyToken)
+    if (!options.verifyToken || !options.membershipRepository)
       return errorResponse(
         c,
         503,
@@ -212,7 +214,7 @@ export function createEventsApp(options: EventApiOptions) {
     }
   };
 
-  app.use('*', authenticate);
+  if (!options.useCentralAuth) app.use('*', authenticate);
 
   app.get('/', async (c) => {
     const parsed = eventListQuerySchema.safeParse(c.req.query());
