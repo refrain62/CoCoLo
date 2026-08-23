@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-再開時点の`origin/develop`は`c31d61a`（T037実装PR #67のスカッシュマージ）です。
+再開時点の`origin/develop`は`daa2002`（T014 DB整合性ゲートPR #69のスカッシュマージ）です。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
@@ -136,15 +136,6 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - 完了条件：#50のbootstrap後にCIを再実行し、PR head SHAとbase正本の比較、変更ファイルAPI、3000件上限、permissions、workflow改変検査が成功することです。
 
 ### 3.4 DB整合性と権限検査
-
-- `[~]` **T014-DB-001：PR #42のDB integrity gateを再検証する。**
-  - 対象：PR #42
-  - ブランチ：`feature/t014-db-integrity`
-  - 最新commit：`a66bc2a`
-  - 状態：実装と対象範囲の検証は完了していますが、全体`pnpm test`、GitHub Actions CI、trusted root bootstrap後の再検証が残っています。
-  - 実施済みの変更と検証結果：[T014-DB-001の履歴](resume-task-history.md#t014-db-001)
-  - 依存：trusted rootのbootstrap後にCIを再実行します。
-  - 完了条件：app roleのowner、BYPASSRLS、membership、table ACL、column ACL、RLS policy本文、SECURITY DEFINER function、migration履歴、deploy前後DB検査が同一artifact SHAで成功することです。
 
 - `[ ]` **T014-DB-002：DB検査の悪性fixtureを再実行する。**
   - tenant-only policy、`role IS NOT NULL`だけのpolicy、user_id条件を除いたmembership policy、column GRANT、GRANT OPTION、想定外のSECURITY DEFINER functionを拒否することを確認します。
