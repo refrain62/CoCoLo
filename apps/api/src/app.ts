@@ -14,6 +14,12 @@ import {
   memberUpdateSchema,
   promotionRequestSchema,
 } from '@cocolo/contracts/member';
+import {
+  lineDeliveryResponseSchema,
+  memberListResponseSchema,
+  memberMutationResponseSchema,
+  promotionResponseSchema,
+} from '@cocolo/contracts/runtime-response';
 import type { LineDeliveryProducer } from '@cocolo/db';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
 import { type CorsOptions, createCorsMiddleware } from './security/cors.js';
@@ -28,6 +34,15 @@ import {
   type RateLimitEnvironment,
   type RateLimitStoreMode,
 } from './security/rate-limit-adapter.js';
+import {
+  createResponseContractMiddleware,
+  type ResponseContract,
+} from './security/response-contract.js';
+import {
+  createRequestLoggerMiddleware,
+  createStructuredLogger,
+  type StructuredLogger,
+} from './security/structured-logger.js';
 
 export type MembershipContext = {
   tenantId: string;
@@ -107,6 +122,11 @@ export type AppOptions = {
   promotionRepository?: PromotionRepository;
   lineDeliveryProducer?: LineDeliveryProducer;
   cors?: CorsOptions;
+  observability?: {
+    environment?: RateLimitEnvironment;
+    logger?: StructuredLogger;
+    pathResolver?: (context: Context<ApiEnv>) => string;
+  };
   rateLimit?: {
     environment?: RateLimitEnvironment;
     mode?: RateLimitStoreMode;
@@ -130,6 +150,14 @@ export type ApiEnv = {
 };
 
 const managerRoles = new Set<MemberRole>(['owner', 'admin']);
+
+function hasUnsafeControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code <= 31 || code === 127) return true;
+  }
+  return false;
+}
 
 // エラー形式とrequestIdを全エンドポイントで統一し、内部例外の詳細は外部へ返さない。
 function errorResponse(
@@ -193,14 +221,73 @@ export function createApp(options: AppOptions = {}) {
     timeoutMs: rateLimitOptions.timeoutMs,
   });
 
-  if (options.cors) app.use('*', createCorsMiddleware(options.cors));
-
   app.use('*', async (c, next) => {
-    const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+    const candidate = c.req.header('x-request-id')?.trim();
+    const requestId =
+      candidate &&
+      candidate.length <= 128 &&
+      !hasUnsafeControlCharacter(candidate)
+        ? candidate
+        : crypto.randomUUID();
     c.set('requestId', requestId);
     c.header('x-request-id', requestId);
     await next();
   });
+
+  const logger =
+    options.observability?.logger ?? createStructuredLogger(() => {});
+  app.use(
+    '*',
+    createRequestLoggerMiddleware({
+      logger,
+      environment: options.observability?.environment ?? rateLimitEnvironment,
+      pathResolver: options.observability?.pathResolver,
+    }),
+  );
+  if (options.cors) app.use('*', createCorsMiddleware(options.cors));
+
+  const responseContracts: ResponseContract[] = [
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/members$/,
+      status: 200,
+      schema: memberListResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/members$/,
+      status: 201,
+      schema: memberMutationResponseSchema,
+    },
+    {
+      method: 'PATCH',
+      path: /^\/api\/v1\/members\/[^/]+$/,
+      status: 200,
+      schema: memberMutationResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/members\/[^/]+\/retire$/,
+      status: 200,
+      schema: memberMutationResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/members\/promote$/,
+      status: 200,
+      schema: promotionResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/notifications\/line$/,
+      status: 202,
+      schema: lineDeliveryResponseSchema,
+    },
+  ];
+  app.use(
+    '*',
+    createResponseContractMiddleware({ contracts: responseContracts }),
+  );
 
   // 予期せぬ例外は詳細を隠し、クライアントにはrequestId付きの共通500だけを返す。
   app.onError((error, c) => {
@@ -212,6 +299,10 @@ export function createApp(options: AppOptions = {}) {
       '予期しないエラーが発生しました。',
     );
   });
+
+  app.notFound((c) =>
+    errorResponse(c, 404, 'NOT_FOUND', '指定されたAPIが見つかりません。'),
+  );
 
   app.get('/health', (c) => c.json({ status: 'ok', service: 'api' }));
 
