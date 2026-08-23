@@ -298,6 +298,13 @@ export type DatabaseSecurityInspection = Readonly<{
     usingExpression: string | null;
     withCheckExpression: string | null;
   }>[];
+  securityFunctions: readonly Readonly<{
+    name: string;
+    owner: string;
+    language: string;
+    securityDefiner: boolean;
+    source: string;
+  }>[];
 }>;
 
 export type PsqlExecutionResult = Readonly<{
@@ -479,6 +486,24 @@ SELECT json_build_object(
     )
     FROM pg_policies policies
     WHERE policies.schemaname = 'public'
+  ), '[]'::json),
+  'securityFunctions', COALESCE((
+    SELECT json_agg(
+      json_build_object(
+        'name', p.proname,
+        'owner', owner.rolname,
+        'language', language.lanname,
+        'securityDefiner', p.prosecdef,
+        'source', p.prosrc
+      )
+      ORDER BY p.proname, pg_get_function_identity_arguments(p.oid)
+    )
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    JOIN pg_roles owner ON owner.oid = p.proowner
+    JOIN pg_language language ON language.oid = p.prolang
+    WHERE n.nspname = 'public'
+      AND p.proname = 'app_has_active_membership'
   ), '[]'::json)
 )::text;
 `;
@@ -840,7 +865,7 @@ function assertExpression(
   );
   assert.doesNotMatch(
     normalized,
-    /\b(?:or|and)\s+true\b|\btrue\s+(?:or|and)\b/i,
+    /\b(?:or|and)\s+true\b|\btrue\s+(?:or|and)\b|\b(?:tenant_id|id)\s+is\s+(?:not\s+)?null\b/i,
     `${message}: trueとのOR/ANDで境界を無効化するpolicyは許可しません。`,
   );
   for (const token of tokens)
@@ -931,6 +956,62 @@ function assertPolicies(inspection: DatabaseSecurityInspection) {
   }
 }
 
+function assertSecurityFunctions(inspection: DatabaseSecurityInspection) {
+  assert.ok(
+    Array.isArray(inspection.securityFunctions),
+    'security function検査結果が不正です。',
+  );
+  const functions = inspection.securityFunctions.filter(
+    (candidate) => candidate.name === 'app_has_active_membership',
+  );
+  assert.equal(
+    functions.length,
+    1,
+    'app_has_active_membershipは検査可能な1定義だけが必要です。',
+  );
+  const membershipFunction = functions[0];
+  assertString(
+    membershipFunction.owner,
+    'membership function ownerがありません。',
+  );
+  assert.notEqual(
+    membershipFunction.owner,
+    'cocolo_app',
+    'membership functionをapp roleが所有してはいけません。',
+  );
+  assertString(
+    membershipFunction.language,
+    'membership function languageがありません。',
+  );
+  assert.equal(membershipFunction.language, 'sql');
+  assertBoolean(
+    membershipFunction.securityDefiner,
+    'membership functionのSECURITY DEFINER情報が不正です。',
+  );
+  assert.equal(
+    membershipFunction.securityDefiner,
+    false,
+    'membership functionはSECURITY DEFINERにしてはいけません。',
+  );
+  assertString(
+    membershipFunction.source,
+    'membership function本体がありません。',
+  );
+  const source = membershipFunction.source.toLowerCase();
+  for (const token of [
+    'target_tenant_id',
+    "current_setting('app.tenant_id'",
+    'from tenant_memberships',
+    "current_setting('app.user_id'",
+    "status = 'active'",
+    "current_setting('app.role'",
+  ])
+    assert.ok(
+      source.includes(token),
+      `membership functionに${token}の検証がありません。`,
+    );
+}
+
 // 実接続の観測結果をallowlistと照合し、欠落・過剰権限・RLS弱体化を成功扱いにしない。
 export function assertDatabaseSecurity(inspection: DatabaseSecurityInspection) {
   assertConnection(inspection);
@@ -940,6 +1021,7 @@ export function assertDatabaseSecurity(inspection: DatabaseSecurityInspection) {
   assertSchemaPrivileges(inspection);
   assertTablePrivileges(inspection);
   assertRls(inspection);
+  assertSecurityFunctions(inspection);
   assertPolicies(inspection);
 }
 

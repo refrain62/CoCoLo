@@ -94,6 +94,17 @@ test('新規tableの保護不足と無条件policyを拒否する', () => {
       },
     ]),
   );
+  assert.throws(() =>
+    validateMigrationSql([
+      {
+        ...safeMigration,
+        content: safeMigration.content.replace(
+          "tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid",
+          "tenant_id IS NOT NULL OR tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid",
+        ),
+      },
+    ]),
+  );
 });
 
 test('worker専用outboxのapp role無権限を許可する', () => {

@@ -236,11 +236,38 @@ function createValidInspection(): DatabaseSecurityInspection {
     tablePrivileges,
     rlsTables,
     policies,
+    securityFunctions: [
+      {
+        name: 'app_has_active_membership',
+        owner: 'postgres',
+        language: 'sql',
+        securityDefiner: false,
+        source: [
+          "SELECT target_tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid",
+          'AND EXISTS (SELECT 1 FROM tenant_memberships',
+          "WHERE tenant_id = target_tenant_id AND user_id = current_setting('app.user_id', true)",
+          "AND status = 'active'::membership_status AND role::text = current_setting('app.role', true))",
+        ].join(' '),
+      },
+    ],
   };
 }
 
 test('有効なPostgreSQL security boundaryを受け入れる', () => {
   assert.doesNotThrow(() => assertDatabaseSecurity(createValidInspection()));
+});
+
+test('membership関数の再定義とSECURITY DEFINERを拒否する', () => {
+  const valid = createValidInspection();
+  const spoofed = {
+    ...valid,
+    securityFunctions: valid.securityFunctions.map((fn) => ({
+      ...fn,
+      securityDefiner: true,
+      source: 'SELECT true',
+    })),
+  };
+  assert.throws(() => assertDatabaseSecurity(spoofed), /SECURITY DEFINER/);
 });
 
 test('DATABASE_URL未設定と非PostgreSQL URLを成功扱いにしない', () => {
@@ -440,4 +467,18 @@ test('RLS ENABLE/FORCEと必須policyの弱体化を拒否する', () => {
     ),
   };
   assert.throws(() => assertDatabaseSecurity(bypassPolicy), /trueとのOR/);
+
+  const nullBypassPolicy = {
+    ...validWithPermissivePolicy,
+    policies: validWithPermissivePolicy.policies.map((policy) =>
+      policy.name === 'tenants_select'
+        ? {
+            ...policy,
+            usingExpression:
+              "id IS NOT NULL OR id = NULLIF(current_setting('app.tenant_id', true), '')::uuid",
+          }
+        : policy,
+    ),
+  };
+  assert.throws(() => assertDatabaseSecurity(nullBypassPolicy), /trueとのOR/);
 });
