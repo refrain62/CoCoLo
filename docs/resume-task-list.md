@@ -130,6 +130,9 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - 状態：実装と対象範囲の検証は完了していますが、全体`pnpm test`、GitHub Actions CI、trusted root bootstrap後の再検証が残っています。
   - 実施済みの変更と検証結果：[T014-PR-001の履歴](resume-task-history.md#t014-pr-001)
   - 依存：trusted rootがbootstrap済みになるまで、`pnpm verify:trust-root`が`manual-owner-bootstrap-required`で停止することは仕様どおりです。
+  - 現行確認：mainに`pr-trust-gate.yml`は存在せず、PR #65のactive checkにもtrust gateはありません。
+  - 現行判定：trust gate未展開のため、PR #65の機能、品質、セキュリティ判定ではtrusted manifest差分を非ブロッカーとして扱います。
+  - gate有効化条件：T014-PR-001でmainへworkflowをowner-only反映し、base側manifest、bootstrap extension、permissions、変更ファイルAPI検査を同時に確定します。
   - 完了条件：#50のbootstrap後にCIを再実行し、PR head SHAとbase正本の比較、変更ファイルAPI、3000件上限、permissions、workflow改変検査が成功することです。
 
 ### 3.4 DB整合性と権限検査

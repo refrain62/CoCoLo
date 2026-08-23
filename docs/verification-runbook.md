@@ -173,6 +173,22 @@ Node.js 24の`node --test`はstrip-only実行のため、`.test.ts`でTypeScript
 
 検証失敗を修正した後は、失敗したコマンドだけで終わらせず、`pnpm test`、`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm lint:workflows`を同じHEADで再実行し、CI成功と照合します。
 
+### 追加記録：PR信頼ゲート未展開時の判定境界（2026-08-23）
+
+現行のdefault branchであるmainには`.github/workflows/pr-trust-gate.yml`が存在せず、GitHub workflow APIでも404となります。
+
+`gh workflow list --all`で確認できるactive workflowは、品質、DB整合性、schema drift、セキュリティの4系統です。
+
+したがって、PR #65の現行CIにはPR信頼ゲートが存在せず、trusted manifest差分を理由にPR #65の機能、品質、セキュリティ判定をブロックしません。
+
+PR #65のtrusted manifestへのmigration登録は、現行の品質・DB整合性・schema drift・セキュリティ検査の対象として扱います。
+
+T014-PR-001で`pr-trust-gate.yml`を有効化する際は、owner-only操作としてmainのdefault branchへworkflowを反映し、base側trusted manifest、bootstrap extension、owner承認SHA、workflow permissions、変更ファイルAPI検査を同時に確定します。
+
+gate有効化前のPRへ、後からtrust gateの必須checkを遡及適用しません。
+
+gate有効化後は、owner-only前提が満たされたbase SHAで悪性fixture、protected path、rename、削除、manifest hashのfail-closed検査を再実行します。
+
 ### 追加記録：中央API hardening実装時の手順漏れ（2026-08-23）
 
 新規テストfixtureの型を`Record<string, unknown>`のまま作成し、`MemberRepository`の`MemberRecord`戻り値契約に適合せず、`pnpm lint`のtest typecheckで`TS2322`が発生しました。
