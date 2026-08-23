@@ -147,6 +147,7 @@ jobs:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
           SHADOW_DATABASE_URL: postgresql://cocolo_shadow:cocolo_shadow@localhost:5433/cocolo_shadow?sslmode=disable
+          SHADOW_DATABASE_PASSWORD: cocolo_shadow
           SHADOW_DATABASE_ROLE: cocolo_shadow
           SHADOW_DATABASE_ALLOWED_HOSTS: localhost
           SHADOW_DATABASE_ALLOWED_DATABASES: cocolo_shadow
