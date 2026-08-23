@@ -148,7 +148,7 @@ enum RideRequestStatus {
 model Tenant {
   id           String             @id @default(uuid(7)) @db.Uuid
   name         String             @db.VarChar(200)
-  createdAt    DateTime           @default(now()) @map("created_at")
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   memberships  TenantMembership[]
   members      Member[]
   guardians    GuardianMember[]
@@ -183,11 +183,11 @@ model TenantMembership {
   userId    String           @map("user_id") @db.VarChar(128)
   role      Role
   status    MembershipStatus @default(active)
-  createdAt DateTime         @default(now()) @map("created_at")
-  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, userId])
-  @@index([userId, status])
+  @@index([userId, status], map: "tenant_memberships_user_status_idx")
   @@map("tenant_memberships")
 }
 
@@ -201,16 +201,16 @@ model Member {
   ageGroup      String?          @map("age_group") @db.VarChar(100)
   status        MemberStatus     @default(active)
   note          String?
-  createdAt     DateTime         @default(now()) @map("created_at")
-  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   guardianLinks GuardianMember[]
   attendanceResponses AttendanceResponseRecord[]
   orderEntries  OrderEntry[]
   rideRequests  RideRequest[]
 
   @@unique([tenantId, id])
-  @@index([tenantId, status, category])
-  @@index([tenantId, name])
+  @@index([tenantId, status, category], map: "members_tenant_status_category_idx")
+  @@index([tenantId, name], map: "members_tenant_name_idx")
   @@map("members")
 }
 
@@ -220,12 +220,12 @@ model GuardianMember {
   userId       String   @map("user_id") @db.VarChar(128)
   memberId     String   @map("member_id") @db.Uuid
   relationship String   @db.VarChar(100)
-  consentedAt  DateTime? @map("consented_at")
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  member       Member   @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict)
+  consentedAt  DateTime? @map("consented_at") @db.Timestamptz(6)
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  member       Member    @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, userId, memberId])
-  @@index([tenantId, userId])
+  @@index([tenantId, userId], map: "guardian_members_tenant_user_idx")
   @@map("guardian_members")
 }
 
@@ -237,10 +237,10 @@ model AuditLog {
   resourceType String @map("resource_type") @db.VarChar(100)
   resourceId String?  @map("resource_id") @db.Uuid
   metadata   Json?
-  createdAt  DateTime @default(now()) @map("created_at")
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
-  @@index([tenantId, createdAt])
+  @@index([tenantId, createdAt], map: "audit_logs_tenant_created_idx")
   @@map("audit_logs")
 }
 
@@ -250,18 +250,18 @@ model PromotionRun {
   fiscalYear     Int               @map("fiscal_year")
   status         PromotionRunStatus
   previewCount   Int               @default(0) @map("preview_count")
-  executedAt     DateTime?         @map("executed_at")
+  executedAt     DateTime?         @map("executed_at") @db.Timestamptz(6)
   actorUserId    String            @map("actor_user_id") @db.VarChar(128)
   idempotencyKey String?           @map("idempotency_key") @db.VarChar(128)
-  requestHash    String?           @map("request_hash") @db.Char(64)
+  requestHash    String?            @map("request_hash") @db.Char(64)
   result         Json?
-  createdAt      DateTime          @default(now()) @map("created_at")
-  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, id])
   @@unique([tenantId, fiscalYear])
   @@unique([tenantId, idempotencyKey])
-  @@index([tenantId, status])
+  @@index([tenantId, status], map: "promotion_runs_tenant_status_idx")
   @@map("promotion_runs")
 }
 
