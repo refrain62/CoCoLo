@@ -110,7 +110,24 @@ jobs:
           DIRECT_URL: postgresql://cocolo_shadow:cocolo_shadow@localhost:5433/cocolo_shadow?sslmode=disable
           SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
       - name: Shadow DBのenum PUBLIC権限を除去
-        run: psql --no-psqlrc --set=ON_ERROR_STOP=1 --host localhost --port 5433 --username postgres --dbname cocolo_shadow --command "REVOKE USAGE ON ALL TYPES IN SCHEMA public FROM PUBLIC;"
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/revoke-shadow-enum.sql" <<'SQL'
+          DO $$
+          DECLARE item record;
+          BEGIN
+            FOR item IN
+              SELECT n.nspname AS schema_name, t.typname AS type_name
+                FROM pg_type t
+                JOIN pg_namespace n ON n.oid = t.typnamespace
+               WHERE n.nspname = 'public' AND t.typtype = 'e'
+            LOOP
+              EXECUTE format('REVOKE USAGE ON TYPE %I.%I FROM PUBLIC', item.schema_name, item.type_name);
+            END LOOP;
+          END
+          $$;
+          SQL
+          psql --no-psqlrc --set=ON_ERROR_STOP=1 --host localhost --port 5433 --username postgres --dbname cocolo_shadow --file "$RUNNER_TEMP/revoke-shadow-enum.sql"
         env:
           PGPASSFILE: ${{ runner.temp }}/cocolo.pgpass
       - name: Shadow DB role属性を検査
