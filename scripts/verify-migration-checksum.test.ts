@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   formatMigrationManifest,
+  type MigrationChecksum,
   parseMigrationManifest,
   verifyMigrationManifest,
-  type MigrationChecksum,
 } from './verify-migration-checksum.ts';
 
 const entries: MigrationChecksum[] = [
@@ -52,12 +52,17 @@ test('migrationの追加と削除をchecksum不一致として拒否する', () 
     verifyMigrationManifest(added, formatMigrationManifest(entries)),
   );
   assert.throws(() =>
-    verifyMigrationManifest(entries.slice(0, 1), formatMigrationManifest(entries)),
+    verifyMigrationManifest(
+      entries.slice(0, 1),
+      formatMigrationManifest(entries),
+    ),
   );
 });
 
 test('不正なmanifest形式を拒否する', () => {
-  assert.throws(() => parseMigrationManifest(`${'a'.repeat(64)} migration.sql\n`));
+  assert.throws(() =>
+    parseMigrationManifest(`${'a'.repeat(64)} migration.sql\n`),
+  );
   assert.throws(() =>
     parseMigrationManifest(
       `${'a'.repeat(64)}  20260822090000_phase1_foundation/migration.sql\r\n`,

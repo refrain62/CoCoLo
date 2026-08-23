@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {
-  verifyMigrationHistory,
-  type MigrationHistory,
-} from './verify-migration-history.ts';
 import type { MigrationChecksum } from './verify-migration-checksum.ts';
+import {
+  type MigrationHistory,
+  verifyMigrationHistory,
+} from './verify-migration-history.ts';
 
 const expected: MigrationChecksum[] = [
   { path: '001/migration.sql', sha256: 'a'.repeat(64) },
@@ -31,9 +31,7 @@ assert.ok(firstHistory);
 assert.ok(secondHistory);
 
 test('完了済みmigration履歴を受け入れる', () => {
-  assert.doesNotThrow(() =>
-    verifyMigrationHistory(expected, completeHistory),
-  );
+  assert.doesNotThrow(() => verifyMigrationHistory(expected, completeHistory));
 });
 
 test('DB checksumの改変を拒否する', () => {

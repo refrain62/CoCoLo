@@ -53,8 +53,8 @@ function assertForbiddenStatements(file: MigrationSqlFile) {
       message: '既存列を削除するSQLは禁止です。',
     },
     {
-      pattern: /\b(?:TRUNCATE|DELETE\s+FROM|REVOKE)\b/i,
-      message: '既存データまたは権限を一括削除するSQLは禁止です。',
+      pattern: /\b(?:TRUNCATE|DELETE\s+FROM)\b/i,
+      message: '既存データを一括削除するSQLは禁止です。',
     },
   ] as const;
 
@@ -67,10 +67,9 @@ function assertForbiddenStatements(file: MigrationSqlFile) {
     const grantee = /\bTO\s+([a-z_][a-z0-9_]*)\b/i
       .exec(match[0])?.[1]
       ?.toLowerCase();
-    assert.equal(
-      grantee,
-      'cocolo_app',
-      `${file.path}: cocolo_app以外へのGRANTは禁止です。`,
+    assert.ok(
+      grantee === 'cocolo_app' || grantee === 'line_delivery_worker',
+      `${file.path}: 許可された実行role以外へのGRANTは禁止です。`,
     );
     assert.doesNotMatch(
       match[0],
@@ -78,6 +77,14 @@ function assertForbiddenStatements(file: MigrationSqlFile) {
       `${file.path}: GRANT OPTIONは禁止です。`,
     );
   }
+
+  const revokePattern = /\bREVOKE\b[^;]*;/gi;
+  for (const match of compact.matchAll(revokePattern))
+    assert.match(
+      match[0],
+      /^REVOKE\s+.+\s+ON\s+(?:TABLE\s+)?[^;]+\s+FROM\s+(?:PUBLIC|cocolo_app|line_delivery_worker)(?:\s*,\s*(?:PUBLIC|cocolo_app|line_delivery_worker))*\s*;$/i,
+      `${file.path}: 許可されたrole以外へのREVOKEは禁止です。`,
+    );
 }
 
 function assertCreatedTablesAreProtected(file: MigrationSqlFile) {
@@ -88,6 +95,24 @@ function assertCreatedTablesAreProtected(file: MigrationSqlFile) {
   for (const match of compact.matchAll(createTablePattern)) {
     const tableName = match[1];
     assert.ok(tableName, `${file.path}: CREATE TABLEの名前を解釈できません。`);
+    const tableStart = match.index ?? 0;
+    const nextTableMatch = /\bCREATE\s+TABLE\b/i.exec(
+      compact.slice(tableStart + match[0].length),
+    );
+    const nextTable =
+      nextTableMatch?.index === undefined
+        ? -1
+        : tableStart + match[0].length + nextTableMatch.index;
+    const tableBody = compact.slice(
+      tableStart,
+      nextTable === -1 ? compact.length : nextTable,
+    );
+    if (tableName !== 'tenants')
+      assert.match(
+        tableBody,
+        /\btenant_id\b/i,
+        `${file.path}: ${tableName}にはtenant_id列が必要です。`,
+      );
     assert.match(
       compact,
       tablePattern('COMMENT\\s+ON\\s+TABLE', tableName),
@@ -116,13 +141,49 @@ function assertCreatedTablesAreProtected(file: MigrationSqlFile) {
       tablePattern('CREATE\\s+POLICY\\s+[^;]+\\bON', tableName),
       `${file.path}: ${tableName}のRLS policyが必要です。`,
     );
+    if (tableName !== 'line_delivery_outbox')
+      assert.match(
+        compact,
+        new RegExp(
+          `GRANT\\s+[^;]*\\b${tableName}\\b[^;]*\\bTO\\s+cocolo_app\\b`,
+          'i',
+        ),
+        `${file.path}: ${tableName}へのcocolo_app権限が必要です。`,
+      );
+  }
+}
+
+function assertPolicyTenantBoundaries(file: MigrationSqlFile) {
+  const compact = compactSql(file.content);
+  const policyPattern = /\bCREATE\s+POLICY\b[^;]+;/gi;
+  for (const match of compact.matchAll(policyPattern)) {
+    const statement = match[0];
+    const table = /\bON\s+(?:"?public"?\.)?"?([a-z_][a-z0-9_]*)"?/i.exec(
+      statement,
+    )?.[1];
+    assert.ok(table, `${file.path}: policyの対象tableを解釈できません。`);
+    if (table === 'tenants') {
+      assert.match(
+        statement,
+        /\bid\b[\s\S]*current_setting\s*\(\s*'app\.tenant_id'/i,
+        `${file.path}: tenants policyにtenant境界が必要です。`,
+      );
+      continue;
+    }
     assert.match(
-      compact,
-      new RegExp(
-        `GRANT\\s+[^;]*\\b${tableName}\\b[^;]*\\bTO\\s+cocolo_app\\b`,
-        'i',
-      ),
-      `${file.path}: ${tableName}へのcocolo_app権限が必要です。`,
+      statement,
+      /\btenant_id\b/i,
+      `${file.path}: ${table} policyにtenant_id境界が必要です。`,
+    );
+    assert.match(
+      statement,
+      /current_setting\s*\(\s*'app\.tenant_id'|app_has_active_membership/i,
+      `${file.path}: ${table} policyにtenant context境界が必要です。`,
+    );
+    assert.doesNotMatch(
+      statement,
+      /\b(?:USING|WITH\s+CHECK)\s*\(\s*true\s*\)/i,
+      `${file.path}: ${table} policyの無条件許可は禁止です。`,
     );
   }
 }
@@ -143,6 +204,7 @@ export function validateMigrationSql(files: readonly MigrationSqlFile[]) {
     );
     assertForbiddenStatements(file);
     assertCreatedTablesAreProtected(file);
+    assertPolicyTenantBoundaries(file);
   }
   const allSql = files.map((file) => file.content).join('\n');
   assert.match(allSql, /COMMENT ON TABLE\s+[a-z_]+/);

@@ -37,7 +37,11 @@ export function formatMigrationManifest(entries: readonly MigrationChecksum[]) {
   assert.ok(sortedEntries.length > 0, 'migration checksumが1件以上必要です。');
   const seenPaths = new Set<string>();
   for (const entry of sortedEntries) {
-    assert.match(entry.sha256, /^[0-9a-f]{64}$/, `${entry.path}: SHA-256が不正です`);
+    assert.match(
+      entry.sha256,
+      /^[0-9a-f]{64}$/,
+      `${entry.path}: SHA-256が不正です`,
+    );
     assert.match(
       entry.path,
       /^[^/\\]+\/migration\.sql$/,
@@ -51,18 +55,25 @@ export function formatMigrationManifest(entries: readonly MigrationChecksum[]) {
 
 export function parseMigrationManifest(content: string) {
   assert.ok(!content.includes('\r'), 'checksum manifestはLF改行にしてください');
-  assert.ok(content.endsWith('\n'), 'checksum manifestは末尾をLF改行にしてください');
+  assert.ok(
+    content.endsWith('\n'),
+    'checksum manifestは末尾をLF改行にしてください',
+  );
   const lines = content.slice(0, -1).split('\n');
   assert.ok(lines.length > 0 && lines[0], 'checksum manifestが空です');
   const entries: MigrationChecksum[] = [];
   for (const [index, line] of lines.entries()) {
-    const match = /^(?<sha256>[0-9a-f]{64})  (?<path>[^/\\]+\/migration\.sql)$/.exec(
-      line,
-    );
+    const match =
+      /^(?<sha256>[0-9a-f]{64}) {2}(?<path>[^/\\]+\/migration\.sql)$/.exec(
+        line,
+      );
     const groups = match?.groups;
     assert.ok(groups, `checksum manifest ${index + 1}行目の形式が不正です`);
     assert.ok(groups.path, `checksum manifest ${index + 1}行目のパスが空です`);
-    assert.ok(groups.sha256, `checksum manifest ${index + 1}行目のchecksumが空です`);
+    assert.ok(
+      groups.sha256,
+      `checksum manifest ${index + 1}行目のchecksumが空です`,
+    );
     entries.push({
       path: groups.path,
       sha256: groups.sha256,
