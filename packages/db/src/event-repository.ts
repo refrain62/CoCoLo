@@ -7,7 +7,7 @@ import {
   type EventType,
   summarizeAttendance,
 } from '@cocolo/domain/event';
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 
 export type EventRecord = {
   id: string;
@@ -549,68 +549,71 @@ export function createEventRepository(client: PrismaClient): EventRepository {
         return toAttendanceRecord(row);
       }),
     summary: (input) =>
-      client.$transaction(async (tx) => {
-        await setRlsContext(tx, input);
-        await assertActiveMembership(tx, input);
-        if (input.role === 'guardian')
-          throw new EventAuthorizationError(
-            '出欠集計を閲覧する権限がありません。',
-          );
-        const eventRows = await tx.$queryRaw<Array<{ id: string }>>`
+      client.$transaction(
+        async (tx) => {
+          await setRlsContext(tx, input);
+          await assertActiveMembership(tx, input);
+          if (input.role === 'guardian')
+            throw new EventAuthorizationError(
+              '出欠集計を閲覧する権限がありません。',
+            );
+          const eventRows = await tx.$queryRaw<Array<{ id: string }>>`
           SELECT id
           FROM events
           WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
           FOR UPDATE
         `;
-        if (!eventRows[0]) throw new EventNotFoundError();
-        const totalRows = await tx.$queryRaw<Array<{ count: bigint }>>`
+          if (!eventRows[0]) throw new EventNotFoundError();
+          const totalRows = await tx.$queryRaw<Array<{ count: bigint }>>`
           SELECT count(*)::bigint AS count
           FROM members
           WHERE tenant_id = ${input.tenantId}::uuid AND status <> 'retired'::member_status
         `;
-        const responseRows = await tx.$queryRaw<
-          Array<{
-            response: AttendanceResponse;
-            member_id: string;
-            updated_at: Date;
-            id: string;
-          }>
-        >`
+          const responseRows = await tx.$queryRaw<
+            Array<{
+              response: AttendanceResponse;
+              member_id: string;
+              updated_at: Date;
+              id: string;
+            }>
+          >`
           SELECT DISTINCT ON (member_id) id, response, member_id, updated_at
           FROM attendance_responses
           WHERE tenant_id = ${input.tenantId}::uuid AND event_id = ${input.eventId}::uuid
           ORDER BY member_id, updated_at DESC, id DESC
         `;
-        const totalMembers = Number(totalRows[0]?.count ?? 0n);
-        const latestResponses = new Map<string, AttendanceResponse>();
-        for (const row of responseRows)
-          if (!latestResponses.has(row.member_id))
-            latestResponses.set(row.member_id, row.response);
-        const counts = summarizeAttendance(totalMembers, [
-          ...latestResponses.values(),
-        ]);
-        const answeredIds = new Set(latestResponses.keys());
-        const memberRows = await tx.$queryRaw<Array<{ id: string }>>`
+          const totalMembers = Number(totalRows[0]?.count ?? 0n);
+          const latestResponses = new Map<string, AttendanceResponse>();
+          for (const row of responseRows)
+            if (!latestResponses.has(row.member_id))
+              latestResponses.set(row.member_id, row.response);
+          const counts = summarizeAttendance(totalMembers, [
+            ...latestResponses.values(),
+          ]);
+          const answeredIds = new Set(latestResponses.keys());
+          const memberRows = await tx.$queryRaw<Array<{ id: string }>>`
           SELECT id
           FROM members
           WHERE tenant_id = ${input.tenantId}::uuid AND status <> 'retired'::member_status
           ORDER BY id
         `;
-        await audit(
-          tx,
-          input,
-          'attendance.summary',
-          'event',
-          input.eventId,
-          {},
-        );
-        return {
-          ...counts,
-          totalMembers,
-          unansweredMemberIds: memberRows
-            .map((row) => row.id)
-            .filter((id) => !answeredIds.has(id)),
-        };
-      }),
+          await audit(
+            tx,
+            input,
+            'attendance.summary',
+            'event',
+            input.eventId,
+            {},
+          );
+          return {
+            ...counts,
+            totalMembers,
+            unansweredMemberIds: memberRows
+              .map((row) => row.id)
+              .filter((id) => !answeredIds.has(id)),
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+      ),
   };
 }
