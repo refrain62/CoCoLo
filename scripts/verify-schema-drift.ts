@@ -59,11 +59,6 @@ export type MigrationIntegrityVerifier = (
   paths: SchemaDriftPaths,
 ) => Promise<void>;
 
-export type RedactedDatabaseUrl = Readonly<{
-  argvUrl: string;
-  password: string;
-}>;
-
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.dirname(scriptDirectory);
 
@@ -81,21 +76,6 @@ export function resolveSchemaDriftPaths(
   };
 }
 
-export function buildPrismaDiffArgs(
-  paths: SchemaDriftPaths,
-): readonly string[] {
-  return [
-    'migrate',
-    'diff',
-    '--from-migrations',
-    paths.migrationsDirectory,
-    '--to-schema-datamodel',
-    paths.schemaFile,
-    '--script',
-    '--exit-code',
-  ];
-}
-
 export function buildDirectDatabaseDiffArgs(
   paths: SchemaDriftPaths,
 ): readonly string[] {
@@ -109,21 +89,6 @@ export function buildDirectDatabaseDiffArgs(
     '--script',
     '--exit-code',
   ];
-}
-
-export function redactDatabaseUrl(
-  value: string | undefined,
-): RedactedDatabaseUrl {
-  assert.ok(value, 'Shadow DB URLが必要です。');
-  const parsed = new URL(value);
-  assert.ok(
-    parsed.protocol === 'postgresql:' || parsed.protocol === 'postgres:',
-    'Shadow DB URLはPostgreSQL URLで指定してください。',
-  );
-  const password = decodeURIComponent(parsed.password);
-  parsed.password = '';
-  parsed.searchParams.delete('password');
-  return { argvUrl: parsed.toString(), password };
 }
 
 function sanitizeDiagnostics(value: string): string {
@@ -672,13 +637,18 @@ export async function verifySchemaDrift(
   };
   const result = runner(
     process.execPath,
-    [prismaEntryPoint(paths), ...buildPrismaDiffArgs(paths)],
+    [prismaEntryPoint(paths), ...buildDirectDatabaseDiffArgs(paths)],
     {
       cwd: paths.dbDirectory,
       encoding: 'utf8',
       shell: false,
       windowsHide: true,
-      env: { ...directEnv, PRISMA_HIDE_UPDATE_MESSAGE: '1' },
+      env: {
+        ...directEnv,
+        DATABASE_URL: shadowDatabaseUrl,
+        DIRECT_URL: shadowDatabaseUrl,
+        PRISMA_HIDE_UPDATE_MESSAGE: '1',
+      },
     },
   );
   assertPrismaDiffClean(result);

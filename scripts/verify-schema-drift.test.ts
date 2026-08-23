@@ -9,9 +9,7 @@ import {
   assertMigrationLock,
   assertPrismaDiffClean,
   buildDirectDatabaseDiffArgs,
-  buildPrismaDiffArgs,
   type PrismaDiffResult,
-  redactDatabaseUrl,
   type SchemaDriftPaths,
   validateShadowDatabaseConfig,
   verifySchemaDrift,
@@ -21,9 +19,6 @@ const shadowDatabaseUrl =
   'postgresql://cocolo_shadow@localhost:5432/cocolo_shadow?sslmode=disable';
 const shadowDatabaseUrlWithPassword =
   'postgresql://cocolo_shadow:cocolo_shadow@localhost:5432/cocolo_shadow?sslmode=disable';
-const shadowDatabaseArg =
-  'postgresql://cocolo_shadow@localhost:5432/cocolo_shadow?sslmode=disable';
-
 const shadowConfig = {
   environment: 'local',
   databaseUrl: 'postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_local',
@@ -207,20 +202,10 @@ test('アプリrole・migration owner roleの共有を拒否する', () => {
 });
 
 test('Shadow DBの認証情報をargvへ渡さない', () => {
-  const redacted = redactDatabaseUrl(shadowDatabaseUrlWithPassword);
-  assert.equal(redacted.argvUrl, shadowDatabaseArg);
-  assert.equal(redacted.password, 'cocolo_shadow');
-  assert.ok(
-    buildPrismaDiffArgs(fixturePaths('C:\\schema-drift-fixture')).includes(
-      shadowDatabaseArg,
-    ) === false,
+  const args = buildDirectDatabaseDiffArgs(
+    fixturePaths('C:\\schema-drift-fixture'),
   );
-  assert.equal(
-    buildPrismaDiffArgs(fixturePaths('C:\\schema-drift-fixture')).includes(
-      shadowDatabaseUrlWithPassword,
-    ),
-    false,
-  );
+  assert.equal(args.includes(shadowDatabaseUrlWithPassword), false);
 });
 
 test('本番相当環境でprimaryと同じhostのShadow URLを拒否する', () => {
@@ -359,7 +344,7 @@ test('差分なしではPrisma CLIをexit-code付きで実行して成功する'
           'build',
           'index.js',
         ),
-        ...buildPrismaDiffArgs(fixture.paths),
+        ...buildDirectDatabaseDiffArgs(fixture.paths),
       ],
       received[0]?.args,
     );
