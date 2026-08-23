@@ -729,10 +729,12 @@ AS $$
 DECLARE
   plan_id uuid;
 BEGIN
-  plan_id := CASE
-    WHEN TG_TABLE_NAME = 'ride_plans' THEN NEW.id
-    ELSE NEW.plan_id
-  END;
+  plan_id := (
+    to_jsonb(NEW) ->> CASE
+      WHEN TG_TABLE_NAME = 'ride_plans' THEN 'id'
+      ELSE 'plan_id'
+    END
+  )::uuid;
   PERFORM pg_advisory_xact_lock(hashtextextended(NEW.tenant_id::text || ':' || plan_id::text, 0));
   RETURN NEW;
 END;
