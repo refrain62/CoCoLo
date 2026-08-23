@@ -10,10 +10,6 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  IF OLD.status = 'completed'::promotion_run_status
-    AND NEW IS DISTINCT FROM OLD THEN
-    RAISE EXCEPTION 'completed状態の年度繰り上げpayloadは変更できません';
-  END IF;
   IF OLD.tenant_id <> NEW.tenant_id OR OLD.fiscal_year <> NEW.fiscal_year THEN
     RAISE EXCEPTION 'promotion runのtenantまたは年度は変更できません';
   END IF;
@@ -31,6 +27,10 @@ BEGIN
   IF OLD.status = 'completed'::promotion_run_status
     AND NEW.status <> 'completed'::promotion_run_status THEN
     RAISE EXCEPTION 'completedからの状態変更はできません';
+  END IF;
+  IF OLD.status = 'completed'::promotion_run_status
+    AND NEW IS DISTINCT FROM OLD THEN
+    RAISE EXCEPTION 'completed状態の年度繰り上げpayloadは変更できません';
   END IF;
   IF OLD.status = 'preview'::promotion_run_status
     AND NEW.status NOT IN (
