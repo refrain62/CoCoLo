@@ -46,11 +46,16 @@ function splitHeaderList(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
-function setVaryOrigin(headers: Headers) {
+function setVary(headers: Headers, values: readonly string[]) {
   const current = headers.get('Vary');
-  if (!current) headers.set('Vary', 'Origin');
-  else if (!current.split(',').some((item) => item.trim() === 'Origin'))
-    headers.set('Vary', `${current}, Origin`);
+  const existing = new Set(
+    (current ?? '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
+  for (const value of values) existing.add(value);
+  headers.set('Vary', [...existing].join(', '));
 }
 
 function requestId(request: Request): string {
@@ -134,8 +139,19 @@ export function createCorsMiddleware(options: CorsOptions): MiddlewareHandler {
     throw new Error('CORS preflightのmax-ageが不正です。');
 
   return async (c, next) => {
+    c.header('Cache-Control', 'private, no-store');
     const origin = c.req.header('origin');
     if (!origin) return next();
+
+    const varyValues =
+      c.req.method === 'OPTIONS'
+        ? [
+            'Origin',
+            'Access-Control-Request-Method',
+            'Access-Control-Request-Headers',
+          ]
+        : ['Origin'];
+    setVary(c.res.headers, varyValues);
 
     let normalizedOrigin: string;
     try {
@@ -159,7 +175,6 @@ export function createCorsMiddleware(options: CorsOptions): MiddlewareHandler {
       c.header('Access-Control-Allow-Methods', [...methods].join(', '));
       c.header('Access-Control-Allow-Headers', [...headers].join(', '));
       c.header('Access-Control-Max-Age', String(maxAgeSeconds));
-      setVaryOrigin(c.res.headers);
       return c.body(null, 204);
     }
 
@@ -168,7 +183,6 @@ export function createCorsMiddleware(options: CorsOptions): MiddlewareHandler {
       'Access-Control-Expose-Headers',
       'X-Request-Id, ETag, Retry-After',
     );
-    setVaryOrigin(c.res.headers);
     await next();
   };
 }

@@ -24,7 +24,7 @@ const app = createApp({
     namespace: runtime.rateLimitNamespace,
     adapter: distributedRateLimitAdapter,
   },
-  cors: { origins: [runtime.publicAppUrl] },
+  cors: { origins: runtime.publicAppUrlAllowlist },
   ...repositories,
 });
 serve({ fetch: app.fetch, port });

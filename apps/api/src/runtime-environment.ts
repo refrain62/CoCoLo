@@ -20,6 +20,7 @@ export type RuntimeEnvironment = {
   r2Endpoint: string;
   r2Bucket: string;
   publicAppUrl: string;
+  publicAppUrlAllowlist: string[];
   rateLimitNamespace: AppEnvironment;
   rateLimitStoreMode: RateLimitStoreMode;
   rateLimitFailClosed: true;
@@ -143,6 +144,10 @@ export function readRuntimeEnvironment(
     supabaseAllowedJwksUrl: allowedJwksUrl,
     publicAppUrlAllowlist: allowlist,
   });
+  const publicAppUrlAllowlist = (allowlist ?? publicAppUrl)
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
 
   const configuredIssuer = environment.SUPABASE_ISSUER?.trim();
   if (configuredIssuer && configuredIssuer !== supabaseIssuer)
@@ -166,6 +171,7 @@ export function readRuntimeEnvironment(
     r2Endpoint,
     r2Bucket,
     publicAppUrl,
+    publicAppUrlAllowlist,
     rateLimitNamespace: appEnv,
     rateLimitStoreMode,
     rateLimitFailClosed: true,

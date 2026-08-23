@@ -36,7 +36,16 @@ test('許可されたoriginのpreflightだけを204で返す', async () => {
   );
   assert.equal(response.headers.get('Access-Control-Allow-Credentials'), null);
   assert.equal(response.headers.get('Access-Control-Max-Age'), '300');
-  assert.equal(response.headers.get('Vary'), 'Origin');
+  assert.match(response.headers.get('Vary') ?? '', /Origin/);
+  assert.match(
+    response.headers.get('Vary') ?? '',
+    /Access-Control-Request-Method/,
+  );
+  assert.match(
+    response.headers.get('Vary') ?? '',
+    /Access-Control-Request-Headers/,
+  );
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
   assert.match(
     response.headers.get('Access-Control-Allow-Headers') ?? '',
     /Authorization/i,
@@ -52,6 +61,16 @@ test('許可されていないorigin、method、headerをfail-closedで拒否す
   assert.equal(originResponse.status, 403);
   assert.equal((await originResponse.json()).error.code, 'CORS_ORIGIN_DENIED');
   assert.ok(originResponse.headers.get('x-request-id'));
+  assert.equal(originResponse.headers.get('Vary'), 'Origin');
+
+  const nullOriginResponse = await app.request('/resource', {
+    headers: { Origin: 'null' },
+  });
+  assert.equal(nullOriginResponse.status, 403);
+  assert.equal(
+    (await nullOriginResponse.json()).error.code,
+    'CORS_ORIGIN_DENIED',
+  );
 
   const methodResponse = await app.request('/resource', {
     method: 'OPTIONS',
@@ -89,6 +108,7 @@ test('許可された単純リクエストだけにCORS response headerを付け
     allowed.headers.get('Access-Control-Expose-Headers'),
     'X-Request-Id, ETag, Retry-After',
   );
+  assert.equal(allowed.headers.get('Cache-Control'), 'private, no-store');
 
   const sameOrigin = await app.request('/resource');
   assert.equal(sameOrigin.status, 200);
@@ -109,6 +129,21 @@ test('createAppへ接続したCORS境界は認証より前にpreflightを処理�
   assert.equal(
     response.headers.get('Access-Control-Allow-Origin'),
     ALLOWED_ORIGIN,
+  );
+});
+
+test('複数の固定公開URLをruntimeのCORS allowlistへ接続できる', async () => {
+  const app = createApp({
+    cors: { origins: [ALLOWED_ORIGIN, 'https://admin.staging.example.test'] },
+  });
+  const response = await app.request('/health', {
+    headers: { Origin: 'https://admin.staging.example.test' },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(
+    response.headers.get('Access-Control-Allow-Origin'),
+    'https://admin.staging.example.test',
   );
 });
 

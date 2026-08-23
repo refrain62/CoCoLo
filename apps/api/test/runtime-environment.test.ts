@@ -46,6 +46,7 @@ test('API起動時に許可されたstaging環境を解決する', () => {
       r2Endpoint: validStagingEnvironment.R2_ENDPOINT,
       r2Bucket: validStagingEnvironment.R2_BUCKET,
       publicAppUrl: validStagingEnvironment.PUBLIC_APP_URL,
+      publicAppUrlAllowlist: [validStagingEnvironment.PUBLIC_APP_URL],
       rateLimitNamespace: 'staging',
       rateLimitStoreMode: 'distributed',
       rateLimitFailClosed: true,
