@@ -110,7 +110,7 @@ async function seedFixture(client: PrismaClient) {
        (id, tenant_id, owner_user_id, object_key, media_type, byte_size, sha256, status,
         expires_at, complete_attempts, cleanup_attempts, created_at, available_at)
        VALUES
-        ($1::uuid, $3::uuid, 'guardian-a', 'tenant-a/00000000-0000-7000-8000-000000000501', 'image/png', 8,
+        ($1::uuid, $3::uuid, 'guardian-a2', 'tenant-a/00000000-0000-7000-8000-000000000501', 'image/png', 8,
          NULL, 'uploaded', '2099-01-01T00:00:00Z', 0, 0, now(), NULL),
         ($2::uuid, $4::uuid, 'owner-b', 'tenant-b/00000000-0000-7000-8000-000000000502', 'application/pdf', 5,
          NULL, 'uploaded', '2099-01-01T00:00:00Z', 0, 0, now(), NULL)`,
@@ -151,7 +151,7 @@ async function seedFixture(client: PrismaClient) {
     `INSERT INTO attendance_responses
        (id, tenant_id, event_id, user_id, member_id, response)
      VALUES
-       ('00000000-0000-7000-8000-000000000411', $1::uuid, $2::uuid, 'guardian-a', $3::uuid, 'attending'),
+       ('00000000-0000-7000-8000-000000000411', $1::uuid, $2::uuid, 'guardian-a2', $3::uuid, 'attending'),
        ('00000000-0000-7000-8000-000000000412', $1::uuid, $2::uuid, 'owner-a', $4::uuid, 'absent')`,
     tenantA,
     eventA,
@@ -187,7 +187,7 @@ async function seedFixture(client: PrismaClient) {
       transaction as unknown as PrismaClient,
       `INSERT INTO order_entries
          (id, tenant_id, order_id, orderer_user_id, orderer_name, member_id, total_amount, payment_status)
-       VALUES ($1::uuid, $2::uuid, $3::uuid, 'guardian-a', '注文者A', $4::uuid, 1000, 'unpaid')`,
+       VALUES ($1::uuid, $2::uuid, $3::uuid, 'guardian-a2', '注文者A', $4::uuid, 1000, 'unpaid')`,
       entryA,
       tenantA,
       orderA,
@@ -208,7 +208,7 @@ async function seedFixture(client: PrismaClient) {
     client,
     `INSERT INTO order_idempotency_keys
        (id, tenant_id, actor_user_id, idempotency_key, request_hash, resource_type, resource_id)
-     VALUES ($1::uuid, $2::uuid, 'guardian-a', 'fixture-key', repeat('c', 64), 'order_entry', $3::uuid)`,
+     VALUES ($1::uuid, $2::uuid, 'guardian-a2', 'fixture-key', repeat('c', 64), 'order_entry', $3::uuid)`,
     idempotencyA,
     tenantA,
     entryA,
@@ -280,7 +280,7 @@ async function seedFixture(client: PrismaClient) {
   await execute(
     client,
     `INSERT INTO ride_requests (id, tenant_id, plan_id, member_id, requester_user_id, passenger_count, status)
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'guardian-a', 1, 'pending')`,
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'guardian-a2', 1, 'pending')`,
     rideRequestA,
     tenantA,
     ridePlanA,
@@ -513,7 +513,7 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
     assert.equal(await count(tx, 'purchase_orders'), 0);
   });
 
-  await withContext(app, tenantA, 'guardian-a', 'guardian', async (tx) => {
+  await withContext(app, tenantA, 'guardian-a2', 'guardian', async (tx) => {
     assert.equal(await count(tx, 'attendance_responses'), 1);
     assert.equal(await count(tx, 'attachments'), 1);
     assert.equal(await count(tx, 'order_entries'), 1);
@@ -525,7 +525,7 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
         tx,
         `INSERT INTO attendance_responses
              (id, tenant_id, event_id, user_id, member_id, response)
-           VALUES ('00000000-0000-7000-8000-000000000413', $1::uuid, $2::uuid, 'guardian-a', $3::uuid, 'absent')`,
+             VALUES ('00000000-0000-7000-8000-000000000413', $1::uuid, $2::uuid, 'guardian-a2', $3::uuid, 'absent')`,
         tenantA,
         eventA,
         memberA2,
@@ -539,7 +539,7 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
     assert.equal(await count(tx, 'purchase_orders'), 0);
   });
 
-  await withContext(app, tenantA, 'guardian-a', 'guardian', async (tx) => {
+  await withContext(app, tenantA, 'guardian-a2', 'guardian', async (tx) => {
     await execute(
       tx,
       `DELETE FROM board_contacts WHERE id = $1::uuid`,
