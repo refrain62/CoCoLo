@@ -550,6 +550,7 @@ function diagnostics(result: PrismaDiffResult): string {
 
 // Prismaの終了状態と差分出力を両方検査し、CLI失敗やschema driftを合格へ変換しない。
 export function assertPrismaDiffClean(result: PrismaDiffResult): void {
+  const emptyMigrationMessage = '-- This is an empty migration.';
   if (result.error) {
     throw new Error(
       `Prisma migrate diffの実行に失敗しました: ${result.error.message}`,
@@ -577,8 +578,9 @@ export function assertPrismaDiffClean(result: PrismaDiffResult): void {
     );
   }
   assert.equal(
-    result.stdout.trim(),
-    '',
+    result.stdout.trim() === '' ||
+      result.stdout.trim() === emptyMigrationMessage,
+    true,
     `Prisma schemaとmigrationに構造差分があります。${diagnostics(result)}`,
   );
 }
