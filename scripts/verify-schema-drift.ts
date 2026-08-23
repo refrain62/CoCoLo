@@ -3,16 +3,16 @@ import { spawnSync } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { verifyMigrationBaseline } from './verify-migration-baseline.ts';
 import {
   migrationPaths,
   parseMigrationManifest,
   readMigrationChecksums,
   verifyMigrationManifest,
 } from './verify-migration-checksum.ts';
-import { verifyMigrationBaseline } from './verify-migration-baseline.ts';
 import {
-  verifyMigrationHistory,
   readMigrationHistory,
+  verifyMigrationHistory,
 } from './verify-migration-history.ts';
 
 export type SchemaDriftPaths = Readonly<{
