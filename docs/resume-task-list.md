@@ -130,6 +130,9 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - 状態：実装と対象範囲の検証は完了していますが、全体`pnpm test`、GitHub Actions CI、trusted root bootstrap後の再検証が残っています。
   - 実施済みの変更と検証結果：[T014-PR-001の履歴](resume-task-history.md#t014-pr-001)
   - 依存：trusted rootがbootstrap済みになるまで、`pnpm verify:trust-root`が`manual-owner-bootstrap-required`で停止することは仕様どおりです。
+  - 現行確認：mainに`pr-trust-gate.yml`は存在せず、PR #65のactive checkにもtrust gateはありません。
+  - 現行判定：trust gate未展開のため、PR #65の機能、品質、セキュリティ判定ではtrusted manifest差分を非ブロッカーとして扱います。
+  - gate有効化条件：T014-PR-001でmainへworkflowをowner-only反映し、base側manifest、bootstrap extension、permissions、変更ファイルAPI検査を同時に確定します。
   - 完了条件：#50のbootstrap後にCIを再実行し、PR head SHAとbase正本の比較、変更ファイルAPI、3000件上限、permissions、workflow改変検査が成功することです。
 
 ### 3.4 DB整合性と権限検査
@@ -236,10 +239,7 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
 
 ## 6. Phase 2の未統合タスク
 
-- `[ ]` **EVT-001：予定と出欠を中央API、Web、DBへ統合する。**
-  - 対象：PR #27、`feature/phase2-events-attendance`
-  - 予定登録、期間一覧、編集、月間表示、週間表示、出欠回答、締切、管理者修正、集計を中央routeへ接続します。
-  - PR固有の実DBテストは成功報告がありますが、中央統合後にmigration、RLS、OpenAPI、Playwrightを再実行します。
+EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume-task-history.mdのEVT-001](resume-task-history.md#evt-001)と[verification-runbook.mdのEVT-001記録](verification-runbook.md#追加記録evt-001中央接続の実db検証漏れとrlsロック境界-2026-08-23)へ移しました。
 
 - `[ ]` **EVT-002：予定詳細と出欠回答状態を統合する。**
   - 対象：PR #49、`feature/central-event-detail`
