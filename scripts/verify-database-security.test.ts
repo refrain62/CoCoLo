@@ -66,7 +66,7 @@ function createValidInspection(): DatabaseSecurityInspection {
       name: 'tenants_select',
       command: 'SELECT',
       usingExpression:
-        "id = NULLIF(current_setting('app.tenant_id', true), '')::uuid",
+        "(id = (nullif(current_setting('app.tenant_id'::text, true), ''::text))::uuid)",
       withCheckExpression: null,
     },
     {
