@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createApp } from '../dist/app.js';
-import { InMemoryRateLimitStore } from '../dist/security/rate-limit.js';
+import {
+  createRateLimitKey,
+  InMemoryRateLimitStore,
+} from '../dist/security/rate-limit.js';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TOKEN = 'owner-a';
@@ -92,6 +95,17 @@ test('認証済みのexact routeにもtenant/user rate limitを適用する', as
   assert.equal(members.status, 200);
   assert.equal(notification.status, 202);
   assert.equal(store.keys.length, 2);
+  assert.equal(
+    store.keys[0],
+    createRateLimitKey('local', 'authenticated', {
+      kind: 'user',
+      tenantId: TENANT_A,
+      userId: TOKEN,
+    }),
+  );
+  assert.equal(store.keys[0], store.keys[1]);
+  assert.match(store.keys[0], /^user:local:[a-f0-9]{64}:[a-f0-9]{64}$/);
+  assert.doesNotMatch(store.keys[0], new RegExp(`${TENANT_A}|${TOKEN}`));
   assert.equal(getProducerCalls(), 1);
 });
 
@@ -108,6 +122,7 @@ test('rate limit超過時はexact routeの業務handlerを呼ばず429にする'
       ...authHeaders,
       'content-type': 'application/json',
       'idempotency-key': 'notification-002',
+      'x-request-id': 'rate-limit-request-002',
     },
     body: JSON.stringify({
       sourceId: 'event-002',
@@ -120,5 +135,20 @@ test('rate limit超過時はexact routeの業務handlerを呼ばず429にする'
 
   assert.equal(members.status, 429);
   assert.equal(notification.status, 429);
+  assert.equal(
+    notification.headers.get('x-request-id'),
+    'rate-limit-request-002',
+  );
+  assert.equal(notification.headers.get('x-ratelimit-limit'), '60');
+  assert.equal(notification.headers.get('x-ratelimit-remaining'), '0');
+  assert.equal(notification.headers.get('retry-after'), '60');
+  assert.deepEqual(await notification.json(), {
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'リクエスト数の上限を超えました。',
+      details: {},
+      requestId: 'rate-limit-request-002',
+    },
+  });
   assert.equal(getProducerCalls(), 0);
 });
