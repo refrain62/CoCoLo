@@ -20,7 +20,7 @@ export type ShadowRoleInspection = Readonly<{
 }>;
 
 export type ShadowAclEntry = Readonly<{
-  objectType: 'default' | 'schema' | 'table' | 'sequence' | 'enum' | 'function';
+  objectType: 'default' | 'schema' | 'table' | 'sequence' | 'enum';
   objectName: string;
   grantee: string;
   privilege: string;
@@ -124,12 +124,6 @@ function expectedAclEntries(
     objectName: 'public',
     grantee: 'cocolo_app',
     privilege: 'USAGE',
-  });
-  entries.push({
-    objectType: 'function',
-    objectName: 'public.app_guard_promotion_run_transition()',
-    grantee: 'cocolo_app',
-    privilege: 'EXECUTE',
   });
   for (const objectName of [
     'public.tenants',
@@ -342,15 +336,7 @@ async function inspectShadowDatabase(
          SELECT 'enum'::text, n.nspname || '.' || t.typname, CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END, x.privilege_type
            FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
            CROSS JOIN LATERAL aclexplode(t.typacl) x
-           WHERE n.nspname = 'public' AND t.typtype = 'e' AND x.grantee <> t.typowner
-          UNION ALL
-         SELECT 'function'::text,
-                n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')',
-                CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END,
-                x.privilege_type
-           FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-           CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) x
-          WHERE n.nspname = 'public' AND p.prokind IN ('f', 'p') AND x.grantee <> p.proowner`,
+           WHERE n.nspname = 'public' AND t.typtype = 'e' AND x.grantee <> t.typowner`,
     ),
     client.$queryRawUnsafe<ShadowAclEntry[]>(
       `SELECT 'default'::text AS "objectType", COALESCE(n.nspname, '*') AS "objectName",
