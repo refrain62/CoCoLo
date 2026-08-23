@@ -738,6 +738,44 @@ CREATE TRIGGER ride_request_state_lock
 BEFORE UPDATE ON ride_requests
 FOR EACH ROW EXECUTE FUNCTION app_lock_ride_state();
 
+CREATE OR REPLACE FUNCTION app_guard_ride_state_transition()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status THEN
+    IF TG_TABLE_NAME = 'ride_plans' AND NOT (
+      (OLD.status::text = 'draft' AND NEW.status::text = 'open')
+      OR (OLD.status::text = 'open' AND NEW.status::text = 'closed')
+      OR (OLD.status::text = 'closed' AND NEW.status::text = 'finalized')
+    ) THEN
+      RAISE EXCEPTION '送迎予定の状態遷移が不正です';
+    END IF;
+    IF TG_TABLE_NAME = 'ride_offers' AND NOT (
+      OLD.status::text = 'open' AND NEW.status::text = 'cancelled'
+    ) THEN
+      RAISE EXCEPTION '送迎提供の状態遷移が不正です';
+    END IF;
+    IF TG_TABLE_NAME = 'ride_requests' AND NOT (
+      (OLD.status::text IN ('pending', 'unassigned') AND NEW.status::text IN ('assigned', 'unassigned', 'cancelled'))
+      OR (OLD.status::text = 'assigned' AND NEW.status::text = 'cancelled')
+    ) THEN
+      RAISE EXCEPTION '乗車希望の状態遷移が不正です';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER ride_plan_state_transition_guard
+BEFORE UPDATE ON ride_plans
+FOR EACH ROW EXECUTE FUNCTION app_guard_ride_state_transition();
+CREATE TRIGGER ride_offer_state_transition_guard
+BEFORE UPDATE ON ride_offers
+FOR EACH ROW EXECUTE FUNCTION app_guard_ride_state_transition();
+CREATE TRIGGER ride_request_state_transition_guard
+BEFORE UPDATE ON ride_requests
+FOR EACH ROW EXECUTE FUNCTION app_guard_ride_state_transition();
+
 CREATE OR REPLACE FUNCTION app_has_active_membership(target_tenant_id uuid)
 RETURNS boolean
 LANGUAGE sql
