@@ -146,18 +146,28 @@ async function seedFixture(client: PrismaClient) {
     tenantB,
     attachmentA,
   );
-  await execute(
-    client,
-    `INSERT INTO attendance_responses
-       (id, tenant_id, event_id, user_id, member_id, response)
-     VALUES
-       ('00000000-0000-7000-8000-000000000411', $1::uuid, $2::uuid, 'guardian-a2', $3::uuid, 'attending'),
-       ('00000000-0000-7000-8000-000000000412', $1::uuid, $2::uuid, 'owner-a', $4::uuid, 'absent')`,
-    tenantA,
-    eventA,
-    memberA,
-    memberA2,
-  );
+  await withContext(client, tenantA, 'guardian-a2', 'guardian', async (tx) => {
+    await execute(
+      tx,
+      `INSERT INTO attendance_responses
+         (id, tenant_id, event_id, user_id, member_id, response)
+       VALUES ('00000000-0000-7000-8000-000000000411', $1::uuid, $2::uuid, 'guardian-a2', $3::uuid, 'attending')`,
+      tenantA,
+      eventA,
+      memberA,
+    );
+  });
+  await withContext(client, tenantA, 'owner-a', 'owner', async (tx) => {
+    await execute(
+      tx,
+      `INSERT INTO attendance_responses
+         (id, tenant_id, event_id, user_id, member_id, response)
+       VALUES ('00000000-0000-7000-8000-000000000412', $1::uuid, $2::uuid, 'owner-a', $3::uuid, 'absent')`,
+      tenantA,
+      eventA,
+      memberA2,
+    );
+  });
   await execute(
     client,
     `INSERT INTO board_contacts
