@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type { MemberRecord } from '../dist/app.js';
 import { createApp } from '../dist/app.js';
 import { createStructuredLogger } from '../dist/security/structured-logger.js';
 
@@ -7,7 +8,7 @@ const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const MEMBER_A = '00000000-0000-7000-8000-000000000002';
 const TOKEN = 'owner-a';
 
-function createMemberApp(member: Record<string, unknown>, logs: string[] = []) {
+function createMemberApp(member: MemberRecord, logs: string[] = []) {
   return createApp({
     verifyToken: async (token) => {
       if (token !== TOKEN) throw new Error('invalid token');
@@ -34,7 +35,7 @@ function createMemberApp(member: Record<string, unknown>, logs: string[] = []) {
   });
 }
 
-const validMember = {
+const validMember: MemberRecord = {
   id: MEMBER_A,
   tenantId: TENANT_A,
   name: '部員',
