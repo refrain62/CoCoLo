@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { uuidv7 } from './uuidv7.js';
 
 export type BoardContactRoleType = 'admin' | 'staff' | 'member';
 export type ContactPreference = 'line' | 'phone' | 'both';
@@ -202,7 +203,7 @@ async function writeAudit(
       resource_id,
       metadata
     ) VALUES (
-      gen_random_uuid(),
+      ${uuidv7()}::uuid,
       ${input.tenantId}::uuid,
       ${input.actorUserId},
       ${action},
@@ -315,7 +316,7 @@ export function createBoardContactRepository(client: PrismaClient) {
             phone,
             contact_preference
           ) VALUES (
-            gen_random_uuid(),
+            ${uuidv7()}::uuid,
             ${input.tenantId}::uuid,
             ${input.contact.fiscalYear},
             ${input.contact.roleName},
@@ -475,7 +476,7 @@ export function createBoardContactRepository(client: PrismaClient) {
             contact_preference
           )
           SELECT
-            gen_random_uuid(),
+            ${uuidv7()}::uuid,
             tenant_id,
             ${input.toFiscalYear},
             role_name,

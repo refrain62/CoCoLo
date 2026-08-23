@@ -411,7 +411,7 @@ function toClaim(row: ClaimRow | undefined): LineDeliveryClaim | null {
     !row.notification_id ||
     !row.tenant_id ||
     !row.destination ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-57][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       row.provider_retry_key,
     ) ||
     !row.attempt_token ||

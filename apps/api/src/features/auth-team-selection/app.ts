@@ -77,7 +77,7 @@ function selectionErrorResponse(
 // 認証済み利用者のactive所属だけを返し、チーム選択の認可をAPI境界で完結させる。
 export function createAuthTeamSelectionApp(
   options: AuthTeamSelectionAppOptions = {},
-) {
+): Hono<AuthTeamSelectionEnv> {
   const app = new Hono<AuthTeamSelectionEnv>();
 
   app.use('*', async (context, next) => {

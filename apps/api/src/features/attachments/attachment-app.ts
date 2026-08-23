@@ -130,7 +130,9 @@ async function cleanupRejected(
 }
 
 // Phase 4の中央appへ後でmountできる自己完結router。認証・RLS・ストレージを外から注入する。
-export function createAttachmentApp(options: AttachmentAppOptions) {
+export function createAttachmentApp(
+  options: AttachmentAppOptions,
+): Hono<AttachmentApiEnv> {
   const app = new Hono<AttachmentApiEnv>();
   const now = options.now ?? (() => new Date());
   const createId =

@@ -48,6 +48,7 @@ async function requiredManifestPaths(): Promise<string[]> {
     'pnpm-lock.yaml',
     'biome.json',
     'tsconfig.scripts.json',
+    'packages/db/package.json',
     'packages/db/prisma/schema.prisma',
   ];
   for (const directory of [

@@ -101,6 +101,14 @@ async function publishViaProductionApi(input: {
   return result.data.notificationId;
 }
 
+async function deleteAuditLogs(resourceId: string) {
+  await owner.$transaction(async (tx) => {
+    await tx.$executeRaw`ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_append_only_guard`;
+    await tx.$executeRaw`DELETE FROM audit_logs WHERE resource_id = ${resourceId}::uuid`;
+    await tx.$executeRaw`ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_append_only_guard`;
+  });
+}
+
 test('同一tenantで別sourceがIdempotency-Keyを再利用しても500ではなく409になる', async () => {
   const idempotencyKey = `cross-source-${randomUUID()}`;
   const firstId = await publishViaProductionApi({
@@ -119,9 +127,7 @@ test('同一tenantで別sourceがIdempotency-Keyを再利用しても500では�
        AND idempotency_key = ${idempotencyKey}
   `;
   assert.deepEqual(rows, [{ count: 1n }]);
-  await owner.$executeRaw`
-    DELETE FROM audit_logs WHERE resource_id = ${firstId}::uuid
-  `;
+  await deleteAuditLogs(firstId);
   await owner.$executeRaw`
     DELETE FROM line_delivery_outbox WHERE id = ${firstId}::uuid
   `;
@@ -185,9 +191,7 @@ test('業務transactionのenqueueからworker claim・送信・sent確定まで�
        AND action = 'line_delivery.requested'
   `;
   assert.equal(auditRows.length, 2);
-  await owner.$executeRaw`
-    DELETE FROM audit_logs WHERE resource_id = ${notificationId}::uuid
-  `;
+  await deleteAuditLogs(notificationId);
   await owner.$executeRaw`
     DELETE FROM line_delivery_outbox WHERE id = ${notificationId}::uuid
   `;
@@ -302,9 +306,7 @@ test('retry・unknown・lease切れは同じprovider retry keyで重複送信を
     ].sort((left, right) => left.id.localeCompare(right.id)),
   );
   for (const notificationId of [retryId, unknownId, leaseId]) {
-    await owner.$executeRaw`
-      DELETE FROM audit_logs WHERE resource_id = ${notificationId}::uuid
-    `;
+    await deleteAuditLogs(notificationId);
     await owner.$executeRaw`
       DELETE FROM line_delivery_outbox WHERE id = ${notificationId}::uuid
     `;
@@ -363,9 +365,7 @@ test('unknown確定は古いtokenまたは期限切れleaseでは状態を変更
        AND action = 'line_delivery.unknown'
   `;
   assert.deepEqual(unknownAuditRows, []);
-  await owner.$executeRaw`
-    DELETE FROM audit_logs WHERE resource_id = ${notificationId}::uuid
-  `;
+  await deleteAuditLogs(notificationId);
   await owner.$executeRaw`
     DELETE FROM line_delivery_outbox WHERE id = ${notificationId}::uuid
   `;

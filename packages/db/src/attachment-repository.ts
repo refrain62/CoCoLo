@@ -7,6 +7,7 @@ import type {
   ExpiredAttachmentCleanupInput,
 } from '@cocolo/domain/attachment';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { uuidv7 } from './uuidv7.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 type AttachmentRole = 'owner' | 'admin' | 'staff' | 'guardian';
@@ -109,7 +110,7 @@ async function audit(
   await client.$executeRaw`
     INSERT INTO audit_logs (id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata)
     VALUES (
-      gen_random_uuid(),
+      ${uuidv7()}::uuid,
       ${input.tenantId}::uuid,
       ${input.actorUserId},
       ${input.action},

@@ -155,7 +155,7 @@ function projectAttendance(
 }
 
 // Phase 2の登録点をfeature単位へ閉じ込め、既存createAppへは統合メモ記載のapp.routeで接続する。
-export function createEventsApp(options: EventApiOptions) {
+export function createEventsApp(options: EventApiOptions): Hono<EventApiEnv> {
   const app = new Hono<EventApiEnv>();
   if (!options.useCentralAuth)
     app.use('*', async (c, next) => {

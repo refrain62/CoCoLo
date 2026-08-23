@@ -135,7 +135,9 @@ function repositoryError(
  * 注文機能だけを独立して公開するHono app。
  * 既存のapp.tsへ接続する際も、認証済み所属からtenantIdを決める境界は変更しない。
  */
-export function createOrdersPaymentsApp(options: OrdersPaymentsAppOptions) {
+export function createOrdersPaymentsApp(
+  options: OrdersPaymentsAppOptions,
+): Hono<OrdersPaymentsApiEnv> {
   const app = new Hono<OrdersPaymentsApiEnv>();
   app.use('*', async (c, next) => {
     c.set('requestId', c.req.header('x-request-id') ?? crypto.randomUUID());
