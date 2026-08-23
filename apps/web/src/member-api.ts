@@ -76,6 +76,7 @@ export class MemberApiError extends Error {
 
 export type MemberApi = {
   list: (filters: MemberListFilters) => Promise<MemberSummary[]>;
+  listAll: (filters: MemberListFilters) => Promise<MemberSummary[]>;
   create: (input: MemberCreateInput) => Promise<MemberSummary>;
   update: (
     memberId: string,
@@ -132,14 +133,33 @@ export function createMemberApi({
     return (await response.json()) as T;
   }
 
+  async function listPage(
+    filters: MemberListFilters,
+    page: number,
+    pageSize: number,
+  ) {
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    if (filters.q.trim()) params.set('q', filters.q.trim());
+    if (filters.category) params.set('category', filters.category);
+    if (filters.status) params.set('status', filters.status);
+    return request<MemberListResponse>(`?${params}`);
+  }
+
   return {
     async list(filters) {
-      const params = new URLSearchParams({ page: '1', pageSize: '50' });
-      if (filters.q.trim()) params.set('q', filters.q.trim());
-      if (filters.category) params.set('category', filters.category);
-      if (filters.status) params.set('status', filters.status);
-      const response = await request<MemberListResponse>(`?${params}`);
+      const response = await listPage(filters, 1, 50);
       return response.data;
+    },
+    async listAll(filters) {
+      const members: MemberSummary[] = [];
+      for (let page = 1; ; page += 1) {
+        const response = await listPage(filters, page, 100);
+        members.push(...response.data);
+        if (response.data.length < response.pageSize) return members;
+      }
     },
     async create(input) {
       const response = await request<{ data: MemberSummary }>('', {

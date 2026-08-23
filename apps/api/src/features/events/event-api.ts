@@ -166,9 +166,9 @@ export function createEventsApp(options: EventApiOptions) {
     if (response) return response;
     return errorResponse(
       c,
-      500,
-      'INTERNAL_SERVER_ERROR',
-      '予期しないエラーが発生しました。',
+      503,
+      'DEPENDENCY_UNAVAILABLE',
+      '予定データストアを利用できません。',
     );
   });
 

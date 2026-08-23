@@ -46,7 +46,7 @@ function AuthenticatedApp() {
     setEventsError(null);
     void Promise.all([
       authContextApi.get(),
-      memberApi.list({ q: '', category: '', status: 'active' }),
+      memberApi.listAll({ q: '', category: '', status: 'active' }),
     ])
       .then(([context, members]) => {
         if (!active) return;

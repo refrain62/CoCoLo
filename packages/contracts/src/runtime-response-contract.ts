@@ -131,7 +131,7 @@ const eventPublicResponseSchema = z
     endsAt: z.string().datetime({ offset: true }),
     location: z.string().max(500).nullable(),
     itemsToBring: z.string().max(2000).nullable(),
-    fee: z.number().int().min(0),
+    fee: z.number().int().min(0).max(1_000_000),
     announcementImageAttachmentId: uuidV7.nullable(),
     opponent: z.string().max(200).nullable(),
     meetingTime: z.string().datetime({ offset: true }).nullable(),
@@ -143,7 +143,7 @@ const eventPublicResponseSchema = z
   .strict();
 
 export const eventListResponseSchema = z
-  .object({ data: z.array(eventPublicResponseSchema) })
+  .object({ data: z.array(eventPublicResponseSchema).max(500) })
   .strict();
 
 export const eventMutationResponseSchema = z

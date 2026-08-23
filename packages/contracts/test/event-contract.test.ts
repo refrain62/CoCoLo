@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   attendanceUpsertSchema,
   eventCreateSchema,
+  eventListQuerySchema,
   eventUpdateSchema,
 } from '../src/event-contract.ts';
 
@@ -44,6 +45,23 @@ test('試合の対戦相手と締切後修正理由は別のAPI契約で検証�
       memberId: '00000000-0000-7000-8000-000000000201',
       response: 'attending',
       unexpected: true,
+    }).success,
+    false,
+  );
+});
+
+test('予定一覧の検索期間は93日以内に制限する', () => {
+  assert.equal(
+    eventListQuerySchema.safeParse({
+      from: '2026-01-01T00:00:00Z',
+      to: '2026-04-04T00:00:00Z',
+    }).success,
+    true,
+  );
+  assert.equal(
+    eventListQuerySchema.safeParse({
+      from: '2026-01-01T00:00:00Z',
+      to: '2026-04-05T00:00:00Z',
     }).success,
     false,
   );

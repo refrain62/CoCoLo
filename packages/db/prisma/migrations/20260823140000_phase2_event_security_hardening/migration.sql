@@ -39,13 +39,34 @@ AS $$
   )
 $$;
 
+CREATE OR REPLACE FUNCTION app_is_live_member(
+  p_tenant_id uuid,
+  p_member_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+      FROM public.members
+     WHERE tenant_id = p_tenant_id
+       AND id = p_member_id
+       AND status <> 'retired'::public.member_status
+  )
+$$;
+
 REVOKE ALL ON FUNCTION app_is_active_member(uuid, varchar(128)) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_is_active_member_with_role(uuid, varchar(128), varchar(32)) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_is_active_member(uuid, varchar(128)) TO cocolo_app;
 GRANT EXECUTE ON FUNCTION app_is_active_member_with_role(uuid, varchar(128), varchar(32)) TO cocolo_app;
+GRANT EXECUTE ON FUNCTION app_is_live_member(uuid, uuid) TO cocolo_app;
 
 COMMENT ON FUNCTION app_is_active_member(uuid, varchar(128)) IS 'RLSからactive membershipの存在だけを判定するsecurity definer関数';
 COMMENT ON FUNCTION app_is_active_member_with_role(uuid, varchar(128), varchar(32)) IS 'RLSからactive membershipとDB上のrole一致を判定するsecurity definer関数';
+COMMENT ON FUNCTION app_is_live_member(uuid, uuid) IS 'RLSから退部済みでない部員の存在だけを判定するsecurity definer関数';
 
 ALTER TABLE events
   ADD CONSTRAINT events_tenant_attachment_fk
@@ -55,30 +76,43 @@ ALTER TABLE events
 
 COMMENT ON CONSTRAINT events_tenant_attachment_fk ON events IS '予定は同一tenantの添付だけを参照する';
 
-ALTER TABLE attendance_responses
-  DROP CONSTRAINT IF EXISTS attendance_responses_tenant_id_event_id_user_id_member_id_key;
-DROP INDEX IF EXISTS attendance_responses_tenant_id_event_id_user_id_member_id_key;
+ALTER TABLE events
+  ADD CONSTRAINT events_fee_max_check
+  CHECK (fee <= 1000000) NOT VALID,
+  ADD CONSTRAINT events_match_opponent_not_blank_check
+  CHECK (event_type <> 'match'::event_type OR NULLIF(trim(opponent), '') IS NOT NULL) NOT VALID;
 
--- 既存データが複数actor回答を持つ場合は最後に更新された回答を残してから制約を追加する。
-WITH ranked AS (
-  SELECT
-    id,
-    row_number() OVER (
-      PARTITION BY tenant_id, event_id, member_id
-      ORDER BY updated_at DESC, id DESC
-    ) AS row_number
-  FROM attendance_responses
-)
-DELETE FROM attendance_responses AS responses
-USING ranked
-WHERE responses.id = ranked.id
-  AND ranked.row_number > 1;
+COMMENT ON CONSTRAINT events_fee_max_check ON events IS 'API契約と同じ会費上限をDBの新規変更にも適用する';
+COMMENT ON CONSTRAINT events_match_opponent_not_blank_check ON events IS '試合予定の対戦相手は空白だけを許可しない';
 
-ALTER TABLE attendance_responses
-  ADD CONSTRAINT attendance_responses_tenant_event_member_key
-  UNIQUE (tenant_id, event_id, member_id);
+CREATE OR REPLACE FUNCTION app_guard_event_attachment()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF NEW.announcement_image_attachment_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.attachments
+      WHERE tenant_id = NEW.tenant_id
+        AND id = NEW.announcement_image_attachment_id
+        AND status = 'available'::public.attachment_status
+    ) THEN
+    RAISE EXCEPTION '予定の添付は同一tenantのavailable状態だけ参照できます';
+  END IF;
+  RETURN NEW;
+END;
+$$;
 
-COMMENT ON CONSTRAINT attendance_responses_tenant_event_member_key ON attendance_responses IS '同一tenantの同一予定・同一部員には現在回答を1件だけ保持する';
+DROP TRIGGER IF EXISTS event_attachment_state_guard ON events;
+CREATE TRIGGER event_attachment_state_guard
+BEFORE INSERT OR UPDATE ON events
+FOR EACH ROW
+EXECUTE FUNCTION app_guard_event_attachment();
+
+COMMENT ON FUNCTION app_guard_event_attachment() IS '予定がavailable状態の同一tenant添付だけを参照することをDBで強制';
 
 CREATE OR REPLACE FUNCTION app_guard_attendance_response()
 RETURNS trigger
@@ -110,15 +144,15 @@ BEGIN
   IF deadline IS NULL THEN
     RAISE EXCEPTION '出欠回答の予定が見つかりません';
   END IF;
-  IF now() > deadline AND role_name = 'guardian' THEN
+  IF now() >= deadline AND role_name = 'guardian' THEN
     RAISE EXCEPTION '出欠締切後はguardianの回答を変更できません';
   END IF;
-  IF now() > deadline
+  IF now() >= deadline
     AND role_name IN ('owner', 'admin', 'staff')
     AND NULLIF(trim(NEW.correction_reason), '') IS NULL THEN
     RAISE EXCEPTION '締切後の管理者修正には理由が必要です';
   END IF;
-  IF now() <= deadline THEN
+  IF now() < deadline THEN
     NEW.correction_reason := NULL;
   END IF;
   RETURN NEW;
@@ -165,12 +199,14 @@ CREATE POLICY attendance_select ON attendance_responses
   USING (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     AND app_is_active_member(tenant_id, current_setting('app.user_id', true))
+    AND app_is_live_member(tenant_id, member_id)
     AND (
       app_is_active_member_with_role(tenant_id, current_setting('app.user_id', true), current_setting('app.role', true))
       AND current_setting('app.role', true) IN ('owner', 'admin', 'staff')
       OR (
         current_setting('app.role', true) = 'guardian'
         AND app_is_active_member_with_role(tenant_id, current_setting('app.user_id', true), 'guardian')
+        AND user_id = current_setting('app.user_id', true)
         AND EXISTS (
           SELECT 1 FROM guardian_members
           WHERE guardian_members.tenant_id = attendance_responses.tenant_id
@@ -187,6 +223,7 @@ CREATE POLICY attendance_insert ON attendance_responses
   WITH CHECK (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     AND app_is_active_member(tenant_id, current_setting('app.user_id', true))
+    AND app_is_live_member(tenant_id, member_id)
     AND user_id = current_setting('app.user_id', true)
     AND (
       app_is_active_member_with_role(tenant_id, current_setting('app.user_id', true), current_setting('app.role', true))
@@ -194,6 +231,7 @@ CREATE POLICY attendance_insert ON attendance_responses
       OR (
         current_setting('app.role', true) = 'guardian'
         AND app_is_active_member_with_role(tenant_id, current_setting('app.user_id', true), 'guardian')
+        AND user_id = current_setting('app.user_id', true)
         AND EXISTS (
           SELECT 1 FROM guardian_members
           WHERE guardian_members.tenant_id = attendance_responses.tenant_id
@@ -210,12 +248,14 @@ CREATE POLICY attendance_update ON attendance_responses
   USING (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     AND app_is_active_member(tenant_id, current_setting('app.user_id', true))
+    AND app_is_live_member(tenant_id, member_id)
     AND (
       app_is_active_member_with_role(tenant_id, current_setting('app.user_id', true), current_setting('app.role', true))
       AND current_setting('app.role', true) IN ('owner', 'admin', 'staff')
       OR (
         current_setting('app.role', true) = 'guardian'
         AND app_is_active_member_with_role(tenant_id, current_setting('app.user_id', true), 'guardian')
+        AND user_id = current_setting('app.user_id', true)
         AND EXISTS (
           SELECT 1 FROM guardian_members
           WHERE guardian_members.tenant_id = attendance_responses.tenant_id
@@ -228,12 +268,14 @@ CREATE POLICY attendance_update ON attendance_responses
   WITH CHECK (
     tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     AND app_is_active_member(tenant_id, current_setting('app.user_id', true))
+    AND app_is_live_member(tenant_id, member_id)
     AND (
       app_is_active_member_with_role(tenant_id, current_setting('app.user_id', true), current_setting('app.role', true))
       AND current_setting('app.role', true) IN ('owner', 'admin', 'staff')
       OR (
         current_setting('app.role', true) = 'guardian'
         AND app_is_active_member_with_role(tenant_id, current_setting('app.user_id', true), 'guardian')
+        AND user_id = current_setting('app.user_id', true)
         AND EXISTS (
           SELECT 1 FROM guardian_members
           WHERE guardian_members.tenant_id = attendance_responses.tenant_id

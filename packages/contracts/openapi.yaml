@@ -36,6 +36,12 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
@@ -83,6 +89,12 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
@@ -120,6 +132,12 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -174,6 +192,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -232,6 +256,12 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
@@ -272,6 +302,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -1151,7 +1187,8 @@
           },
           "fee": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 1000000
           },
           "announcementImageAttachmentId": {
             "type": [
@@ -1200,6 +1237,7 @@
         "properties": {
           "data": {
             "type": "array",
+            "maxItems": 500,
             "items": {
               "$ref": "#/components/schemas/EventResponse"
             }

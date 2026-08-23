@@ -17,10 +17,17 @@ const repository = readFileSync(
 test('EVT-001のmigrationはactive membership、添付tenant、回答一意性をDBで固定する', () => {
   assert.match(migration, /CREATE OR REPLACE FUNCTION app_is_active_member\(/);
   assert.match(migration, /app_is_active_member_with_role/);
+  assert.match(migration, /CREATE OR REPLACE FUNCTION app_is_live_member\(/);
   assert.match(migration, /events_tenant_attachment_fk/);
+  assert.match(migration, /event_attachment_state_guard/);
+  assert.match(migration, /app_is_live_member\(tenant_id, member_id\)/);
+  assert.doesNotMatch(
+    migration,
+    /DELETE FROM attendance_responses AS responses/,
+  );
   assert.match(
     migration,
-    /attendance_responses_tenant_event_member_key[\s\S]*UNIQUE \(tenant_id, event_id, member_id\)/,
+    /attendance_select[\s\S]*user_id = current_setting\('app.user_id', true\)/,
   );
   assert.match(
     migration,
@@ -31,5 +38,8 @@ test('EVT-001のmigrationはactive membership、添付tenant、回答一意性�
 test('EVT-001 repositoryはmembership変更と業務transactionを直列化する', () => {
   assert.match(repository, /pg_advisory_xact_lock\(hashtextextended/);
   assert.match(repository, /FROM tenant_memberships[\s\S]*FOR UPDATE/);
+  assert.match(repository, /FROM guardian_members[\s\S]*FOR SHARE/);
+  assert.match(repository, /FROM events[\s\S]*FOR UPDATE/);
   assert.match(repository, /status = 'available'::attachment_status/);
+  assert.match(repository, /LIMIT 500/);
 });

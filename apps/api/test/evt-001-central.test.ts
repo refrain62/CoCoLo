@@ -8,6 +8,7 @@ import type {
 } from '@cocolo/db/events';
 import type { MembershipContext } from '../dist/app.js';
 import { createApp } from '../dist/app.js';
+import { InMemoryRateLimitStore } from '../dist/security/rate-limit.js';
 
 const TENANT_ID = '00000000-0000-7000-8000-000000000001';
 const EVENT_ID = '00000000-0000-7000-8000-000000000101';
@@ -62,7 +63,22 @@ function createRepository(): EventRepository {
   };
 }
 
-function createTestApp() {
+class RejectingRateLimitStore extends InMemoryRateLimitStore {
+  override consume(input: {
+    key: string;
+    limit: number;
+    windowMs: number;
+    nowMs: number;
+  }) {
+    return {
+      allowed: false,
+      remaining: 0,
+      resetAtMs: input.nowMs + input.windowMs,
+    };
+  }
+}
+
+function createTestApp(localStore?: InMemoryRateLimitStore) {
   const memberships: Record<string, MembershipContext> = {
     'owner-a': { tenantId: TENANT_ID, role: 'owner' },
     'guardian-a': { tenantId: TENANT_ID, role: 'guardian' },
@@ -81,6 +97,7 @@ function createTestApp() {
       findActiveByUserId: async (userId) => memberships[userId] ?? null,
     },
     eventRepository: createRepository(),
+    rateLimit: localStore ? { localStore } : undefined,
   });
 }
 
@@ -121,4 +138,51 @@ test('認証済みcontextをWebが取得できる', async () => {
   assert.deepEqual(await response.json(), {
     data: { tenantId: TENANT_ID, role: 'owner' },
   });
+});
+
+test('中央APIのevents全操作を公開response契約へ接続する', async () => {
+  const app = createTestApp();
+  const eventInput = {
+    title: '追加予定',
+    type: 'practice',
+    startsAt: '2026-09-01T10:00:00Z',
+    endsAt: '2026-09-01T12:00:00Z',
+    attendanceDeadline: '2026-08-31T10:00:00Z',
+    fee: 0,
+    transportationRequired: false,
+  };
+  const created = await app.request('/api/v1/events', {
+    method: 'POST',
+    headers: { ...auth('owner-a'), 'content-type': 'application/json' },
+    body: JSON.stringify(eventInput),
+  });
+  assert.equal(created.status, 201);
+
+  const updated = await app.request(`/api/v1/events/${EVENT_ID}`, {
+    method: 'PATCH',
+    headers: { ...auth('owner-a'), 'content-type': 'application/json' },
+    body: JSON.stringify({ title: '更新予定' }),
+  });
+  assert.equal(updated.status, 200);
+
+  const answered = await app.request(`/api/v1/events/${EVENT_ID}/attendance`, {
+    method: 'PUT',
+    headers: { ...auth('owner-a'), 'content-type': 'application/json' },
+    body: JSON.stringify({ memberId: MEMBER_ID, response: 'attending' }),
+  });
+  assert.equal(answered.status, 200);
+
+  const summarized = await app.request(
+    `/api/v1/events/${EVENT_ID}/attendance/summary`,
+    { headers: auth('owner-a') },
+  );
+  assert.equal(summarized.status, 200);
+});
+
+test('events routeへ認証済みrate limitを適用し、handlerを呼ばない', async () => {
+  const response = await createTestApp(new RejectingRateLimitStore()).request(
+    `/api/v1/events${period}`,
+    { headers: auth('owner-a') },
+  );
+  assert.equal(response.status, 429);
 });

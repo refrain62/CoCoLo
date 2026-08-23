@@ -266,15 +266,16 @@ async function findAssignedMember(
   memberId: string,
 ) {
   if (input.role !== 'guardian') return true;
-  const rows = await client.$queryRaw<Array<{ exists: boolean }>>`
-    SELECT EXISTS (
-      SELECT 1 FROM guardian_members
-      WHERE tenant_id = ${input.tenantId}::uuid
-        AND user_id = ${input.actorUserId}
-        AND member_id = ${memberId}::uuid
-    ) AS exists
+  const rows = await client.$queryRaw<Array<{ member_id: string }>>`
+    SELECT member_id
+    FROM guardian_members
+    WHERE tenant_id = ${input.tenantId}::uuid
+      AND user_id = ${input.actorUserId}
+      AND member_id = ${memberId}::uuid
+    LIMIT 1
+    FOR SHARE
   `;
-  return rows[0]?.exists === true;
+  return rows.length > 0;
 }
 
 // イベントと回答を同一transactionで更新し、締切判定・担当部員・監査をDB境界内で確定する。
@@ -294,6 +295,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
             AND starts_at < ${input.to}
             AND ends_at > ${input.from}
           ORDER BY starts_at ASC, id ASC
+          LIMIT 500
         `;
         await audit(tx, input, 'event.list', 'event', input.tenantId, {
           from: input.from.toISOString(),
@@ -437,6 +439,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           SELECT attendance_deadline
           FROM events
           WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
+          FOR UPDATE
         `;
         const event = eventRows[0];
         if (!event) throw new EventNotFoundError();
@@ -453,7 +456,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           input.memberId,
         );
         const deadlineRows = await tx.$queryRaw<Array<{ passed: boolean }>>`
-          SELECT now() > ${event.attendance_deadline} AS passed
+          SELECT now() >= ${event.attendance_deadline} AS passed
         `;
         const deadlinePassed = deadlineRows[0]?.passed === true;
         assertAttendanceChangeAllowed({
@@ -469,6 +472,10 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           WHERE tenant_id = ${input.tenantId}::uuid
             AND event_id = ${input.eventId}::uuid
             AND member_id = ${input.memberId}::uuid
+            AND (
+              (${input.role} = 'guardian' AND user_id = ${input.actorUserId})
+              OR ${input.role} <> 'guardian'
+            )
           ORDER BY updated_at DESC, id DESC
           LIMIT 1
           FOR UPDATE
@@ -530,6 +537,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           SELECT id
           FROM events
           WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
+          FOR UPDATE
         `;
         if (!eventRows[0]) throw new EventNotFoundError();
         const totalRows = await tx.$queryRaw<Array<{ count: bigint }>>`
@@ -538,18 +546,27 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           WHERE tenant_id = ${input.tenantId}::uuid AND status <> 'retired'::member_status
         `;
         const responseRows = await tx.$queryRaw<
-          Array<{ response: AttendanceResponse; member_id: string }>
+          Array<{
+            response: AttendanceResponse;
+            member_id: string;
+            updated_at: Date;
+            id: string;
+          }>
         >`
-          SELECT response, member_id
+          SELECT id, response, member_id, updated_at
           FROM attendance_responses
           WHERE tenant_id = ${input.tenantId}::uuid AND event_id = ${input.eventId}::uuid
+          ORDER BY member_id, updated_at DESC, id DESC
         `;
         const totalMembers = Number(totalRows[0]?.count ?? 0n);
-        const counts = summarizeAttendance(
-          totalMembers,
-          responseRows.map((row) => row.response),
-        );
-        const answeredIds = new Set(responseRows.map((row) => row.member_id));
+        const latestResponses = new Map<string, AttendanceResponse>();
+        for (const row of responseRows)
+          if (!latestResponses.has(row.member_id))
+            latestResponses.set(row.member_id, row.response);
+        const counts = summarizeAttendance(totalMembers, [
+          ...latestResponses.values(),
+        ]);
+        const answeredIds = new Set(latestResponses.keys());
         const memberRows = await tx.$queryRaw<Array<{ id: string }>>`
           SELECT id
           FROM members
