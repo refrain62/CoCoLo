@@ -19,9 +19,14 @@ const tablePrivilegeNames = [
 ] as const;
 
 function policyExpression(tokens: readonly string[]) {
-  return tokens
-    .map((token) => `current_setting('${token}', true)`)
-    .join(' AND ');
+  const tenantColumn = tokens.includes('id') ? 'id' : 'tenant_id';
+  const tenantBoundary = `${tenantColumn} = NULLIF(current_setting('app.tenant_id', true), '')::uuid`;
+  return [
+    tenantBoundary,
+    ...tokens
+      .filter((token) => token !== 'id' && token !== 'tenant_id')
+      .map((token) => `current_setting('${token}', true)`),
+  ].join(' AND ');
 }
 
 function requireAppRole(inspection: DatabaseSecurityInspection) {
@@ -60,7 +65,8 @@ function createValidInspection(): DatabaseSecurityInspection {
       table: 'tenants',
       name: 'tenants_select',
       command: 'SELECT',
-      usingExpression: policyExpression(['id', 'app.tenant_id']),
+      usingExpression:
+        "id = NULLIF(current_setting('app.tenant_id', true), '')::uuid",
       withCheckExpression: null,
     },
     {

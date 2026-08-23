@@ -36,6 +36,15 @@ test('危険なDDL・一括削除・任意roleへの権限付与を拒否する'
       ]),
     );
   }
+  assert.throws(() =>
+    validateMigrationSql([
+      safeMigration,
+      {
+        path: '20260823160002_public_grant/migration.sql',
+        content: 'GRANT SELECT ON records TO cocolo_app, PUBLIC;',
+      },
+    ]),
+  );
 });
 
 test('新規tableの保護不足と無条件policyを拒否する', () => {
@@ -59,6 +68,17 @@ test('新規tableの保護不足と無条件policyを拒否する', () => {
         content: safeMigration.content.replace(
           "tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid",
           'true',
+        ),
+      },
+    ]),
+  );
+  assert.throws(() =>
+    validateMigrationSql([
+      {
+        ...safeMigration,
+        content: safeMigration.content.replace(
+          "tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid",
+          'tenant_id IS NOT NULL OR tenant_id = NULL',
         ),
       },
     ]),

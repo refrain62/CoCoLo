@@ -3,8 +3,8 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 export const REQUIRED_TABLE_PRIVILEGES = {
-  tenants: ['SELECT'],
-  tenant_memberships: ['SELECT'],
+  tenants: ['SELECT', 'INSERT', 'UPDATE'],
+  tenant_memberships: ['SELECT', 'INSERT', 'UPDATE'],
   members: ['SELECT', 'INSERT', 'UPDATE'],
   guardian_members: ['SELECT', 'INSERT', 'UPDATE'],
   audit_logs: ['SELECT', 'INSERT'],
@@ -843,6 +843,11 @@ function assertExpression(
       normalized.includes(token.toLowerCase()),
       `${message}: ${token}の境界条件がありません。`,
     );
+  assert.match(
+    normalized,
+    /(?:\b(?:tenant_id|id)\s*=\s*(?:nullif\s*\(\s*)?current_setting\s*\(\s*'app\.tenant_id'|current_setting\s*\(\s*'app\.tenant_id'[^)]*\)\s*\)?\s*::?\w*\s*=\s*(?:tenant_id|id)|app_has_active_membership\s*\(\s*tenant_id\s*\))/i,
+    `${message}: tenant contextとの実際の一致またはmembership検証がありません。`,
+  );
 }
 
 function assertPolicies(inspection: DatabaseSecurityInspection) {

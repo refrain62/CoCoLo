@@ -64,13 +64,17 @@ function assertForbiddenStatements(file: MigrationSqlFile) {
 
   const grantPattern = /\bGRANT\b[^;]*;/gi;
   for (const match of compact.matchAll(grantPattern)) {
-    const grantee = /\bTO\s+([a-z_][a-z0-9_]*)\b/i
-      .exec(match[0])?.[1]
-      ?.toLowerCase();
-    assert.ok(
-      grantee === 'cocolo_app' || grantee === 'line_delivery_worker',
-      `${file.path}: 許可された実行role以外へのGRANTは禁止です。`,
-    );
+    const grantees =
+      /\bTO\s+(.+?)(?:\s+WITH\s+GRANT\s+OPTION)?\s*;/i
+        .exec(match[0])?.[1]
+        ?.split(',')
+        .map((grantee) => grantee.trim().toLowerCase()) ?? [];
+    assert.ok(grantees.length > 0, `${file.path}: GRANT先を解釈できません。`);
+    for (const grantee of grantees)
+      assert.ok(
+        grantee === 'cocolo_app' || grantee === 'line_delivery_worker',
+        `${file.path}: 許可された実行role以外へのGRANTは禁止です。`,
+      );
     assert.doesNotMatch(
       match[0],
       /\bWITH\s+GRANT\s+OPTION\b/i,
@@ -179,6 +183,11 @@ function assertPolicyTenantBoundaries(file: MigrationSqlFile) {
       statement,
       /current_setting\s*\(\s*'app\.tenant_id'|app_has_active_membership/i,
       `${file.path}: ${table} policyにtenant context境界が必要です。`,
+    );
+    assert.match(
+      statement,
+      /(?:\b(?:tenant_id|id)\s*=\s*(?:nullif\s*\(\s*)?current_setting\s*\(\s*'app\.tenant_id'|current_setting\s*\(\s*'app\.tenant_id'[^)]*\)\s*\)?\s*::?\w*\s*=\s*(?:tenant_id|id)|app_has_active_membership\s*\(\s*tenant_id\s*\))/i,
+      `${file.path}: ${table} policyにtenant contextとの実際の一致またはmembership検証が必要です。`,
     );
     assert.doesNotMatch(
       statement,
