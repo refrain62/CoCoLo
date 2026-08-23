@@ -90,3 +90,19 @@ LINE SQL repositoryをRLS context設定済みのtransaction clientへ接続す�
 DB側でIDを生成する例外はLINE通知キューだけであり、他の表へ同じ責務を暗黙に拡張してはならない。
 
 FS-ORDのSQL adapter、Board/BulletinのUUIDv7生成器、R2 adapterの実体検証は中央DBのCritical/High未解消とは扱わないが、中央mount前の必須条件である。
+
+## 2026-08-23最終再レビュー
+
+対象HEADは`8279af86815f9f5c02ddad77f3c51f91d356a423`である。
+
+品質ゲートCI run `32624831166`は、migration、RLS統合テスト、契約テスト、型検査、build、release artifact検証を含め成功した。
+
+Hubbleの再レビューはCritical 0、High 0、Medium 1、Low 0であった。
+
+Peirceの再レビューはCritical 0、High 0、Medium 3、Low 4であった。
+
+送迎予定の`NEW.plan_id`参照と、`ride_plans`の初期`status`とrepository INSERT値の不一致は、動的列参照および`draft` INSERT後の同一transaction内`open`遷移へ修正した。
+
+残るMediumは、既存UUIDv4行がある環境でのUUIDv7制約適用前検査、回覧添付の`available`状態のDB保証、`board_contacts` PIIのDB直接SELECT境界、Webhook receipt INSERT権限の専用actor限定である。
+
+残るMediumは今回の中央DB統合のCritical/High停止条件には該当しないが、各機能mount前の後続タスクとして台帳と手順書へ記録する。
