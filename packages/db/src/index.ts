@@ -383,7 +383,7 @@ async function markPromotionFailed(
 }
 
 // API serverが利用するPrisma clientを生成する。transaction境界は各repository操作で管理する。
-export function createPrismaClient(databaseUrl?: string) {
+export function createPrismaClient(databaseUrl?: string): PrismaClient {
   return databaseUrl
     ? new PrismaClient({ datasources: { db: { url: databaseUrl } } })
     : new PrismaClient();

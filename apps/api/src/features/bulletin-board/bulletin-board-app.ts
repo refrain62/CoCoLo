@@ -163,7 +163,9 @@ function parseAnnouncementId(c: Context<ApiEnv>) {
 }
 
 // 回覧板だけを後から中央appへ接続できるよう、認証・route・repositoryをfeature adapterへ閉じ込める。
-export function createBulletinBoardApp(options: BulletinBoardAppOptions = {}) {
+export function createBulletinBoardApp(
+  options: BulletinBoardAppOptions = {},
+): Hono<ApiEnv> {
   const app = new Hono<ApiEnv>();
 
   app.use('*', async (c, next) => {

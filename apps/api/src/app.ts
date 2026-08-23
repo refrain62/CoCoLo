@@ -207,7 +207,7 @@ function projectMember(member: MemberRecord, role: MemberRole) {
 }
 
 // APIの依存性と認証middlewareを組み立て、tenant/roleは認証後の所属解決結果だけを利用する。
-export function createApp(options: AppOptions = {}) {
+export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   const app = new Hono<ApiEnv>();
   const rateLimitOptions = options.rateLimit ?? {};
   const rateLimitEnvironment = rateLimitOptions.environment ?? 'local';

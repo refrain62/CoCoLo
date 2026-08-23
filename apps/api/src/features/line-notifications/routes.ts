@@ -45,7 +45,9 @@ function serviceError(c: Context<LineApiEnv>, error: unknown) {
 }
 
 // LINE専用routeを単体で検証し、将来の中央appへmountできるよう既存app.tsを変更せず公開する。
-export function createLineNotificationApp(options: LineRouteOptions) {
+export function createLineNotificationApp(
+  options: LineRouteOptions,
+): Hono<LineApiEnv> {
   const app = new Hono<LineApiEnv>();
   app.use('*', async (c, next) => {
     const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();

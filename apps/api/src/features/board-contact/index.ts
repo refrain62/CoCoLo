@@ -176,7 +176,9 @@ function repositoryUnavailable(
 }
 
 // 中央appへ未接続でも単独でmountできるfeature app。認証所属からtenantを解決し、入力のtenantIdを利用しない。
-export function createBoardContactApp(options: BoardContactAppOptions = {}) {
+export function createBoardContactApp(
+  options: BoardContactAppOptions = {},
+): Hono<BoardContactApiEnv> {
   const app = new Hono<BoardContactApiEnv>();
 
   app.use('*', async (c, next) => {
