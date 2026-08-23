@@ -8,11 +8,16 @@ import { createStructuredLogger } from '../dist/security/structured-logger.js';
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const MEMBER_A = '00000000-0000-7000-8000-000000000002';
 const TOKEN = 'owner-a';
+const REQUEST_ID_1 = '00000000-0000-4000-8000-000000000011';
+const REQUEST_ID_2 = '00000000-0000-4000-8000-000000000012';
+const REQUEST_ID_3 = '00000000-0000-4000-8000-000000000013';
+const REQUEST_ID_4 = '00000000-0000-4000-8000-000000000014';
 
 function createMemberApp(
   member: MemberRecord,
   logs: string[] = [],
   role: MemberRole = 'owner',
+  membershipError = false,
 ) {
   return createApp({
     verifyToken: async (token) => {
@@ -25,7 +30,10 @@ function createMemberApp(
       };
     },
     membershipRepository: {
-      findActiveByUserId: async () => ({ tenantId: TENANT_A, role }),
+      findActiveByUserId: async () => {
+        if (membershipError) throw new Error('membership store unavailable');
+        return { tenantId: TENANT_A, role };
+      },
     },
     memberRepository: {
       list: async () => [member],
@@ -59,14 +67,14 @@ test('中央APIの構造化request loggerはqueryと秘密情報を出力しな�
   const response = await app.request('/health?name=個人情報', {
     headers: {
       authorization: 'Bearer secret-token',
-      'x-request-id': 'central-request-001',
+      'x-request-id': REQUEST_ID_1,
     },
   });
 
   assert.equal(response.status, 200);
   assert.equal(logs.length, 1);
   const entry = JSON.parse(logs[0] ?? '') as Record<string, unknown>;
-  assert.equal(entry.requestId, 'central-request-001');
+  assert.equal(entry.requestId, REQUEST_ID_1);
   assert.equal(entry.path, '/api/v1/members');
   assert.equal(entry.status, 200);
   assert.equal(logs[0]?.includes('個人情報'), false);
@@ -95,22 +103,31 @@ test('中央APIの正常な部員一覧はruntime response契約を通る', asyn
 });
 
 test('中央APIの不正な公開レスポンスは元の本文を返さず500に収束する', async () => {
-  const app = createMemberApp({
-    ...validMember,
-    id: 'not-a-uuid',
-  });
+  const logs: string[] = [];
+  const app = createMemberApp(
+    {
+      ...validMember,
+      id: 'not-a-uuid',
+    },
+    logs,
+  );
   const response = await app.request('/api/v1/members', {
     headers: {
       authorization: `Bearer ${TOKEN}`,
-      'x-request-id': 'central-request-002',
+      'x-request-id': REQUEST_ID_2,
     },
   });
 
   assert.equal(response.status, 500);
   const body = await response.json();
   assert.equal(body.error.code, 'INTERNAL_SERVER_ERROR');
-  assert.equal(body.error.requestId, 'central-request-002');
+  assert.equal(body.error.requestId, REQUEST_ID_2);
   assert.equal(JSON.stringify(body).includes('not-a-uuid'), false);
+  assert.equal(logs.length, 1);
+  assert.equal(
+    JSON.parse(logs[0] ?? '').errorCode,
+    'RESPONSE_CONTRACT_VIOLATION',
+  );
 });
 
 test('中央APIの未登録成功routeは404ではなく内部エラーへ収束する', async () => {
@@ -118,7 +135,7 @@ test('中央APIの未登録成功routeは404ではなく内部エラーへ収束
   app.get('/api/v1/unregistered', (c) => c.json({ secret: 'do-not-return' }));
 
   const response = await app.request('/api/v1/unregistered', {
-    headers: { 'x-request-id': 'central-request-003' },
+    headers: { 'x-request-id': REQUEST_ID_3 },
   });
 
   assert.equal(response.status, 500);
@@ -130,7 +147,7 @@ test('中央APIの未登録成功routeは404ではなく内部エラーへ収束
 test('中央APIの未知routeは共通404契約とrequestIdを返す', async () => {
   const app = createMemberApp(validMember);
   const response = await app.request('/api/v1/unknown', {
-    headers: { 'x-request-id': 'central-request-004' },
+    headers: { 'x-request-id': REQUEST_ID_4 },
   });
 
   assert.equal(response.status, 404);
@@ -139,7 +156,7 @@ test('中央APIの未知routeは共通404契約とrequestIdを返す', async () 
       code: 'NOT_FOUND',
       message: '指定されたAPIが見つかりません。',
       details: {},
-      requestId: 'central-request-004',
+      requestId: REQUEST_ID_4,
     },
   });
 });
@@ -193,4 +210,18 @@ test('pathResolver未指定でもstructured loggerはqueryなしの実pathを記
   const entry = JSON.parse(logs[0] ?? '') as Record<string, unknown>;
   assert.equal(entry.path, '/health');
   assert.equal(logs[0]?.includes('do-not-log'), false);
+});
+
+test('所属解決の依存障害は401ではなく503とdependency.failureに収束する', async () => {
+  const logs: string[] = [];
+  const app = createMemberApp(validMember, logs, 'owner', true);
+
+  const response = await app.request('/api/v1/members', {
+    headers: { authorization: `Bearer ${TOKEN}` },
+  });
+
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.error.code, 'DEPENDENCY_UNAVAILABLE');
+  assert.equal(JSON.parse(logs[0] ?? '').event, 'dependency.failure');
 });

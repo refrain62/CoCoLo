@@ -344,27 +344,9 @@ export function createApp(options: AppOptions = {}) {
     if (!token)
       return errorResponse(c, 401, 'UNAUTHENTICATED', '認証が必要です。');
 
+    let claims: Awaited<ReturnType<NonNullable<AppOptions['verifyToken']>>>;
     try {
-      const claims = await options.verifyToken(token);
-      if (claims.expiresAt <= Math.floor(Date.now() / 1000))
-        return errorResponse(
-          c,
-          401,
-          'UNAUTHENTICATED',
-          '認証の有効期限が切れています。',
-        );
-      const membership = await options.membershipRepository.findActiveByUserId(
-        claims.userId,
-      );
-      if (!membership)
-        return errorResponse(
-          c,
-          403,
-          'FORBIDDEN',
-          '利用可能な所属がありません。',
-        );
-      c.set('auth', { userId: claims.userId, membership });
-      await next();
+      claims = await options.verifyToken(token);
     } catch {
       return errorResponse(
         c,
@@ -373,6 +355,30 @@ export function createApp(options: AppOptions = {}) {
         '認証情報を確認できません。',
       );
     }
+    if (claims.expiresAt <= Math.floor(Date.now() / 1000))
+      return errorResponse(
+        c,
+        401,
+        'UNAUTHENTICATED',
+        '認証の有効期限が切れています。',
+      );
+    let membership: MembershipContext | null;
+    try {
+      membership = await options.membershipRepository.findActiveByUserId(
+        claims.userId,
+      );
+    } catch {
+      return errorResponse(
+        c,
+        503,
+        'DEPENDENCY_UNAVAILABLE',
+        '所属情報を確認できません。',
+      );
+    }
+    if (!membership)
+      return errorResponse(c, 403, 'FORBIDDEN', '利用可能な所属がありません。');
+    c.set('auth', { userId: claims.userId, membership });
+    await next();
   };
 
   app.use('/api/v1/members/*', authenticate);

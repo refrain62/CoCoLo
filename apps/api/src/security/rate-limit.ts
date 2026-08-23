@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Context, MiddlewareHandler } from 'hono';
+import { contextRequestId, hasUnsafeControlCharacter } from './request-id.js';
 
 export const rateLimitPolicies = {
   authenticated: { limit: 60, windowMs: 60_000 },
@@ -213,27 +214,8 @@ export function createRateLimitKey(
   return `client:${namespace}:${scopeHash}:${hashIdentityParts([identity.clientId, identity.ipAddress])}`;
 }
 
-function requestId(c: Context): string {
-  const candidate = c.req.header('x-request-id')?.trim();
-  if (
-    candidate &&
-    candidate.length <= 128 &&
-    !hasUnsafeControlCharacter(candidate)
-  )
-    return candidate;
-  return crypto.randomUUID();
-}
-
-function hasUnsafeControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    if (code <= 31 || code === 127) return true;
-  }
-  return false;
-}
-
 function rateLimitError(c: Context, status: 429 | 503, code: string) {
-  const id = requestId(c);
+  const id = contextRequestId(c);
   c.header('x-request-id', id);
   return c.json(
     {

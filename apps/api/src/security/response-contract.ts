@@ -79,6 +79,10 @@ function matchesResponse(
   );
 }
 
+function markViolation(c: Parameters<MiddlewareHandler>[0]) {
+  c.set('responseContractViolation', true);
+}
+
 // 公開JSONを送信前に検証し、契約不一致や未登録routeは内部エラーへ置換する。
 export function createResponseContractMiddleware(
   options: ResponseContractOptions,
@@ -89,7 +93,7 @@ export function createResponseContractMiddleware(
   return async (c, next) => {
     await next();
     const path = new URL(c.req.url).pathname;
-    if (!path.startsWith('/api/v1')) return;
+    if (!(path === '/api/v1' || path.startsWith('/api/v1/'))) return;
 
     const violation = {
       method: c.req.method,
@@ -103,6 +107,7 @@ export function createResponseContractMiddleware(
         matchesResponse(item, c.req.method, path, c.res.status),
       )
     ) {
+      markViolation(c);
       options.onViolation?.(violation);
       internalError(c);
       return;
@@ -121,6 +126,7 @@ export function createResponseContractMiddleware(
         : (contract?.schema ??
           (c.res.status >= 400 ? errorResponseSchema : null));
     if (!schema) {
+      markViolation(c);
       options.onViolation?.(violation);
       internalError(c);
       return;
@@ -130,11 +136,13 @@ export function createResponseContractMiddleware(
     try {
       body = await c.res.clone().json();
     } catch {
+      markViolation(c);
       options.onViolation?.(violation);
       internalError(c);
       return;
     }
     if (!schema.safeParse(body).success) {
+      markViolation(c);
       options.onViolation?.(violation);
       internalError(c);
     }

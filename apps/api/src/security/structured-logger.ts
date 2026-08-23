@@ -63,24 +63,26 @@ export function createRequestLoggerMiddleware(
       failed = true;
       throw error;
     } finally {
-      const status = failed ? 500 : c.res.status;
-      options.logger.write({
-        timestamp: new Date().toISOString(),
-        level: status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info',
-        event:
-          status >= 500
-            ? 'dependency.failure'
-            : [401, 403, 429].includes(status)
-              ? 'security.denied'
-              : 'request.completed',
-        service: 'api',
-        environment: options.environment,
-        requestId: contextRequestId(c),
-        method: c.req.method as StructuredLogEntry['method'],
-        path: path(c, options.pathResolver),
-        status,
-        durationMs: Math.max(0, now() - startedAt),
-      });
+      if (c.get('responseContractViolation') !== true) {
+        const status = failed ? 500 : c.res.status;
+        options.logger.write({
+          timestamp: new Date().toISOString(),
+          level: status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info',
+          event:
+            status >= 500
+              ? 'dependency.failure'
+              : [401, 403, 429].includes(status)
+                ? 'security.denied'
+                : 'request.completed',
+          service: 'api',
+          environment: options.environment,
+          requestId: contextRequestId(c),
+          method: c.req.method as StructuredLogEntry['method'],
+          path: path(c, options.pathResolver),
+          status,
+          durationMs: Math.max(0, now() - startedAt),
+        });
+      }
     }
   };
 }

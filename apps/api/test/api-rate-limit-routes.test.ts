@@ -181,7 +181,7 @@ test('rate limit超過時はexact routeの業務handlerを呼ばず429にする'
       ...authHeaders,
       'content-type': 'application/json',
       'idempotency-key': 'notification-002',
-      'x-request-id': 'rate-limit-request-002',
+      'x-request-id': '00000000-0000-4000-8000-000000000022',
     },
     body: JSON.stringify({
       sourceId: 'event-002',
@@ -205,7 +205,7 @@ test('rate limit超過時はexact routeの業務handlerを呼ばず429にする'
   assert.equal(notification.status, 429);
   assert.equal(
     notification.headers.get('x-request-id'),
-    'rate-limit-request-002',
+    '00000000-0000-4000-8000-000000000022',
   );
   assert.equal(notification.headers.get('x-ratelimit-limit'), '60');
   assert.equal(notification.headers.get('x-ratelimit-remaining'), '0');
@@ -215,7 +215,7 @@ test('rate limit超過時はexact routeの業務handlerを呼ばず429にする'
       code: 'RATE_LIMIT_EXCEEDED',
       message: 'リクエスト数の上限を超えました。',
       details: {},
-      requestId: 'rate-limit-request-002',
+      requestId: '00000000-0000-4000-8000-000000000022',
     },
   });
   assert.equal(getMemberHandlerCalls(), 0);

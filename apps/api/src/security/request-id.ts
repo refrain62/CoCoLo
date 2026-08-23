@@ -9,8 +9,8 @@ export function hasUnsafeControlCharacter(value: string): boolean {
 }
 
 function isValidRequestId(value: string): boolean {
-  return (
-    value.length > 0 && value.length <= 128 && !hasUnsafeControlCharacter(value)
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
   );
 }
 

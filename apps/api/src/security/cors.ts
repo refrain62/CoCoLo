@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import { contextRequestId } from './request-id.js';
 
 const allowedMethods = [
   'GET',
@@ -58,27 +59,8 @@ function setVary(headers: Headers, values: readonly string[]) {
   headers.set('Vary', [...existing].join(', '));
 }
 
-function requestId(request: Request): string {
-  const candidate = request.headers.get('x-request-id')?.trim();
-  if (
-    candidate &&
-    candidate.length <= 128 &&
-    !hasUnsafeControlCharacter(candidate)
-  )
-    return candidate;
-  return crypto.randomUUID();
-}
-
-function hasUnsafeControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    if (code <= 31 || code === 127) return true;
-  }
-  return false;
-}
-
 function rejectCors(c: Parameters<MiddlewareHandler>[0], code: string) {
-  const id = requestId(c.req.raw);
+  const id = contextRequestId(c);
   c.header('x-request-id', id);
   return c.json(
     {
