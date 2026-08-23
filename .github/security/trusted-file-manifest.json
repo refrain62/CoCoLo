@@ -66,7 +66,7 @@
     "scripts/verify-migration-history.test.ts": "7f5e9d20734e3a1c3f69bc865af5192f19f4df0eb4d70e173b4af249f97d6272",
     "scripts/verify-migration-history.ts": "42bf7eef5386df6028a1c97d5379eb11489d733608f452893849b38c4a03e474",
     "scripts/verify-migration-sql.test.ts": "ead3d51c8267a4b5000f1efd45a1d7faa9887863e5395319e57ac974e831e56d",
-    "scripts/verify-migration-sql.ts": "476da819dd3f75b6f44ef7dc2f16bf9421a34ec778dbeb7442162714e94ed61",
+    "scripts/verify-migration-sql.ts": "476da819dd3f75b6f44ef7dc2f16bf9421a34ec778dbebb7442162714e94ed61",
     "scripts/verify-openapi.ts": "e8e175ef0880c9a879cfbddfebb979c1d6862da9f8d28bbb58fcfd3cb69819f0",
     "scripts/verify-pnpm-config.ts": "de5fcbea207a36553e6bc3e82c6ffe94e18fdf2568db8eda89e31ba3077ec263",
     "scripts/verify-production-bundle.ts": "52e34aa58f5e08326a8ea1a3fced4b840d371d113a6f707114a1e847e228fc3d",
