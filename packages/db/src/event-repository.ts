@@ -68,6 +68,15 @@ export class EventAuthorizationError extends Error {
   }
 }
 
+export class EventValidationError extends Error {
+  readonly status = 400;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'EventValidationError';
+  }
+}
+
 export type EventRepository = {
   list: (
     input: EventRepositoryInput & { from: Date; to: Date },
@@ -109,6 +118,8 @@ export type EventWriteInput = {
 };
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
+
+const MAX_EVENT_LIST_RANGE_MS = 93 * 24 * 60 * 60 * 1000;
 
 type EventRow = {
   id: string;
@@ -281,8 +292,15 @@ async function findAssignedMember(
 // イベントと回答を同一transactionで更新し、締切判定・担当部員・監査をDB境界内で確定する。
 export function createEventRepository(client: PrismaClient): EventRepository {
   return {
-    list: (input) =>
-      client.$transaction(async (tx) => {
+    list: (input) => {
+      const rangeMs = input.to.getTime() - input.from.getTime();
+      if (
+        !Number.isFinite(rangeMs) ||
+        rangeMs <= 0 ||
+        rangeMs > MAX_EVENT_LIST_RANGE_MS
+      )
+        throw new EventValidationError('検索期間は93日以内にしてください。');
+      return client.$transaction(async (tx) => {
         await setRlsContext(tx, input);
         await assertActiveMembership(tx, input);
         const rows = await tx.$queryRaw<EventRow[]>`
@@ -295,14 +313,19 @@ export function createEventRepository(client: PrismaClient): EventRepository {
             AND starts_at < ${input.to}
             AND ends_at > ${input.from}
           ORDER BY starts_at ASC, id ASC
-          LIMIT 500
+          LIMIT 501
         `;
+        if (rows.length > 500)
+          throw new EventValidationError(
+            '検索結果が多すぎます。検索期間を狭めてください。',
+          );
         await audit(tx, input, 'event.list', 'event', input.tenantId, {
           from: input.from.toISOString(),
           to: input.to.toISOString(),
         });
         return rows.map(toEventRecord);
-      }),
+      });
+    },
     create: (input) =>
       client.$transaction(async (tx) => {
         await setRlsContext(tx, input);
@@ -553,7 +576,7 @@ export function createEventRepository(client: PrismaClient): EventRepository {
             id: string;
           }>
         >`
-          SELECT id, response, member_id, updated_at
+          SELECT DISTINCT ON (member_id) id, response, member_id, updated_at
           FROM attendance_responses
           WHERE tenant_id = ${input.tenantId}::uuid AND event_id = ${input.eventId}::uuid
           ORDER BY member_id, updated_at DESC, id DESC

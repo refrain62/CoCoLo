@@ -60,6 +60,7 @@ $$;
 
 REVOKE ALL ON FUNCTION app_is_active_member(uuid, varchar(128)) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_is_active_member_with_role(uuid, varchar(128), varchar(32)) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app_is_live_member(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_is_active_member(uuid, varchar(128)) TO cocolo_app;
 GRANT EXECUTE ON FUNCTION app_is_active_member_with_role(uuid, varchar(128), varchar(32)) TO cocolo_app;
 GRANT EXECUTE ON FUNCTION app_is_live_member(uuid, uuid) TO cocolo_app;
@@ -67,6 +68,50 @@ GRANT EXECUTE ON FUNCTION app_is_live_member(uuid, uuid) TO cocolo_app;
 COMMENT ON FUNCTION app_is_active_member(uuid, varchar(128)) IS 'RLSからactive membershipの存在だけを判定するsecurity definer関数';
 COMMENT ON FUNCTION app_is_active_member_with_role(uuid, varchar(128), varchar(32)) IS 'RLSからactive membershipとDB上のrole一致を判定するsecurity definer関数';
 COMMENT ON FUNCTION app_is_live_member(uuid, uuid) IS 'RLSから退部済みでない部員の存在だけを判定するsecurity definer関数';
+
+DO $$
+DECLARE
+  invalid_attachment_count bigint;
+  unavailable_attachment_count bigint;
+  invalid_fee_count bigint;
+  invalid_opponent_count bigint;
+BEGIN
+  SELECT count(*) INTO invalid_attachment_count
+  FROM events
+  WHERE announcement_image_attachment_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM attachments
+      WHERE attachments.tenant_id = events.tenant_id
+        AND attachments.id = events.announcement_image_attachment_id
+    );
+  SELECT count(*) INTO unavailable_attachment_count
+  FROM events
+  JOIN attachments
+    ON attachments.tenant_id = events.tenant_id
+   AND attachments.id = events.announcement_image_attachment_id
+  WHERE events.announcement_image_attachment_id IS NOT NULL
+    AND attachments.status <> 'available'::attachment_status;
+  SELECT count(*) INTO invalid_fee_count
+  FROM events
+  WHERE fee > 1000000;
+  SELECT count(*) INTO invalid_opponent_count
+  FROM events
+  WHERE event_type = 'match'::event_type
+    AND NULLIF(trim(opponent), '') IS NULL;
+  IF invalid_attachment_count > 0
+    OR unavailable_attachment_count > 0
+    OR invalid_fee_count > 0
+    OR invalid_opponent_count > 0 THEN
+    RAISE EXCEPTION
+      '予定migration前提違反: attachment_missing=%, attachment_unavailable=%, fee=%, opponent=%',
+      invalid_attachment_count,
+      unavailable_attachment_count,
+      invalid_fee_count,
+      invalid_opponent_count;
+  END IF;
+END
+$$;
 
 ALTER TABLE events
   ADD CONSTRAINT events_tenant_attachment_fk
@@ -76,11 +121,16 @@ ALTER TABLE events
 
 COMMENT ON CONSTRAINT events_tenant_attachment_fk ON events IS '予定は同一tenantの添付だけを参照する';
 
+CREATE INDEX attendance_responses_event_member_updated_idx
+  ON attendance_responses (tenant_id, event_id, member_id, updated_at DESC, id DESC);
+
+COMMENT ON INDEX attendance_responses_event_member_updated_idx IS '出欠集計で部員ごとの最新回答を直接取得する';
+
 ALTER TABLE events
   ADD CONSTRAINT events_fee_max_check
-  CHECK (fee <= 1000000) NOT VALID,
+  CHECK (fee <= 1000000),
   ADD CONSTRAINT events_match_opponent_not_blank_check
-  CHECK (event_type <> 'match'::event_type OR NULLIF(trim(opponent), '') IS NOT NULL) NOT VALID;
+  CHECK (event_type <> 'match'::event_type OR NULLIF(trim(opponent), '') IS NOT NULL);
 
 COMMENT ON CONSTRAINT events_fee_max_check ON events IS 'API契約と同じ会費上限をDBの新規変更にも適用する';
 COMMENT ON CONSTRAINT events_match_opponent_not_blank_check ON events IS '試合予定の対戦相手は空白だけを許可しない';

@@ -9,6 +9,7 @@ import {
 import {
   EventAuthorizationError,
   type EventRepository,
+  EventValidationError,
 } from '@cocolo/db/events';
 import {
   AttendancePolicyError,
@@ -89,6 +90,8 @@ function inputError(c: Context<EventApiEnv>, error: unknown) {
   }
   if (error instanceof EventAuthorizationError)
     return errorResponse(c, 403, 'FORBIDDEN', error.message);
+  if (error instanceof EventValidationError)
+    return errorResponse(c, 400, 'VALIDATION_ERROR', error.message);
   if (
     error &&
     typeof error === 'object' &&
