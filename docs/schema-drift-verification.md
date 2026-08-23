@@ -13,30 +13,30 @@
 2. `packages/db/prisma/migrations.sha256` と、現在のmigration SQLのパス・SHA-256が完全一致する。編集・追加・削除は失敗する。
 3. `DIRECT_URL`で参照した `_prisma_migrations` の件数、適用順、migration名、checksum、`finished_at`、`rolled_back_at` が正本と完全一致する。未適用、余分な履歴、改変、未完了、rollback済みは失敗する。
 4. Prismaのmigrationからshadow DBへ再構築した結果とschema datamodelに構造差分がない。
-5. `SHADOW_DATABASE_URL` が `DATABASE_URL` / `DIRECT_URL` と同じ host・port・database を指さず、専用role・host・databaseの許可リストに一致する。`staging` / `production` ではアプリDB・migration DBと別hostも必須とする。
+5. `SHADOW_DATABASE_URL` が `DATABASE_URL` / `DIRECT_URL` と同じ host・port・database を指さず、専用role・host・database・host/port/databaseペアの許可リストに一致する。`staging` / `production` ではアプリDB・migration DBと別host、TLSを必須とする。
 
-Prisma CLIへ渡すShadow DB URLにはパスワードを含めず、認証情報をargvへ出さない。
-local CIはPostgreSQL serviceのtrust認証を使い、staging / productionはmTLSなどの外部認証を使う。
+Prisma 6.10の`migrate diff --from-migrations`は`--shadow-database-url`をargvへ必須とし、`PGPASSWORD`やschema datasourceの環境変数を認証情報として使わない。そのためPR CIでは、アプリ検査用PostgreSQL（SCRAM password認証）とは分離したShadow専用PostgreSQL serviceだけをtrust認証にし、passwordlessのShadow URLをargvへ渡す。Shadow URLにpasswordを含めず、認証情報をargvへ出さない。staging / productionはこのCI専用passwordless経路を使わず、TLSを有効にした外部認証方式を別途構成する。
 ログに接続URLや認証情報を出力してはいけない。
 
 ## CI接続
 
-`.github/workflows/schema-drift.yml` はPRごとに、固定したPostgreSQL serviceで専用roleとshadow DBを作成し、空のテストDBへmigrationを適用してから検査する。
+`.github/workflows/schema-drift.yml` はPRごとに、アプリ検査用の固定PostgreSQL service（password認証）と、Shadow専用の分離service（CI限定trust認証、host側5433番ポート）を起動する。Shadow roleは管理者権限なしで作成し、属性とmembershipを実DBで検査してからPrisma CLIを実行する。
+Shadow serviceには、既存migrationの`GRANT ... TO cocolo_app`を成立させるためだけに`NOLOGIN`の互換roleも作成する。検査プロセスが使う接続roleは常に`cocolo_shadow`であり、互換roleを共有認証情報として使わない。
 `BASE_SHA`を取得できない、migration checksumを読めない、Prisma ClientまたはDBへ接続できない場合はfail-closedでジョブを失敗させる。
 
 CIの接続先は次の分離を守る。
 
-| 用途 | database | role |
+| 用途 | host:port/database | role |
 | --- | --- | --- |
-| アプリ検査対象 | `cocolo_test` | `cocolo_app` |
-| migration履歴照合 | `cocolo_test` | `postgres` |
-| Prisma shadow | `cocolo_shadow` | `cocolo_shadow` |
+| アプリ検査対象 | `localhost:5432/cocolo_test` | `cocolo_app` |
+| migration履歴照合 | `localhost:5432/cocolo_test` | `postgres` |
+| Prisma shadow（専用service） | `localhost:5433/cocolo_shadow` | `cocolo_shadow` |
 
-本番相当の検査では `DATABASE_URL` / `DIRECT_URL` 自体が本番接続先になるため、`SHADOW_DATABASE_ALLOWED_HOSTS` と `SHADOW_DATABASE_ALLOWED_DATABASES` を専用shadow環境の値だけに制限し、shadow hostも本番DBと別にする。
+本番相当の検査では `DATABASE_URL` / `DIRECT_URL` 自体が本番接続先になるため、`SHADOW_DATABASE_ALLOWED_HOSTS`、`SHADOW_DATABASE_ALLOWED_DATABASES`、`SHADOW_DATABASE_ALLOWED_TARGETS`を専用shadow環境の値だけに制限し、shadow hostも本番DBと別にする。
 
 ## ローカル実行
 
-PostgreSQLを起動し、`DATABASE_URL`、`DIRECT_URL`、専用DBの `SHADOW_DATABASE_URL`、`SHADOW_DATABASE_ROLE`、許可リストを設定する。
+PostgreSQLを起動し、`DATABASE_URL`、`DIRECT_URL`、専用DBのパスワードレス`SHADOW_DATABASE_URL`、`SHADOW_DATABASE_ROLE`、host/dbペアを含む許可リストを設定する。`APP_ENV`は必須で、localは`sslmode=disable`、staging / productionはTLS用の`sslmode`を明示する。
 
 ```text
 pnpm test:schema-drift

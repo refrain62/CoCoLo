@@ -51,6 +51,7 @@ export type ShadowDatabaseConfig = Readonly<{
   expectedRole?: string;
   allowedHosts?: string;
   allowedDatabases?: string;
+  allowedTargets?: string;
 }>;
 
 export type MigrationIntegrityVerifier = (
@@ -148,6 +149,7 @@ type DatabaseTarget = Readonly<{
   port: number;
   database: string;
   user: string;
+  sslMode: string | null;
 }>;
 
 function parseDatabaseTarget(
@@ -176,6 +178,7 @@ function parseDatabaseTarget(
     port: Number(url.port || 5432),
     database,
     user: decodeURIComponent(url.username),
+    sslMode: url.searchParams.get('sslmode')?.toLowerCase() ?? null,
   };
 }
 
@@ -196,6 +199,25 @@ function sameDatabase(left: DatabaseTarget, right: DatabaseTarget): boolean {
   );
 }
 
+function databaseTargetKey(target: DatabaseTarget): string {
+  return `${target.host}:${target.port}/${target.database.toLowerCase()}`;
+}
+
+function assertTlsMode(
+  target: DatabaseTarget,
+  environment: string,
+  label: string,
+): void {
+  const allowed =
+    environment === 'local'
+      ? ['disable']
+      : ['require', 'verify-ca', 'verify-full'];
+  assert.ok(
+    target.sslMode && allowed.includes(target.sslMode),
+    `${label}のsslmodeは${allowed.join(' / ')}のいずれかを明示してください。`,
+  );
+}
+
 // Shadow DBはアプリ接続先と分離し、専用role・許可済みhost・DB名を満たす場合だけ使う。
 // staging / productionでは同一hostも拒否し、同一PostgreSQLクラスタの誤指定を避ける。
 export function validateShadowDatabaseConfig(
@@ -206,10 +228,17 @@ export function validateShadowDatabaseConfig(
   expectedRole = process.env.SHADOW_DATABASE_ROLE,
   allowedHosts = process.env.SHADOW_DATABASE_ALLOWED_HOSTS,
   allowedDatabases = process.env.SHADOW_DATABASE_ALLOWED_DATABASES,
+  allowedTargets = process.env.SHADOW_DATABASE_ALLOWED_TARGETS,
 ): void {
   assert.ok(
     environment,
     'APP_ENVが必要です。local、staging、productionのいずれかを指定してください。',
+  );
+  assert.ok(
+    environment === 'local' ||
+      environment === 'staging' ||
+      environment === 'production',
+    'APP_ENVはlocal、staging、productionのいずれかにしてください。',
   );
   const primary = parseDatabaseTarget(databaseUrl, 'DATABASE_URL');
   const direct = parseDatabaseTarget(directUrl, 'DIRECT_URL');
@@ -240,6 +269,7 @@ export function validateShadowDatabaseConfig(
     false,
     'SHADOW_DATABASE_URLをDIRECT_URLと同じhost・port・DBへ設定できません。',
   );
+  assertTlsMode(shadow, environment, 'SHADOW_DATABASE_URL');
 
   const hosts = csvValues(allowedHosts, 'SHADOW_DATABASE_ALLOWED_HOSTS');
   const databases = csvValues(
@@ -254,6 +284,11 @@ export function validateShadowDatabaseConfig(
     databases.includes(shadow.database.toLowerCase()),
     'SHADOW_DATABASE_URLのDB名が許可リストにありません。',
   );
+  const targets = csvValues(allowedTargets, 'SHADOW_DATABASE_ALLOWED_TARGETS');
+  assert.ok(
+    targets.includes(databaseTargetKey(shadow)),
+    'SHADOW_DATABASE_URLのhost・port・DBの組み合わせが許可リストにありません。',
+  );
 
   if (environment === 'staging' || environment === 'production') {
     assert.notEqual(
@@ -265,12 +300,6 @@ export function validateShadowDatabaseConfig(
       shadow.host,
       direct.host,
       'staging / productionのShadow DBはmigration DBと別hostにしてください。',
-    );
-  } else {
-    assert.equal(
-      environment,
-      'local',
-      'APP_ENVはlocal、staging、productionのいずれかにしてください。',
     );
   }
 }
@@ -364,6 +393,46 @@ export function assertSchemaDriftWorkflowConnected(content: string): void {
     content,
     /SHADOW_DATABASE_ALLOWED_DATABASES:/,
     'schema-drift WorkflowにShadow DB名許可リストが必要です。',
+  );
+  assert.match(
+    content,
+    /SHADOW_DATABASE_ALLOWED_TARGETS:/,
+    'schema-drift WorkflowにShadow DB host・port・DBペア許可リストが必要です。',
+  );
+  assert.match(
+    content,
+    /pnpm verify:shadow-role/,
+    'schema-drift WorkflowからShadow role属性検査を実行してください。',
+  );
+  assert.match(
+    content,
+    /CREATE ROLE cocolo_shadow LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION/,
+    'schema-drift WorkflowはShadow roleの管理者権限とpassword設定を無効化してください。',
+  );
+  assert.match(
+    content,
+    /CREATE ROLE cocolo_app NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION/,
+    'schema-drift WorkflowはShadow serviceの互換roleをNOLOGINにしてください。',
+  );
+  assert.match(
+    content,
+    /POSTGRES_HOST_AUTH_METHOD:\s*trust/,
+    '専用Shadow serviceはCI限定のpasswordless接続を使用してください。',
+  );
+  const postgresService =
+    /^\s{6}postgres:\s*\r?\n([\s\S]*?)(?=^\s{6}shadow:\s*$)/m.exec(
+      content,
+    )?.[1];
+  assert.ok(postgresService, 'アプリ検査用PostgreSQL serviceが必要です。');
+  assert.doesNotMatch(
+    postgresService,
+    /POSTGRES_HOST_AUTH_METHOD:\s*trust/,
+    'アプリ検査用PostgreSQL serviceをtrust認証にしてはいけません。',
+  );
+  assert.match(
+    content,
+    /SHADOW_DATABASE_URL:\s*postgresql:\/\/[^\s:@]+@(?:shadow:5432|localhost:5433)\/[^\s?]+\?sslmode=disable/,
+    'schema-drift Workflowはpasswordless Shadow URLを使用してください。',
   );
   assert.match(
     content,
@@ -529,6 +598,7 @@ export async function verifySchemaDrift(
     config.expectedRole,
     config.allowedHosts,
     config.allowedDatabases,
+    config.allowedTargets,
   );
   const lockBytes = await readRequiredFile(
     paths.migrationLockFile,
