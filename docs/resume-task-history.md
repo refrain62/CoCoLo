@@ -240,7 +240,8 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 ### GitHub反映
 
 - PR #62は`2ce3dbe`として`develop`へスカッシュマージ済みです。
-- `origin/develop`の再開基準を`2ce3dbe`へ更新しました。
+- docs-only PR #63は`a3a735b`として`develop`へスカッシュマージ済みです。
+- `origin/develop`の再開基準を`a3a735b`へ更新しました。
 
 ## 履歴の更新規則
 
