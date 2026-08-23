@@ -183,7 +183,7 @@ async function assertActiveMembership(
     FROM tenant_memberships
     WHERE tenant_id = ${input.tenantId}::uuid
       AND user_id = ${input.actorUserId}
-    FOR UPDATE
+    FOR SHARE
   `;
   const membership = memberships[0];
   if (membership?.status !== 'active' || membership.role !== input.role)

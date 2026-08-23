@@ -37,7 +37,7 @@ test('EVT-001のmigrationはactive membership、添付tenant、回答一意性�
 
 test('EVT-001 repositoryはmembership変更と業務transactionを直列化する', () => {
   assert.match(repository, /pg_advisory_xact_lock\(hashtextextended/);
-  assert.match(repository, /FROM tenant_memberships[\s\S]*FOR UPDATE/);
+  assert.match(repository, /FROM tenant_memberships[\s\S]*FOR SHARE/);
   assert.match(repository, /FROM guardian_members[\s\S]*FOR SHARE/);
   assert.match(repository, /FROM events[\s\S]*FOR UPDATE/);
   assert.match(repository, /status = 'available'::attachment_status/);
