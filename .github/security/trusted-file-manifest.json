@@ -81,7 +81,7 @@
     "scripts/verify-schema-drift.test.ts": "47d3900f5b2bf4df8d5d7e079d8cfa755df2723276f39ab9e85ab2770f45fcdf",
     "scripts/verify-schema-drift.ts": "a34f2f0d40a14df862dacc326dc65148bedccddc1213d45042dcb4226ac44870",
     "scripts/verify-shadow-role.test.ts": "a6f061aa5656b54b3410572e0b9b5bcd9b600f275891a9f752553949c5b90f2a",
-    "scripts/verify-shadow-role.ts": "741cefc4223adcce520189938c32f3a2ffc482869b2674ca9578612db41a182c",
+    "scripts/verify-shadow-role.ts": "018483a36d4752a974ad994ffc79cd3a0716a337b2456030a53699947852ed56",
     "scripts/verify-trust-root.ts": "dfb488401e615ac2ceb6dfa309e5d10eff9d7f967c0724225309850d5dd83f0d",
     "scripts/verify-trusted-pr.ts": "09fd38924219a3f2d35cd1fb32885c6d1099a67fc728da4f560ba8a9e2dece6e",
     "scripts/verify-workflows.ts": "6ad80ba76de3ab26b4c7c043ae8b879dc46e5e1ee39d89d9dbdc734bd90eb8f9",

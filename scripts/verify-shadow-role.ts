@@ -166,6 +166,7 @@ const expectedEnumNames = [
 export const expectedShadowObjectOwnerKeys = [
   'table:public._prisma_migrations',
   ...[...expectedTablePrivileges.keys()].map((name) => `table:public.${name}`),
+  'table:public.line_delivery_outbox',
   ...expectedEnumNames.map((name) => `enum:public.${name}`),
 ];
 
