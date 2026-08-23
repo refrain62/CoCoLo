@@ -138,3 +138,9 @@ rename境界の追加テストを作成した直後、`pnpm lint`がBiomeのform
 ### 追加記録：台帳・運用記録の分離（2026-08-23）
 
 resume-task-list、resume-task-history、verification-runbookの更新は実装PRへ混在させず、develop起点のdocs-only Draft PRで管理します。実装PRにはコード、テスト、必要なmanifest同期だけを含め、作業順・失敗原因・レビュー記録はdocs-only PRへ記録します。
+
+### 追加記録：ghマージ後の別worktree衝突（2026-08-23）
+
+`gh pr merge --squash --delete-branch`はリモートのスカッシュマージ後にローカル`develop`をcheckoutして後処理するため、別worktreeが`develop`を使用中だとローカル側だけが失敗します。
+
+このエラーを見たときは再度マージせず、最初に`gh pr view <番号> --json state,mergedAt,mergeCommit`でリモート状態を確認します。`state=MERGED`なら、`git fetch origin develop --prune`で実際のスカッシュSHAを同期し、ローカルworktreeの削除やbranch cleanupだけを必要に応じて別途行います。
