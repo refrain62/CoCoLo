@@ -1,9 +1,6 @@
 -- FS-EVT、FS-BRD、FS-ORD、FS-FIL、FS-ANN、FS-NOT、FS-RIDEの中央DB契約。
 -- 新規IDはUUIDv7とし、LINE通知キューだけは既存repository互換のためSQL defaultで生成する。
 
-CREATE TYPE event_type AS ENUM ('practice', 'match', 'event');
-CREATE TYPE attendance_response AS ENUM ('attending', 'absent', 'pending');
-CREATE TYPE attachment_status AS ENUM ('uploaded', 'available', 'rejected', 'deleted');
 CREATE TYPE announcement_status AS ENUM ('published', 'archived');
 CREATE TYPE purchase_order_status AS ENUM ('open', 'closed', 'completed');
 CREATE TYPE payment_status AS ENUM ('unpaid', 'paid');
@@ -51,84 +48,10 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_id_uuidv7 CHECK (app_is_uuidv7(
 ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_resource_id_uuidv7 CHECK (resource_id IS NULL OR app_is_uuidv7(resource_id));
 ALTER TABLE promotion_runs ADD CONSTRAINT promotion_runs_id_uuidv7 CHECK (app_is_uuidv7(id));
 
-CREATE TABLE attachments (
-  id uuid PRIMARY KEY,
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-  owner_user_id varchar(128) NOT NULL,
-  object_key varchar(512) NOT NULL,
-  media_type varchar(64) NOT NULL,
-  byte_size integer NOT NULL,
-  sha256 char(64),
-  status attachment_status NOT NULL DEFAULT 'uploaded',
-  expires_at timestamptz NOT NULL,
-  complete_attempts integer NOT NULL DEFAULT 0,
-  cleanup_attempts integer NOT NULL DEFAULT 0,
-  cleanup_completed_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  available_at timestamptz,
-  deleted_at timestamptz,
-  UNIQUE (tenant_id, id),
-  UNIQUE (tenant_id, object_key),
-  CHECK (app_is_uuidv7(id)),
-  CHECK (media_type IN ('image/jpeg', 'image/png', 'application/pdf')),
-  CHECK (byte_size BETWEEN 1 AND 20971520),
-  CHECK (sha256 IS NULL OR sha256 ~ '^[0-9a-f]{64}$'),
-  CHECK (complete_attempts BETWEEN 0 AND 3),
-  CHECK (cleanup_attempts >= 0),
-  CHECK (status <> 'deleted'::attachment_status OR deleted_at IS NOT NULL),
-  CHECK (status = 'deleted'::attachment_status OR deleted_at IS NULL),
-  CHECK (position('://' IN object_key) = 0),
-  CHECK (left(object_key, 1) <> '/')
-);
 CREATE INDEX attachments_tenant_status_expiry_idx ON attachments(tenant_id, status, expires_at);
 
-CREATE TABLE events (
-  id uuid PRIMARY KEY,
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-  title varchar(200) NOT NULL,
-  event_type event_type NOT NULL,
-  starts_at timestamptz NOT NULL,
-  ends_at timestamptz NOT NULL,
-  location varchar(500),
-  items_to_bring varchar(2000),
-  fee integer NOT NULL DEFAULT 0,
-  announcement_image_attachment_id uuid,
-  opponent varchar(200),
-  meeting_time timestamptz,
-  transportation_required boolean NOT NULL DEFAULT false,
-  attendance_deadline timestamptz NOT NULL,
-  created_by_user_id varchar(128) NOT NULL,
-  updated_by_user_id varchar(128) NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (tenant_id, id),
-  FOREIGN KEY (tenant_id, announcement_image_attachment_id)
-    REFERENCES attachments(tenant_id, id) ON DELETE RESTRICT,
-  CHECK (app_is_uuidv7(id)),
-  CHECK (ends_at > starts_at),
-  CHECK (attendance_deadline <= starts_at),
-  CHECK (meeting_time IS NULL OR meeting_time <= starts_at),
-  CHECK (fee BETWEEN 0 AND 1000000),
-  CHECK (event_type <> 'match'::event_type OR length(btrim(opponent)) > 0)
-);
 CREATE INDEX events_tenant_starts_idx ON events(tenant_id, starts_at, id);
 
-CREATE TABLE attendance_responses (
-  id uuid PRIMARY KEY,
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-  event_id uuid NOT NULL,
-  user_id varchar(128) NOT NULL,
-  member_id uuid NOT NULL,
-  response attendance_response NOT NULL,
-  correction_reason varchar(500),
-  responded_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (tenant_id, id),
-  UNIQUE (tenant_id, event_id, user_id, member_id),
-  FOREIGN KEY (tenant_id, event_id) REFERENCES events(tenant_id, id) ON DELETE RESTRICT,
-  FOREIGN KEY (tenant_id, member_id) REFERENCES members(tenant_id, id) ON DELETE RESTRICT,
-  CHECK (app_is_uuidv7(id))
-);
 CREATE INDEX attendance_responses_event_member_idx ON attendance_responses(tenant_id, event_id, member_id);
 
 CREATE TABLE board_contacts (
