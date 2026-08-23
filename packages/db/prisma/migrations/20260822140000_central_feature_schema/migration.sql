@@ -672,51 +672,6 @@ ALTER TABLE ride_requests FORCE ROW LEVEL SECURITY;
 ALTER TABLE ride_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ride_assignments FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY attachments_read ON attachments FOR SELECT
-  USING (app_has_active_membership(tenant_id) AND (app_is_event_manager() OR owner_user_id = current_setting('app.user_id', true)));
-CREATE POLICY attachments_insert ON attachments FOR INSERT
-  WITH CHECK (app_has_active_membership(tenant_id) AND owner_user_id = current_setting('app.user_id', true));
-CREATE POLICY attachments_update ON attachments FOR UPDATE
-  USING (app_has_active_membership(tenant_id) AND (app_is_event_manager() OR owner_user_id = current_setting('app.user_id', true)))
-  WITH CHECK (app_has_active_membership(tenant_id) AND (app_is_event_manager() OR owner_user_id = current_setting('app.user_id', true)));
-
-CREATE POLICY events_read ON events FOR SELECT USING (app_has_active_membership(tenant_id));
-CREATE POLICY events_write ON events FOR INSERT
-  WITH CHECK (app_has_active_membership(tenant_id) AND app_is_event_manager());
-CREATE POLICY events_update ON events FOR UPDATE
-  USING (app_has_active_membership(tenant_id) AND app_is_event_manager())
-  WITH CHECK (app_has_active_membership(tenant_id) AND app_is_event_manager());
-
-CREATE POLICY attendance_read ON attendance_responses FOR SELECT
-  USING (
-    app_has_active_membership(tenant_id)
-    AND (app_is_event_manager()
-      OR (user_id = current_setting('app.user_id', true)
-        AND EXISTS (SELECT 1 FROM guardian_members gm WHERE gm.tenant_id = attendance_responses.tenant_id AND gm.member_id = attendance_responses.member_id AND gm.user_id = current_setting('app.user_id', true))))
-  );
-CREATE POLICY attendance_insert ON attendance_responses FOR INSERT
-  WITH CHECK (
-    app_has_active_membership(tenant_id)
-    AND (
-      app_is_event_manager()
-      OR (current_setting('app.role', true) = 'guardian' AND user_id = current_setting('app.user_id', true)
-        AND EXISTS (SELECT 1 FROM guardian_members gm WHERE gm.tenant_id = attendance_responses.tenant_id AND gm.member_id = attendance_responses.member_id AND gm.user_id = current_setting('app.user_id', true)))
-    )
-  );
-CREATE POLICY attendance_update ON attendance_responses FOR UPDATE
-  USING (
-    app_has_active_membership(tenant_id)
-    AND (app_is_event_manager()
-      OR (user_id = current_setting('app.user_id', true)
-        AND EXISTS (SELECT 1 FROM guardian_members gm WHERE gm.tenant_id = attendance_responses.tenant_id AND gm.member_id = attendance_responses.member_id AND gm.user_id = current_setting('app.user_id', true))))
-  )
-  WITH CHECK (
-    app_has_active_membership(tenant_id)
-    AND (app_is_event_manager()
-      OR (user_id = current_setting('app.user_id', true)
-        AND EXISTS (SELECT 1 FROM guardian_members gm WHERE gm.tenant_id = attendance_responses.tenant_id AND gm.member_id = attendance_responses.member_id AND gm.user_id = current_setting('app.user_id', true))))
-  );
-
 CREATE POLICY board_contacts_read ON board_contacts FOR SELECT USING (app_has_active_membership(tenant_id));
 CREATE POLICY board_contacts_write ON board_contacts FOR INSERT
   WITH CHECK (app_has_active_membership(tenant_id) AND app_is_manager());
