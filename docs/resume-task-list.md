@@ -20,13 +20,25 @@
 
 ## 1. 停止時点の基準
 
-現行の`develop`は`5e346d1`（部員編集と退部を実装）です。
+再開時点の`origin/develop`は`8ccb459`（PR #38「リリース成果物のSupabase環境境界を検証」のスカッシュマージ）です。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
 Draft PRに実装が存在しても、`develop`へ統合されていない機能は現行環境では未実装として扱います。
 
-停止時点では、`develop`へのマージ、force push、未コミット差分の破棄を行っていません。
+再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
+
+### 1.1 再開時のGitHub同期結果
+
+GitHubの最新状態は、次のルールで扱います。
+
+- `develop`へ未統合のDraft PRは、CIが成功していても「未実装」として扱います。
+- #36、#37、#43は、現行`develop`に既に存在するmigration、LINE webhook、release/trust-root検査と重複または契約不一致があるため、現PRをそのままマージしません。
+- #41、#42、#48は、古いbaseまたはtrusted rootへの依存が残るため、現行`develop`から再検証できる専用の小さなPRへ分解します。
+- #40、#49はLINE outboxと予定詳細の依存関係を先に確定し、#36の旧Webhook契約を前提にしません。
+- #51と#6は`main`向けまたは`main`をbaseとするPRであり、`develop`向けの機能マージ候補から除外します。
+
+再開時点で`develop`向けに未マージの主なPRは、#29、#36、#37、#40、#41、#42、#43、#48、#49です。各PRの最新head、CI、レビュー結果を確認してから、同じ責務を持つ新規PRを作成します。
 
 ### 状態記号
 
@@ -78,17 +90,8 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - 外部条件：リポジトリ所有者がowner-only手順を実行し、bootstrap commitを保護対象として確定します。
   - 完了条件：owner-only bootstrapの実行記録、main向けCI、trusted root検査、悪性fixture検査が成功することです。
 
-- `[~]` **T014-ROOT-002：developのowner-only bootstrapを完了する。**
-  - 対象：PR #50
-  - ブランチ：`feature/t014-trust-root-bootstrap`
-  - 最新commit：`15c082a`
-  - base：`develop`
-  - 最新成功CI：品質ゲート run `32596723583`
-  - 未コミット差分：`.github/security/bootstrap-extension.json`、`.github/security/trust-root.json`、`.github/security/trusted-file-manifest.json`、`scripts/trust-root.ts`、`scripts/verify-trust-root.ts`、`scripts/verify-trusted-pr.ts`、`.github/security/bootstrap-owner-procedure.md`、`.github/security/trust-root-contract.json`
-  - 直前レビューのHigh：scanner rule 3ファイルの保護対象不足、mainとdevelopのroot分離、manifest self-hashとbootstrap extensionの整合不足です。
-  - 完了条件：#51とのroot contractが一致し、owner-only手順を実行した後に`pnpm verify:trust-root`がbootstrap済みになります。
-
 - `[ ]` **T014-ROOT-003：mainからdevelopへのtrusted root昇格契約を確定する。**
+  - develop側のbootstrapはPR #50とスカッシュ後のPR #54で完了済みです。再開時は完了済み実装を再作成せず、mainとの昇格契約だけを確認します。
   - mainとdevelopが別rootとして独立してしまわないことを確認します。
   - manifest、trust contract、bootstrap extension、scanner ruleのhashが、mainからdevelopへ昇格する経路で検証されることを確認します。
   - GitHub Free環境でCODEOWNERSが自動強制されない前提を、owner-only手順とCIの停止条件へ反映します。
@@ -99,10 +102,13 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - 対象：PR #48
   - ブランチ：`feature/t014-security-scanners`
   - 最新commit：`00e24ff`
+  - 現行developからの再構成コミット：`codex/t014-scanner-protected-paths@7601d08`（ローカル保存済み、未push）
   - base：`feature/t014-trust-root-bootstrap`
   - 最新成功CI：品質ゲート run `32596118308`
   - 未コミット差分：`.github/security/fixtures/malicious-scanner-pr.json`、`.github/workflows/security-scanners.yml`、`scripts/security-scanner.test.ts`、`scripts/verify-security-trust.ts`、`scripts/verify-workflows.test.ts`、`scripts/verify-workflows.ts`
   - 直前レビューのHigh：`.gitleaks.toml`、`.semgrep/ci.yml`、`.trivy-secret.yaml`がprotected pathsに列挙されていても、`isProtectedPath`と差分hash検査の対象から漏れることです。
+  - 再構成では3ファイルのprotected判定と`previous_filename`を実装し、renameをfail-closedにしました。Critical/Highのコード指摘は解消済みです。
+  - 停止条件：`scripts/verify-trusted-pr.ts`、manifest、quality workflow、package scriptがprotected対象のため、現行baseのowner-only extensionを更新する所有者操作が完了するまでpush、CI、マージを行いません。
   - 完了条件：3ファイルを変更する悪性fixtureが検査で拒否され、manifest、CODEOWNERS、trust root、scanner workflowの許可対象が一致することです。
 
 - `[~]` **T014-SCAN-002：scanner初回導入時のpush境界を成立させる。**
