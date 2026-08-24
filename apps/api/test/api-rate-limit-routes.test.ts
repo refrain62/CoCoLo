@@ -88,6 +88,10 @@ function createTestApp(store: RecordingRateLimitStore) {
         producerCalls += 1;
         return { notificationId: '00000000-0000-7000-8000-000000000101' };
       },
+      retry: async () => {
+        producerCalls += 1;
+        return { notificationId: '00000000-0000-7000-8000-000000000101' };
+      },
     },
     rateLimit: { localStore: store },
   });
@@ -101,6 +105,31 @@ function createTestApp(store: RecordingRateLimitStore) {
 }
 
 const authHeaders = { authorization: `Bearer ${TOKEN}` };
+
+test('失敗済みLINE通知の再試行をowner/adminだけに公開する', async () => {
+  const store = new RecordingRateLimitStore(true);
+  const { app, getProducerCalls } = createTestApp(store);
+  const notification = await app.request(
+    '/api/v1/notifications/line/00000000-0000-7000-8000-000000000101/retry',
+    { method: 'POST', headers: authHeaders },
+  );
+
+  assert.equal(notification.status, 202);
+  assert.deepEqual(await notification.json(), {
+    data: {
+      notificationId: '00000000-0000-7000-8000-000000000101',
+      status: 'pending',
+    },
+  });
+  assert.equal(getProducerCalls(), 1);
+
+  const invalid = await app.request(
+    '/api/v1/notifications/line/not-a-uuid/retry',
+    { method: 'POST', headers: authHeaders },
+  );
+  assert.equal(invalid.status, 400);
+  assert.equal(getProducerCalls(), 1);
+});
 
 test('認証済みのexact routeにもtenant/user rate limitを適用する', async () => {
   const store = new RecordingRateLimitStore(true);

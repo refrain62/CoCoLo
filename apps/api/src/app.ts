@@ -318,6 +318,12 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       schema: lineDeliveryResponseSchema,
     },
     {
+      method: 'POST',
+      path: /^\/api\/v1\/notifications\/line\/[^/]+\/retry$/,
+      status: 202,
+      schema: lineDeliveryResponseSchema,
+    },
+    {
       method: 'GET',
       path: /^\/api\/v1\/events$/,
       status: 200,
@@ -505,6 +511,7 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
 
   app.use('/api/v1/members/*', authenticate);
   app.use('/api/v1/notifications/line', authenticate);
+  app.use('/api/v1/notifications/line/:notificationId/retry', authenticate);
   app.use('/api/v1/auth/context', authenticate);
   if (options.eventRepository) {
     app.use('/api/v1/events', authenticate);
@@ -554,6 +561,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   });
   app.use('/api/v1/members/*', authenticatedRateLimit);
   app.use('/api/v1/notifications/line', authenticatedRateLimit);
+  app.use(
+    '/api/v1/notifications/line/:notificationId/retry',
+    authenticatedRateLimit,
+  );
   app.use('/api/v1/auth/context', authenticatedRateLimit);
   if (options.eventRepository) {
     app.use('/api/v1/events', authenticatedRateLimit);
@@ -922,6 +933,54 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
           deliveryError.code === 'LINE_NOT_CONNECTED'
             ? 'LINEが未接続か、通知先が現在の接続先と一致しません。'
             : '同じtenant内で通知の冪等キーまたはpayloadが競合しました。',
+        );
+      throw error;
+    }
+  });
+
+  // 失敗済み通知の再試行も現行outboxの接続世代とowner/admin境界を通す。
+  app.post('/api/v1/notifications/line/:notificationId/retry', async (c) => {
+    if (!options.lineDeliveryProducer)
+      return errorResponse(
+        c,
+        503,
+        'DEPENDENCY_UNAVAILABLE',
+        'LINE通知producerが設定されていません。',
+      );
+    const auth = c.get('auth');
+    if (!managerRoles.has(auth.membership.role))
+      return errorResponse(
+        c,
+        403,
+        'FORBIDDEN',
+        'LINE通知を再試行する権限がありません。',
+      );
+    const notificationId = c.req.param('notificationId');
+    if (!uuidv7Schema.safeParse(notificationId).success)
+      return errorResponse(c, 400, 'VALIDATION_ERROR', '通知IDが不正です。');
+    try {
+      const result = await options.lineDeliveryProducer.retry({
+        tenantId: auth.membership.tenantId,
+        actorUserId: auth.userId,
+        role: auth.membership.role,
+        notificationId,
+      });
+      return c.json(
+        { data: { notificationId: result.notificationId, status: 'pending' } },
+        202,
+      );
+    } catch (error) {
+      const deliveryError = error as { status?: unknown; code?: unknown };
+      if (error instanceof Error && deliveryError.status === 409)
+        return errorResponse(
+          c,
+          409,
+          typeof deliveryError.code === 'string'
+            ? deliveryError.code
+            : 'LINE_DELIVERY_RETRY_CONFLICT',
+          deliveryError.code === 'LINE_NOT_CONNECTED'
+            ? 'LINEが未接続か、通知の接続世代が古くなっています。'
+            : '失敗状態で再試行可能なLINE通知がありません。',
         );
       throw error;
     }
