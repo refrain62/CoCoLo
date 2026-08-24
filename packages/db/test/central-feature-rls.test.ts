@@ -130,16 +130,16 @@ async function seedFixture(client: PrismaClient) {
       client,
       `INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status)
      VALUES
-       ('00000000-0000-7000-8000-000000000104', $1::uuid, 'admin-a', 'admin', 'active'),
-       ('00000000-0000-7000-8000-000000000105', $1::uuid, 'staff-a', 'staff', 'active'),
-       ('00000000-0000-7000-8000-000000000106', $1::uuid, 'guardian-a2', 'guardian', 'active')
+       ('00000000-0000-7000-8000-000000000114', $1::uuid, 'admin-a', 'admin', 'active'),
+       ('00000000-0000-7000-8000-000000000115', $1::uuid, 'staff-a', 'staff', 'active'),
+       ('00000000-0000-7000-8000-000000000116', $1::uuid, 'guardian-a2', 'guardian', 'active')
      ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = EXCLUDED.role, status = EXCLUDED.status`,
       tenantA,
     );
     await execute(
       client,
       `INSERT INTO guardian_members (id, tenant_id, user_id, member_id, relationship)
-     VALUES ('00000000-0000-7000-8000-000000000302', $1::uuid, 'guardian-a2', $2::uuid, '父')
+     VALUES ('00000000-0000-7000-8000-000000000312', $1::uuid, 'guardian-a2', $2::uuid, '父')
      ON CONFLICT (tenant_id, user_id, member_id) DO NOTHING`,
       tenantA,
       memberA2,
