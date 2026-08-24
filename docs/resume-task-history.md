@@ -721,22 +721,26 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - Betterleaksは`redact`付きで実行し、検出レポートを一時ディレクトリへ保存して終了時に削除します。CIのDocker実行はdigest固定、network none、read-only、capability削減、ホストUID/GIDを使用します。
 - password、token等を検査対象とし、migrationとtrust manifestの正本として必要なSHA-256 checksumだけを除外しました。検査設定と保護対象のハッシュはtrust manifestへ反映しました。
 - READMEへmise導入、pre-commit設定、checksum除外理由を記載しました。
+- PR #118で、CIコンテナの非rootユーザーがread-only設定を読める権限と、bind mountした`/src`のGit安全ディレクトリ設定を追加しました。Betterleaksの検査対象、redact、network none、read-only、tmpfs出力は維持しています。
 
 ### 検証結果
 
 - `pnpm build`、`pnpm test`（175件）、`pnpm lint`、`pnpm typecheck`、`pnpm lint:biome`、trust root検証、`git diff --check`が成功しました。
 - GitHub Actions quality run `32713902923`はDockerの一時設定ファイル権限で失敗しましたが、ホストUID/GID実行へ修正し、run `32714974037`で成功しました。
 - PR本文は規定7区画のフォーマット検証に成功しました。
+- PR #118のquality run `32717384669`、squash commit `7a0b023`が成功しました。修正後の`pnpm test`（API 177件）、`pnpm build`、`pnpm typecheck`、`pnpm lint`、trust root検証も成功しています。
 
 ### 敵対的レビュー
 
 - アプリケーションのtenant、認可、個人情報、状態遷移は変更していません。
 - 検査失敗時の終了コード伝播、秘密値のredact、レポート削除、CI image digest固定、checksum除外範囲を確認しました。Critical 0、High 0です。
+- PR #118では設定ファイルに秘密値を含めないこと、コンテナ内のsafe.directoryを`/src`だけに限定することを確認しました。Critical 0、High 0です。
 - ローカルのmise導入とpre-commit hook設定は各開発環境で必要です。CIではPR品質ゲートが強制します。
 
 ### GitHub反映
 
 - PR #116は`d350f87`として`develop`へsquash mergeしました。
+- PR #118は`7a0b023`として`develop`へsquash mergeしました。
 
 ### 残タスク
 
