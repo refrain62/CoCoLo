@@ -18,6 +18,25 @@ const workerPassword =
   process.env.LINE_DELIVERY_WORKER_PASSWORD ?? 'line_delivery_worker';
 
 // migration ownerはSupabase localで明示的に有効化し、CIの既存security期待値には追加しない。
+const migrationCompatibilitySql = migrationRole
+  ? `
+DO $$
+BEGIN
+  -- Supabase localはpgcryptoをextensions schemaへ配置するため、既存migrationのpublic参照を互換化する。
+  IF to_regprocedure('public.digest(text,text)') IS NULL
+     AND to_regprocedure('extensions.digest(text,text)') IS NOT NULL THEN
+    CREATE FUNCTION public.digest(data text, algorithm text)
+    RETURNS bytea
+    LANGUAGE sql
+    IMMUTABLE
+    STRICT
+    PARALLEL SAFE
+    AS 'SELECT extensions.digest($1, $2)';
+  END IF;
+END
+$$;
+`
+  : '';
 const roleSql = `
 DO $$
 BEGIN
@@ -53,6 +72,8 @@ const grants = [
 ];
 
 await withPostgresClient(process.env.DIRECT_URL, async (client) => {
+  if (migrationCompatibilitySql)
+    await client.$executeRawUnsafe(migrationCompatibilitySql);
   await client.$executeRawUnsafe(roleSql);
   for (const statement of grants) await client.$executeRawUnsafe(statement);
 });
