@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-再開時点の`origin/develop`は`31a4c04`（Web役員連絡先と回覧板接続PR #93のマージ）です。
+再開時点の`origin/develop`は`70f6f27`（Web接続実施履歴PR #94のマージ）です。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
