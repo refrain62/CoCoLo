@@ -18,7 +18,7 @@
 
 ## 停止時点の基準
 
-停止時点の`develop`は`7056aac`（注文APIの公開レスポンス契約を追加）です。
+停止時点の`develop`は`a0fb868`（回覧板APIの公開レスポンス契約を追加）です。
 
 `develop`へ反映済みの業務機能は、認証、テナント境界、部員一覧、検索、登録、編集、退部、学年表示、年度繰り上げです。
 
@@ -917,6 +917,36 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - local/staging PostgreSQLでのrepository・RLS・状態遷移・同時実行の実DB検証とstaging Supabase E2EはORD-001/API-002の残タスクとして継続します。
 - 他featureの固有response契約と全画面の実ブラウザ統合テストは残タスク台帳で管理します。
+
+## API-002 回覧板APIの公開レスポンス契約
+
+### 実施した変更
+
+- PR #135で、回覧一覧、詳細、掲載、既読、未読者一覧の公開レスポンスschemaを追加しました。
+- 中央APIでは、回覧板のrouteとHTTP statusに対応する固有schemaを、汎用envelope schemaより先に適用します。
+- 未読者一覧は`userId`と`role`だけを許可し、email、電話番号、tenant識別子、監査情報、添付内部情報を公開しません。
+- 未読者一覧の件数とdataの長さを契約で一致させ、未知フィールドを拒否します。
+
+### 検証結果
+
+- `pnpm test`、`pnpm build`、`pnpm lint`が成功しました。
+- contracts 30件、API unit 187件を含む全テストが成功しました。
+- PR #135のquality run `32733507668`が成功しました。
+
+### 敵対的レビュー
+
+- tenant越境、掲載者本人だけに許可された未読者一覧、添付メタデータと個人情報の公開境界を確認し、CriticalとHighは0件です。
+- schemaを認可の代替にせず、既存のmembership・repository境界を維持していることを確認しました。
+- DB migration、認証方式、認可、回覧状態遷移、添付保存処理は変更していません。
+
+### GitHub反映
+
+- PR #135は`a0fb868`としてdevelopへsquash mergeしました。
+
+### 未完了条件
+
+- 回覧板の実PostgreSQL/RLS検証、staging E2E、実ブラウザ統合テストはAPI-002の残タスクとして継続します。
+- 認証チーム選択、添付、送迎など未契約APIの公開response契約は後続featureで対応します。
 
 ## 履歴の更新規則
 
