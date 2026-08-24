@@ -283,6 +283,15 @@ async function prepareStack(
     ['--filter', '@cocolo/db', 'exec', 'prisma', 'migrate', 'deploy'],
     appEnv,
   );
+  // Prisma migration後にfixture専用roleの対象テーブル権限を付与する。
+  // 初回のdb-prepareはrole作成を先に行うため、migration前でも安全に再実行できる。
+  if (appEnv.COCOLO_MIGRATION_ROLE) {
+    runNodeScript('db-prepare-test.ts', {
+      ...appEnv,
+      DATABASE_URL: status.dbUrl,
+      DIRECT_URL: status.dbUrl,
+    });
+  }
   if (fresh) {
     runNodeScript('local-auth-fixture.ts', {
       ...appEnv,
