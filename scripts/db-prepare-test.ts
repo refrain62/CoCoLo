@@ -9,9 +9,11 @@ const quoteLiteral = (value: string) => `'${value.replaceAll("'", "''")}'`;
 const appPassword = process.env.COCOLO_APP_PASSWORD ?? 'cocolo_app';
 const migrationRole = process.env.COCOLO_MIGRATION_ROLE?.trim();
 const fixtureGrantsOnly = process.env.COCOLO_FIXTURE_GRANTS_ONLY === 'true';
+const adminGrantsOnly = process.env.COCOLO_ADMIN_GRANTS_ONLY === 'true';
 assert.ok(
-  !fixtureGrantsOnly || migrationRole === 'cocolo_migration',
-  'COCOLO_FIXTURE_GRANTS_ONLY はmigration roleと併用してください。',
+  (!fixtureGrantsOnly && !adminGrantsOnly) ||
+    migrationRole === 'cocolo_migration',
+  'fixture/admin専用権限付与はmigration roleと併用してください。',
 );
 assert.ok(
   !migrationRole || migrationRole === 'cocolo_migration',
@@ -43,9 +45,10 @@ END
 $$;
 `
   : '';
-const roleSql = fixtureGrantsOnly
-  ? ''
-  : `
+const roleSql =
+  fixtureGrantsOnly || adminGrantsOnly
+    ? ''
+    : `
 DO $$
 BEGIN
   ${
@@ -83,22 +86,28 @@ const fixtureTableGrants = [
   'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO cocolo_fixture',
   'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO cocolo_fixture',
 ];
-const grants = fixtureGrantsOnly
-  ? fixtureTableGrants
-  : [
-      ...(migrationRole
-        ? [
-            'GRANT USAGE, CREATE ON SCHEMA public TO cocolo_migration',
-            'GRANT USAGE ON SCHEMA extensions TO cocolo_migration',
-            'GRANT USAGE ON SCHEMA public TO cocolo_fixture',
-            'GRANT cocolo_migration TO cocolo_fixture',
-            ...fixtureTableGrants,
-          ]
-        : []),
-      'GRANT USAGE ON SCHEMA public TO cocolo_app',
-      'GRANT USAGE ON SCHEMA public TO line_delivery_worker',
-      'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM line_delivery_worker',
-    ];
+const grants = adminGrantsOnly
+  ? [
+      'GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres',
+      'GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres',
+    ]
+  : fixtureGrantsOnly
+    ? fixtureTableGrants
+    : [
+        ...(migrationRole
+          ? [
+              'GRANT USAGE, CREATE ON SCHEMA public TO cocolo_migration',
+              'GRANT USAGE ON SCHEMA extensions TO cocolo_migration',
+              'GRANT USAGE ON SCHEMA public TO cocolo_fixture',
+              'GRANT cocolo_migration TO cocolo_fixture',
+              'GRANT cocolo_migration TO postgres',
+              ...fixtureTableGrants,
+            ]
+          : []),
+        'GRANT USAGE ON SCHEMA public TO cocolo_app',
+        'GRANT USAGE ON SCHEMA public TO line_delivery_worker',
+        'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM line_delivery_worker',
+      ];
 
 await withPostgresClient(process.env.DIRECT_URL, async (client) => {
   if (migrationCompatibilitySql)

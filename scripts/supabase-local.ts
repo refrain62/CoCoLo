@@ -292,6 +292,12 @@ async function prepareStack(
       DIRECT_URL: appEnv.DIRECT_URL,
       COCOLO_FIXTURE_GRANTS_ONLY: 'true',
     });
+    runNodeScript('db-prepare-test.ts', {
+      ...appEnv,
+      DATABASE_URL: appEnv.DIRECT_URL,
+      DIRECT_URL: appEnv.DIRECT_URL,
+      COCOLO_ADMIN_GRANTS_ONLY: 'true',
+    });
   }
   if (fresh) {
     runNodeScript('local-auth-fixture.ts', {
