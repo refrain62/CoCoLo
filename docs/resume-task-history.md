@@ -406,7 +406,6 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 ### 残タスク
 
 - LINE providerのstaging接続、専用channel/groupを使ったE2E、provider送達確認と`unknown`照合運用は`LINE-DELIVERY-002`および`NOT-002`、`OPS-004`として残ります。
-- EVT-002の予定詳細・出欠回答状態の統合、実DB検証が未完了のため、次の実装候補として残します。
 
 ## LOCAL-SUPABASE-001
 
@@ -436,6 +435,31 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 ### 残タスク
 
 - Supabase Auth、PostgreSQL、R2、LINE、分散rate limitのstaging接続と実サービスE2Eは、既存のOPS/LINE残タスクとして継続します。
+
+## EVT-002
+
+### 実施した変更
+
+- 旧PR #49は古い`feature/line-notification-outbox`と中央Web mountをbaseとしていたため、そのまま統合せず、現行develop起点のPR #85へ予定詳細の責務だけを再構成しました。
+- 予定詳細取得と現在の出欠回答取得をAPI、DB repository、中央APIのruntime response契約、OpenAPIへ追加しました。
+- Webの予定一覧から詳細画面を開けるようにし、tenantの認可済み予定情報、保存済み出欠状態、回答登録、締切後の管理者修正理由入力を同じAPI契約へ接続しました。
+- 現在の出欠取得ではguardianは自身の回答だけ、管理者はtenant内の最新回答だけを受け取り、`userId`や監査情報は公開レスポンスへ投影しません。
+
+### 検証結果
+
+- ローカルで`pnpm test` 166件、`pnpm test:unit`（Vitest 60件を含む）、`pnpm build`、`pnpm lint`、`pnpm typecheck`、OpenAPI、migration SQL、workflow検査が成功しました。
+- 実PostgreSQLを使う統合テストとstaging E2Eは、接続情報およびDocker Engineがローカルにないため未実行です。実DBのRLS競合とstaging接続は既存のOPS/LINE残タスクとして継続します。
+- PR #85のCIはquality run `32691578920`、database-integrity run `32691578967`、schema-drift run `32691578934`がすべて成功しました。
+
+### 敵対的レビュー
+
+- 別担当の最新HEADレビューはCritical 0、High 0、必須修正なしでした。
+- tenant越境、guardianの回答者境界、公開レスポンスの個人情報、未登録runtime response契約を確認し、必要な修正を実装済みです。
+
+### GitHub反映
+
+- 実装PR #85は`f43b2316cd688f0f6564645028f04705c4283f80`として`develop`へマージしました。
+- 本記録と残タスク台帳の更新は、実装PRと分離したdocs-only PRで反映します。
 
 ## 履歴の更新規則
 

@@ -211,10 +211,6 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
 
 EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume-task-history.mdのEVT-001](resume-task-history.md#evt-001)と[verification-runbook.mdのEVT-001記録](verification-runbook.md#追加記録evt-001中央接続の実db検証漏れとrlsロック境界-2026-08-23)へ移しました。
 
-- `[ ]` **EVT-002：予定詳細と出欠回答状態を統合する。**
-  - 対象：PR #49、`feature/central-event-detail`
-  - baseが`feature/line-notification-outbox`であるため、先にoutboxの統合方針を確認します。
-  - 出欠回答の対象部員、締切後修正理由、guardianの担当部員境界、更新競合を実DBで確認します。
 
 ## 7. Phase 3の未統合タスク
 
