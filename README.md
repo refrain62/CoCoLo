@@ -50,16 +50,28 @@ WebからDB・認証実装を直接参照せず、APIが認証・認可・RLS下
 
 ## ローカル開発
 
-前提はNode.js 24、pnpm 10.26.0、PostgreSQL 17、接続可能なpsqlです。Dockerコンテナ内でDB操作する場合は PSQL_DOCKER_CONTAINER を設定します。
+前提はNode.js 24.12.0、pnpm 10.26.0、PostgreSQL 17、接続可能なpsqlです。Node.jsとpnpmは、プロジェクトルートの `mise.toml` でバージョンを固定しています。Dockerコンテナ内でDB操作する場合は PSQL_DOCKER_CONTAINER を設定します。
 
 Supabase AuthはlocalではSupabase CLIの環境またはE2E用test-only Authを使用できます。test-only Authは APP_ENV=local のときだけ有効です。
 
 ### 初期設定
 
 ~~~powershell
-pnpm install
+winget install jdx.mise
+mise install
+mise exec -- pnpm install
 Copy-Item .env.example .env
 ~~~
+
+`mise install` 後にプロジェクトのNode.jsとpnpmを明示して実行する場合は、`mise exec -- <command>` を使用します。たとえば、次のコマンドでバージョンを確認できます。
+
+~~~powershell
+mise exec -- node --version
+mise exec -- pnpm --version
+mise exec -- pnpm install
+~~~
+
+`mise.toml` を変更したときは、再度 `mise install` を実行してください。個人だけの上書き設定が必要な場合は、Git管理外の `mise.local.toml` を使用できます。
 
 .env.exampleには各変数の用途、local / staging / productionでの違い、secretの扱いを記載しています。実際の鍵やパスワードは.envまたはCI/CDのsecretへ設定し、.env.exampleへ書き戻さないでください。
 
