@@ -364,6 +364,7 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     /^\/api\/v1\/auth\/teams(?:\/.*)?$/,
     /^\/api\/v1\/board-members(?:\/.*)?$/,
     /^\/api\/v1\/announcements(?:\/.*)?$/,
+    /^\/api\/v1\/line(?:\/.*)?$/,
     /^\/api\/v1\/ride-plans(?:\/.*)?$/,
     /^\/api\/v1\/uploads(?:\/.*)?$/,
     /^\/api\/v1\/orders(?:\/.*)?$/,
@@ -521,6 +522,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     app.use('/api/v1/announcements', authenticate);
     app.use('/api/v1/announcements/*', authenticate);
   }
+  if (options.centralFeatures?.line) {
+    app.use('/api/v1/line', authenticate);
+    app.use('/api/v1/line/*', authenticate);
+  }
   if (options.centralFeatures?.ride) {
     app.use('/api/v1/ride-plans', authenticate);
     app.use('/api/v1/ride-plans/*', authenticate);
@@ -572,6 +577,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.centralFeatures?.bulletinBoard) {
     app.use('/api/v1/announcements', authenticatedRateLimit);
     app.use('/api/v1/announcements/*', authenticatedRateLimit);
+  }
+  if (options.centralFeatures?.line) {
+    app.use('/api/v1/line', authenticatedRateLimit);
+    app.use('/api/v1/line/*', authenticatedRateLimit);
   }
   if (options.centralFeatures?.ride) {
     app.use('/api/v1/ride-plans', authenticatedRateLimit);

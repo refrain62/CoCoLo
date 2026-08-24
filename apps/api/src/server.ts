@@ -5,11 +5,16 @@ import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selectio
 import { createBoardContactRepository } from '@cocolo/db/board-contact';
 import { createBulletinBoardRepositories } from '@cocolo/db/bulletin-board';
 import { createEventRepository } from '@cocolo/db/events';
+import { createPrismaLineRepository } from '@cocolo/db/line';
 import { createPrismaOrdersRepository } from '@cocolo/db/orders';
 import { createRideRepository } from '@cocolo/db/ride';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
 import { createR2AttachmentStorageFromEnv } from './features/attachments/r2-real-attachment-storage.js';
+import {
+  createLineMessagingAdapter,
+  createLineNotificationService,
+} from './features/line-notifications/index.js';
 import { createRideService } from './features/ride-operations/ride-service.js';
 import { readRuntimeEnvironment } from './runtime-environment.js';
 import { loadDistributedRateLimitAdapter } from './security/rate-limit-adapter.js';
@@ -23,6 +28,24 @@ const repositories = createMemberRepositories(prisma);
 const eventRepository = createEventRepository(prisma, {
   notificationPublicAppUrl: runtime.publicAppUrl,
 });
+const lineChannelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
+const lineChannelSecret = process.env.LINE_CHANNEL_SECRET?.trim();
+const lineWebhookDestination = process.env.LINE_WEBHOOK_DESTINATION?.trim();
+const lineFeature =
+  lineChannelAccessToken && lineChannelSecret && lineWebhookDestination
+    ? {
+        service: createLineNotificationService({
+          repository: createPrismaLineRepository(prisma),
+          adapter: createLineMessagingAdapter({
+            channelAccessToken: lineChannelAccessToken,
+          }),
+          channelSecret: lineChannelSecret,
+          webhookDestination: lineWebhookDestination,
+          publicAppUrl: runtime.publicAppUrl,
+          liffId: process.env.LINE_LIFF_ID?.trim() || undefined,
+        }),
+      }
+    : undefined;
 const centralFeatures = {
   authTeamSelection: {
     repository: createAuthTeamSelectionRepository(prisma),
@@ -43,6 +66,7 @@ const centralFeatures = {
   ride: {
     service: createRideService(createRideRepository(prisma)),
   },
+  ...(lineFeature ? { line: lineFeature } : {}),
 };
 const distributedRateLimitAdapter = runtime.rateLimitAdapterModule
   ? await loadDistributedRateLimitAdapter(runtime.rateLimitAdapterModule)

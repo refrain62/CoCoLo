@@ -6,6 +6,7 @@ import {
   LineNotificationStateError,
   type LineWebhookReceipt,
 } from '@cocolo/domain/line';
+import type { PrismaClient } from '@prisma/client';
 
 export type LineActor = {
   tenantId: string;
@@ -721,4 +722,27 @@ export function createSqlLineRepository(
       });
     },
   };
+}
+
+// Prismaのtransaction clientをSQL repositoryの境界へ変換し、RLS設定を同じtransaction内に閉じ込める。
+export function createPrismaLineRepository(
+  client: PrismaClient,
+  options: LineSqlRepositoryOptions = {},
+): LineNotificationRepository {
+  return createSqlLineRepository(
+    {
+      transaction: (work) =>
+        client.$transaction(async (transaction) =>
+          work({
+            query: async <Row>(query: string, values: readonly unknown[]) => ({
+              rows: (await transaction.$queryRawUnsafe(
+                query,
+                ...values,
+              )) as Row[],
+            }),
+          }),
+        ),
+    },
+    options,
+  );
 }

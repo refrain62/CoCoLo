@@ -1,3 +1,5 @@
+import { selectedTeamHeaderName } from '../auth-team-selection/selected-team-storage.js';
+
 export type LineConnectionStatus = 'connected' | 'disconnected';
 export type LineNotificationSource = 'event' | 'deadline' | 'bulletin';
 
@@ -56,6 +58,7 @@ export type LineNotificationApi = {
 type LineNotificationApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  getSelectedTeamId?: () => string | null;
 };
 
 function getStoredAccessToken() {
@@ -76,16 +79,19 @@ async function readError(response: Response): Promise<LineApiError> {
 export function createLineNotificationApi({
   baseUrl = '',
   getAccessToken = getStoredAccessToken,
+  getSelectedTeamId,
 }: LineNotificationApiOptions = {}): LineNotificationApi {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
     if (!accessToken)
       throw new LineApiError(401, 'UNAUTHENTICATED', 'ログインが必要です。');
+    const selectedTeamId = getSelectedTeamId?.();
     const response = await fetch(`${baseUrl}/api/v1/line${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${accessToken}`,
+        ...(selectedTeamId ? { [selectedTeamHeaderName]: selectedTeamId } : {}),
         ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
         ...init?.headers,
       },
