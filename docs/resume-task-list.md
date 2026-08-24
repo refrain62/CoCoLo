@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-実装再開の基準となる`develop`は`d350f87`（PR #112〜#116反映後）です。実装baselineは`0903dd6`（PR #104、#105を含む）で、添付APIは`ced1e71`、添付Webは`e4d7af0`、注文・集金APIは`e708e96`、注文Webは`750c08e`、送迎・logout・LINE接続操作は`8c96baf`まで、Betterleaks秘密情報検査は`d350f87`まで反映済みです。完了済み実装とdocs-only PRの履歴更新は`develop`へ反映済みです。
+実装再開の基準となる`develop`は`cb5b63f`（PR #112〜#120反映後）です。実装baselineは`0903dd6`（PR #104、#105を含む）で、添付APIは`ced1e71`、添付Webは`e4d7af0`、注文・集金APIは`e708e96`、注文Webは`750c08e`、送迎・logout・LINE接続操作は`8c96baf`まで、Betterleaks秘密情報検査は`d350f87`まで、LINE通知outboxの接続先・接続世代検証は`cb5b63f`まで反映済みです。完了済み実装とdocs-only PRの履歴更新は`develop`へ反映済みです。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
@@ -39,7 +39,7 @@ GitHubの最新状態は、次のルールで扱います。
 - #35と#37は、現行developを起点に再構成したPR #89、既存中央schemaへ置換済みのためクローズしました。
 - #51と#6は`main`向けまたは`main`をbaseとするPRであり、`develop`向けの機能マージ候補から除外します。
 
-現時点で`develop`向けに未マージの主なPRは、#32、#41です。#35、#37、#40は重複・契約不一致のためクローズしました。#48と#51はtrusted rootの外部条件に依存し、#6はmain向けのため、developへの直接マージ候補から除外します。各PRの最新head、CI、レビュー結果を確認してから、同じ責務を持つ新規PRを作成します。
+現時点で`develop`向けに未マージの主なPRは、#32、#41、#118です。#35、#37、#40は重複・契約不一致のためクローズしました。#48と#51はtrusted rootの外部条件に依存し、#6はmain向けのため、developへの直接マージ候補から除外します。各PRの最新head、CI、レビュー結果を確認してから、同じ責務を持つ新規PRを作成します。
 
 ### 状態記号
 
@@ -186,7 +186,7 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - 対象：PR #29、`feature/api-hardening`
   - CORS allowlistはPR #59、認証後のtenantとuser単位rate limitはPR #60で`develop`へ接続済みです。
   - 構造化ログとruntime response schema検証はPR #62で`apps/api/src/app.ts`へ接続済みです。
-  - 中央APIの複数tenant所属時の明示的チーム選択はPR #89、Web側の選択状態と主要API header接続はPR #91、既存AuthSessionManagerのWeb接続はPR #96で完了しました。PR #114でLINEの接続状態・接続・解除だけを中央mountへ接続しました。通知queue/outbox統合とWebhookはNOT-001へ残しています。
+  - 中央APIの複数tenant所属時の明示的チーム選択はPR #89、Web側の選択状態と主要API header接続はPR #91、既存AuthSessionManagerのWeb接続はPR #96で完了しました。PR #114でLINEの接続状態・接続・解除を中央mountへ接続し、PR #117で通知登録を現行outboxへ接続、PR #120で接続世代検証をfail-closed化しました。再試行APIとWebhookはNOT-001へ残しています。
   - staging、productionでは分散rate limit adapterを必須にし、in-memory fallbackを許可しません。
 
 - `[~]` **API-002：WebとAPIの中央mountを統合する。**
@@ -197,7 +197,7 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - PR #102で添付upload APIを中央mountし、中央認証、選択tenant、rate limit、R2実adapter、response契約を接続済みです。Webの添付画面は未接続です。
   - PR #105で添付Web画面を中央APIへ接続し、選択tenant headerとguardianの表示制御を追加しました。
   - PR #109で注文・集金APIをPrisma repositoryと中央mountへ接続し、PR #110で注文Web画面、選択tenant header、チーム切替時の状態破棄を接続しました。
-  - 残りはLINE通知queue/outboxとWebhookのAPI接続、全画面の統合テスト、staging Supabase E2E、feature固有response契約の厳密化です。送迎画面の予定選択はPR #112、チーム選択前のlogout導線はPR #113で完了しました。古いPR #35はクローズしました。
+  - 残りはLINE通知の再試行APIとWebhookの専用DB actor境界、全画面の統合テスト、staging Supabase E2E、feature固有response契約の厳密化です。送迎画面の予定選択はPR #112、チーム選択前のlogout導線はPR #113で完了しました。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**
@@ -242,7 +242,8 @@ EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume
 
 - `[ ]` **NOT-001：LINE通知契約とWebhookを統合する。**
   - 対象：PR #28、PR #36
-  - PR #114で接続状態・接続・解除だけを中央APIへmountしました。旧`line_notification_queue`と現行`line_delivery_outbox`を混在させないため、通知登録・再試行・Webhookは未公開のままです。
+  - PR #114で接続状態・接続・解除を中央APIへmountし、PR #117で通知登録を現行`line_delivery_outbox`へ接続しました。接続済みの現在グループ以外は拒否し、接続世代をoutboxへ保存します。PR #120でcontext欠落、旧世代のNULL、同一冪等キーの再送をfail-closed化しました。
+  - 旧`line_notification_queue`と現行`line_delivery_outbox`を混在させないため、再試行APIとWebhookは引き続き分離して設計します。Webhookには専用のDB actorと署名検証境界が必要です。
   - LINE channel、groupIdとtenantの紐付け、未接続状態、署名検証、Webhook重複排除、未知group拒否、再試行、LIFF、deep linkを統合します。
   - `POST /api/v1/notifications/line`、Webhook route、outbox、workerを同一の認可と監査契約で確認します。
 
