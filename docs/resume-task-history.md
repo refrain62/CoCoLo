@@ -1281,6 +1281,7 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 ### GitHub反映
 
 - 実装PR #160は`f49cf02`として`develop`へsquash mergeしました。
+- PR #161は`9c203ce`としてqualityへroot test、lint、production bundle検査を追加し、`develop`へsquash mergeしました。
 - 実装コードと台帳・実施記録は分離し、この変更はdocs-only PRで提出します。
 
 ### 未完了条件
