@@ -18,7 +18,7 @@
 
 ## 停止時点の基準
 
-停止時点の`develop`は`bfb2852`（LINE Webhook受信境界を分離）です。
+停止時点の`develop`は`4ddcbd2`（LINE公開レスポンス契約を厳密化）です。
 
 `develop`へ反映済みの業務機能は、認証、テナント境界、部員一覧、検索、登録、編集、退部、学年表示、年度繰り上げです。
 
@@ -830,6 +830,35 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - Dockerまたは実PostgreSQLを使うmigration、ACL、RLS、同時実行の統合検証はCIで確認します。
 - stagingのLINE secret、専用DB URL、実Webhook疎通は外部運用設定後に確認します。
+
+## API-002 LINE公開レスポンス契約
+
+### 実施した変更
+
+- PR #129で、LINEの接続状態、接続、解除、Webhook、通知登録、再試行の成功レスポンスschemaを追加しました。
+- 中央APIでは、LINEのrouteとHTTP statusに対応する固有schemaを、汎用envelope schemaより先に適用します。
+- LINE通知routeは、tenant、作成者、本文、deep link、provider情報などの内部項目を公開DTOから除外します。
+- 公開通知DTOは、通知ID、通知元、状態、試行回数、次回再試行時刻だけを返します。
+
+### 検証結果
+
+- `pnpm test`が成功し、API unit 186件とcontracts 21件を含む全テストが成功しました。
+- `pnpm build`と`pnpm lint`が成功しました。
+- PR #129のquality run `32729543290`が成功しました。
+
+### 敵対的レビュー
+
+- tenant ID、作成者ID、本文、provider情報の公開レスポンスへの混入を確認し、CriticalとHighは0件です。
+- 接続操作、Webhook、通知操作のrouteとHTTP statusに対するschema漏れを確認しました。
+- DB migration、認証方式、通知状態遷移は変更していません。
+
+### GitHub反映
+
+- PR #129は`4ddcbd2`としてdevelopへsquash mergeしました。
+
+### 未完了条件
+
+- 他featureの固有response契約、全画面の統合テスト、staging Supabase E2Eは残タスク台帳で管理します。
 
 ## 履歴の更新規則
 
