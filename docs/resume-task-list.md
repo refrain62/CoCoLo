@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-実装再開の基準となる`develop`は`47d04fe`（PR #112〜#125反映後）です。実装baselineは`0903dd6`（PR #104、#105を含む）で、添付APIは`ced1e71`、添付Webは`e4d7af0`、注文・集金APIは`e708e96`、注文Webは`750c08e`、送迎・logout・LINE接続操作は`8c96baf`まで、Betterleaks秘密情報検査は`7a0b023`まで、LINE通知outboxの接続先・接続世代検証は`cb5b63f`まで、管理者再試行APIとworkerのロック順序修正は`47d04fe`まで反映済みです。完了済み実装とdocs-only PRの履歴更新は`develop`へ反映済みです。
+実装再開の基準となる`develop`は`c517eaf`（PR #112〜#125とdocs-only PR #124反映後）です。実装baselineは`0903dd6`（PR #104、#105を含む）で、添付APIは`ced1e71`、添付Webは`e4d7af0`、注文・集金APIは`e708e96`、注文Webは`750c08e`、送迎・logout・LINE接続操作は`8c96baf`まで、Betterleaks秘密情報検査は`7a0b023`まで、LINE通知outboxの接続先・接続世代検証は`cb5b63f`まで、管理者再試行APIとworkerのロック順序修正は`47d04fe`まで反映済みです。完了済み実装とdocs-only PRの履歴更新は`develop`へ反映済みです。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
