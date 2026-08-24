@@ -156,6 +156,15 @@ Draft PRに実装が存在しても、`develop`へ統合されていない機能
 - 任意artifact SHA、自己申告manifest、自己生成staging evidence、直接CLIを、Git commit、GitHub attestation、実staging runへ結び付ける必要があります。
 - quality workflowのtrigger、permissions、checkout credential、timeout、function本体とtriggerのdrift検査を追加する必要があります。
 
+### 完了追記（2026-08-24）
+
+- 現行`develop`基準で実装を再構成し、PR #72（`feature/t014-schema-drift-fix`）として提出しました。旧PR #43の内容を直接mergeせず、PR #72へ必要な変更を集約しました。
+- Prisma schemaとmigrationの実DB差分を修正し、schema drift workflow、Shadow DB専用role検査、migration checksum・baseline・履歴検査、staging evidenceとrelease provenanceの接続を含む検証を確定しました。
+- CIは`quality`、`database-integrity`、`schema-drift`の全ジョブが成功しました。ローカルでもPrisma validate、schema drift 32/32、`pnpm build`、`pnpm test`（API 157件を含む）が成功しました。
+- テナント境界、API認可、個人情報投影、入力検証、業務状態遷移の実装変更はありません。trusted manifestは変更ファイルのハッシュだけを更新し、migrationに存在しないDB制約はPrisma schemaへ追加していません。
+- Critical / Highの指摘はありません。PR #72は2026-08-24にmerge commit `a3dcbcd`として`develop`へsquash mergeし、重複するPR #71はsupersededとしてcloseしました。
+- 残るT014のtrust root、scanner、DB security boundary、定期E2E、分散rate limit、staging接続などは本台帳の別タスクで継続します。
+
 ## T014-SCAN-001およびT014-SCAN-002
 
 ### 実施した変更

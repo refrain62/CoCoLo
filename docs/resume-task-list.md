@@ -144,15 +144,6 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
 
 ### 3.5 schema driftとdeploy provenance
 
-- `[~]` **T014-DRIFT-001：PR #43のschema drift検査を完了する。**
-  - 対象：PR #43
-  - ブランチ：`feature/t014-schema-drift`
-  - 最新commit：`69a58b0`
-  - 未コミット差分：`.github/workflows/production-promote.yml`、`.github/workflows/quality.yml`、`package.json`、`scripts/create-staging-evidence.ts`、`scripts/database-security.ts`、`scripts/database-security.test.ts`、`scripts/deployment-preconditions.ts`、`scripts/deployment-preconditions.test.ts`、`scripts/package-release.ts`、`scripts/verify-release.ts`、`scripts/verify-workflows.ts`、`scripts/release-provenance.ts`、`scripts/release-provenance.test.ts`、`scripts/staging-evidence.ts`
-  - 状態：修正差分が未コミットです。Highの指摘はRLS完全allowlistと、artifactおよびstaging証跡をGitHub provenanceへ結び付ける検査です。
-  - 直前レビューの詳細：[T014-DRIFT-001の履歴](resume-task-history.md#t014-drift-001)
-  - 完了条件：RLSの完全allowlist、GitHub runのworkflow pathとjob成功、artifact checksum、attestation、migration checksum、production deploy前後DB検査を同一SHAで検証し、直接CLIをGitHub provenanceなしでは拒否することです。
-
 ### 3.6 T-014の周辺タスク
 
 - `[ ]` **T014-BOUNDARY-001：PR #45のDB security boundaryを再レビューする。**
