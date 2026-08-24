@@ -18,7 +18,7 @@
 
 ## 停止時点の基準
 
-停止時点の`develop`は`5e346d1`（部員編集と退部を実装）です。
+停止時点の`develop`は`bfb2852`（LINE Webhook受信境界を分離）です。
 
 `develop`へ反映済みの業務機能は、認証、テナント境界、部員一覧、検索、登録、編集、退部、学年表示、年度繰り上げです。
 
@@ -795,6 +795,41 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - PR #123は`6d95154`としてdevelopへsquash mergeしました。
 - PR #125は`47d04fe`としてdevelopへsquash mergeしました。
+
+## API-002/NOT-001 LINE Webhook受信境界
+
+### 実施した変更
+
+- PR #127で、`line_webhook_receiver` roleとreceipt記録用のSECURITY DEFINER関数を追加しました。
+- 受信専用roleにはテーブル権限を付与せず、関数のEXECUTE権限だけを付与しました。
+- `cocolo_app`からWebhook receiptの直接INSERT、UPDATE、DELETE権限を削除しました。
+- 公開JWT例外を、Webhook機能が有効な場合のPOST `/api/v1/line/webhook`完全一致に限定しました。
+- 受信専用DB接続、署名検証、destination検証、接続済みgroupの確認、`group_id`と`webhook_event_id`による冪等記録を接続しました。
+- 環境変数、localテストDB、Shadow DB、migration権限検査、運用文書を更新しました。
+
+### 検証結果
+
+- `pnpm test`が成功しました。
+- `pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm lint:workflows`が成功しました。
+- `pnpm verify:migration-sql`、`pnpm verify:migration-checksum`、`pnpm verify:trust-root`が成功しました。
+- `pnpm test:schema-drift`は42件が成功しました。
+- API unitは185件が成功しました。
+- PR #127のquality run `32727617803`が成功しました。
+
+### 敵対的レビュー
+
+- JWT例外がWebhookのPOST完全一致パス以外へ広がらないことを確認しました。
+- receiver roleがテーブルへ直接アクセスできず、関数内でrole、入力値、接続状態を検証することを確認しました。
+- tenant越境、認可、個人情報、入力検証、状態遷移、重複排除、rate limitのCriticalとHighは0件です。
+
+### GitHub反映
+
+- PR #127は`bfb2852`としてdevelopへsquash mergeしました。
+
+### 未完了条件
+
+- Dockerまたは実PostgreSQLを使うmigration、ACL、RLS、同時実行の統合検証はCIで確認します。
+- stagingのLINE secret、専用DB URL、実Webhook疎通は外部運用設定後に確認します。
 
 ## 履歴の更新規則
 
