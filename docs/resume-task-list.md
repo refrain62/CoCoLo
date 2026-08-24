@@ -197,7 +197,7 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
 - `[~]` **API-002：WebとAPIの中央mountを統合する。**
   - 対象：PR #32、現行develop起点のPR #89
   - PR #89でauth team選択、役員連絡先、回覧板、送迎のAPI routeを中央mountし、中央認証、tenant再解決、rate limit、CORS、response envelope契約を接続済みです。
-- PR #91でログイン後のactiveチーム一覧、複数所属時の選択画面、再読み込み時の候補照合、auth context/部員/予定APIへの選択tenant header付与を接続済みです。
+  - PR #91でログイン後のactiveチーム一覧、複数所属時の選択画面、再読み込み時の候補照合、auth context/部員/予定APIへの選択tenant header付与を接続済みです。
   - PR #93で役員連絡先と回覧板のWeb画面をmountし、両APIへ選択tenant headerを付与しました。役員管理操作はowner/adminだけに表示します。
   - 残りはattachments/orders/LINE feature webhookのAPI接続、送迎画面の予定選択、全画面の統合テスト、Auth session lifecycle、feature固有response契約の厳密化です。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
