@@ -18,7 +18,7 @@
 
 ## 停止時点の基準
 
-停止時点の`develop`は`4ddcbd2`（LINE公開レスポンス契約を厳密化）です。
+停止時点の`develop`は`34b2083`（役員連絡先の公開レスポンス契約を追加）です。
 
 `develop`へ反映済みの業務機能は、認証、テナント境界、部員一覧、検索、登録、編集、退部、学年表示、年度繰り上げです。
 
@@ -859,6 +859,35 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 ### 未完了条件
 
 - 他featureの固有response契約、全画面の統合テスト、staging Supabase E2Eは残タスク台帳で管理します。
+
+## API-002 役員連絡先の公開レスポンス契約
+
+### 実施した変更
+
+- PR #131で、役員一覧、作成、更新、年度引き継ぎの公開レスポンスschemaを追加しました。
+- staffとguardianの一覧は役職枠だけを許可し、ownerとadminはcontactPreferenceに合う連絡先だけを許可します。
+- 中央APIでは、役員連絡先のrouteとHTTP statusに対応する固有schemaを、汎用envelope schemaより先に適用します。
+- tenant ID、未知項目、表示設定と一致しない連絡先が公開レスポンスへ入らないことを契約で検証します。
+
+### 検証結果
+
+- `pnpm test`が成功し、API unit 186件とcontracts 24件を含む全テストが成功しました。
+- `pnpm build`と`pnpm lint`が成功しました。
+- PR #131のquality run `32730593518`が成功しました。
+
+### 敵対的レビュー
+
+- staffとguardianへの電話番号、LINE連絡先、担当者IDの混入を拒否することを確認し、CriticalとHighは0件です。
+- ownerとadminでもcontactPreferenceと異なる連絡先、tenant ID、未知項目を拒否することを確認しました。
+- DB migration、認証方式、tenant解決、役員連絡先の状態遷移は変更していません。
+
+### GitHub反映
+
+- PR #131は`34b2083`としてdevelopへsquash mergeしました。
+
+### 未完了条件
+
+- 役員連絡先の実PostgreSQL/RLS検証、staging E2E、他featureの固有response契約は残タスク台帳で管理します。
 
 ## 履歴の更新規則
 
