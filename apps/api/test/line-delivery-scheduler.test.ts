@@ -97,6 +97,13 @@ const RETRY_API_MIGRATION = readFileSync(
   ),
   'utf8',
 );
+const CLAIM_LOCK_ORDER_MIGRATION = readFileSync(
+  new URL(
+    '../../../packages/db/prisma/migrations/20260824160000_line_delivery_claim_lock_order/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const SCHEDULER_SOURCE = readFileSync(
   new URL('../src/line-delivery-scheduler.ts', import.meta.url),
   'utf8',
@@ -927,6 +934,22 @@ test('LINE通知の管理者再試行は現行outboxと接続世代を再検証�
   assert.match(
     RETRY_API_MIGRATION,
     /GRANT EXECUTE ON FUNCTION app_retry_line_delivery_outbox[\s\S]*TO cocolo_app/s,
+  );
+});
+
+test('worker claimはtenant lockをoutbox行lockより先に取得する', () => {
+  const advisoryLock = CLAIM_LOCK_ORDER_MIGRATION.indexOf(
+    "PERFORM pg_advisory_xact_lock(\n    hashtextextended('line:' || candidate_tenant_id::text, 0)",
+  );
+  const rowLock = CLAIM_LOCK_ORDER_MIGRATION.indexOf(
+    'FOR UPDATE OF o SKIP LOCKED',
+  );
+  assert.ok(advisoryLock >= 0);
+  assert.ok(rowLock >= 0);
+  assert.ok(advisoryLock < rowLock);
+  assert.match(
+    CLAIM_LOCK_ORDER_MIGRATION,
+    /候補選択では行をロックせず、tenant advisory lockを先に取得する。/,
   );
 });
 
