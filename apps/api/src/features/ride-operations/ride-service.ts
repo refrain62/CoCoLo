@@ -16,63 +16,76 @@ import {
 
 export type { RideActor };
 
+export type RidePlanView = Omit<RidePlan, 'tenantId'>;
+
+export type RideOfferView = {
+  id: string;
+  capacity: number;
+  status: RideSnapshot['offers'][number]['status'];
+  isMine: boolean;
+};
+
+export type RideRequestView = {
+  id: string;
+  memberId: string;
+  passengerCount: number;
+  status: RideSnapshot['requests'][number]['status'];
+  isMine: boolean;
+};
+
+export type RideAssignmentView = RideSnapshot['assignments'][number];
+
+export type RideSnapshotAssignmentView = {
+  id: string;
+  requestId: string;
+  offerId: string;
+  passengerCount: number;
+};
+
 export type RideSnapshotView = {
-  plan: RideSnapshot['plan'];
-  offers: Array<{
-    id: string;
-    capacity: number;
-    status: RideSnapshot['offers'][number]['status'];
-    isMine: boolean;
-  }>;
-  requests: Array<{
-    id: string;
-    memberId: string;
-    passengerCount: number;
-    status: RideSnapshot['requests'][number]['status'];
-    isMine: boolean;
-  }>;
-  assignments: Array<{
-    id: string;
-    requestId: string;
-    offerId: string;
-    passengerCount: number;
-  }>;
+  plan: RidePlanView;
+  offers: RideOfferView[];
+  requests: RideRequestView[];
+  assignments: RideSnapshotAssignmentView[];
   history: RideSnapshot['history'];
 };
 
 export type RideDispatchView = {
-  plan: RidePlan;
+  plan: RidePlanView;
   offers: RideSnapshot['offers'];
   requests: RideSnapshot['requests'];
   assignments: RideSnapshot['assignments'];
 };
 
 export type RideService = {
-  listPlans: (actor: RideActor) => Promise<RidePlan[]>;
+  listPlans: (actor: RideActor) => Promise<RidePlanView[]>;
   createPlan: (
     actor: RideActor,
     input: RidePlanCreateInput,
-  ) => Promise<RidePlan>;
+  ) => Promise<RidePlanView>;
   createOffer: (
     actor: RideActor,
     planId: string,
     input: RideOfferCreateInput,
-  ) => Promise<RideSnapshot['offers'][number]>;
+  ) => Promise<RideOfferView>;
   createRequest: (
     actor: RideActor,
     planId: string,
     input: RideRequestCreateInput,
-  ) => Promise<RideSnapshot['requests'][number]>;
+  ) => Promise<RideRequestView>;
   getSnapshot: (actor: RideActor, planId: string) => Promise<RideSnapshotView>;
   autoMatch: (
     actor: RideActor,
     planId: string,
-  ) => ReturnType<RideRepository['autoMatch']>;
+  ) => Promise<{
+    assignments: RideAssignmentView[];
+    unassignedRequestIds: string[];
+  }>;
   assign: (
     actor: RideActor,
     planId: string,
     input: RideAssignmentInput,
-  ) => ReturnType<RideRepository['assign']>;
+  ) => Promise<RideAssignmentView>;
   getDispatch: (actor: RideActor, planId: string) => Promise<RideDispatchView>;
   getMetrics: (actor: RideActor, planId: string) => Promise<RideMetrics>;
 };
@@ -97,31 +110,62 @@ function validatePlanInput(input: RidePlanCreateInput) {
   };
 }
 
+function toPlanView(plan: RidePlan): RidePlanView {
+  const { tenantId: _tenantId, ...view } = plan;
+  return view;
+}
+
+function toOfferView(
+  actor: RideActor,
+  offer: RideSnapshot['offers'][number],
+): RideOfferView {
+  return {
+    id: offer.id,
+    capacity: offer.capacity,
+    status: offer.status,
+    isMine: offer.driverUserId === actor.userId,
+  };
+}
+
+function toRequestView(
+  actor: RideActor,
+  request: RideSnapshot['requests'][number],
+): RideRequestView {
+  return {
+    id: request.id,
+    memberId: request.memberId,
+    passengerCount: request.passengerCount,
+    status: request.status,
+    isMine: request.requesterUserId === actor.userId,
+  };
+}
+
+function toAssignmentView(
+  assignment: RideSnapshot['assignments'][number],
+): RideAssignmentView {
+  return { ...assignment };
+}
+
+function toSnapshotAssignmentView(
+  assignment: RideSnapshot['assignments'][number],
+): RideSnapshotAssignmentView {
+  return {
+    id: assignment.id,
+    requestId: assignment.requestId,
+    offerId: assignment.offerId,
+    passengerCount: assignment.passengerCount,
+  };
+}
+
 function toSnapshotView(
   actor: RideActor,
   snapshot: RideSnapshot,
 ): RideSnapshotView {
   return {
-    plan: snapshot.plan,
-    offers: snapshot.offers.map((offer) => ({
-      id: offer.id,
-      capacity: offer.capacity,
-      status: offer.status,
-      isMine: offer.driverUserId === actor.userId,
-    })),
-    requests: snapshot.requests.map((request) => ({
-      id: request.id,
-      memberId: request.memberId,
-      passengerCount: request.passengerCount,
-      status: request.status,
-      isMine: request.requesterUserId === actor.userId,
-    })),
-    assignments: snapshot.assignments.map((assignment) => ({
-      id: assignment.id,
-      requestId: assignment.requestId,
-      offerId: assignment.offerId,
-      passengerCount: assignment.passengerCount,
-    })),
+    plan: toPlanView(snapshot.plan),
+    offers: snapshot.offers.map((offer) => toOfferView(actor, offer)),
+    requests: snapshot.requests.map((request) => toRequestView(actor, request)),
+    assignments: snapshot.assignments.map(toSnapshotAssignmentView),
     history: snapshot.history,
   };
 }
@@ -129,29 +173,52 @@ function toSnapshotView(
 // 送迎機能の認可・入力正規化をserviceへ集約し、API handlerやWeb表示が権限境界を迂回できないようにする。
 export function createRideService(repository: RideRepository): RideService {
   return {
-    listPlans: (actor) => repository.listPlans(actor),
-    createPlan: (actor, input) => {
-      assertManager(actor);
-      return repository.createPlan(actor, validatePlanInput(input));
+    async listPlans(actor) {
+      return (await repository.listPlans(actor)).map(toPlanView);
     },
-    createOffer: (actor, planId, input) =>
-      repository.createOffer(actor, planId, input),
-    createRequest: (actor, planId, input) =>
-      repository.createRequest(actor, planId, input),
+    async createPlan(actor, input) {
+      assertManager(actor);
+      return toPlanView(
+        await repository.createPlan(actor, validatePlanInput(input)),
+      );
+    },
+    async createOffer(actor, planId, input) {
+      return toOfferView(
+        actor,
+        await repository.createOffer(actor, planId, input),
+      );
+    },
+    async createRequest(actor, planId, input) {
+      return toRequestView(
+        actor,
+        await repository.createRequest(actor, planId, input),
+      );
+    },
     async getSnapshot(actor, planId) {
       return toSnapshotView(actor, await repository.getSnapshot(actor, planId));
     },
     async autoMatch(actor, planId) {
       assertManager(actor);
-      return repository.autoMatch(actor, planId);
+      const result = await repository.autoMatch(actor, planId);
+      return {
+        assignments: result.assignments.map(toAssignmentView),
+        unassignedRequestIds: result.unassignedRequestIds,
+      };
     },
     async assign(actor, planId, input) {
       assertManager(actor);
-      return repository.assign(actor, planId, input);
+      return toAssignmentView(await repository.assign(actor, planId, input));
     },
     async getDispatch(actor, planId) {
       assertManager(actor);
-      return repository.getSnapshot(actor, planId);
+      const snapshot = await repository.getSnapshot(actor, planId);
+      return {
+        plan: toPlanView(snapshot.plan),
+        offers: snapshot.offers,
+        requests: snapshot.requests,
+        assignments: snapshot.assignments,
+        history: snapshot.history,
+      };
     },
     async getMetrics(actor, planId) {
       assertManager(actor);

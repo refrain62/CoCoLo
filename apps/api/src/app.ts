@@ -49,6 +49,17 @@ import {
   orderSummaryResponseEnvelopeSchema,
 } from '@cocolo/contracts/orders-response';
 import {
+  rideAssignmentResponseEnvelopeSchema,
+  rideDispatchResponseEnvelopeSchema,
+  rideMatchResponseSchema,
+  rideMetricsResponseEnvelopeSchema,
+  rideOfferResponseEnvelopeSchema,
+  ridePlanListResponseSchema,
+  ridePlanResponseEnvelopeSchema,
+  rideRequestResponseEnvelopeSchema,
+  rideSnapshotResponseEnvelopeSchema,
+} from '@cocolo/contracts/ride-response';
+import {
   attendanceListResponseSchema,
   attendanceResponseSchema,
   attendanceSummaryResponseSchema,
@@ -606,6 +617,60 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       path: /^\/api\/v1\/auth\/context$/,
       status: 200,
       schema: authContextResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/ride-plans$/,
+      status: 200,
+      schema: ridePlanListResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/ride-plans$/,
+      status: 201,
+      schema: ridePlanResponseEnvelopeSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/ride-plans\/[^/]+$/,
+      status: 200,
+      schema: rideSnapshotResponseEnvelopeSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/ride-plans\/[^/]+\/offers$/,
+      status: 201,
+      schema: rideOfferResponseEnvelopeSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/ride-plans\/[^/]+\/requests$/,
+      status: 201,
+      schema: rideRequestResponseEnvelopeSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/ride-plans\/[^/]+\/match$/,
+      status: 200,
+      schema: rideMatchResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/ride-plans\/[^/]+\/assignments$/,
+      status: 201,
+      schema: rideAssignmentResponseEnvelopeSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/ride-plans\/[^/]+\/dispatch$/,
+      status: 200,
+      schema: rideDispatchResponseEnvelopeSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/ride-plans\/[^/]+\/metrics$/,
+      status: 200,
+      schema: rideMetricsResponseEnvelopeSchema,
     },
   ];
   for (const path of [

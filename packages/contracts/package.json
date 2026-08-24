@@ -47,6 +47,10 @@
       "types": "./src/ride-contract.ts",
       "import": "./dist/ride-contract.js"
     },
+    "./ride-response": {
+      "types": "./src/ride-response-contract.ts",
+      "import": "./dist/ride-response-contract.js"
+    },
     "./orders": {
       "types": "./src/orders-contract.ts",
       "import": "./dist/orders-contract.js"
