@@ -35,7 +35,7 @@
     "packages/db/prisma/migrations/20260823160000_promotion_payload_immutability/migration.sql": "b90ea039965415aeddcc071bd274de2bf88ae0cccbc0be4641756bb6455b7037",
     "packages/db/prisma/migrations/migration_lock.toml": "63d7115513530f40893f37ab841c316523b7a3113b70ec44ad32ccc79ef9ff90",
     "packages/db/prisma/migrations.sha256": "f48c3b7f176b1af2e46e44fa22633416ef31453b71361201f77bbbfbcaf99f1f",
-    "packages/db/prisma/schema.prisma": "fb210476955ada845d88f1e42a0128d7771c1b0f2880f3ada6078d6326a70154",
+    "packages/db/prisma/schema.prisma": "6ef6244fdaa6ba76ff2ded0fcc8b269147fe5bf3880f7477fea247a6daf709de",
     "pnpm-lock.yaml": "497cabf3e4253a2f19d450494167ac201488abea3476e01bd2826dbd28e74ff3",
     "scripts/create-staging-evidence.ts": "5728af722e0635d90a6834ad5241eb91d40d1736370ad7627329fbb10306db01",
     "scripts/create-pgpass.ts": "8b5c4ef10457ef8a95f774aa121034d36c9f9c19452e663248b8e659eabf90bb",
