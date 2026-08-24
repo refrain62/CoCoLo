@@ -307,6 +307,15 @@ EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume
   - Actionのruntime警告とアプリのNode.js 24要件を分けて確認します。
   - ActionのSHA固定を維持し、更新時はworkflow検査とCIを再実行します。
 
+## 11.1 当初要求差分の残タスク
+
+- `[ ]` **ORIG-REQ-001：当初要求との差分を実装してdevelopへ統合する。**
+  - 対象：`docs/original-requirements-traceability.md`、機能仕様書の FS-COM-006、FS-MEM-006、FS-EVT-004〜005、FS-DUT-001〜002、FS-ORD-005、FS-FIL-003、FS-NOT-002、FS-RIDE-002、FS-UI-001。
+  - 状態：要求と設計への反映のみ完了。機能コード、DB migration、公開API、Web画面、実DB RLS、staging E2Eは未完了として扱います。
+  - 実装順：WebとLINEの責務、表示名と保護者連携、月間表と当番、出欠と集金の通知、地図と画像、deep link、配車表、モバイル表示を機能単位へ分割します。
+  - 完了条件：各機能のTDD、tenant越境と認可検査、個人情報投影、状態遷移と冪等性、競合検査、外部サービス未接続と障害の表示、staging E2E、Critical / High 0件の敵対的レビュー、develop向けPRのCI成功とマージです。
+  - 参照：`docs/original-requirements-traceability.md`、`docs/functional-specification.md`、`docs/ implementation-plan.md` の ORIG-REQ-001。
+
 ## 12. 再開時のレビュー手順
 
 機能単位では、次の順序を崩しません。
