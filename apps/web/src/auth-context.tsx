@@ -1,3 +1,4 @@
+import { AppShell } from '@cocolo/ui';
 import {
   createContext,
   type FormEvent,
@@ -417,25 +418,39 @@ export function LoginPage() {
   }
 
   return (
-    <main>
-      <h1>CoCoLo ログイン</h1>
-      <form onSubmit={submit}>
-        <div>
-          <label htmlFor="auth-email">メールアドレス</label>
-          <input id="auth-email" name="email" required type="email" />
+    <AppShell className="auth-shell" nav={null}>
+      <section className="auth-card" aria-labelledby="auth-heading">
+        <div className="auth-card-icon" aria-hidden="true">
+          C
         </div>
-        <div>
-          <label htmlFor="auth-password">パスワード</label>
-          <input id="auth-password" name="password" required type="password" />
-        </div>
-        {error ? <p role="alert">{error}</p> : null}
-        <button disabled={isSigningIn} type="submit">
-          {isSigningIn ? 'ログイン中…' : 'ログイン'}
-        </button>
-      </form>
-      <p>
-        <a href="/manual">操作マニュアルを確認</a>
-      </p>
-    </main>
+        <p className="auth-eyebrow">TEAM OPERATIONS</p>
+        <h1 id="auth-heading">CoCoLoへログイン</h1>
+        <p className="auth-lead">
+          予定、出欠、連絡、チーム運営をひとつの場所で確認できます。
+        </p>
+        <form onSubmit={submit}>
+          <div>
+            <label htmlFor="auth-email">メールアドレス</label>
+            <input id="auth-email" name="email" required type="email" />
+          </div>
+          <div>
+            <label htmlFor="auth-password">パスワード</label>
+            <input
+              id="auth-password"
+              name="password"
+              required
+              type="password"
+            />
+          </div>
+          {error ? <p role="alert">{error}</p> : null}
+          <button disabled={isSigningIn} type="submit">
+            {isSigningIn ? 'ログイン中…' : 'ログイン'}
+          </button>
+        </form>
+        <p className="auth-help">
+          <a href="/manual">操作マニュアルを確認</a>
+        </p>
+      </section>
+    </AppShell>
   );
 }
