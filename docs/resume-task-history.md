@@ -577,6 +577,33 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - attachments/orders/LINE feature webhookのAPI接続、送迎画面の予定選択、全画面の統合テスト、logout時の選択状態整理、チーム切替UI、Auth session lifecycle、feature固有response契約の厳密化を継続します。
 
+## FIL-001 R2添付APIの中央mount統合
+
+### 実施した変更
+
+- 現行developを起点にPR #102を作成し、`POST /api/v1/uploads`、complete、download、cleanupの添付APIを中央APIへmountしました。
+- 中央認証から解決した利用者、選択中tenant、owner境界を利用し、認証済みrate limit、response契約、Prisma attachment repository、Cloudflare R2実adapterを接続しました。
+- staging / production WorkflowへR2 endpoint、bucket、access key、secretの引き渡しを追加しました。trusted manifestも実ファイルのSHAへ更新しました。
+- 添付Web画面、localのR2互換サービス起動、staging実バケットE2Eは後続タスクとして残します。
+
+### 検証結果
+
+- ローカルで`pnpm test`（API 171件を含む）、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm lint:workflows`、`pnpm verify:trust-root`、`git diff --check`が成功しました。
+- PR #102のquality run `32703822824`、database-integrity run `32703822814`、schema-drift run `32703822773`がすべて成功しました。
+
+### 敵対的レビュー
+
+- 初回レビューのHighは、staging / production WorkflowからR2 endpointとaccess key、secretがdeploy adapterへ渡らない点でした。`92f8a95`で修正し、`ec0201d`でtrusted manifestを更新しました。
+- 最終レビューはCritical 0、High 0、Medium 1でした。残るMediumは中央mountのcomplete、download、rate limit、tenant切替に対する結合テスト拡張で、今回のマージを妨げない後続課題です。
+
+### GitHub反映
+
+- 実装PR #102は、最新developを取り込んだ`65971ab`でCIを再実行し、squash commit `ced1e71`として`develop`へ統合しました。
+
+### 残タスク
+
+- 添付Web画面の接続、local R2互換サービス起動、staging実バケットE2E、中央mount固有の結合テストをAPI-002、FIL-002の後続作業として管理します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。

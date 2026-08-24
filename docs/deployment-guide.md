@@ -47,8 +47,11 @@ main ── push ──▶ staging deploy
 | Secret | `STAGING_DEPLOY_ADAPTER` | staging providerへ配置する実行可能なadapter。引数は[adapter契約](deployment-adapter.md)に従う。 |
 | Secret | `STAGING_E2E_TEST_EMAIL` | staging専用E2Eユーザーのメールアドレス。通常ユーザーやproductionユーザーを指定しない。 |
 | Secret | `STAGING_E2E_TEST_PASSWORD` | staging専用E2Eユーザーのパスワード。 |
+| Secret | `R2_ACCESS_KEY_ID` | staging private bucketへ接続するaccess key ID。Web、ログ、artifactへ渡さない。 |
+| Secret | `R2_SECRET_ACCESS_KEY` | staging private bucketへ接続するsecret access key。ログ、artifactへ出力しない。 |
 | Variable | `SUPABASE_URL` | staging Supabase projectのURL。HTTPSを使う。 |
 | Variable | `SUPABASE_JWKS_URL` | staging SupabaseのJWKS URL。`SUPABASE_URL`のprojectと一致させる。 |
+| Variable | `R2_ENDPOINT` | staging用Cloudflare R2 endpoint。HTTPSを使い、production endpointと分離する。 |
 | Variable | `PUBLIC_APP_URL` | staging Webアプリの公開HTTPS URL。 |
 | Variable | `PUBLIC_APP_URL_ALLOWLIST` | コード側のstaging固定allowlistに含まれるURLだけを指定する。任意のURL追加は拒否する。 |
 | Variable | `RATE_LIMIT_ADAPTER_MODULE` | providerをlockfileとallowlistへ追加した場合だけ設定する。現時点は実provider未同梱のため未設定。 |
@@ -76,8 +79,11 @@ Workflow内で次の値は固定されており、Environment variableとして�
 | Secret | `SUPABASE_ANON_KEY` | production Supabase の anon key。 |
 | Secret | `SUPABASE_SERVICE_ROLE_KEY` | APIサーバー専用のService Role Key。Webのビルド変数やブラウザへ絶対に渡さない。 |
 | Secret | `PRODUCTION_DEPLOY_ADAPTER` | production providerへ配置する実行可能なadapter。 |
+| Secret | `R2_ACCESS_KEY_ID` | production private bucketへ接続するaccess key ID。stagingと分離する。 |
+| Secret | `R2_SECRET_ACCESS_KEY` | production private bucketへ接続するsecret access key。ログ、artifactへ出力しない。 |
 | Variable | `SUPABASE_URL` | production Supabase projectのURL。stagingと異なる場合は後述の昇格前提を満たすこと。 |
 | Variable | `SUPABASE_JWKS_URL` | production SupabaseのJWKS URL。 |
+| Variable | `R2_ENDPOINT` | production用Cloudflare R2 endpoint。HTTPSを使い、staging endpointと分離する。 |
 | Variable | `PUBLIC_APP_URL` | production Webアプリの公開HTTPS URL。 |
 | Variable | `PUBLIC_APP_URL_ALLOWLIST` | コード側のproduction固定allowlistに含まれるURLだけを指定する。任意のURL追加は拒否する。 |
 | Variable | `RETIRED_DATA_RETENTION_DAYS` | 退部データを保持する日数。運用上の保存期間を整数で設定する。 |

@@ -29,9 +29,9 @@ SVGはMIMEを偽装しても、許可MIMEの一覧とマジックバイト検証
 
 ## API契約
 
-API routerは既存APIへまだmountしていません。
+API routerはPR #102で中央`apps/api/src/app.ts`へmount済みです。
 
-中央`apps/api/src/app.ts`を変更できる統合段階で、同じ`verifyToken`、`membershipRepository`、DB repository、R2 adapterを注入して`createAttachmentApp`をrouteへ接続します。
+中央認証から選択中tenantと利用者を解決し、同じDB repository、R2 adapter、認証済みrate limit、response契約へ接続しています。R2 endpoint、bucket、access key、secretはstaging / production WorkflowからAPI起動経路へ渡します。
 
 Web画面も中央`apps/web/src/main.tsx`を変更できる統合段階で、現在の認証sessionから作った`AttachmentApi`を`AttachmentUploader`へ渡して表示します。
 
