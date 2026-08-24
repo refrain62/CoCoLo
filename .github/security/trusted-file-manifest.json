@@ -94,8 +94,8 @@
     "scripts/verify-workflows.ts": "6ad80ba76de3ab26b4c7c043ae8b879dc46e5e1ee39d89d9dbdc734bd90eb8f9",
     "scripts/verify-workspace-boundaries.ts": "142ae19436873fc254f91c6351b9c3354a1675f392fc5183a4c669febc0efa74",
     "tsconfig.scripts.json": "b812bc3ef869600859f0df844e151987d45a651207f16f4161052ec98a7f319b",
-    "scripts/local-auth-fixture.ts": "14e23b059603399aca52959e1e48dfa0031f2a2a0cc7c43c4ec112502e123d9f",
-    "scripts/supabase-local.ts": "d3a10cab4bc98a609ed7237f0de7570741983dd5aace144769da277f1d258d08",
+    "scripts/local-auth-fixture.ts": "7e2c8d569f370de84ca8a95df040456f87fa27913549520c6a4a5f5683224b1f",
+    "scripts/supabase-local.ts": "56e9627f0f147e9b769ea1c3a0911a1cff2d1e1397618f0ff1f14134c36a7928",
     "scripts/test-database-guard.test.ts": "8736869fa9916a9ea7eebfc0326d062c3ea7aba443ecbb5ba8424cfebcb88af3",
     "scripts/test-database-guard.ts": "b26d7e27b2a9e8a9e8df73d9fabea50b21e83d526af5f56dcb2863be9336970b"
   }

@@ -153,6 +153,23 @@ function runSupabase(
   );
 }
 
+function redactOutput(value: string): string {
+  return value
+    .replace(/(postgres(?:ql)?:\/\/[^:\s/]+:)[^@\s]+(@)/gi, '$1[REDACTED]$2')
+    .replace(/\bsb_(?:publishable|secret)_[A-Za-z0-9_-]+\b/g, '[REDACTED]')
+    .replace(/\b(?:eyJ[A-Za-z0-9_-]+\.){2}[A-Za-z0-9_-]+\b/g, '[REDACTED]')
+    .replace(
+      /(\b(?:anon|service[_ -]?role|secret|access)[ _-]?key\s*[:=]\s*)\S+/gi,
+      '$1[REDACTED]',
+    )
+    .replace(/(\bsecret\s+)\S+/gi, '$1[REDACTED]');
+}
+
+function printRedactedOutput(result: SpawnSyncReturns<string>): void {
+  if (result.stdout) process.stdout.write(redactOutput(result.stdout));
+  if (result.stderr) process.stderr.write(redactOutput(result.stderr));
+}
+
 function parseStatus(output: string, stack: Stack): SupabaseStatus {
   const start = output.indexOf('{');
   const end = output.lastIndexOf('}');
@@ -213,6 +230,13 @@ function createApplicationEnvironment(
     'cocolo_migration',
     env.COCOLO_MIGRATION_PASSWORD ?? 'cocolo_migration',
   );
+  const workerDbUrl = postgresUrl(
+    stack,
+    'line_delivery_worker',
+    env.LINE_DELIVERY_WORKER_PASSWORD ?? 'line_delivery_worker',
+  );
+  delete env.SUPABASE_SERVICE_ROLE_KEY;
+  delete env.SUPABASE_ADMIN_DATABASE_URL;
   return {
     ...env,
     APP_ENV: 'local',
@@ -221,6 +245,7 @@ function createApplicationEnvironment(
     TEST_DATABASE_RESET_ALLOWED: stack.name === 'test' ? 'true' : 'false',
     DATABASE_URL: appDbUrl,
     DIRECT_URL: migrationDbUrl,
+    LINE_DELIVERY_WORKER_DATABASE_URL: workerDbUrl,
     SUPABASE_URL: status.apiUrl.replace(/\/$/, ''),
     SUPABASE_JWKS_URL: `${status.apiUrl.replace(/\/$/, '')}/auth/v1/.well-known/jwks.json`,
     SUPABASE_ANON_KEY: status.anonKey,
@@ -228,9 +253,9 @@ function createApplicationEnvironment(
     PUBLIC_APP_URL: `http://localhost:${stack.webPort}`,
     PUBLIC_APP_URL_ALLOWLIST: `http://localhost:${stack.webPort},http://127.0.0.1:${stack.webPort}`,
     R2_BUCKET: 'cocolo-local',
-    R2_ENDPOINT: env.R2_ENDPOINT ?? 'http://127.0.0.1:9000',
-    R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID ?? 'local-r2-access-key',
-    R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY ?? 'local-r2-secret-key',
+    R2_ENDPOINT: 'http://127.0.0.1:9000',
+    R2_ACCESS_KEY_ID: 'local-r2-access-key',
+    R2_SECRET_ACCESS_KEY: 'local-r2-secret-key',
     RATE_LIMIT_STORE: 'memory',
     RATE_LIMIT_FAIL_CLOSED: 'true',
     RATE_LIMIT_ADAPTER_MODULE: '',
@@ -268,7 +293,16 @@ async function prepareStack(
     ['--filter', '@cocolo/db', 'exec', 'prisma', 'generate'],
     baseEnvironment(),
   );
-  runSupabase(stack, ['start']);
+  const startResult = runSupabase(stack, ['start'], {
+    capture: true,
+    allowFailure: true,
+  });
+  printRedactedOutput(startResult);
+  assert.equal(
+    startResult.status,
+    0,
+    `${stack.projectId} Supabaseの起動に失敗しました。`,
+  );
   const status = getStatus(stack);
   const appEnv = createApplicationEnvironment(stack, status);
   const fresh = !(await hasMigrationHistory(status.dbUrl));
@@ -355,8 +389,8 @@ async function runPlaywright(
 
 async function runIntegration(): Promise<void> {
   const stack = stacks.test;
-  const prepared = await prepareStack(stack, { forceFresh: true });
   try {
+    const prepared = await prepareStack(stack, { forceFresh: true });
     const result = runPnpm(['test:integration:raw'], prepared.env, {
       allowFailure: true,
     });
@@ -372,8 +406,8 @@ async function runIntegration(): Promise<void> {
 
 async function runE2E(extraArgs: string[]): Promise<void> {
   const stack = stacks.test;
-  const prepared = await prepareStack(stack, { forceFresh: true });
   try {
+    const prepared = await prepareStack(stack, { forceFresh: true });
     const status = await runPlaywright(prepared.env, extraArgs);
     assert.equal(status, 0, 'Supabase test DBのE2Eに失敗しました。');
   } finally {
@@ -417,8 +451,8 @@ async function main(): Promise<void> {
     return;
   }
   assert.equal(command, 'dev', 'supabase-localのcommandが不正です。');
-  const prepared = await prepareStack(stacks.dev, { forceFresh: false });
   try {
+    const prepared = await prepareStack(stacks.dev, { forceFresh: false });
     await runHostDevelopment(prepared.env);
   } finally {
     stopStack(stacks.dev, false);

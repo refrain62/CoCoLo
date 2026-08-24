@@ -6,6 +6,11 @@ import { assertTestDatabaseTarget } from './test-database-guard.ts';
 
 const email = process.env.E2E_TEST_EMAIL ?? 'owner-a@example.test';
 const password = process.env.E2E_TEST_PASSWORD ?? 'owner-password';
+assert.match(
+  email,
+  /^[^@\s]+@example\.test$/i,
+  'local Auth fixtureのメールアドレスはexample.testに限定します。',
+);
 const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, '');
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const adminDatabaseUrl = process.env.SUPABASE_ADMIN_DATABASE_URL;
@@ -88,10 +93,9 @@ async function ensureUser(): Promise<string> {
 
 const userId = await ensureUser();
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+// Auth管理APIはservice roleで呼ぶが、DB fixtureはmigration roleでschema ownerとして投入する。
 const childEnv = {
   ...process.env,
-  DATABASE_URL: adminDatabaseUrl,
-  DIRECT_URL: adminDatabaseUrl,
   TEST_AUTH_USER_ID: userId,
   TEST_DATABASE_RESET_ALLOWED: 'true',
 };
