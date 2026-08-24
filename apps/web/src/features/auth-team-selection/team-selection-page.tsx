@@ -71,9 +71,14 @@ export function TeamSelectionPage({ api, onSelected }: TeamSelectionPageProps) {
   }
 
   return (
-    <main aria-labelledby="team-selection-title">
+    <section
+      className="team-selection-card"
+      aria-labelledby="team-selection-title"
+    >
       <h1 id="team-selection-title">利用するチームを選択</h1>
-      <p>操作対象のチームを選択してください。</p>
+      <p className="team-selection-lead">
+        操作対象のチームを選択してください。選択したチームの情報だけが表示されます。
+      </p>
       <button
         disabled={isLoggingOut}
         onClick={() => void logout()}
@@ -107,6 +112,6 @@ export function TeamSelectionPage({ api, onSelected }: TeamSelectionPageProps) {
           </button>
         </fieldset>
       ) : null}
-    </main>
+    </section>
   );
 }

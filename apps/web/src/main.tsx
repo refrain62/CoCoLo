@@ -191,8 +191,22 @@ function AuthenticatedApp() {
     };
   }, [authContextApi, memberApi, selectedTeam, session]);
   if (!session) return <LoginPage />;
-  if (isResolvingTeam) return <p role="status">チーム情報を確認しています。</p>;
-  if (teamError) return <p role="alert">{teamError}</p>;
+  if (isResolvingTeam)
+    return (
+      <AppShell>
+        <section className="app-state-card" aria-live="polite" role="status">
+          チーム情報を確認しています。
+        </section>
+      </AppShell>
+    );
+  if (teamError)
+    return (
+      <AppShell>
+        <section className="app-state-card" role="alert">
+          {teamError}
+        </section>
+      </AppShell>
+    );
   if (!selectedTeam)
     return (
       <AppShell>

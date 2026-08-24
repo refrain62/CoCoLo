@@ -83,7 +83,7 @@ function AnnouncementDetail({
           : '／未読'}
       </p>
       <div>
-        <p style={{ whiteSpace: 'pre-wrap' }}>{announcement.body}</p>
+        <p className="preserve-linebreaks">{announcement.body}</p>
       </div>
       {announcement.attachments.length > 0 ? (
         <section aria-labelledby="bulletin-attachments-heading">
