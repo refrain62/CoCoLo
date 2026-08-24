@@ -17,6 +17,7 @@ const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
 const ACTOR = 'owner-a';
 const RACE_ACTOR = 'owner-b';
+const INTEGRATION_GROUP = 'Uintegration';
 
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URLが必要です');
 assert.ok(
@@ -30,6 +31,15 @@ const worker = createPrismaClient(
   process.env.LINE_DELIVERY_WORKER_DATABASE_URL,
 );
 const owner = createPrismaClient(process.env.DIRECT_URL);
+await owner.$executeRaw`
+  INSERT INTO line_connections (tenant_id, group_id, status, connected_at, updated_at)
+  VALUES (${TENANT_A}::uuid, ${INTEGRATION_GROUP}, 'connected'::line_connection_status, clock_timestamp(), clock_timestamp())
+  ON CONFLICT (tenant_id) DO UPDATE
+    SET group_id = EXCLUDED.group_id,
+        status = EXCLUDED.status,
+        connected_at = EXCLUDED.connected_at,
+        updated_at = EXCLUDED.updated_at
+`;
 const apiRepositories = createMemberRepositories(app);
 const api = createApp({
   verifyToken: async (token) => {
@@ -79,7 +89,7 @@ async function requestProductionApi(input: {
     },
     body: JSON.stringify({
       sourceId: input.sourceId,
-      destination: 'Uintegration',
+      destination: INTEGRATION_GROUP,
       title: input.title ?? '統合テスト通知',
       body: '統合テスト本文',
       deepLink: 'https://app.example.test/integration',
@@ -429,6 +439,11 @@ test('worker接続は専用role・RLS非bypassでclaim関数だけを利用す�
 });
 
 test.after(async () => {
+  await owner.$executeRaw`
+    DELETE FROM line_connections
+     WHERE tenant_id = ${TENANT_A}::uuid
+       AND group_id = ${INTEGRATION_GROUP}
+  `;
   await Promise.all([
     app.$disconnect(),
     worker.$disconnect(),

@@ -126,6 +126,16 @@ export class LineDeliveryConflictError extends Error {
   }
 }
 
+export class LineDeliveryUnavailableError extends Error {
+  readonly status = 409;
+  readonly code = 'LINE_NOT_CONNECTED';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'LineDeliveryUnavailableError';
+  }
+}
+
 // 同一tenant内の別sourceによる冪等キーunique競合も、業務APIの409契約へ変換する。
 function isLineDeliveryConflict(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -136,6 +146,12 @@ function isLineDeliveryConflict(error: unknown): boolean {
     code === 'P2002' ||
     (code === 'P2010' && /23505|unique constraint/i.test(error.message)) ||
     /line_delivery_outbox_idempotency_idx/i.test(error.message)
+  );
+}
+
+function isLineDeliveryUnavailable(error: unknown): boolean {
+  return (
+    error instanceof Error && /接続済みのLINEグループ以外/.test(error.message)
   );
 }
 
@@ -453,6 +469,10 @@ export function createLineDeliveryProducer(
             idempotencyKey: input.idempotencyKey,
           });
         } catch (error) {
+          if (isLineDeliveryUnavailable(error))
+            throw new LineDeliveryUnavailableError(
+              'LINEが未接続か、通知先が現在の接続先と一致しません。',
+            );
           if (isLineDeliveryConflict(error))
             throw new LineDeliveryConflictError(
               '同じtenant内で通知の冪等キーが競合しました。',
