@@ -1,4 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import type { AttachmentApi } from '../attachments/attachment-api.js';
 import {
   type Announcement,
   type AnnouncementCreateInput,
@@ -65,9 +66,11 @@ function AnnouncementList({
 
 function AnnouncementDetail({
   announcement,
+  attachmentApi,
   onListUnread,
 }: {
   announcement: Announcement;
+  attachmentApi: AttachmentApi;
   onListUnread: () => void;
 }) {
   return (
@@ -88,13 +91,15 @@ function AnnouncementDetail({
           <ul>
             {announcement.attachments.map((attachment) => (
               <li key={attachment.id}>
-                {attachment.mediaType}・{formatBytes(attachment.byteSize)}
+                {attachment.mediaType}・{formatBytes(attachment.byteSize)}{' '}
+                <AttachmentDownloadButton
+                  api={attachmentApi}
+                  attachmentId={attachment.id}
+                  mediaType={attachment.mediaType}
+                />
               </li>
             ))}
           </ul>
-          <p>
-            添付のダウンロードは、接続先の添付機能が発行する短期URLを利用します。
-          </p>
         </section>
       ) : null}
       {announcement.canViewUnread ? (
@@ -103,6 +108,50 @@ function AnnouncementDetail({
         </button>
       ) : null}
     </article>
+  );
+}
+
+function AttachmentDownloadButton({
+  api,
+  attachmentId,
+  mediaType,
+}: {
+  api: AttachmentApi;
+  attachmentId: string;
+  mediaType: Announcement['attachments'][number]['mediaType'];
+}) {
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function download() {
+    setError(null);
+    setIsPreparing(true);
+    try {
+      const downloadUrl = await api.createDownloadUrl(attachmentId);
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      anchor.target = '_blank';
+      anchor.rel = 'noreferrer';
+      anchor.click();
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setIsPreparing(false);
+    }
+  }
+
+  return (
+    <span>
+      <button
+        type="button"
+        disabled={isPreparing}
+        onClick={() => void download()}
+        aria-label={`${mediaType}の添付をダウンロード`}
+      >
+        {isPreparing ? '準備中…' : 'ダウンロード'}
+      </button>
+      {error ? <span role="alert">（{error}）</span> : null}
+    </span>
   );
 }
 
@@ -191,9 +240,11 @@ function PublishForm({
 
 export function BulletinBoardPage({
   api = defaultApi,
+  attachmentApi,
   role,
 }: {
   api?: BulletinBoardApi;
+  attachmentApi: AttachmentApi;
   role?: BulletinBoardRole;
 }) {
   const [announcements, setAnnouncements] = useState<AnnouncementSummary[]>([]);
@@ -288,6 +339,7 @@ export function BulletinBoardPage({
       {selected ? (
         <AnnouncementDetail
           announcement={selected}
+          attachmentApi={attachmentApi}
           onListUnread={() => void listUnread()}
         />
       ) : null}
