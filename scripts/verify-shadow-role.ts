@@ -393,7 +393,10 @@ async function inspectShadowDatabase(
                 x.privilege_type
            FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
            CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) x
-          WHERE n.nspname = 'public' AND p.prokind IN ('f', 'p') AND x.grantee <> p.proowner`,
+          WHERE n.nspname = 'public'
+            AND p.proname = 'app_guard_promotion_run_transition'
+            AND p.prokind IN ('f', 'p')
+            AND x.grantee <> p.proowner`,
     ),
     client.$queryRawUnsafe<ShadowAclEntry[]>(
       `SELECT 'default'::text AS "objectType", COALESCE(n.nspname, '*') AS "objectName",

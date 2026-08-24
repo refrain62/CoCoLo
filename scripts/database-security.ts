@@ -125,6 +125,12 @@ const appEnumNames = [
 ] as const;
 
 const appGuardFunctionName = 'public.app_guard_promotion_run_transition()';
+const appTableNameValues = appTableNames.map((name) =>
+  name.slice('public.'.length),
+);
+const appEnumNameValues = appEnumNames.map((name) =>
+  name.slice('public.'.length),
+);
 
 const allowedMembershipKeys = [
   'pg_read_all_settings:pg_monitor',
@@ -808,25 +814,27 @@ export async function inspectDatabaseSecurity(
                 pg_get_userbyid(c.relowner) AS owner
            FROM pg_class c
            JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-            AND n.nspname NOT LIKE 'pg_toast%'
+          WHERE n.nspname = 'public'
+            AND (c.relname = '_prisma_migrations' OR c.relname = ANY($1::text[]))
             AND c.relkind IN ('r', 'v', 'm', 'f', 'p')
           UNION ALL
          SELECT 'sequence'::text, n.nspname || '.' || c.relname,
                 pg_get_userbyid(c.relowner)
            FROM pg_class c
            JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-            AND n.nspname NOT LIKE 'pg_toast%'
+          WHERE n.nspname = 'public'
+            AND c.relname = ANY($1::text[])
             AND c.relkind = 'S'
           UNION ALL
          SELECT 'enum'::text, n.nspname || '.' || t.typname,
                 pg_get_userbyid(t.typowner)
            FROM pg_type t
            JOIN pg_namespace n ON n.oid = t.typnamespace
-          WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-            AND n.nspname NOT LIKE 'pg_toast%'
+          WHERE n.nspname = 'public'
+            AND t.typname = ANY($2::text[])
             AND t.typtype = 'e'`,
+        appTableNameValues,
+        appEnumNameValues,
       ),
       admin.$queryRawUnsafe<DatabaseAclEntry[]>(
         `SELECT 'schema'::text AS "objectType",
@@ -835,8 +843,7 @@ export async function inspectDatabaseSecurity(
                 x.privilege_type AS privilege
            FROM pg_namespace n
            CROSS JOIN LATERAL aclexplode(COALESCE(n.nspacl, acldefault('n', n.nspowner))) x
-          WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-            AND n.nspname NOT LIKE 'pg_toast%'
+          WHERE n.nspname = 'public'
             AND x.grantee <> n.nspowner
           UNION ALL
          SELECT CASE WHEN c.relkind = 'S' THEN 'sequence'::text ELSE 'table'::text END,
@@ -851,8 +858,8 @@ export async function inspectDatabaseSecurity(
                acldefault(CASE WHEN c.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END, c.relowner)
              )
            ) x
-          WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-            AND n.nspname NOT LIKE 'pg_toast%'
+          WHERE n.nspname = 'public'
+            AND c.relname = ANY($1::text[])
             AND c.relkind IN ('r', 'v', 'm', 'f', 'p', 'S')
             AND x.grantee <> c.relowner
           UNION ALL
@@ -862,8 +869,8 @@ export async function inspectDatabaseSecurity(
            FROM pg_type t
            JOIN pg_namespace n ON n.oid = t.typnamespace
            CROSS JOIN LATERAL aclexplode(COALESCE(t.typacl, acldefault('T', t.typowner))) x
-          WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-            AND n.nspname NOT LIKE 'pg_toast%'
+          WHERE n.nspname = 'public'
+            AND t.typname = ANY($2::text[])
             AND t.typtype = 'e'
             AND x.grantee <> t.typowner
           UNION ALL
@@ -874,10 +881,12 @@ export async function inspectDatabaseSecurity(
            FROM pg_proc p
            JOIN pg_namespace n ON n.oid = p.pronamespace
            CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) x
-          WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-            AND n.nspname NOT LIKE 'pg_toast%'
+          WHERE n.nspname = 'public'
+            AND p.proname = 'app_guard_promotion_run_transition'
             AND p.prokind IN ('f', 'p')
             AND x.grantee <> p.proowner`,
+        appTableNameValues,
+        appEnumNameValues,
       ),
       admin.$queryRawUnsafe<DatabaseAclEntry[]>(
         `SELECT 'default'::text AS "objectType",
@@ -901,8 +910,9 @@ export async function inspectDatabaseSecurity(
            JOIN pg_namespace n ON n.oid = c.relnamespace
           WHERE n.nspname = 'public'
             AND c.relkind = 'r'
-            AND c.relname <> '_prisma_migrations'
-          ORDER BY c.relname`,
+            AND c.relname = ANY($1::text[])
+            ORDER BY c.relname`,
+        appTableNameValues,
       ),
       admin.$queryRawUnsafe<DatabasePolicyInspection[]>(
         `SELECT schemaname || '.' || tablename AS "tableName",
@@ -944,8 +954,8 @@ export async function inspectDatabaseSecurity(
                 ) AS "aclEntries"
            FROM pg_proc p
            JOIN pg_namespace n ON n.oid = p.pronamespace
-          WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-            AND n.nspname NOT LIKE 'pg_toast%'
+          WHERE n.nspname = 'public'
+            AND p.proname = 'app_guard_promotion_run_transition'
             AND p.prokind IN ('f', 'p')`,
         )
         .then((rows) =>

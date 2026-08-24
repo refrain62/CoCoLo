@@ -74,7 +74,14 @@ jobs:
       - name: 実DBのrole・権限・RLS・policyを検証
         run: pnpm verify:database-security
         env:
+          APP_ENV: local
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+          DATABASE_APP_ROLE: cocolo_app
+          DATABASE_ADMIN_ROLE: postgres
+          DATABASE_ALLOWED_HOSTS: localhost
+          DATABASE_ALLOWED_DATABASES: cocolo_test
+          DATABASE_ALLOWED_TARGETS: localhost:5432/cocolo_test
       - name: schemaとfixtureを検証
         run: pnpm --filter @cocolo/db exec prisma validate && pnpm db:seed:test
         env:
