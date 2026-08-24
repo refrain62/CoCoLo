@@ -1071,6 +1071,39 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - 実PostgreSQL/RLS統合テストとstaging E2Eは環境準備後に実施します。
 - 既存UUIDv4行の移行前検査とboard contact PIIのDB直接SELECT見直しはDB-002の残タスクとして継続します。
 
+## DB-002 既存UUIDv4行のUUIDv7移行前検査
+
+### 実施した変更
+
+- PR #145で、public schemaのUUID列をDIRECT_URL経由で走査し、version nibbleが7でない既存行を件数単位で検出するscriptを追加しました。
+- `line_delivery_outbox.attempt_token`と`provider_retry_key`は、外部再送と送信競合制御に使う意図的なUUIDv4のため検査対象から除外しました。
+- database-integrity、staging、productionのmigration前workflowへ検査を接続し、不正行がある場合はfail-closedで停止します。
+- 識別子検証、検査対象の除外、version nibble判定の単体テストとtrusted manifest更新を追加しました。
+
+### 検証結果
+
+- `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm lint:workflows`が成功しました。
+- `pnpm verify:trust-root`、`pnpm verify:migration-sql`、`pnpm verify:migration-checksum`、`git diff --check`が成功しました。
+- PR #145の品質ゲート run `32742520512`が成功しました。
+- 実PostgreSQLへの検査は接続情報がないため未実施です。
+
+### 敵対的レビュー
+
+- UUID列の識別子を検証し、任意SQLの混入を拒否することを確認しました。
+- 検査結果は列名と件数だけを出力し、行IDやPIIを出力しないことを確認しました。
+- 既存データ検査をmigrationより前に実行し、意図的UUIDv4 token以外をfail-closedで扱うことを確認しました。
+- CriticalとHighの未解消指摘はありません。
+
+### GitHub反映
+
+- PR #145は`463570e`としてdevelopへsquash mergeしました。
+- 実装PRと台帳更新PRを分離しています。
+
+### 未完了条件
+
+- stagingとproductionの実DBで既存データを検査する作業は、環境接続後に実施します。
+- board contact PIIのDB直接SELECT見直しはDB-002の残タスクとして継続します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
