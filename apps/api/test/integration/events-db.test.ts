@@ -328,7 +328,7 @@ test('予定の保存transactionがLINE outboxへ即時通知と締切通知を�
 
     await direct.$executeRaw`
       UPDATE line_delivery_outbox
-         SET status = 'sent', sent_at = ${now}
+         SET status = 'sent', sent_at = ${now}, next_retry_at = NULL
        WHERE tenant_id = ${EVENT_LINE_TENANT}::uuid
          AND source_type = 'deadline'
          AND source_id = ${created.id}
