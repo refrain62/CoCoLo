@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-再開時点の`origin/develop`は`1e17288`（中央API route mount実装PR #89のマージ）です。
+再開時点の`origin/develop`は`0db4fde`（Webチーム選択統合PR #91のマージ）です。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
@@ -191,13 +191,14 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - 対象：PR #29、`feature/api-hardening`
   - CORS allowlistはPR #59、認証後のtenantとuser単位rate limitはPR #60で`develop`へ接続済みです。
   - 構造化ログとruntime response schema検証はPR #62で`apps/api/src/app.ts`へ接続済みです。
-  - 中央APIの複数tenant所属時の明示的チーム選択はPR #89で接続済みです。LINE feature app、Auth session lifecycleの中央mount、Web側の選択状態は別タスクとして残っています。
+  - 中央APIの複数tenant所属時の明示的チーム選択はPR #89、Web側の選択状態と主要API header接続はPR #91で完了しました。LINE feature app、Auth session lifecycleの中央mountは別タスクとして残っています。
   - staging、productionでは分散rate limit adapterを必須にし、in-memory fallbackを許可しません。
 
 - `[~]` **API-002：WebとAPIの中央mountを統合する。**
   - 対象：PR #32、現行develop起点のPR #89
   - PR #89でauth team選択、役員連絡先、回覧板、送迎のAPI routeを中央mountし、中央認証、tenant再解決、rate limit、CORS、response envelope契約を接続済みです。
-  - 残りはattachments/orders/LINE feature webhookのAPI接続、Web画面の中央mount、loading/empty/error/権限不足表示、feature固有response契約の厳密化です。古いPR #35はクローズしました。
+  - PR #91でログイン後のactiveチーム一覧、複数所属時の選択画面、再読み込み時の候補照合、auth context/部員/予定APIへの選択tenant header付与を接続済みです。
+  - 残りはattachments/orders/LINE feature webhookのAPI接続、board/bulletin/ride等のWeb画面mount、loading/empty/error/権限不足表示、feature固有response契約の厳密化です。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**

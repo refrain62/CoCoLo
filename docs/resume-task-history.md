@@ -492,6 +492,35 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - attachments/orders/LINE feature webhookの中央API接続、Web画面の中央mount、Auth session lifecycle、feature固有response契約の厳密化、staging/production実サービスE2Eは継続します。
 
+## API-002 Webのチーム選択接続
+
+### 実施した変更
+
+- 現行developを起点にPR #91を作成し、ログイン後にactiveチーム一覧を取得するWeb導線を接続しました。単一所属は自動選択し、複数所属は業務画面の前に選択画面を表示します。
+- 選択したtenant IDだけをlocalStorageへ保存し、再読み込み時はサーバーから取得したactiveチーム一覧と照合します。access token、refresh token、個人情報は追加保存しません。
+- auth context、部員、予定のAPI clientへ`X-CoCoLo-Team-Id`を付与し、中央API側で毎回UUIDv7とactive所属を再検証する構成へ接続しました。選択中チームと役割もWebへ表示します。
+- Vitest実行時にworkspace packageのdistが未生成でも動作するよう、ブラウザ側の固定header名をローカル定数として切り出しました。API契約の正本値と一致させています。
+
+### 検証結果
+
+- ローカルでWeb Vitest 63件、workspace `pnpm test:unit`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`git diff --check`が成功しました。
+- 初回CIではWeb Vitestがworkspace packageのbuild前にruntime exportを解決できずqualityが失敗しました。ブラウザ側の固定header定数へ切り替えて再実行しました。
+- 修正後のPR #91 CIはquality run `32696484156`、database-integrity run `32696484210`、schema-drift run `32696484226`がすべて成功しました。
+
+### 敵対的レビュー
+
+- 再レビューはCritical 0、High 0でした。tenant越境、PII・token保存、再読み込み時の候補照合、API header付与を確認しました。
+- 残るMediumは、logout時の選択ID消去、利用中のチーム切替UI、画面状態の統合テストです。サーバー側の所属再検証で越境は防止されるため、今回の完成を妨げない後続課題としてAPI-002へ残します。
+
+### GitHub反映
+
+- 実装PR #91はready化後、squash commit `0db4fde`として`develop`へ統合しました。
+- 本記録と残タスク台帳の更新は、実装PRと分離したdocs-only PRで反映します。
+
+### 残タスク
+
+- attachments/orders/LINE feature webhookのAPI接続、board/bulletin/ride等のWeb画面mount、logout時の選択状態整理、チーム切替UI、Auth session lifecycle、feature固有response契約の厳密化を継続します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
