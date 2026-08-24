@@ -1,4 +1,4 @@
-import { selectedTeamHeaderName } from '@cocolo/contracts/auth-team-selection';
+import { selectedTeamHeaderName } from '../auth-team-selection/selected-team-storage.js';
 
 export type OrdersProduct = {
   id: string;
