@@ -1259,6 +1259,35 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - authenticated main screensの実機幅・キーボード・role別ブラウザ受入とstaging確認を完了するまでUI-002は継続します。
 - 保存APIの安定した冪等キー、通信タイムアウト・再試行・競合、外部LINE障害時のPlaywright記録を完了するまでUI-003は未完了です。
 
+## TOOL-001 Node.jsとpnpmのtoolchain固定検証
+
+### 実施した変更
+
+- Node.jsを汎用の`24`で指定していた6つのWorkflowを`24.12.0`へ固定し、pnpm使用Workflowの`10.26.0`固定と整合させました。
+- `verify:toolchain`、固定値policy、専用テストを追加し、実行中のNode.js/pnpm、`mise.toml`、`package.json`、全Workflowの設定をfail-closedで照合します。
+- qualityの`ci:fast`へtoolchain検証を組み込み、変更したWorkflow・scripts・`package.json`のSHAをtrusted-file-manifestへ反映しました。
+
+### 検証結果
+
+- `pnpm test:unit`、`pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`が成功しました。
+- `pnpm lint:workflows`、`pnpm verify:migration-sql`、`pnpm verify:production-bundle`、`pnpm verify:trust-root`、`git diff --check`が成功しました。
+- ローカル実行環境はNode.js 24.19.0のため、`verify:toolchain`が24.12.0以外を拒否することを確認しました。固定環境でのNode.js 24.12.0/pnpm 10.26.0実行はGitHub quality run `32788024029`で成功しました。
+
+### 敵対的レビュー
+
+- Workflowの固定漏れ、実行時バージョン不一致、Windows/Linuxのpnpm実行経路、trust root manifest、供給網設定を確認しました。
+- 変更範囲にCritical / Highの未解消指摘はありません。Node.js 20を実行するActionのruntime警告と、通常install後の実効設定・ignored-buildsの追加証跡はTOOL-003および環境受入の残課題です。
+
+### GitHub反映
+
+- 実装PR #160は`f49cf02`として`develop`へsquash mergeしました。
+- PR #161は`9c203ce`としてqualityへroot test、lint、production bundle検査を追加し、`develop`へsquash mergeしました。
+- 実装コードと台帳・実施記録は分離し、この変更はdocs-only PRで提出します。
+
+### 未完了条件
+
+- TOOL-002のCRLF検査結果統一、TOOL-003のNode.js 20警告整理、通常install経路の実効pnpm設定検証は継続します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
