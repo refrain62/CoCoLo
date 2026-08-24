@@ -38,6 +38,16 @@ const policies: DatabasePolicyInspection[] = [
     withCheckExpression: null,
   },
   {
+    tableName: 'public.tenant_memberships',
+    policyName: 'tenant_memberships_announcement_author_select',
+    permissive: 'PERMISSIVE',
+    roles: ['public'],
+    command: 'SELECT',
+    usingExpression:
+      "tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid AND status = 'active'::membership_status AND NULLIF(current_setting('app.announcement_id', true), '') IS NOT NULL AND app_is_announcement_author(tenant_id, NULLIF(current_setting('app.announcement_id', true), '')::uuid, current_setting('app.user_id', true))",
+    withCheckExpression: null,
+  },
+  {
     tableName: 'public.members',
     policyName: 'members_select',
     permissive: 'PERMISSIVE',

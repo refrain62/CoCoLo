@@ -175,6 +175,22 @@ const expectedPolicies: readonly PolicyExpectation[] = [
     withCheckRequired: false,
   },
   {
+    tableName: 'public.tenant_memberships',
+    policyName: 'tenant_memberships_announcement_author_select',
+    command: 'SELECT',
+    roles: ['public'],
+    usingMarkers: [
+      "current_setting('app.tenant_id'",
+      "current_setting('app.announcement_id'",
+      "current_setting('app.user_id'",
+      'status =',
+      'app_is_announcement_author',
+    ],
+    withCheckMarkers: [],
+    usingRequired: true,
+    withCheckRequired: false,
+  },
+  {
     tableName: 'public.members',
     policyName: 'members_select',
     command: 'SELECT',
