@@ -366,6 +366,7 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     /^\/api\/v1\/announcements(?:\/.*)?$/,
     /^\/api\/v1\/ride-plans(?:\/.*)?$/,
     /^\/api\/v1\/uploads(?:\/.*)?$/,
+    /^\/api\/v1\/orders(?:\/.*)?$/,
   ])
     for (const method of ['GET', 'POST', 'PATCH', 'DELETE'])
       for (const status of [200, 201, 202])
@@ -389,6 +390,11 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
           method: 'DELETE',
           path: /^\/api\/v1\/board-members\/[^/]+$/,
           status: 204,
+        },
+        {
+          method: 'GET',
+          path: /^\/api\/v1\/orders\/[^/]+\/export\.csv$/,
+          status: 200,
         },
       ],
       onViolation: (violation) => {
@@ -519,6 +525,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     app.use('/api/v1/ride-plans', authenticate);
     app.use('/api/v1/ride-plans/*', authenticate);
   }
+  if (options.centralFeatures?.orders) {
+    app.use('/api/v1/orders', authenticate);
+    app.use('/api/v1/orders/*', authenticate);
+  }
 
   // 認証後のtenant/userだけをキーに使い、production系では起動時に分散adapterを要求する。
   const authenticatedRateLimit = createRateLimitMiddleware({
@@ -566,6 +576,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.centralFeatures?.ride) {
     app.use('/api/v1/ride-plans', authenticatedRateLimit);
     app.use('/api/v1/ride-plans/*', authenticatedRateLimit);
+  }
+  if (options.centralFeatures?.orders) {
+    app.use('/api/v1/orders', authenticatedRateLimit);
+    app.use('/api/v1/orders/*', authenticatedRateLimit);
   }
 
   app.get('/api/v1/auth/context', (c) => {

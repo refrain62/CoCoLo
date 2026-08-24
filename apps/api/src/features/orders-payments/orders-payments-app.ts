@@ -13,16 +13,19 @@ import {
   type OrdersRepository,
   OrdersRepositoryError,
 } from '@cocolo/db/orders';
-import type { OrdersRole } from '@cocolo/domain/orders';
+import { isOrdersManager, type OrdersRole } from '@cocolo/domain/orders';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
 import { HTTPException } from 'hono/http-exception';
+import type { ApiEnv } from '../../app.js';
 
-type Membership = { tenantId: string; role: OrdersRole };
+type Membership = ApiEnv['Variables']['auth']['membership'];
+type OrdersAuth = ApiEnv['Variables']['auth'];
 
 export type OrdersPaymentsApiEnv = {
   Variables: {
     requestId: string;
-    auth: { userId: string; membership: Membership };
+    // 中央appが解決したselected tenantをそのまま受け取り、注文appで再解決しない。
+    auth: OrdersAuth;
   };
 };
 
@@ -32,7 +35,35 @@ export type OrdersPaymentsAppOptions = {
     findActiveByUserId: (userId: string) => Promise<Membership | null>;
   };
   ordersRepository: OrdersRepository;
+  useCentralAuth?: boolean;
 };
+
+class AuthContextError extends Error {
+  constructor() {
+    super('認証コンテキストが設定されていません。');
+    this.name = 'AuthContextError';
+  }
+}
+
+const ordersRoles = new Set<OrdersRole>([
+  'owner',
+  'admin',
+  'staff',
+  'guardian',
+]);
+
+// 中央appと単独appのどちらでも、repositoryへ渡す前にtenant・roleの形を検証する。
+function getOrdersAuth(c: Context<OrdersPaymentsApiEnv>): OrdersAuth {
+  const auth = c.get('auth') as OrdersAuth | undefined;
+  if (
+    !auth ||
+    typeof auth.userId !== 'string' ||
+    typeof auth.membership?.tenantId !== 'string' ||
+    !ordersRoles.has(auth.membership.role)
+  )
+    throw new AuthContextError();
+  return auth;
+}
 
 function errorResponse(
   c: Context<OrdersPaymentsApiEnv>,
@@ -100,6 +131,7 @@ function projectCampaign(
 
 function projectEntry(
   entry: Awaited<ReturnType<OrdersRepository['createEntry']>>,
+  role: OrdersRole,
 ) {
   return {
     id: entry.id,
@@ -111,7 +143,9 @@ function projectEntry(
     totalAmount: entry.totalAmount,
     paymentStatus: entry.paymentStatus,
     paymentConfirmedAt: entry.paymentConfirmedAt,
-    paymentConfirmedBy: entry.paymentConfirmedBy,
+    ...(isOrdersManager(role)
+      ? { paymentConfirmedBy: entry.paymentConfirmedBy }
+      : {}),
     createdAt: entry.createdAt,
   };
 }
@@ -133,18 +167,21 @@ function repositoryError(
 
 /**
  * 注文機能だけを独立して公開するHono app。
- * 既存のapp.tsへ接続する際も、認証済み所属からtenantIdを決める境界は変更しない。
+ * 中央appへ接続した場合は親appのauthを利用し、注文app自身でtenantを暗黙選択しない。
  */
 export function createOrdersPaymentsApp(
   options: OrdersPaymentsAppOptions,
 ): Hono<OrdersPaymentsApiEnv> {
   const app = new Hono<OrdersPaymentsApiEnv>();
-  app.use('*', async (c, next) => {
-    c.set('requestId', c.req.header('x-request-id') ?? crypto.randomUUID());
-    c.header('x-request-id', c.get('requestId'));
-    await next();
-  });
+  if (!options.useCentralAuth)
+    app.use('*', async (c, next) => {
+      c.set('requestId', c.req.header('x-request-id') ?? crypto.randomUUID());
+      c.header('x-request-id', c.get('requestId'));
+      await next();
+    });
   app.onError((error, c) => {
+    if (error instanceof AuthContextError)
+      return errorResponse(c, 401, 'UNAUTHENTICATED', '認証が必要です。');
     if (error instanceof InputError)
       return errorResponse(c, 400, 'VALIDATION_ERROR', error.message);
     if (error instanceof OrdersRepositoryError)
@@ -203,13 +240,15 @@ export function createOrdersPaymentsApp(
     }
   };
 
-  app.use('/api/v1/orders', authenticate);
-  app.use('/api/v1/orders/*', authenticate);
+  if (!options.useCentralAuth) {
+    app.use('/api/v1/orders', authenticate);
+    app.use('/api/v1/orders/*', authenticate);
+  }
 
   app.get('/api/v1/orders', async (c) => {
     const parsed = orderListQuerySchema.safeParse(c.req.query());
     if (!parsed.success) throw new InputError('一覧条件が不正です。');
-    const auth = c.get('auth');
+    const auth = getOrdersAuth(c);
     try {
       const campaigns = await options.ordersRepository.listCampaigns({
         tenantId: auth.membership.tenantId,
@@ -228,7 +267,7 @@ export function createOrdersPaymentsApp(
   app.post('/api/v1/orders', async (c) => {
     const parsed = orderCreateSchema.safeParse(await readJson(c));
     if (!parsed.success) throw new InputError('募集案件の入力値が不正です。');
-    const auth = c.get('auth');
+    const auth = getOrdersAuth(c);
     try {
       const campaign = await options.ordersRepository.createCampaign(
         {
@@ -249,7 +288,7 @@ export function createOrdersPaymentsApp(
 
   app.get('/api/v1/orders/:orderId', async (c) => {
     const orderId = resourceId(c, 'orderId');
-    const auth = c.get('auth');
+    const auth = getOrdersAuth(c);
     try {
       const campaign = await options.ordersRepository.getCampaign({
         tenantId: auth.membership.tenantId,
@@ -269,7 +308,7 @@ export function createOrdersPaymentsApp(
     const orderId = resourceId(c, 'orderId');
     const parsed = orderProductSchema.safeParse(await readJson(c));
     if (!parsed.success) throw new InputError('商品の入力値が不正です。');
-    const auth = c.get('auth');
+    const auth = getOrdersAuth(c);
     try {
       const product = await options.ordersRepository.addProduct(
         {
@@ -294,7 +333,7 @@ export function createOrdersPaymentsApp(
     const parsed = orderStatusUpdateSchema.safeParse(await readJson(c));
     if (!parsed.success)
       throw new InputError('募集案件状態の入力値が不正です。');
-    const auth = c.get('auth');
+    const auth = getOrdersAuth(c);
     try {
       const campaign = await options.ordersRepository.updateCampaignStatus({
         tenantId: auth.membership.tenantId,
@@ -316,7 +355,7 @@ export function createOrdersPaymentsApp(
     const orderId = resourceId(c, 'orderId');
     const parsed = paymentStatusQuerySchema.safeParse(c.req.query());
     if (!parsed.success) throw new InputError('支払状態の絞り込みが不正です。');
-    const auth = c.get('auth');
+    const auth = getOrdersAuth(c);
     try {
       const entries = await options.ordersRepository.listEntries({
         tenantId: auth.membership.tenantId,
@@ -325,7 +364,9 @@ export function createOrdersPaymentsApp(
         orderId,
         paymentStatus: parsed.data.paymentStatus,
       });
-      return c.json({ data: entries.map(projectEntry) });
+      return c.json({
+        data: entries.map((entry) => projectEntry(entry, auth.membership.role)),
+      });
     } catch (error) {
       if (error instanceof OrdersRepositoryError)
         return repositoryError(c, error);
@@ -337,7 +378,7 @@ export function createOrdersPaymentsApp(
     const orderId = resourceId(c, 'orderId');
     const parsed = orderEntryCreateSchema.safeParse(await readJson(c));
     if (!parsed.success) throw new InputError('注文の入力値が不正です。');
-    const auth = c.get('auth');
+    const auth = getOrdersAuth(c);
     try {
       const entry = await options.ordersRepository.createEntry({
         tenantId: auth.membership.tenantId,
@@ -347,7 +388,7 @@ export function createOrdersPaymentsApp(
         idempotencyKey: idempotencyKey(c),
         entry: parsed.data,
       });
-      return c.json({ data: projectEntry(entry) }, 201);
+      return c.json({ data: projectEntry(entry, auth.membership.role) }, 201);
     } catch (error) {
       if (error instanceof OrdersRepositoryError)
         return repositoryError(c, error);
@@ -360,7 +401,7 @@ export function createOrdersPaymentsApp(
     const entryId = resourceId(c, 'entryId');
     const parsed = paymentUpdateSchema.safeParse(await readJson(c));
     if (!parsed.success) throw new InputError('支払状態の入力値が不正です。');
-    const auth = c.get('auth');
+    const auth = getOrdersAuth(c);
     try {
       const entry = await options.ordersRepository.updatePayment({
         tenantId: auth.membership.tenantId,
@@ -371,7 +412,7 @@ export function createOrdersPaymentsApp(
         status: parsed.data.status,
         idempotencyKey: idempotencyKey(c),
       });
-      return c.json({ data: projectEntry(entry) });
+      return c.json({ data: projectEntry(entry, auth.membership.role) });
     } catch (error) {
       if (error instanceof OrdersRepositoryError)
         return repositoryError(c, error);
@@ -381,7 +422,7 @@ export function createOrdersPaymentsApp(
 
   app.get('/api/v1/orders/:orderId/summary', async (c) => {
     const orderId = resourceId(c, 'orderId');
-    const auth = c.get('auth');
+    const auth = getOrdersAuth(c);
     try {
       const summary = await options.ordersRepository.summarize({
         tenantId: auth.membership.tenantId,
@@ -399,7 +440,7 @@ export function createOrdersPaymentsApp(
 
   app.get('/api/v1/orders/:orderId/unpaid', async (c) => {
     const orderId = resourceId(c, 'orderId');
-    const auth = c.get('auth');
+    const auth = getOrdersAuth(c);
     try {
       const entries = await options.ordersRepository.listEntries({
         tenantId: auth.membership.tenantId,
@@ -408,7 +449,9 @@ export function createOrdersPaymentsApp(
         orderId,
         paymentStatus: 'unpaid',
       });
-      return c.json({ data: entries.map(projectEntry) });
+      return c.json({
+        data: entries.map((entry) => projectEntry(entry, auth.membership.role)),
+      });
     } catch (error) {
       if (error instanceof OrdersRepositoryError)
         return repositoryError(c, error);
@@ -418,7 +461,7 @@ export function createOrdersPaymentsApp(
 
   app.get('/api/v1/orders/:orderId/export.csv', async (c) => {
     const orderId = resourceId(c, 'orderId');
-    const auth = c.get('auth');
+    const auth = getOrdersAuth(c);
     try {
       const csv = await options.ordersRepository.exportCsv({
         tenantId: auth.membership.tenantId,

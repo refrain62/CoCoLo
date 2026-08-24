@@ -5,6 +5,7 @@ import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selectio
 import { createBoardContactRepository } from '@cocolo/db/board-contact';
 import { createBulletinBoardRepositories } from '@cocolo/db/bulletin-board';
 import { createEventRepository } from '@cocolo/db/events';
+import { createPrismaOrdersRepository } from '@cocolo/db/orders';
 import { createRideRepository } from '@cocolo/db/ride';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
@@ -35,6 +36,9 @@ const centralFeatures = {
   },
   bulletinBoard: {
     repository: createBulletinBoardRepositories(prisma).bulletinBoardRepository,
+  },
+  orders: {
+    repository: createPrismaOrdersRepository(prisma),
   },
   ride: {
     service: createRideService(createRideRepository(prisma)),

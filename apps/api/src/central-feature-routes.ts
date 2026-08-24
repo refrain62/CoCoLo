@@ -2,6 +2,7 @@ import type { TokenVerifier } from '@cocolo/auth';
 import type { MemberRole } from '@cocolo/contracts/member';
 import type { AuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import type { BulletinBoardRepository } from '@cocolo/db/bulletin-board';
+import type { OrdersRepository } from '@cocolo/db/orders';
 import type { AttachmentRepository } from '@cocolo/domain/attachment';
 import type { Context, Hono } from 'hono';
 import type { ApiEnv } from './app.js';
@@ -13,6 +14,7 @@ import {
   createBoardContactApp,
 } from './features/board-contact/index.js';
 import { createBulletinBoardApp } from './features/bulletin-board/bulletin-board-app.js';
+import { createOrdersPaymentsApp } from './features/orders-payments/orders-payments-app.js';
 import {
   type RideRouteApp,
   registerRideRoutes,
@@ -33,6 +35,7 @@ export type CentralFeatureRoutes = {
   };
   boardContact?: { repository: BoardContactRepository };
   bulletinBoard?: { repository: BulletinBoardRepository };
+  orders?: { repository: OrdersRepository };
   ride?: { service: RideService };
 };
 
@@ -91,6 +94,15 @@ export function mountCentralFeatureRoutes(options: CentralFeatureRouteOptions) {
       createBulletinBoardApp({
         ...common,
         bulletinBoardRepository: features.bulletinBoard.repository,
+        useCentralAuth: true,
+      }),
+    );
+
+  if (features?.orders)
+    options.rideApp.route(
+      '/',
+      createOrdersPaymentsApp({
+        ordersRepository: features.orders.repository,
         useCentralAuth: true,
       }),
     );
