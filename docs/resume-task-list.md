@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-再開時点の`origin/develop`は`d9734eb`（AUTH-002完了履歴PR #97のマージ）です。
+実装再開の基準となる`develop`は`b14f891`（AUTH-002実装PR #96のマージ）です。docs-only PR #97、#98の履歴更新は`develop`へ反映済みです。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
