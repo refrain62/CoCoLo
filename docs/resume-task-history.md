@@ -373,6 +373,41 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - 実DB接続情報がないローカル実行は、build・unit test成功だけでDB統合成功と判定しません。
 - 今後の機能は、同手順書のT037再発防止チェックリストを実装PRとdocs-only PRの完了条件へ適用します。
 
+## EVT-003
+
+### 実施した変更
+
+- 対象は「予定と締切をLINE outboxへ接続する」機能です。旧PR #40をそのまま統合せず、現行`develop`を起点にPR #77として再構成しました。
+- 予定作成時のevent通知とdeadline通知を業務transaction内でoutboxへ登録し、UUIDv7、source単位のidempotency、固定payload、同一環境deep-link、接続世代をDB側で検証します。
+- workerのclaim、外部送信直前の再検証、lease、attempt token、provider retry key、送信結果の`sent`・`failed`・`unknown`遷移を接続しました。
+- tenantのadvisory lockに加え、同一LINE groupの再利用と外部送信をgroup advisory lockで直列化しました。送信中transactionのtimeoutは外部送信上限120秒より長い130秒に固定しています。
+- 汎用LINE通知について、別tenantが同一groupを接続中の場合はclaim・送信前検証から除外し、送信中に再利用された場合は`unknown`へ収束させます。この修正は既存migrationを変更せず、後続migration `20260824120000_line_delivery_group_reuse_guard`へ分離しました。
+
+### 検証結果
+
+- ローカル最終実装HEADでは`pnpm test`が164件成功、`pnpm build`、`pnpm typecheck`、`pnpm lint:biome`、`git diff --check`が成功しました。
+- migration baseline、checksum、SQL、trust-root、database-integrity 23件、schema-drift 42件が成功しました。
+- `pnpm test:integration`は`DATABASE_URL`、`DIRECT_URL`等が未設定のため、実PostgreSQL統合テストを実行できませんでした。実DBのRLS、group再利用競合、timeout中のlock保持、LINE provider E2Eはstagingで別途確認が必要です。
+- PR #80のCIはquality run `32686760497`、database-integrity run `32686760559`、schema-drift run `32686760496`がすべて成功しました。
+
+### 敵対的レビュー
+
+- 初回レビューで検出されたclaim後の接続変更と外部送信のTOCTOUは、送信・結果確定までtenant/group lockを保持する実装で解消しました。
+- 再レビューで検出されたPrisma interactive transaction既定timeoutによるlock早期解放は、送信timeoutより長い明示timeoutを設定して解消しました。
+- 最終レビューはCritical 0、High 0、Medium 2でした。残るMediumは実DB競合テスト未整備と、テスト・非production adapterで`withDeliveryLock`が未提供の場合にtenant lockへフォールバックする構成境界です。productionのPrisma wiringはgroup lockを提供します。
+
+### GitHub反映
+
+- 実装PR #77は`bdfaf9c`として`develop`へスカッシュマージ済みです。
+- 旧修正PR #79は既存migration編集をbaselineが拒否するためクローズし、後続migrationへ分離したPR #80へ置き換えました。
+- 修正PR #80は`22b2dc4`として`develop`へスカッシュマージ済みです。
+- 本記録と残タスク台帳の更新は、実装PRと分離したdocs-only PRで反映します。
+
+### 残タスク
+
+- LINE providerのstaging接続、専用channel/groupを使ったE2E、provider送達確認と`unknown`照合運用は`LINE-DELIVERY-002`および`NOT-002`、`OPS-004`として残ります。
+- EVT-002の予定詳細・出欠回答状態の統合、実DB検証が未完了のため、次の実装候補として残します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
