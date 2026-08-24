@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-再開時点の`origin/develop`は`70f6f27`（Web接続実施履歴PR #94のマージ）です。
+再開時点の`origin/develop`は`b14f891`（AUTH-002実装PR #96のマージ）です。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
@@ -182,16 +182,11 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - API、Web、RLS、再読み込み時の選択状態、複数所属の実DB検証を中央mountへ接続します。
   - 所属一覧を認証情報の一部として扱い、利用者入力のtenant IDだけで認可しないことを確認します。
 
-- `[ ]` **AUTH-002：Supabase Auth session lifecycleを統合する。**
-  - 対象：PR #34、`feature/auth-session-lifecycle`
-  - 期限前refresh、401時の一度だけの再送、single-flight、古いrefresh応答の無効化、logout、保存tokenの消去をWebの中央mountへ接続します。
-  - localStorageのXSSリスク、staging Supabase E2E、logout UIを受け入れ条件へ追加します。
-
 - `[~]` **API-001：共通API hardeningを中央APIへ接続する。**
   - 対象：PR #29、`feature/api-hardening`
   - CORS allowlistはPR #59、認証後のtenantとuser単位rate limitはPR #60で`develop`へ接続済みです。
   - 構造化ログとruntime response schema検証はPR #62で`apps/api/src/app.ts`へ接続済みです。
-  - 中央APIの複数tenant所属時の明示的チーム選択はPR #89、Web側の選択状態と主要API header接続はPR #91で完了しました。LINE feature app、Auth session lifecycleの中央mountは別タスクとして残っています。
+  - 中央APIの複数tenant所属時の明示的チーム選択はPR #89、Web側の選択状態と主要API header接続はPR #91、既存AuthSessionManagerのWeb接続はPR #96で完了しました。LINE feature appの中央mountは別タスクとして残っています。
   - staging、productionでは分散rate limit adapterを必須にし、in-memory fallbackを許可しません。
 
 - `[~]` **API-002：WebとAPIの中央mountを統合する。**
@@ -199,7 +194,7 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - PR #89でauth team選択、役員連絡先、回覧板、送迎のAPI routeを中央mountし、中央認証、tenant再解決、rate limit、CORS、response envelope契約を接続済みです。
   - PR #91でログイン後のactiveチーム一覧、複数所属時の選択画面、再読み込み時の候補照合、auth context/部員/予定APIへの選択tenant header付与を接続済みです。
   - PR #93で役員連絡先と回覧板のWeb画面をmountし、両APIへ選択tenant headerを付与しました。役員管理操作はowner/adminだけに表示します。
-  - 残りはattachments/orders/LINE feature webhookのAPI接続、送迎画面の予定選択、全画面の統合テスト、Auth session lifecycle、feature固有response契約の厳密化です。古いPR #35はクローズしました。
+  - 残りはattachments/orders/LINE feature webhookのAPI接続、送迎画面の予定選択、チーム選択前のlogout導線、全画面の統合テスト、staging Supabase E2E、feature固有response契約の厳密化です。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**

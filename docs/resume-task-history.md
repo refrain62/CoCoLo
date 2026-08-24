@@ -521,6 +521,33 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - attachments/orders/LINE feature webhookのAPI接続、board/bulletin/ride等のWeb画面mount、logout時の選択状態整理、チーム切替UI、Auth session lifecycle、feature固有response契約の厳密化を継続します。
 
+## AUTH-002 WebのAuth session lifecycle接続
+
+### 実施した変更
+
+- 現行developを起点にPR #96を作成し、既存のAuthSessionManagerが提供する`authenticatedFetch`を、チーム選択、auth context、部員、予定、役員連絡先、回覧板のWeb APIクライアントへ接続しました。
+- 期限前refresh、401時の一度だけの再送、single-flight、Authorizationの最新token上書きは既存のAuthSessionManagerへ委譲し、API・DB・ストレージ・token保存方式は変更していません。
+- 選択中チームヘッダーにlogoutを追加し、session消去後に既存の選択チームIDもクリアするようにしました。logout失敗時も、メモリ上のsessionと選択状態は先に消去されます。
+
+### 検証結果
+
+- Web Vitest 68件、workspace `pnpm test:unit`、`pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`git diff --check`が成功しました。
+- PR #96のquality run `32700420470`、database-integrity run `32700420478`、schema-drift run `32700420490`がすべて成功しました。
+
+### 敵対的レビュー
+
+- Critical 0、High 0でした。401 refresh/retry、Authorization更新、logout時のsessionと選択tenant状態、依存配列、tenant越境、PII露出を確認しました。
+- 残るMediumは、チーム選択前・所属0件画面のlogout導線と、mainからAuthSessionManagerまでを検証する画面統合テストです。今回の最小スコープでは業務API表示前の導線とテスト拡張の課題であり、マージを妨げない後続課題としてAPI-002へ残します。
+
+### GitHub反映
+
+- 実装PR #96はready化後、squash commit `b14f891`として`develop`へ統合しました。
+- 本記録と残タスク台帳の更新は、実装PRと分離したdocs-only PRで反映します。
+
+### 残タスク
+
+- チーム選択前のlogout導線、画面統合テスト、staging Supabase E2E、attachments/orders/LINE feature webhookのAPI接続、送迎画面の予定選択、feature固有response契約の厳密化を継続します。
+
 ## API-002 Webの役員連絡先と回覧板接続
 
 ### 実施した変更
