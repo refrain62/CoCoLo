@@ -50,6 +50,10 @@ export function OrdersPaymentsPage({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [pendingPaymentEntryId, setPendingPaymentEntryId] = useState<
+    string | null
+  >(null);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
 
   const loadCampaigns = useCallback(async () => {
     setIsLoading(true);
@@ -97,8 +101,9 @@ export function OrdersPaymentsPage({
   );
 
   async function updatePayment(entry: OrdersEntry) {
-    if (!selectedCampaignId) return;
+    if (!selectedCampaignId || pendingPaymentEntryId) return;
     setError(null);
+    setPendingPaymentEntryId(entry.id);
     try {
       await api.updatePayment(
         selectedCampaignId,
@@ -109,11 +114,14 @@ export function OrdersPaymentsPage({
       setSuccess('支払状態を更新しました。');
     } catch (requestError) {
       setError(message(requestError));
+    } finally {
+      setPendingPaymentEntryId(null);
     }
   }
 
   async function downloadCsv() {
-    if (!selectedCampaignId) return;
+    if (!selectedCampaignId || isExportingCsv) return;
+    setIsExportingCsv(true);
     try {
       const blob = await api.exportCsv(selectedCampaignId);
       const url = URL.createObjectURL(blob);
@@ -124,6 +132,8 @@ export function OrdersPaymentsPage({
       URL.revokeObjectURL(url);
     } catch (requestError) {
       setError(message(requestError));
+    } finally {
+      setIsExportingCsv(false);
     }
   }
 
@@ -146,7 +156,7 @@ export function OrdersPaymentsPage({
         />
       ) : null}
       {!isLoading && campaigns.length === 0 ? (
-        <p>募集中の商品はありません。</p>
+        <p role="status">募集中の商品はありません。</p>
       ) : null}
       {campaigns.length > 0 ? (
         <section aria-labelledby="orders-campaign-heading">
@@ -177,6 +187,8 @@ export function OrdersPaymentsPage({
             <ManagerPanel
               entries={entries}
               summary={summary}
+              isExportingCsv={isExportingCsv}
+              pendingPaymentEntryId={pendingPaymentEntryId}
               onPayment={updatePayment}
               onCsv={downloadCsv}
             />
@@ -325,15 +337,17 @@ function EntryForm({
   const [backName, setBackName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const product =
     campaign.products.find((candidate) => candidate.id === productId) ??
     campaign.products[0];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!product) return;
+    if (!product || isSaving) return;
     setError(null);
     setSuccess(null);
+    setIsSaving(true);
     try {
       const entry = await api.createEntry(campaign.id, {
         memberId,
@@ -352,6 +366,8 @@ function EntryForm({
       setSuccess('注文を登録しました。');
     } catch (requestError) {
       setError(message(requestError));
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -449,7 +465,9 @@ function EntryForm({
       ) : null}
       {error ? <p role="alert">{error}</p> : null}
       {success ? <p role="status">{success}</p> : null}
-      <button type="submit">注文を登録</button>
+      <button type="submit" disabled={isSaving || !product}>
+        {isSaving ? '登録中…' : '注文を登録'}
+      </button>
     </form>
   );
 }
@@ -457,11 +475,15 @@ function EntryForm({
 function ManagerPanel({
   entries,
   summary,
+  isExportingCsv,
+  pendingPaymentEntryId,
   onPayment,
   onCsv,
 }: {
   entries: OrdersEntry[];
   summary: OrdersSummary | null;
+  isExportingCsv: boolean;
+  pendingPaymentEntryId: string | null;
   onPayment: (entry: OrdersEntry) => Promise<void>;
   onCsv: () => Promise<void>;
 }) {
@@ -474,21 +496,31 @@ function ManagerPanel({
           {summary.paidAmount}円、未払い {summary.unpaidAmount}円
         </p>
       ) : null}
-      <button type="button" onClick={() => void onCsv()}>
-        CSVを出力
+      <button
+        type="button"
+        disabled={isExportingCsv}
+        onClick={() => void onCsv()}
+      >
+        {isExportingCsv ? '出力中…' : 'CSVを出力'}
       </button>
       {entries.length === 0 ? (
-        <p>注文はありません。</p>
+        <p role="status">注文はありません。</p>
       ) : (
         <ul>
           {entries.map((entry) => (
             <li key={entry.id}>
               {entry.memberName}（{entry.ordererName}）: {entry.totalAmount}円、
               {entry.paymentStatus === 'paid' ? '支払済み' : '未払い'}{' '}
-              <button type="button" onClick={() => void onPayment(entry)}>
-                {entry.paymentStatus === 'paid'
-                  ? '未払いへ戻す'
-                  : '支払済みにする'}
+              <button
+                type="button"
+                disabled={pendingPaymentEntryId !== null}
+                onClick={() => void onPayment(entry)}
+              >
+                {pendingPaymentEntryId === entry.id
+                  ? '更新中…'
+                  : entry.paymentStatus === 'paid'
+                    ? '未払いへ戻す'
+                    : '支払済みにする'}
               </button>
             </li>
           ))}

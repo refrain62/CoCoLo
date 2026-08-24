@@ -423,6 +423,7 @@ export function EventsPage({
   const [transportationRequired, setTransportationRequired] = useState(false);
   const [type, setType] = useState<'practice' | 'match' | 'event'>('practice');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   const range = useMemo(
     () => (viewMode === 'month' ? monthRange() : weekRange()),
@@ -469,8 +470,10 @@ export function EventsPage({
 
   async function createEvent(eventSubmit: FormEvent<HTMLFormElement>) {
     eventSubmit.preventDefault();
+    if (isCreating) return;
     setSuccess(null);
     setError(null);
+    setIsCreating(true);
     try {
       await api.create({
         title: title.trim(),
@@ -499,6 +502,8 @@ export function EventsPage({
       await loadEvents();
     } catch (createError) {
       setError(getErrorMessage(createError));
+    } finally {
+      setIsCreating(false);
     }
   }
 
@@ -627,14 +632,16 @@ export function EventsPage({
             onChange={(input) => setAttendanceDeadline(input.target.value)}
             required
           />
-          <button type="submit">登録</button>
+          <button type="submit" disabled={isCreating}>
+            {isCreating ? '登録中…' : '登録'}
+          </button>
         </form>
       ) : null}
       {isLoading ? <p role="status">読み込み中…</p> : null}
       {error ? <p role="alert">{error}</p> : null}
       {success ? <p role="status">{success}</p> : null}
       {!isLoading && !error && displayedEvents.length === 0 ? (
-        <p>予定はありません。</p>
+        <p role="status">予定はありません。</p>
       ) : null}
       <div aria-live="polite">
         {displayedEvents.map((event) => (

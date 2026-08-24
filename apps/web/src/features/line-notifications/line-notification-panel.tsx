@@ -35,11 +35,14 @@ export function LineNotificationPanel({
   const [deepLink, setDeepLink] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [isLoadingStatus, setIsLoadingStatus] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const canManage = role === 'owner' || role === 'admin';
   const canNotify = canManage;
 
   useEffect(() => {
     let active = true;
+    setIsLoadingStatus(true);
     void api
       .status()
       .then((value) => {
@@ -58,6 +61,9 @@ export function LineNotificationPanel({
           return;
         }
         setError(errorMessage(requestError));
+      })
+      .finally(() => {
+        if (active) setIsLoadingStatus(false);
       });
     return () => {
       active = false;
@@ -66,8 +72,10 @@ export function LineNotificationPanel({
 
   async function connect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSaving) return;
     setError(null);
     setMessage(null);
+    setIsSaving(true);
     try {
       const value = await api.connect(inputGroupId);
       setStatus(value.status);
@@ -75,13 +83,17 @@ export function LineNotificationPanel({
       setMessage('LINEグループを接続しました。');
     } catch (requestError) {
       setError(errorMessage(requestError));
+    } finally {
+      setIsSaving(false);
     }
   }
 
   async function disconnect() {
+    if (isSaving) return;
     if (!window.confirm('LINEグループとの接続を解除しますか？')) return;
     setError(null);
     setMessage(null);
+    setIsSaving(true);
     try {
       await api.disconnect();
       setStatus('disconnected');
@@ -89,6 +101,8 @@ export function LineNotificationPanel({
       setMessage('LINEグループの接続を解除しました。');
     } catch (requestError) {
       setError(errorMessage(requestError));
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -96,10 +110,12 @@ export function LineNotificationPanel({
     event.preventDefault();
     setError(null);
     setMessage(null);
+    if (isSaving) return;
     if (!groupId) {
       setMessage('LINEは未接続のため、通知を登録しませんでした。');
       return;
     }
+    setIsSaving(true);
     try {
       await api.enqueue({
         sourceId: sourceId.trim(),
@@ -114,26 +130,42 @@ export function LineNotificationPanel({
       setBody('');
     } catch (requestError) {
       setError(errorMessage(requestError));
+    } finally {
+      setIsSaving(false);
     }
   }
 
   return (
     <section aria-labelledby="line-notification-heading">
       <h2 id="line-notification-heading">LINE通知</h2>
-      <p role="status">接続状態: {status ? statusLabels[status] : '確認中…'}</p>
+      <p role="status">
+        接続状態:{' '}
+        {status
+          ? statusLabels[status]
+          : isLoadingStatus
+            ? '確認中…'
+            : '確認できません'}
+      </p>
       {canManage ? (
         <form onSubmit={connect}>
           <label htmlFor="line-group-id">LINEグループID</label>
           <input
             id="line-group-id"
             maxLength={128}
+            required
             value={inputGroupId}
             onChange={(event) => setInputGroupId(event.target.value)}
           />
-          <button type="submit">接続する</button>
+          <button type="submit" disabled={isSaving || !inputGroupId.trim()}>
+            {isSaving ? '接続中…' : '接続する'}
+          </button>
           {groupId ? (
-            <button type="button" onClick={() => void disconnect()}>
-              接続を解除
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={() => void disconnect()}
+            >
+              {isSaving ? '処理中…' : '接続を解除'}
             </button>
           ) : null}
         </form>
@@ -169,7 +201,9 @@ export function LineNotificationPanel({
             value={deepLink}
             onChange={(event) => setDeepLink(event.target.value)}
           />
-          <button type="submit">通知を登録する</button>
+          <button type="submit" disabled={isSaving || !groupId}>
+            {isSaving ? '登録中…' : '通知を登録する'}
+          </button>
         </form>
       ) : null}
       {error ? <p role="alert">{error}</p> : null}

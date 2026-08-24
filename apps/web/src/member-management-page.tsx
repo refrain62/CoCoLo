@@ -28,6 +28,12 @@ const emptyFilters: MemberListFilters = {
 
 const defaultMemberApi = createMemberApi();
 
+type MemberRole = 'owner' | 'admin' | 'staff' | 'guardian';
+
+function canManageMembers(role: MemberRole | null | undefined) {
+  return role === 'owner' || role === 'admin' || role === 'staff';
+}
+
 type MemberFormState = {
   name: string;
   kana: string;
@@ -111,11 +117,13 @@ function toMemberFormState(member: MemberSummary): MemberFormState {
 function MemberEditForm({
   member,
   api,
+  canManage,
   onUpdated,
   onRetired,
 }: {
   member: MemberSummary;
   api: MemberApi;
+  canManage: boolean;
   onUpdated: (member: MemberSummary) => void;
   onRetired: (member: MemberSummary) => void;
 }) {
@@ -178,7 +186,7 @@ function MemberEditForm({
 
   return (
     <div>
-      {member.status !== 'retired' ? (
+      {canManage && member.status !== 'retired' ? (
         <button
           type="button"
           onClick={() => {
@@ -191,12 +199,12 @@ function MemberEditForm({
           {isEditing ? '編集を閉じる' : '編集'}
         </button>
       ) : null}
-      {member.status !== 'retired' ? (
+      {canManage && member.status !== 'retired' ? (
         <button type="button" disabled={isSaving} onClick={() => void retire()}>
           退部
         </button>
       ) : null}
-      {isEditing ? (
+      {canManage && isEditing ? (
         <form noValidate onSubmit={submit}>
           <label htmlFor={`member-edit-name-${member.id}`}>氏名</label>
           <input
@@ -279,11 +287,13 @@ function MemberEditForm({
 function MemberTable({
   members,
   api,
+  canManage,
   onUpdated,
   onRetired,
 }: {
   members: MemberSummary[];
   api: MemberApi;
+  canManage: boolean;
   onUpdated: (member: MemberSummary) => void;
   onRetired: (member: MemberSummary) => void;
 }) {
@@ -318,12 +328,17 @@ function MemberTable({
             </td>
             <td>{formatMemberStatus(member.status)}</td>
             <td>
-              <MemberEditForm
-                api={api}
-                member={member}
-                onRetired={onRetired}
-                onUpdated={onUpdated}
-              />
+              {canManage ? (
+                <MemberEditForm
+                  api={api}
+                  canManage={canManage}
+                  member={member}
+                  onRetired={onRetired}
+                  onUpdated={onUpdated}
+                />
+              ) : (
+                <span>閲覧のみ</span>
+              )}
             </td>
           </tr>
         ))}
@@ -582,14 +597,17 @@ function PromotionPanel({ api }: { api: MemberApi }) {
 // 部員一覧・検索・登録の画面状態を管理し、データ取得の認可はMemberApi/APIへ委譲する。
 export function MemberManagementPage({
   api = defaultMemberApi,
+  role = null,
 }: {
   api?: MemberApi;
+  role?: MemberRole | null;
 }) {
   const [filters, setFilters] = useState(emptyFilters);
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const canManage = canManageMembers(role);
 
   // 初回表示と検索を同じ経路にし、loading/error状態を必ずリクエスト単位で更新する。
   const loadMembers = useCallback(
@@ -695,6 +713,7 @@ export function MemberManagementPage({
         {!isLoading && !listError ? (
           <MemberTable
             api={api}
+            canManage={canManage}
             members={members}
             onRetired={replaceMember}
             onUpdated={replaceMember}
@@ -702,22 +721,33 @@ export function MemberManagementPage({
         ) : null}
       </section>
 
-      <section aria-labelledby="member-create-toggle-heading">
-        <h2 id="member-create-toggle-heading" className="visually-hidden">
-          部員登録操作
-        </h2>
-        <button
-          type="button"
-          onClick={() => setShowForm((current) => !current)}
-        >
-          部員を登録
-        </button>
-        {showForm ? (
-          <MemberForm api={api} onCreated={setMembersAfterCreate(setMembers)} />
-        ) : null}
-      </section>
+      {canManage ? (
+        <>
+          <section aria-labelledby="member-create-toggle-heading">
+            <h2 id="member-create-toggle-heading" className="visually-hidden">
+              部員登録操作
+            </h2>
+            <button
+              type="button"
+              onClick={() => setShowForm((current) => !current)}
+            >
+              部員を登録
+            </button>
+            {showForm ? (
+              <MemberForm
+                api={api}
+                onCreated={setMembersAfterCreate(setMembers)}
+              />
+            ) : null}
+          </section>
 
-      <PromotionPanel api={api} />
+          <PromotionPanel api={api} />
+        </>
+      ) : (
+        <p className="app-permission-note" role="status">
+          部員情報は閲覧できます。登録・編集・退部・年度繰り上げは管理権限が必要です。
+        </p>
+      )}
     </>
   );
 }
