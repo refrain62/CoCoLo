@@ -71,3 +71,34 @@ export const downloadResponseSchema = z
     expiresAt: z.string().datetime(),
   })
   .strict();
+
+export const uploadCompleteResponseSchema = z
+  .object({ data: attachmentResponseSchema })
+  .strict();
+
+export const uploadDownloadResponseSchema = z
+  .object({ data: downloadResponseSchema })
+  .strict();
+
+export const uploadExpiredCleanupResponseSchema = z
+  .object({
+    data: z
+      .object({
+        scannedCount: z.number().int().min(0).max(1000),
+        cleanedCount: z.number().int().min(0).max(1000),
+        pendingCount: z.number().int().min(0).max(1000),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const uploadCleanupResponseSchema = z
+  .object({
+    data: z
+      .object({
+        attachmentId: z.string().uuid(),
+        cleaned: z.literal(true),
+      })
+      .strict(),
+  })
+  .strict();

@@ -61,7 +61,13 @@ import {
   memberMutationResponseSchemaForRole,
   promotionResponseSchema,
 } from '@cocolo/contracts/runtime-response';
-import { uploadSessionResponseSchema } from '@cocolo/contracts/upload';
+import {
+  uploadCleanupResponseSchema,
+  uploadCompleteResponseSchema,
+  uploadDownloadResponseSchema,
+  uploadExpiredCleanupResponseSchema,
+  uploadSessionResponseSchema,
+} from '@cocolo/contracts/upload';
 import type { LineDeliveryProducer } from '@cocolo/db';
 import type { EventRepository } from '@cocolo/db/events';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
@@ -474,6 +480,30 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       path: /^\/api\/v1\/uploads$/,
       status: 201,
       schema: uploadSessionResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/uploads\/cleanup-expired$/,
+      status: 200,
+      schema: uploadExpiredCleanupResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/uploads\/[^/]+\/complete$/,
+      status: 200,
+      schema: uploadCompleteResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/uploads\/[^/]+\/download$/,
+      status: 200,
+      schema: uploadDownloadResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/uploads\/[^/]+\/cleanup$/,
+      status: 200,
+      schema: uploadCleanupResponseSchema,
     },
     {
       method: 'GET',
