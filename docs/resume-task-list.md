@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-実装再開の基準となる`develop`は`eaf5b27`（PR #141反映後）です。管理者再試行APIとworkerのロック順序修正、LINE Webhook受信境界、LINE公開レスポンス契約、役員連絡先、注文API、回覧板、認証チーム選択、添付、送迎の公開レスポンス契約まで反映済みです。完了済み実装の詳細は[完了タスクと実施履歴](resume-task-history.md)へ移しています。
+実装再開の基準となる`develop`は`2f938ec`（PR #143反映後）です。管理者再試行APIとworkerのロック順序修正、LINE Webhook受信境界、LINE公開レスポンス契約、役員連絡先、注文API、回覧板、認証チーム選択、添付、送迎の公開レスポンス契約、回覧添付のavailable状態DBガードまで反映済みです。完了済み実装の詳細は[完了タスクと実施履歴](resume-task-history.md)へ移しています。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
@@ -200,8 +200,9 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - PR #123でowner/admin向けの管理者再試行APIを現行outboxへ接続し、PR #125でworker claimと管理者再試行のロック順序を統一しました。PR #127でWebhookの専用DB actor境界を追加し、PR #129でLINE公開レスポンス契約を厳密化し、PR #131で役員連絡先の公開レスポンス契約を追加し、PR #133で注文APIの公開レスポンス契約を追加し、PR #135で回覧板APIの公開レスポンス契約を追加し、PR #137で認証チーム選択の公開レスポンス契約を中央APIへ適用し、PR #139で添付APIの公開レスポンス契約を拡張し、PR #141で送迎APIの公開レスポンス契約を追加しました。残りは全画面の統合テストとstaging Supabase E2Eです。送迎画面の予定選択はPR #112、チーム選択前のlogout導線はPR #113で完了しました。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
-- `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**
-  - 対象：既存UUIDv4行の移行前検査、回覧添付のavailable状態、board contact PIIのDB直接SELECTです。
+- `[~]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**
+  - 対象：既存UUIDv4行の移行前検査とboard contact PIIのDB直接SELECTです。
+  - PR #143で回覧添付のavailable状態をDBトリガーへ移し、実PostgreSQL/RLS検証を含む残りの項目は継続します。
   - 各項目は機能mountの専用PRへ分離し、CriticalとHighを0件にしてから統合します。
 
 - `[ ]` **RELEASE-001：release artifactの環境境界を統合する。**
