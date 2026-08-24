@@ -42,7 +42,7 @@ ON CONFLICT (tenant_id, user_id, member_id) DO NOTHING;
     ? [
         `
 INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status)
-VALUES ('00000000-0000-7000-8000-000000000104', '00000000-0000-7000-8000-000000000001', '${authUserId}', 'owner', 'active')
+VALUES ('00000000-0000-7000-8000-000000000199', '00000000-0000-7000-8000-000000000001', '${authUserId}', 'owner', 'active')
 ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = 'owner', status = 'active';
 `,
       ]

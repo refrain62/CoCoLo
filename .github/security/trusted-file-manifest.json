@@ -46,7 +46,7 @@
     "scripts/create-staging-evidence.ts": "5728af722e0635d90a6834ad5241eb91d40d1736370ad7627329fbb10306db01",
     "scripts/create-pgpass.ts": "8b5c4ef10457ef8a95f774aa121034d36c9f9c19452e663248b8e659eabf90bb",
     "scripts/db-prepare-test.ts": "4aa97a6c384605035fb80cea24982ba1cd6fcb2d314b4a61bc1430ec123906a6",
-    "scripts/db-seed-test.ts": "100960606f5d76523e1311d8f2e03366df2722100bcf57518dae735faa524e5d",
+    "scripts/db-seed-test.ts": "e01ae265149b4cab4418c9261ce91192789119523b5655cd28832d2e7ecf5b8a",
     "scripts/database-security.test.ts": "b99fd0450dcd5c4bc519fac0308fa95c1162023018e55853b39e619cbff93bce",
     "scripts/database-security.ts": "5ece07a981a7fbfe730c311b91c0c70ad7a12a0ecece0d11526459f30deca54a",
     "scripts/deploy-artifact.ts": "b54254c16ab6c74f0a192a45365b2ff21d160e3c525583e69f95e7e370a48b3e",
