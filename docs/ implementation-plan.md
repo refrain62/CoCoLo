@@ -1,19 +1,26 @@
 # 部活・クラブチーム管理アプリ「CoCoLo」完全統合版・開発実装計画書
 
-本ドキュメントは、アプリ「CoCoLo」のコンセプト、命名由来、追加機能開発、ORM移行（DrizzleからPrismaへ）、Flyway風差分マイグレーション運用、およびCI/CDパイプライン構築における**すべての検討・決定事項（ボツ案・命名根拠・試行錯誤の全経緯・詳細設計）**を記録した完全仕様書です。
+本ドキュメントは、アプリ「CoCoLo」の技術方式、実装順序、データベース変更、テスト、CI/CDを記録する実装計画書です。
 
 実装としてはテスト駆動（TDD）で開発を行ってください。
 
-利用者向けの機能・業務仕様は `docs/functional-specification.md` に分離しています。機能改修は同仕様書の ID を先に変更し、その後に本書の実装タスク・テスト・マイグレーションを更新します。文書の用語と文章表現は `docs/japanese-writing-guidelines.md` に従います。
+利用者向けの機能と業務仕様は `docs/functional-specification.md` に分離しています。
+
+企画初期の要求、会話中の提案、現行決定の対応は `docs/original-requirements-traceability.md` に記録します。
+
+機能改修は機能仕様書の ID を先に変更し、その後に本書の実装タスク、テスト、マイグレーションを更新します。
+
+文書の用語と文章表現は `docs/japanese-writing-guidelines.md` に従います。
 
 ---
 
 ## 1. アプリコンセプト & 命名の由来
 
 * **アプリケーション名:** CoCoLo（ココロ）
-* **名前の由来:** 
+* **名前の由来:**
   * **「心（こころ）」:** 選手、保護者、役員、指導者が「心をひとつに」してチームを運営・応援できるようにという想い。
-  * **「Co-（共に） + Co-（協力する） + Local / Team（地域・チーム）」:** 保護者の負担を減らし、チームに関わる全員が対等に**Co-operation（協力）** **Co-ordination（調整）**できるプラットフォームを目指す意図が込められています。
+  * **「Co-（共に） + Co-（協力する） + Local / Team（地域・チーム）」:** 保護者の負担を減らし、チームに関わる全員が対等に **Co-operation（協力）**と **Co-ordination（調整）**を行えるプラットフォームを目指す意図。
+* **提供価値:** 保護者、指導者、役員が、クラブ運営に必要な協力と調整を少ない負担で行えること。
 * **ターゲット:** 部活、スポーツ少年団、保護者会、クラブチーム（小・中・高・大・一般）
 * **基本技術スタック:**
   * フロントエンド: Vite + React (TypeScript) + Tailwind CSS
@@ -27,6 +34,10 @@
   * CI/CD: GitHub Actions
 
 Supabase CLI はローカルのマイグレーション / seed / テスト環境操作に使用します。Supabase Service Role Key は Hono のサーバー専用環境変数としてのみ使用し、ブラウザへ渡しません。
+
+初期運用では各サービスの無償枠を活用しますが、無償継続を機能保証にしません。
+
+料金と上限は配置前に公式情報を確認し、使用量、保存容量、要求数、外部通知数、予算超過を監視します。
 
 外部サービスの現行設定、責務境界、権限、監視、障害対応は [`docs/external-services-operations.md`](external-services-operations.md) を正本とします。Supabase PostgreSQL を将来別の PostgreSQL へ分離する場合の不変契約、移行対象、照合、切り戻しは [`docs/database-separation-plan.md`](database-separation-plan.md) に従います。R2は現時点で導入予定であり、実装済みの機能として扱いません。
 
@@ -45,7 +56,12 @@ GitHub Freeのpublic repositoryを前提に、PRの自動Workflowは短時間の
 `database-integrity.yml`、`schema-drift.yml`、`e2e-daily.yml`、`e2e-weekly.yml`、`staging-deploy.yml`は自動PR/push/schedule起動を持たず、必要時の`workflow_dispatch`だけで実行します。`production-promote.yml`の手動承認、artifact SHA、staging証跡、migration検証は変更しません。レポートは個人情報・secret・URLの資格情報を含めず、`.ci-reports/`でGit管理外とします。
 
 
-主要機能の設計案
+### 1.1 当初要求の要約
+
+この節は企画初期の要求を要約したものであり、受け入れ条件の正本ではありません。
+
+要求ごとの採否と反映先は `docs/original-requirements-traceability.md`、確定仕様は `docs/functional-specification.md` を参照します。
+
 マルチテナント構造（例: cocolo.app/team-a やテナントID管理）を前提とし、各チームが独立して利用できる基本機能の構成案です。
 
 - スケジュール・練習予定
@@ -348,6 +364,8 @@ model Event {
 
 * 氏名の上に小さく kana（ふりがな）をルビのように表示し、難読文字に対応。
 * 保護者欄には保護者名と LINE 連携ステータス（連携済み / 未招待）を表示。
+* `name` はチーム内の表示名とし、フルネームまたはチームが認めたハンドルネームを保存できるようにする。
+* 保護者の紐付けは `GuardianMember` で管理し、公開部員一覧からの自己申告だけで確定しない。
 
 年度末一括繰り上がり API:
 
@@ -364,6 +382,8 @@ model Event {
 引き継ぎ機能:
 
 新年度開始時に、前年度の役職定義（会長、会計、配車担当など）の枠組みだけをワンタップで新年度へ複製コピーする API を提供。
+
+役員割当と `TenantMembership.role` は別の操作として扱い、役員割当から操作権限を自動変更しない。
 
 ### 5.3 共同購買・プリント文字指定・集金チェック機能
 
@@ -384,6 +404,10 @@ Stripe等のオンライン決済（見送り）: 決済手数料（3.6%等）�
 
 * 未払い者リマインド: 未払い者のみをフィルタリングし、一括で LINE リマインドテキストを生成・送信するアクションを配置。
 
+  通知は対象確認後に現行 outbox へ登録し、同じ募集案件、対象者、通知種別、予定時刻の重複を防ぐ。
+
+  グループ通知へ個人名、注文内容、未払い金額を掲載しない。
+
 * 発注サマリー / CSV出力: 集計画面で「サイズ別集計表（例: Sサイズ 12枚、Mサイズ 5枚）」の自動サマリー表示と CSV ダウンロードを可能にする。
 
 ### 5.4 予定・イベント管理機能（懇親会対応）
@@ -392,9 +416,23 @@ Stripe等のオンライン決済（見送り）: 決済手数料（3.6%等）�
 
 * イベント詳細: 懇親会や合宿用に 会費（fee）、持ち物（belongings）、案内画像を表示。
 
+* 月間表示: 日付、予定、時間と場所、当番、送迎、出欠と未回答を同じ日付行に配置する。
+
+* モバイル表示: 主要情報を横スクロールなしで表示し、補足を同じ行で展開する。
+
+* 当番管理: `DutySlot` と `DutyAssignment` を予定から分離し、役割、必要人数、担当者、変更監査を管理する。
+
+* リマインド: 出欠締切と未回答者を Web で表示し、LINE 接続済みの場合だけ冪等な通知を outbox へ登録する。
+
+* 場所: 場所名、住所、検証済み地図 URL を保持し、Google Maps が未設定でも住所を表示する。
+
 ### 5.5 画像添付機能（Cloudflare R2）
 
 * アップロード仕様（Phase 4）: Hono バックエンドの `POST /api/v1/uploads` は JSON のアップロードセッション作成専用とします。API がテナント・所有者・オブジェクトキー・許可 MIME・最大20 MiB・TTL 900秒を束ねた署名 URL を発行し、Web は非公開 R2 へ直接 PUT します。`POST /api/v1/uploads/:id/complete` は所有者、オブジェクトキーの完全一致、有効期限、未使用、上書き不可、実体サイズ、マジックバイト、SHA-256 を検証し、成功時だけ `uploaded` から `available` へ遷移させます。`complete` の再試行は同じセッションで3回までとし、期限切れ・検証失敗は `rejected` にして R2 オブジェクトを24時間以内に削除します。公開 URL は返却しません。
+
+* 利用先: 共同購買の商品画像と予定の案内画像は `Attachment` の ID を参照し、公開 URL をモデルへ保存しない。
+
+* 画面: 認可後に短期 URL を取得してプレビューと拡大表示を行い、代替テキストと読み込み失敗状態を表示する。
 
 ## 6. CI/CD パイプライン仕様（GitHub Actions）
 
@@ -678,11 +716,11 @@ onlyBuiltDependencies:
 本計画は一度に全機能を実装するのではなく、利用可能な縦切り（画面・API・DB・テストを含む単位）で段階的にリリースします。各フェーズは、前フェーズの受け入れ条件と自動テストが通過してから着手します。
 
 * **Phase 0（開発基盤）:** pnpm、Node.js 24、TypeScript strict、Vite、Hono、Prisma、Vitest、Playwright、ESLint、Prettier、環境変数、CI の最小構成を整備します。
-* **Phase 1（認証・テナント・部員）:** Supabase Auth の JWT 検証、チーム境界、役割認可、部員 CRUD、学年表示、年度末繰り上がりを実装します。
-* **Phase 2（予定・出欠）:** 月間/週間の予定一覧、イベント CRUD、締切、出欠登録・集計、持ち物・集合情報を実装します。
-* **Phase 3（役員・共同購買・集金）:** 役員名簿、年度引き継ぎ、商品・注文・集金確認、未払い一覧、CSV 出力を実装します。
-* **Phase 4（添付・通知）:** R2 アップロード、回覧板、既読管理、LINE 通知を実装します。外部サービス未接続でも画面と通知キューの状態を確認できる開発用アダプターを用意します。
-* **Phase 5（送迎・運用強化）:** 乗車可能数と乗車希望のマッチング、配車表、Google Maps リンク、監査ログ、運用メトリクスを追加します。
+* **Phase 1（認証・テナント・部員）:** Supabase Auth の JWT 検証、チーム境界、役割認可、部員 CRUD、表示名、保護者連携状態、学年表示、年度末繰り上がりを実装します。
+* **Phase 2（予定・出欠・当番）:** 月間と週間の予定一覧、イベント CRUD、締切、出欠登録と集計、持ち物、集合情報、当番枠、当番割当、担当回数を実装します。
+* **Phase 3（役員・共同購買・集金）:** 役員名簿、年度引き継ぎ、商品、注文、集金確認、未払い一覧、CSV 出力を実装します。
+* **Phase 4（添付・通知）:** R2 アップロード、商品画像、予定画像、回覧板、既読管理、LINE 通知、deep link、リマインドを実装します。外部サービス未接続でも画面と通知キューの状態を確認できる開発用アダプターを用意します。
+* **Phase 5（送迎・運用強化）:** 乗車可能数と乗車希望のマッチング、配車表の下書き、受付、締切、確定、Google Maps リンク、監査ログ、運用メトリクスを追加します。
 
 Google Maps、LINE Messaging API / LIFF、リアルタイム通知は外部認証情報が必要なため、Phase 1〜3 の必須経路から分離します。未接続状態を「成功」として扱わず、未設定・送信失敗を画面で識別できるようにします。
 
@@ -702,11 +740,16 @@ Supabase Auth を唯一の認証基盤とし、Supabase の Service Role Key は
 
 ### 8.3 データモデルの補充と整合性
 
-現在の 6 モデルに加え、出欠と所属を実装上の必須モデルとして追加します。
+原案の 6 モデルだけでは、認証、テナント分離、出欠、当番、通知、添付、配車の状態遷移を表現できません。
+
+各フェーズで次のモデルを追加します。
 
 * **EventAttendance:** `eventId`、`tenantId`、外部 `userId`、任意の `memberId`、`status`（`attending` / `absent` / `pending`）、`note`、`respondedAt` を持ち、同一イベント・ユーザー・部員の組み合わせを一意にします。
+* **DutySlot / DutyAssignment:** 予定ごとの当番種別、必要人数、説明と、利用者への割当を分離します。`tenantId + eventId` の複合参照を使い、同じ当番枠と利用者の重複を禁止します。
+* **NotificationRequest / DeliveryOutbox:** 出欠締切、未払い、予定、回覧の通知要求と provider への配信状態を分離します。同じ業務操作の冪等キーを一意にし、送信失敗で業務更新をロールバックしません。
 * **Announcement / AnnouncementRead:** 回覧板本文・添付メタデータと、ユーザーごとの既読時刻を管理します。既読情報はテナントを跨いで共有しません。
-* **RideOffer / RideAssignment:** Phase 5 で追加し、運転者の乗車可能数、希望者、割当状態を別々に管理します。最初から自由形式の配車文字列だけで実装しません。
+* **Attachment:** 商品画像、予定画像、回覧資料の所有者、object key、MIME、サイズ、hash、状態を管理し、利用先は添付 ID を参照します。
+* **RideOffer / RideRequest / RidePlan / RideAssignment:** Phase 5 で追加し、運転者の乗車可能数、乗車希望、配車表の状態、割当を別々に管理します。最初から自由形式の配車文字列だけで実装しません。
 
 既存モデルには必要な複合インデックスと制約を追加します。最低限、`tenantId`、検索対象の status / fiscalYear / deadline / startAt、外部 userId に対する検索インデックスを作成し、同一テナント内で重複してはいけない組み合わせは `@@unique` で表現します。
 
@@ -733,6 +776,10 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * `GET/POST/PATCH/DELETE /api/v1/orders`、`/orders/:id/items`、`/orders/:id/user-items`
 * `PATCH /api/v1/user-order-items/:id/payment`、`GET /api/v1/orders/:id/summary.csv`
 * `GET/POST/PATCH/DELETE /api/v1/events`、`PUT /api/v1/events/:id/attendance`
+* `GET/POST/PATCH/DELETE /api/v1/events/:id/duties`、`GET /api/v1/duties/summary`
+* `POST /api/v1/events/:id/reminders`、`POST /api/v1/orders/:id/payment-reminders`
+* `POST /api/v1/ride-plans`、`GET /api/v1/ride-plans/:id`、`POST /api/v1/ride-plans/:id/offers`、`POST /api/v1/ride-plans/:id/requests`
+* `POST /api/v1/ride-plans/:id/match`、`POST /api/v1/ride-plans/:id/assignments`、`GET /api/v1/ride-plans/:id/dispatch`
 * `POST /api/v1/uploads`（Phase 4、JSON でアップロードセッションを作成し、短期署名 URL と Attachment の資源 ID を返却。ファイル本体は受け取らない）
 * `PUT <signed upload URL>`（Phase 4、Web から非公開 R2 へ直接 PUT。署名のオブジェクトキー・MIME・サイズ制限に一致しない要求を拒否）
 * `POST /api/v1/uploads/:id/complete`（Phase 4、所有者・期限・未使用・オブジェクトキー・実体サイズ・マジックバイト・SHA-256 を検証し、成功時だけ `available` へ遷移）
@@ -767,6 +814,16 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 本番は GitHub Actions の `migrate:release`（検証済みの変更不能なリリース成果物内の `pnpm exec prisma migrate deploy`）だけでマイグレーションを適用します。Production の DB URL は GitHub Environment の保護された secret とし、main への push だけで無条件に破壊的 SQL が実行されないよう、マイグレーションレビューと手動承認を設けます。Supabase のバックアップ、復旧手順、失敗したマイグレーションの検知と停止条件を README に記載します。
 
 各リクエストに `requestId` を付与し、認証失敗、権限拒否、マイグレーション失敗、外部通知失敗を構造化ログへ記録します。個人情報、JWT、秘密鍵、アップロード内容はログへ出しません。
+
+初期運用は無償枠中心を目標としますが、無償を受け入れ条件にはしません。
+
+環境ごとに DB 容量、R2 容量と操作数、API 要求数、LINE 配信数、ログ量の警告値と停止値を設定します。
+
+警告値へ達した場合は、添付保持期間、画像サイズ、通知頻度、ログ保持期間を見直し、有料化または機能制限を責任者が判断します。
+
+料金と無料枠は配置前と月次運用で公式情報を確認し、設計書へ固定値を長期保証として記載しません。
+
+サービスの休止を避けることだけを目的とした定期アクセスは自動導入せず、提供条件、要求数、費用、必要性を確認します。
 
 ### 8.8 環境分離（ローカル・ステージング・本番）
 
@@ -812,7 +869,13 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * ユーザーが所属していないテナントのデータを、ID 推測や改変リクエストを使って読み書きできない。
 * 管理者が部員を登録・検索・編集でき、年度繰り上げの対象と非対象が仕様どおりである。
 * ユーザーがイベントの出欠を締切前に登録・変更でき、管理者がテナント内の集計を確認できる。
+* 月間予定で、日付、予定、時間と場所、当番、送迎、出欠と未回答を、モバイルの縦画面でも横スクロールせず確認できる。
+* 当番の重複、別チーム利用者の割当、無効な利用者への割当を拒否し、担当回数と変更履歴を確認できる。
 * 役割ごとに、部員・役員・購買・添付の操作可否と個人情報表示が制御される。
+* 役員割当だけで操作権限が変更されず、保護者と部員の紐付けが管理者確認なしに確定しない。
+* 予定画像と商品画像を非公開 R2 から認可済みの短期 URL で表示でき、公開 URL が DB と API に残らない。
+* LINE 未接続、deep link の再認証、通知重複、provider 失敗を処理でき、通知失敗で予定、出欠、集金状態が巻き戻らない。
+* 配車表は下書き、受付、締切、確定を分け、定員超過、重複割当、競合更新を拒否する。
 * 不正な入力、CSV、ファイル、外部通知失敗が安全に扱われ、利用者へ復旧可能なメッセージが表示される。
 * CI の lint、型、単体、API、UI、E2E、build が再現可能なコマンドで成功する。
 
