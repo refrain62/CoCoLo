@@ -1,4 +1,8 @@
 import { extractBearerToken, type TokenVerifier } from '@cocolo/auth';
+import {
+  selectedTeamHeaderName,
+  uuidv7Schema,
+} from '@cocolo/contracts/auth-team-selection';
 import { lineDeliveryPublishSchema } from '@cocolo/contracts/line-delivery';
 import type {
   MemberCreateInput,
@@ -22,6 +26,7 @@ import {
   authContextResponseSchema,
   eventListResponseSchema,
   eventMutationResponseSchema,
+  featureEnvelopeResponseSchema,
   lineDeliveryResponseSchema,
   memberListResponseSchemaForRole,
   memberMutationResponseSchemaForRole,
@@ -30,6 +35,10 @@ import {
 import type { LineDeliveryProducer } from '@cocolo/db';
 import type { EventRepository } from '@cocolo/db/events';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
+import {
+  type CentralFeatureRoutes,
+  mountCentralFeatureRoutes,
+} from './central-feature-routes.js';
 import { createEventsApp } from './features/events/event-api.js';
 import { type CorsOptions, createCorsMiddleware } from './security/cors.js';
 import {
@@ -148,6 +157,7 @@ export type AppOptions = {
     namespace?: RateLimitEnvironment;
     timeoutMs?: number;
   };
+  centralFeatures?: CentralFeatureRoutes;
 };
 
 export type ApiEnv = {
@@ -343,6 +353,20 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       schema: authContextResponseSchema,
     },
   ];
+  for (const path of [
+    /^\/api\/v1\/auth\/teams(?:\/.*)?$/,
+    /^\/api\/v1\/board-members(?:\/.*)?$/,
+    /^\/api\/v1\/announcements(?:\/.*)?$/,
+    /^\/api\/v1\/ride-plans(?:\/.*)?$/,
+  ])
+    for (const method of ['GET', 'POST', 'PATCH', 'DELETE'])
+      for (const status of [200, 201, 202])
+        responseContracts.push({
+          method,
+          path,
+          status,
+          schema: featureEnvelopeResponseSchema,
+        });
   app.use(
     '*',
     createResponseContractMiddleware({
@@ -351,6 +375,11 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
         {
           method: 'OPTIONS',
           path: /^\/api\/v1(?:\/.*)?$/,
+          status: 204,
+        },
+        {
+          method: 'DELETE',
+          path: /^\/api\/v1\/board-members\/[^/]+$/,
           status: 204,
         },
       ],
@@ -423,9 +452,28 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       );
     let membership: MembershipContext | null;
     try {
-      membership = await options.membershipRepository.findActiveByUserId(
-        claims.userId,
-      );
+      const selectedTeamId = c.req.header(selectedTeamHeaderName);
+      if (selectedTeamId && options.centralFeatures?.authTeamSelection) {
+        if (!uuidv7Schema.safeParse(selectedTeamId).success)
+          return errorResponse(
+            c,
+            400,
+            'VALIDATION_ERROR',
+            '選択中チームIDが不正です。',
+          );
+        const selected =
+          await options.centralFeatures.authTeamSelection.repository.findActiveMembership(
+            claims.userId,
+            selectedTeamId,
+          );
+        membership = selected
+          ? { tenantId: selected.tenantId, role: selected.role }
+          : null;
+      } else {
+        membership = await options.membershipRepository.findActiveByUserId(
+          claims.userId,
+        );
+      }
     } catch {
       return errorResponse(
         c,
@@ -446,6 +494,18 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.eventRepository) {
     app.use('/api/v1/events', authenticate);
     app.use('/api/v1/events/*', authenticate);
+  }
+  if (options.centralFeatures?.boardContact) {
+    app.use('/api/v1/board-members', authenticate);
+    app.use('/api/v1/board-members/*', authenticate);
+  }
+  if (options.centralFeatures?.bulletinBoard) {
+    app.use('/api/v1/announcements', authenticate);
+    app.use('/api/v1/announcements/*', authenticate);
+  }
+  if (options.centralFeatures?.ride) {
+    app.use('/api/v1/ride-plans', authenticate);
+    app.use('/api/v1/ride-plans/*', authenticate);
   }
 
   // 認証後のtenant/userだけをキーに使い、production系では起動時に分散adapterを要求する。
@@ -478,6 +538,18 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
         useCentralAuth: true,
       }),
     );
+  }
+  if (options.centralFeatures?.boardContact) {
+    app.use('/api/v1/board-members', authenticatedRateLimit);
+    app.use('/api/v1/board-members/*', authenticatedRateLimit);
+  }
+  if (options.centralFeatures?.bulletinBoard) {
+    app.use('/api/v1/announcements', authenticatedRateLimit);
+    app.use('/api/v1/announcements/*', authenticatedRateLimit);
+  }
+  if (options.centralFeatures?.ride) {
+    app.use('/api/v1/ride-plans', authenticatedRateLimit);
+    app.use('/api/v1/ride-plans/*', authenticatedRateLimit);
   }
 
   app.get('/api/v1/auth/context', (c) => {
@@ -809,6 +881,25 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
         );
       throw error;
     }
+  });
+
+  mountCentralFeatureRoutes({
+    verifyToken: options.verifyToken,
+    membershipRepository: options.membershipRepository,
+    features: options.centralFeatures,
+    rideApp: app,
+    getRideAuth: (context) => {
+      const auth = context.get('auth') as
+        | ApiEnv['Variables']['auth']
+        | undefined;
+      return auth
+        ? {
+            tenantId: auth.membership.tenantId,
+            userId: auth.userId,
+            role: auth.membership.role,
+          }
+        : null;
+    },
   });
 
   return app;

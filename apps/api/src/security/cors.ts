@@ -1,3 +1,4 @@
+import { selectedTeamHeaderName } from '@cocolo/contracts/auth-team-selection';
 import type { MiddlewareHandler } from 'hono';
 import { contextRequestId } from './request-id.js';
 
@@ -14,6 +15,7 @@ const allowedHeaders = [
   'Content-Type',
   'Idempotency-Key',
   'If-Match',
+  selectedTeamHeaderName,
 ] as const;
 
 export type CorsOptions = {
