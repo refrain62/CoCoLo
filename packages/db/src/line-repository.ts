@@ -439,6 +439,15 @@ async function lockLineTenant(
   ]);
 }
 
+async function lockLineGroup(
+  client: LineSqlTransactionClient,
+  groupId: string,
+) {
+  await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+    `line-group:${groupId}`,
+  ]);
+}
+
 async function withRlsContext<T>(
   client: LineSqlClient,
   actor: LineActor,
@@ -474,6 +483,7 @@ export function createSqlLineRepository(
       const actor = await resolveRlsActor('connect', input, options);
       return withRlsContext(client, actor, async (transaction) => {
         await lockLineTenant(transaction, actor.tenantId);
+        await lockLineGroup(transaction, input.groupId);
         const result = await transaction.query<ConnectionRow>(
           `INSERT INTO line_connections
              (tenant_id, group_id, status, connected_at, updated_at)

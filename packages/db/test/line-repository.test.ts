@@ -110,6 +110,9 @@ test('SQL repositoryはqueueを接続中の同一tenant・groupへ限定する',
     queries.some((query) => query.sql.includes("set_config('app.tenant_id'")),
   );
   assert.ok(
+    queries.some((query) => query.values.includes(`line-group:${GROUP_ID}`)),
+  );
+  assert.ok(
     queries.some((query) => query.sql.includes('FROM tenant_memberships')),
   );
 });

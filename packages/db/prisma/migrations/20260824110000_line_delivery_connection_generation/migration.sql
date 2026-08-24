@@ -37,8 +37,7 @@ BEGIN
     FROM line_delivery_outbox o
    WHERE o.attempt < p_max_attempts
      AND (
-       o.source_type NOT IN ('event', 'deadline')
-       OR EXISTS (
+       EXISTS (
          SELECT 1
            FROM line_connections c
           WHERE c.tenant_id = o.tenant_id
@@ -50,6 +49,17 @@ BEGIN
               OR (o.connection_connected_at IS NULL
                   AND c.connected_at <= o.created_at)
             )
+       )
+       OR (
+         o.source_type NOT IN ('event', 'deadline')
+         AND o.connection_connected_at IS NULL
+         AND NOT EXISTS (
+           SELECT 1
+             FROM line_connections c
+            WHERE c.group_id = o.destination
+              AND c.status = 'connected'::line_connection_status
+              AND c.tenant_id <> o.tenant_id
+         )
        )
      )
      AND (
@@ -74,8 +84,7 @@ BEGIN
      WHERE o.id = candidate_id
        AND o.attempt < p_max_attempts
        AND (
-         o.source_type NOT IN ('event', 'deadline')
-         OR EXISTS (
+         EXISTS (
            SELECT 1
              FROM line_connections c
             WHERE c.tenant_id = o.tenant_id
@@ -87,6 +96,17 @@ BEGIN
                 OR (o.connection_connected_at IS NULL
                     AND c.connected_at <= o.created_at)
               )
+         )
+         OR (
+           o.source_type NOT IN ('event', 'deadline')
+           AND o.connection_connected_at IS NULL
+           AND NOT EXISTS (
+             SELECT 1
+               FROM line_connections c
+              WHERE c.group_id = o.destination
+                AND c.status = 'connected'::line_connection_status
+                AND c.tenant_id <> o.tenant_id
+           )
          )
        )
        AND (
@@ -148,8 +168,7 @@ BEGIN
        AND o.attempt_token = p_attempt_token
        AND o.lease_expires_at > clock_timestamp()
        AND (
-         o.source_type NOT IN ('event', 'deadline')
-         OR EXISTS (
+         EXISTS (
            SELECT 1
              FROM line_connections c
             WHERE c.tenant_id = o.tenant_id
@@ -161,6 +180,17 @@ BEGIN
                 OR (o.connection_connected_at IS NULL
                     AND c.connected_at <= o.created_at)
               )
+         )
+         OR (
+           o.source_type NOT IN ('event', 'deadline')
+           AND o.connection_connected_at IS NULL
+           AND NOT EXISTS (
+             SELECT 1
+               FROM line_connections c
+              WHERE c.group_id = o.destination
+                AND c.status = 'connected'::line_connection_status
+                AND c.tenant_id <> o.tenant_id
+           )
          )
        )
   ) INTO is_current;
