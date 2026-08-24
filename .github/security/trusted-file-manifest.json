@@ -69,7 +69,7 @@
     "scripts/release-public-config.test.ts": "84e1a3c33ea5e06f85ff89fb804924079bce694b74449e0953a2ebdf1822cba8",
     "scripts/release-public-config.ts": "e241d578c2df848c9008971584f4114be6a178f10bd6afb4a141f85914b0dfeb",
     "scripts/release-verify-public-config.ts": "8979818d041903366043b8486dc127cda4d10e8253c22daa0cb3015ebbdcf3ec",
-    "scripts/run-betterleaks.ts": "253a483be361b21a5c7e4d7945a63dc851ef7f80352fa3f7e9696912309ef982",
+    "scripts/run-betterleaks.ts": "46461d3d4bee5f2e335f4a1a5abb982b1c709dfb3af2a8bdfbedcd14cb4823bc",
     "scripts/run-e2e.ts": "33996cea0f7cc8d755bd4903ebc0feaf0a9abfc15ef0ecc273fae1942b0c7410",
     "scripts/run-periodic-e2e.ts": "dc91c248ecb112312ec63729deda05f1b750afa548c61ee815072f32e3120d48",
     "scripts/trust-root.ts": "7e7e79ba79a1d9d162c231b771f20162fe5890cb4f255fc71be2568b94e0c214",

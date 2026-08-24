@@ -86,6 +86,13 @@ try {
           `type=bind,source=${configPath},target=/config/betterleaks.toml,readonly`,
           '--tmpfs',
           '/out:rw,noexec,nosuid,size=16m',
+          // bind mountはrunnerとcontainerのUIDが異なるため、対象repoだけをGitの安全な場所として明示する。
+          '-e',
+          'GIT_CONFIG_COUNT=1',
+          '-e',
+          'GIT_CONFIG_KEY_0=safe.directory',
+          '-e',
+          'GIT_CONFIG_VALUE_0=/src',
           image,
           mode === 'dir' ? 'dir' : 'git',
           '/src',
