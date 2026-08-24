@@ -455,7 +455,6 @@ model OrderIdempotencyKey {
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
-  @@unique([tenantId, id], map: "order_idempotency_keys_tenant_id_id_key")
   @@unique([tenantId, actorUserId, idempotencyKey])
   @@index([tenantId, resourceType, resourceId], map: "order_idempotency_keys_tenant_resource_idx")
   @@map("order_idempotency_keys")
