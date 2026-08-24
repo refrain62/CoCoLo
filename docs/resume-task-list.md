@@ -2,7 +2,7 @@
 
 更新日：2026-08-24
 
-状態：実装作業を中断中
+状態：残タスク継続中
 
 この文書は、作業を再開するときに、現在の実装状態、レビュー指摘、作業ツリーの差分、依存関係、検証条件を復元するための台帳です。
 
@@ -20,13 +20,13 @@
 
 ## 1. 停止時点の基準
 
-実装再開の基準となる`develop`は`750c08e`（PR #110反映後）です。実装baselineは`0903dd6`（PR #104、#105を含む）で、添付APIは`ced1e71`、添付Webは`e4d7af0`、注文・集金APIは`e708e96`、注文Webは`750c08e`まで反映済みです。完了済み実装とdocs-only PRの履歴更新は`develop`へ反映済みです。
+実装再開の基準となる`develop`は`8c96baf`（PR #112、#113、#114反映後）です。実装baselineは`0903dd6`（PR #104、#105を含む）で、添付APIは`ced1e71`、添付Webは`e4d7af0`、注文・集金APIは`e708e96`、注文Webは`750c08e`、送迎・logout・LINE接続操作は`8c96baf`まで反映済みです。完了済み実装とdocs-only PRの履歴更新は`develop`へ反映済みです。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
 Draft PRに実装が存在しても、`develop`へ統合されていない機能は現行環境では未実装として扱います。
 
-再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、#77、#80、#82、#85、#89、#91、#93、docs-only PR #55、#56、#57、#58、#61、#63、#66、#81、#83、#86、#87、#88、#90、#92は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
+再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、#77、#80、#82、#85、#89、#91、#93、#112、#113、#114、docs-only PR #55、#56、#57、#58、#61、#63、#66、#81、#83、#86、#87、#88、#90、#92は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
 
 ### 1.1 再開時のGitHub同期結果
 
@@ -186,7 +186,7 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - 対象：PR #29、`feature/api-hardening`
   - CORS allowlistはPR #59、認証後のtenantとuser単位rate limitはPR #60で`develop`へ接続済みです。
   - 構造化ログとruntime response schema検証はPR #62で`apps/api/src/app.ts`へ接続済みです。
-  - 中央APIの複数tenant所属時の明示的チーム選択はPR #89、Web側の選択状態と主要API header接続はPR #91、既存AuthSessionManagerのWeb接続はPR #96で完了しました。LINE feature appの中央mountは別タスクとして残っています。
+  - 中央APIの複数tenant所属時の明示的チーム選択はPR #89、Web側の選択状態と主要API header接続はPR #91、既存AuthSessionManagerのWeb接続はPR #96で完了しました。PR #114でLINEの接続状態・接続・解除だけを中央mountへ接続しました。通知queue/outbox統合とWebhookはNOT-001へ残しています。
   - staging、productionでは分散rate limit adapterを必須にし、in-memory fallbackを許可しません。
 
 - `[~]` **API-002：WebとAPIの中央mountを統合する。**
@@ -197,7 +197,7 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - PR #102で添付upload APIを中央mountし、中央認証、選択tenant、rate limit、R2実adapter、response契約を接続済みです。Webの添付画面は未接続です。
   - PR #105で添付Web画面を中央APIへ接続し、選択tenant headerとguardianの表示制御を追加しました。
   - PR #109で注文・集金APIをPrisma repositoryと中央mountへ接続し、PR #110で注文Web画面、選択tenant header、チーム切替時の状態破棄を接続しました。
-  - 残りはLINE feature webhookのAPI接続、送迎画面の予定選択、チーム選択前のlogout導線、全画面の統合テスト、staging Supabase E2E、feature固有response契約の厳密化です。古いPR #35はクローズしました。
+  - 残りはLINE通知queue/outboxとWebhookのAPI接続、全画面の統合テスト、staging Supabase E2E、feature固有response契約の厳密化です。送迎画面の予定選択はPR #112、チーム選択前のlogout導線はPR #113で完了しました。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**
@@ -242,6 +242,7 @@ EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume
 
 - `[ ]` **NOT-001：LINE通知契約とWebhookを統合する。**
   - 対象：PR #28、PR #36
+  - PR #114で接続状態・接続・解除だけを中央APIへmountしました。旧`line_notification_queue`と現行`line_delivery_outbox`を混在させないため、通知登録・再試行・Webhookは未公開のままです。
   - LINE channel、groupIdとtenantの紐付け、未接続状態、署名検証、Webhook重複排除、未知group拒否、再試行、LIFF、deep linkを統合します。
   - `POST /api/v1/notifications/line`、Webhook route、outbox、workerを同一の認可と監査契約で確認します。
 
@@ -251,11 +252,6 @@ EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume
   - 本番group、個人LINE、アクセストークン、Webhook raw bodyをlocalログへ持ち込みません。
 
 ## 9. Phase 5の未統合タスク
-
-- `[ ]` **RIDE-001：送迎希望と配車表を統合する。**
-  - 対象：PR #23、`feature/phase5-ride-operations`
-  - 車を出せるか、乗車可能数、乗車希望、補助マッチング、手動割当、未割当、変更履歴、配車表、Google Mapsリンクを中央routeへ接続します。
-  - driver、希望者、割当のtenant境界、同時割当、監査、個人情報表示を実DBで検証します。
 
 - `[ ]` **RIDE-002：Google Maps連携の外部条件を確定する。**
   - API key、許可origin、利用規約、費用上限、障害時の表示、リンクだけで代替する条件を運用文書へ追加します。
