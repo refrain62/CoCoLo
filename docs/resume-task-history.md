@@ -461,6 +461,37 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - 実装PR #85は`f43b2316cd688f0f6564645028f04705c4283f80`として`develop`へマージしました。
 - 本記録と残タスク台帳の更新は、実装PRと分離したdocs-only PRで反映します。
 
+## API-002 中央APIの現行feature mount
+
+### 実施した変更
+
+- 古いPR #35をそのまま統合せず、現行`develop`（`e98da0e`）を起点にPR #89を再構成し、auth team選択、役員連絡先、回覧板、送迎の既存feature appを中央APIへ接続しました。
+- feature側の認証・認可・入力検証・projectionを再実装せず、中央APIのroute factoryへ接続しました。board/bulletinは中央認証コンテキストを利用し、二重認証による所属不一致を避けています。
+- 複数所属ユーザーの`X-CoCoLo-Team-Id`をUUIDv7として検証し、auth team selection repositoryで`(userId, tenantId, active)`を再確認してから業務APIへ渡すようにしました。ヘッダーなしの複数所属は暗黙選択せず403へ収束します。
+- 中央認証対象へboard/bulletin/rideを追加し、認証済みrate limitを適用しました。チーム選択ヘッダーをCORS allowlistへ追加し、ブラウザのpreflight経路も確認しました。
+- `packages/db`のboard contact exportと、feature appの中央認証切替オプションを追加しました。既存のevents、LINE delivery outbox、members routeの契約は変更していません。
+
+### 検証結果
+
+- ローカルで`pnpm test` 170件、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm verify:migration-sql`、`pnpm lint:openapi`、`pnpm verify:trust-root`、`git diff --check`が成功しました。
+- 初回PR CIでは、`packages/db/package.json`のexport変更に対するtrusted manifest hash更新漏れでquality/database-integrityが失敗しました。実ファイルのSHAをmanifestへ反映して再実行し、正本整合性を回復しました。
+- 修正後のPR #89 CIはquality run `32694927172`、database-integrity run `32694927187`、schema-drift run `32694927177`がすべて成功しました。
+
+### 敵対的レビュー
+
+- 初回レビューのHighは、複数所属時に選択済みチームがboard/bulletin等の中央業務APIへ反映されない点でした。中央認証、featureの中央認証切替、CORS、複数所属統合テストを追加して解消しました。
+- 再レビューはCritical 0、High 0でした。残るMediumは、中央response契約の`data: unknown`、auth team featureのrequestId middleware、bulletin/ride/tenant A-Bの中央統合テスト拡張です。今回の完成を妨げない後続課題としてAPI-002へ残します。
+
+### GitHub反映
+
+- 実装PR #89はready化後、squash commit `1e17288`として`develop`へ統合しました。
+- 旧PR #35は#89へ置換、#37は既存中央schemaとの重複、#40は現行LINE outboxとの契約不一致を理由にコメントを残してクローズしました。
+- 本記録と残タスク台帳の更新は、実装PRと分離したdocs-only PRで反映します。
+
+### 残タスク
+
+- attachments/orders/LINE feature webhookの中央API接続、Web画面の中央mount、Auth session lifecycle、feature固有response契約の厳密化、staging/production実サービスE2Eは継続します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
