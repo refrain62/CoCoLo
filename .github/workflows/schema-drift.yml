@@ -1,8 +1,11 @@
 name: schema drift検査
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: 検証対象のmain SHA（省略時は実行対象SHA）
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -57,7 +60,7 @@ jobs:
       - name: 静的migration検査
         run: pnpm verify:migration-checksum && pnpm verify:migration-baseline && pnpm test:database-integrity && pnpm test:schema-drift
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: ${{ inputs.base_sha || github.sha }}
           CI: true
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
@@ -152,7 +155,7 @@ jobs:
         run: pnpm verify:schema-drift
         env:
           APP_ENV: local
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: ${{ inputs.base_sha || github.sha }}
           CI: true
           PGPASSFILE: ${{ runner.temp }}/cocolo.pgpass
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test

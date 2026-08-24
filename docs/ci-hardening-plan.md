@@ -1,28 +1,27 @@
 # CI強化計画
 
+> 現行契約（2026-08-24）：リポジトリはpublic前提で運用し、PRのGitHub Actionsは短時間の品質ゲートだけを自動実行する。DB、RLS、integration、Playwright、stagingの長時間検証はローカルを正規経路とし、GitHub上では必要時の`workflow_dispatch`だけで実行する。ローカルの実行入口は`pnpm ci:fast`、`pnpm ci:local`、`pnpm ci:staging`とし、`.ci-reports/`はGit管理外にする。
+
 ## 1. 目的
 
-開発者が変更を安全に統合できるよう、静的検査、単体テスト、統合テスト、セキュリティ検査、定期検査を再現可能なCIとして整備します。
+開発者が変更を安全に統合できるよう、短時間のPR検査と、ローカルで再現可能な長時間検査を分離します。
 
 この計画はCIの検出範囲だけでなく、Workflow自体の改変、秘密情報の露出、依存関係の侵害、テナント越境、危険なmigration、テストの形骸化も検査対象にします。
 
-E2Eは実行負荷が高いため、PRごとの自動実行から除外します。
-ローカルE2Eは日次と週次の定期実行、および必要時の手動実行で確認します。
+E2Eは実行負荷が高いため、PRごと・scheduleの自動実行から除外します。必要時は`pnpm ci:local`または手動E2E Workflowで実行します。
 
 ## 2. 現状と制約
 
 2026年8月22日時点のPR品質ゲートは約80秒で完了しますが、現行仕様で要求しているローカルE2Eと本番バンドル検査はWorkflowから脱落しています。
 
-リポジトリはGitHub Freeの非公開リポジトリです。
-この構成では`develop`と`main`へbranch protectionとrequired checksを設定できないため、CIはマージを技術的に強制するゲートではなく、変更を検出して証拠化する助言的ゲートとして扱います。
+リポジトリはGitHub Freeのpublicリポジトリです。標準GitHub-hosted runnerを使用し、larger runnerやself-hosted runnerは採用しません。
 
 GitHub側ではDependabot alertsが無効、Environmentが0件、Actionsがすべて許可、Actionの完全SHA固定強制が無効です。
-Environment secretを利用できないため、stagingとproductionへのデプロイは有効化しません。
-repository secretを代替として使うとデプロイ承認と環境分離が弱くなるため、この計画では禁止します。
+stagingとproductionのWorkflowは自動起動せず、必要なリリース候補だけを手動実行します。productionの手動承認、artifact SHA、staging証跡、migration検証は維持します。
 
 ## 3. PR品質ゲート
 
-`quality.yml`は`develop`と`main`に対する`pull_request`、両ブランチへの`push`、secretを受け取らない`workflow_call`で実行します。
+`quality.yml`は`pull_request`だけで実行し、`pnpm ci:fast`へ接続します。PRの古い実行は`concurrency`でキャンセルします。
 
 すべてのジョブは`ubuntu-24.04`、最小権限、固定タイムアウトで動かします。
 PRの古い実行だけを`concurrency`で中止し、`push`の検査は中止しません。
@@ -30,17 +29,16 @@ PRの古い実行だけを`concurrency`で中止し、`push`の検査は中止�
 `actions/checkout`は`persist-credentials: false`とし、PRジョブはsecretを参照しません。
 `pull_request_target`、未信頼コードをcheckoutする`workflow_run`、`secrets: inherit`、GitHub contextの値を直接`run`へ展開する記述を禁止します。
 
-| ジョブ | 検査内容 | 上限 |
+| 入口 | 検査内容 | 上限 |
 | --- | --- | --- |
-| `static-unit-build` | 固定install、Biome、型検査、依存境界、Workflow、OpenAPI、Prisma、単体テスト、カバレッジ、build、本番バンドル検査 | 10分 |
-| `integration` | PostgreSQL 17、migration、RLS、テナント境界、ロール別統合テスト | 10分 |
-| `security` | runtime、開発用、CI用依存関係、秘密情報、SAST、構成ミス、例外期限 | 10分 |
-| `gate` | 上記3ジョブの結果をfail-closedで集約する固定チェック | 2分 |
+| `pnpm ci:fast` | 固定install、pnpm設定、Workflow、migration SQL、Biome、workspace境界、Prisma schema、OpenAPI、contract/unit、typecheck、build | 15分 |
+| `pnpm ci:local` | `ci:fast`、local PostgreSQL/Supabase、migration、RLS、seed、integration、local E2E、全workspace test、production bundle | 開発環境依存 |
+| `pnpm ci:staging` | 明示的な`STAGING_*`接続先のfail-closed検査、staging migration/deploy、smoke/E2E | 手動実行 |
 
 `gate`は`if: always()`で上流ジョブを待ち、すべての結果が`success`の場合だけ成功します。
 `failure`、`cancelled`、`skipped`、未知値、欠落は非0終了とします。
 
-PRの目標はp95実時間5分以内、合計job-minutes 12分以内とします。
+PRの目標はp95実時間5分以内とし、重い検証によるGitHub Actions分数の消費を避けます。
 初回2回の測定は暫定値とし、10回到達時に正式評価します。
 
 v1では依存関係キャッシュを使用しません。
@@ -51,10 +49,10 @@ v1では依存関係キャッシュを使用しません。
 E2EはPR品質ゲートでは自動実行しません。
 PRでは単体テスト、APIテスト、実PostgreSQL統合テストまでを必須の検査範囲とします。
 
-日次実行は`develop`の検証済みSHAを対象に、ChromiumでローカルE2Eを1回実行します。
+日次・週次のscheduleは停止しています。ChromiumのローカルE2Eは`pnpm ci:local`、または`e2e-manual.yml`の手動実行で確認します。
 失敗時の自動retryは行わず、再実行による成功で元の失敗を合格へ変更しません。
 
-週次実行は同じSHAと固定seed、TZ、localeを使い、ローカルE2Eを3回反復します。
+反復実行が必要な場合は、同じSHAと固定seed、TZ、localeを使い、ローカルで明示的に実行します。
 一度でも失敗したテストはflakeとして失敗させ、owner、Issue、最大14日の期限がないquarantineを認めません。
 認証、認可、テナント境界、RLSを確認するE2Eはquarantine対象外とします。
 
@@ -141,28 +139,25 @@ Workflowは`actionlint`と単体テストを持つ独自validatorで検査しま
 
 ## 9. 定期検査
 
-日次WorkflowはE2Eスモークに加え、全履歴の秘密情報検査、SAST、依存関係検査、migration driftを実行します。
+日次・週次のE2E Workflowはscheduleを持たず、必要時の`workflow_dispatch`だけで実行します。DB/RLS/integration/E2Eの通常経路は`pnpm ci:local`です。
 
-週次WorkflowはE2E反復、Windows上のlint、型検査、単体テスト、build、mutation testを実行します。
-WindowsではPostgreSQL service containerを使わず、DB検査はUbuntuに限定します。
+WindowsではPostgreSQL service containerを使わず、`pnpm ci:local`がSupabase CLIのlocal stackを準備・seed・破棄します。mutationや反復が必要な場合もローカルで明示的に実行します。
 
 mutation testは認証、ドメイン、契約、API認可、テナント境界、環境ガードを対象とします。
 Strykerのbreak scoreを70とし、baselineを単調増加させます。
 JWT、テナント、RLS、環境ガードを無効化するsurvivorはscoreに関係なく失敗させます。
 
-月2,000分のうち25%を定期検査と障害調査用に予約します。
-月次予測が上限を超える場合は日次の重いsecurity検査を週次へ移しますが、PRの静的検査、単体テスト、統合テスト、CriticalとHighの検査は削りません。
+GitHub ActionsはPRの短時間検査に限定し、DB/RLS/integration/E2E/stagingの実行時間はローカルへ寄せます。手動Workflowのartifact保持期間は短くし、ログ・レポートへsecretや個人情報を出力しません。
 
 ## 10. GitHub設定とデプロイ停止
 
 ActionsをGitHub製と明示allowlistへ限定し、GitHub側でも完全SHA固定を必須にします。
 default tokenはread-only、ActionsからのPR承認は禁止を維持します。
 
-GitHub Freeの非公開リポジトリを使う期間は、`admin`と`write`をrepository ownerだけに限定します。
+publicリポジトリでは、PRからsecretを参照せず、`pull_request_target`で未信頼コードを実行しません。`actions/checkout`はcredentialを保持しません。
 ownerアカウントはMFAとpasskeyを有効にし、回復コードとログイン履歴を定期確認します。
 
-実行可能なstagingとproduction Workflowは`.github/workflows`から非実行の設計資料へ移します。
-Free期間はflag、手動dispatch、repository secretのいずれでもデプロイできない状態を維持します。
+stagingとproductionのWorkflowは`.github/workflows`に残しますが、stagingはmainからの手動dispatchだけ、productionは手動承認付きdispatchだけで実行します。自動pushからのmigration/deployは行いません。
 
 GitHub Proへ移行した場合もproductionを直ちに有効化しません。
 `develop`と`main`のPR必須、`品質ゲート / gate`必須、force pushと削除禁止、conversation解決、管理者bypass禁止をAPIで検証してから、CIを強制ゲートへ変更します。

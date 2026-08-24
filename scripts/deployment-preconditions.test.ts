@@ -8,7 +8,7 @@ const migrationChecksumSha256 = 'c'.repeat(64);
 const cleanEvidence = {
   workflowName: 'ステージングへデプロイ',
   workflowPath: '.github/workflows/staging-deploy.yml',
-  event: 'push',
+  event: 'workflow_dispatch',
   headBranch: 'main',
   headSha: sha,
   artifactSha: sha,

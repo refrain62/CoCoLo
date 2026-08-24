@@ -1,7 +1,6 @@
 name: ステージングへデプロイ
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
   id-token: write
@@ -9,13 +8,17 @@ permissions:
   actions: write
 jobs:
   staging:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment: staging
     steps:
+      - name: mainからの手動実行だけを許可
+        run: test "$GITHUB_REF" = "refs/heads/main"
       - name: リポジトリを取得
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: pnpmを準備
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
@@ -118,11 +121,11 @@ jobs:
           name: release-${{ github.sha }}
           path: .release
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
       - name: staging環境の配置証跡を保存
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: staging-evidence-${{ github.sha }}
           path: .evidence
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3

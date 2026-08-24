@@ -15,6 +15,9 @@ if (environment !== 'staging' && environment !== 'production')
   );
 const shaIndex = process.argv.indexOf('--artifact-sha');
 const releaseIndex = process.argv.indexOf('--release-dir');
+const localStaging = process.argv.includes('--local');
+if (localStaging && environment !== 'staging')
+  throw new Error('ローカルデプロイ経路はstagingに限定されています。');
 const artifactSha =
   (shaIndex === -1 ? undefined : process.argv[shaIndex + 1]) ??
   process.env.ARTIFACT_SHA;
@@ -24,7 +27,9 @@ const releaseDir =
 if (!artifactSha || !/^[0-9a-f]{40}$/.test(artifactSha))
   throw new Error('成果物の SHA は40桁の小文字 SHA-1 で指定してください。');
 
-await verifyDeployPreconditions(environment, artifactSha, releaseDir);
+await verifyDeployPreconditions(environment, artifactSha, releaseDir, {
+  localStaging,
+});
 
 const adapter = process.env[`${environment.toUpperCase()}_DEPLOY_ADAPTER`];
 if (!adapter)

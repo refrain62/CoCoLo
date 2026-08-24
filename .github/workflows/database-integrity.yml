@@ -1,9 +1,6 @@
 name: DB整合性ゲート
 on:
-  pull_request:
-  push:
-    branches: [develop, main]
-  workflow_call:
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:

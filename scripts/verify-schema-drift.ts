@@ -301,8 +301,8 @@ export async function verifyMigrationIntegrity(
 export function assertSchemaDriftWorkflowConnected(content: string): void {
   assert.match(
     content,
-    /^on:\s*\r?\n\s+pull_request:\s*\r?\n\s+push:\s*$/m,
-    'schema-drift Workflowはpull_requestとmain pushで実行してください。',
+    /^on:\s*\r?\n\s+workflow_dispatch:/m,
+    'schema-drift Workflowはworkflow_dispatchだけで実行し、verify:schema-driftを接続してください。',
   );
   const runMatch = /^\s*run:\s*pnpm verify:schema-drift\s*$/m.exec(content);
   assert.ok(
@@ -324,8 +324,8 @@ export function assertSchemaDriftWorkflowConnected(content: string): void {
   assert.match(step, /^\s+env:\s*$/m, '検査stepにenvが必要です。');
   assert.match(
     step,
-    /BASE_SHA:\s*\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\|\|\s*github\.event\.before\s*\}\}/,
-    '検査stepはPRのbase SHAまたはpushの直前SHAを使ってください。',
+    /BASE_SHA:\s*\$\{\{\s*(?:github\.event\.pull_request\.base\.sha\s*\|\|\s*github\.event\.before|inputs\.base_sha\s*\|\|\s*github\.sha)\s*\}\}/,
+    '検査stepは明示指定したSHAまたはworkflowのSHAを使ってください。',
   );
   assert.match(step, /CI:\s*true/, '検査stepではCI=trueが必要です。');
   assert.match(

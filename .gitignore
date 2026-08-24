@@ -6,6 +6,7 @@ coverage/
 .env.*
 !.env.example
 .release/
+.ci-reports/
 .evidence/
 .temp/
 supabase/.temp/
