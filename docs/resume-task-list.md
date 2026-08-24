@@ -1,6 +1,6 @@
 # 中断再開タスクリスト
 
-更新日：2026-08-23
+更新日：2026-08-24
 
 状態：実装作業を中断中
 
@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-再開時点の`origin/develop`は`daa2002`（T014 DB整合性ゲートPR #69のスカッシュマージ）です。
+再開時点の`origin/develop`は`22b2dc4`（EVT-003 group再利用防止PR #80のスカッシュマージ）です。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
@@ -215,10 +215,6 @@ EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume
   - 対象：PR #49、`feature/central-event-detail`
   - baseが`feature/line-notification-outbox`であるため、先にoutboxの統合方針を確認します。
   - 出欠回答の対象部員、締切後修正理由、guardianの担当部員境界、更新競合を実DBで確認します。
-
-- `[ ]` **EVT-003：予定と締切をLINE outboxへ接続する。**
-  - 対象：PR #40、`feature/line-notification-outbox`
-  - 業務transaction内のoutbox登録、同一eventの重複通知抑止、workerのlease、同時実行、実DB RLS、専用LINE channel E2Eを確認します。
 
 ## 7. Phase 3の未統合タスク
 
