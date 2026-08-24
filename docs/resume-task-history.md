@@ -650,6 +650,36 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - Docker / Podman等のlocal実DB依存を用いた統合検証、staging実サービスE2E、production昇格証跡はOPS/T014の外部条件として継続します。
 
+## ORD-001 共同購買・集金の中央接続
+
+### 実施した変更
+
+- PR #109で注文・集金のPrisma repositoryを追加し、`purchase_orders`、`order_products`、`order_entries`、`order_lines`、`order_idempotency_keys`を既存のmigration/RLSへ接続しました。
+- transaction-local RLS context、active membershipの再確認、tenant・role・guardian担当部員境界、UUIDv7、SHA-256冪等性、監査ログ、BigInt安全変換、状態遷移・選択肢・金額のdomain検証をrepositoryへ閉じ込めました。
+- 注文APIを中央認証、選択tenant、認証済みrate limit、response contractへmountし、CSVはUTF-8 BOMと式注入対策を維持しました。
+- PR #110でWebの注文API clientへ`X-CoCoLo-Team-Id`を追加し、ログイン後の注文画面をowner/admin/guardianへmountしました。staffには画面を表示せず、チーム切替時は画面をremountして旧tenantの注文状態を破棄します。
+
+### 検証結果
+
+- `pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`が成功しました。
+- API unitは173件、注文Web API clientは3件、domainの注文集計安全整数テストを含むVitestが成功しました。
+- PR #109のquality run `32708819991`、PR #110の修正後quality run `32709995858`が成功しました。PR #110の初回run `32709758334`は、workspace package build前にcontractsのruntime subpathを解決できないCI構成差分で失敗し、既存のWeb内header定義へ変更して解消しました。
+
+### 敵対的レビュー
+
+- 初回レビューのHighは、guardianへ`paymentConfirmedBy`を返す投影と、注文数増加時の集計安全整数超過でした。guardian投影の最小化、domainの安全整数検査、in-memory adapterのエラー変換を追加しました。
+- Webレビューで確認されたチーム切替時の旧注文状態競合は、`key={selectedTeamId}`によるremountと一覧・選択・集計の初期化で解消しました。
+- 最終レビューはCritical 0、High 0でした。実ブラウザE2Eと実PostgreSQL repository統合テストは未実施です。
+
+### GitHub反映
+
+- PR #109はsquash commit `e708e96`としてdevelopへ統合しました。
+- PR #110はsquash commit `750c08e`としてdevelopへ統合しました。
+
+### 残タスク
+
+- local/staging PostgreSQLでのrepository・RLS・状態遷移・同時実行の実DB検証、staging Supabase E2E、feature固有response契約の厳密化をORD-001/API-002の後続作業として管理します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
