@@ -17,7 +17,7 @@ const migrationPassword =
 const workerPassword =
   process.env.LINE_DELIVERY_WORKER_PASSWORD ?? 'line_delivery_worker';
 
-// migration ownerはSupabase localで明示的に有効化し、CIの既存security期待値には追加しない。
+// migration ownerはSupabase localで明示的に有効化し、FORCE RLS下のsecurity definerを実行できるようにする。
 const migrationCompatibilitySql = migrationRole
   ? `
 DO $$
@@ -43,9 +43,9 @@ BEGIN
   ${
     migrationRole
       ? `IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cocolo_migration') THEN
-    CREATE ROLE cocolo_migration LOGIN PASSWORD ${quoteLiteral(migrationPassword)} NOSUPERUSER NOBYPASSRLS;
+    CREATE ROLE cocolo_migration LOGIN PASSWORD ${quoteLiteral(migrationPassword)} NOSUPERUSER BYPASSRLS;
   ELSE
-    ALTER ROLE cocolo_migration LOGIN PASSWORD ${quoteLiteral(migrationPassword)} NOSUPERUSER NOBYPASSRLS;
+    ALTER ROLE cocolo_migration LOGIN PASSWORD ${quoteLiteral(migrationPassword)} NOSUPERUSER BYPASSRLS;
   END IF;`
       : ''
   }

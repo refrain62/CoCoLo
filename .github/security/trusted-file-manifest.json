@@ -45,7 +45,7 @@
     "pnpm-lock.yaml": "a28a3a63eee8f0a5969ba1fdb7bc09029e6196fccecc818c172588189223c973",
     "scripts/create-staging-evidence.ts": "5728af722e0635d90a6834ad5241eb91d40d1736370ad7627329fbb10306db01",
     "scripts/create-pgpass.ts": "8b5c4ef10457ef8a95f774aa121034d36c9f9c19452e663248b8e659eabf90bb",
-    "scripts/db-prepare-test.ts": "aad3a66947cbfdbb73e88a30b327dc14fb5155010e71afaaa35d19328fe18d9b",
+    "scripts/db-prepare-test.ts": "5842dfe9c6769c15d0c2b2a0844aba3f46c3302fea4d3b9fc7ff6c12645e84aa",
     "scripts/db-seed-test.ts": "dd32e960f4b1953e90879e7f7a0d4d8ebcc90ed83b91bd3fda243f08abbfa216",
     "scripts/database-security.test.ts": "b99fd0450dcd5c4bc519fac0308fa95c1162023018e55853b39e619cbff93bce",
     "scripts/database-security.ts": "5ece07a981a7fbfe730c311b91c0c70ad7a12a0ecece0d11526459f30deca54a",
