@@ -758,8 +758,9 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 
 | 環境 | 用途 | DB / Auth | R2 | デプロイ・保護 |
 | --- | --- | --- | --- | --- |
-| **local** | 開発・TDD・手動確認 | Docker 上の PostgreSQL と Supabase CLI のローカル Auth。`cocolo_app` / マイグレーション所有者を再現 | Phase 4 以降は MinIO またはローカル配置アダプター | `pnpm dev`、テスト専用 Auth は local のみ。実データ持込禁止 |
-| **staging** | 結合・E2E・受け入れ確認 | 本番と分離した Supabase project / PostgreSQL。テスト専用ユーザーと seed のみ | staging 専用の非公開バケット | `main` から承認付きで配置。マイグレーション、スモークテスト、E2E 成功後に本番候補とする |
+| **local** | 開発・TDD・手動確認 | Docker 上の PostgreSQL と Supabase CLIのローカル Auth。`cocolo_app` / マイグレーション所有者を再現し、volumeを保持 | Phase 4 以降は MinIO またはローカル配置アダプター | `pnpm dev:local`。未適用migrationだけを適用し、実データ持込禁止 |
+| **test** | 統合テスト・local E2E | Supabase CLIで起動する別project。毎回stackとvolumeを破棄し、合成Auth・DB fixtureを投入 | 使用しない | `pnpm test:integration` / `pnpm test:e2e:local`だけが使用 |
+| **staging** | 結合・E2E・受け入れ確認 | 本番と分離した Supabase project / PostgreSQL。専用Authユーザーのみ。local/test fixtureは投入しない | staging 専用の非公開バケット | `main` から承認付きで配置。マイグレーション、スモークテスト、E2E 成功後に本番候補とする |
 | **production** | 利用者向け本番 | production 専用 Supabase project / PostgreSQL。実ユーザー・実データ | production 専用の非公開バケット | 保護された Environment、手動承認、バックアップ、監査、同時実行ロック。テスト専用 Auth 禁止 |
 
 共通の `APP_ENV` は `local` / `staging` / `production` のいずれかを必須とし、環境ごとに `DATABASE_URL`、`DIRECT_URL`、`SUPABASE_URL`、`SUPABASE_JWKS_URL`、`R2_BUCKET`、公開 URL を設定します。production では退部後データと AuditLog の保持期間、staging ではテスト用保持期間を必須設定にし、未設定なら起動を拒否します。
@@ -770,9 +771,9 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * **サーバー専用:** `SUPABASE_SERVICE_ROLE_KEY`、`R2_ENDPOINT`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`。Service Role Key は Supabase Auth の管理 API 等に限定し、Prisma の `DATABASE_URL` / `DIRECT_URL`、ブラウザ、ログ、bundle には使用しません。
 * **環境固定値:** local は `cocolo-local`、staging は `cocolo-staging-private`、production は `cocolo-production-private` の R2 バケットだけを許可します。Supabase URL、R2 endpoint、`PUBLIC_APP_URL` は `APP_ENV` ごとの許可リストと完全一致しなければ起動を拒否します。
 
-各 DB の migration は `environment_guard(id=1, environment)` を owner 接続で作成し、app role は変更不可とします。起動時に `APP_ENV` と `environment_guard.environment` が一致すること、`current_user = cocolo_app`、`rolbypassrls = false`、test-only Auth が production で無効であることを検証します。local / staging から production の Supabase URL、DB、R2 bucket が設定されていた場合は health check 前に fail-fast します。
+各 DB の migration は `environment_guard(id=1, environment)` を owner 接続で作成し、app role は変更不可とします。起動時に `APP_ENV` と `environment_guard.environment` が一致すること、`current_user = cocolo_app`、`rolbypassrls = false`、test fixtureがstaging / productionで無効であることを検証します。local / staging から production の Supabase URL、DB、R2 bucket が設定されていた場合は health check 前に fail-fast します。
 
-環境昇格は **local → PR quality gate → staging deploy → staging migration / smoke / E2E → 本番承認 → production migration / deploy** の順に固定します。staging への実データコピーは禁止し、必要な再現データは匿名化 seed で作成します。staging の E2E は staging Supabase のテスト専用ユーザーを使い、local の test-only Auth adapter は使いません。staging と production の migration は同じ migration artifact を使い、staging で適用・検証済みであることを本番承認条件にします。
+環境昇格は **local → PR quality gate → staging deploy → staging migration / smoke / E2E → 本番承認 → production migration / deploy** の順に固定します。staging への実データコピーは禁止し、local/test fixtureは適用しません。localとtestのE2EはどちらもSupabase GoTrueの実JWTを使い、固定tokenのtest-only Auth adapterは使いません。staging と production の migration は同じ migration artifact を使い、staging で適用・検証済みであることを本番承認条件にします。
 
 ### 8.9 実装単位・レビュー・コミット規約
 
@@ -852,7 +853,7 @@ API DTO は role ごとに別 schema を持ち、staff / guardian のレスポ�
 * **アップロード:** R2 は private bucket を初期値とし、DB にテナント・所有者・MIME・サイズ・object key・`status`（`uploaded` / `available` / `deleted` / `rejected`）を記録します。短期署名 URL でのみ配信し、SVG は拒否、magic bytes と実体サイズを検証し、ファイル名を object key に使用しません。`deletedAt` は `deleted` のときだけ設定します。
 * **年度繰り上げ:** `promotion_runs(tenantId, fiscalYear)` 相当の実行記録を保存し、同一年度の再実行は no-op とします。実行前件数プレビュー、対象条件、17以上の扱い、実行者監査ログを仕様化します。
 * **注文整合性:** `OrderItem` の `tenantId + orderId` と `UserOrderItem` の `tenantId + orderId + itemId` を複合参照で整合させます。選択肢は JSON 文字列のまま信頼せず、Zod で許可値を検証し、`isPaid` と `paidAt` を状態遷移として更新します。
-* **CIとテストDB:** PR 用の `quality.yml`、定期検査用のWorkflow、staging 用の `staging-deploy.yml`、production 用の `production-promote.yml` を分離します。PRでは PostgreSQL を起動して migration、RLS用テストロール、seed を実行し、`pnpm --filter @cocolo/db exec prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm build` を必須にします。`pnpm test:e2e:local` は日次、週次、手動で実行します。staging では staging Auth ユーザーによる `test:e2e:staging` を本番昇格前に実行し、production は承認済み staging evidence と同一 artifact SHA だけを promote します。
+* **CIとテストDB:** PR 用の `quality.yml`、定期検査用のWorkflow、staging 用の `staging-deploy.yml`、production 用の `production-promote.yml` を分離します。PRでは PostgreSQL を起動して migration、RLS用テストロール、seed を実行し、`pnpm --filter @cocolo/db exec prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm build` を必須にします。定期E2EはSupabase CLIの`cocolo-test` stackを毎回再構築し、終了時にvolumeごと破棄します。staging では staging Auth ユーザーによる `test:e2e:staging` を本番昇格前に実行し、production は承認済み staging evidence と同一 artifact SHA だけを promote します。
 
 ### 8.13 Phase 1 スキーマ契約
 
@@ -962,11 +963,11 @@ jobs:
         run: pnpm verify:production-bundle
 ```
 
-`db:prepare:test` は migration owner 接続で `cocolo_app` ロール（`BYPASSRLS` なし）と必要な table grant を作成します。`package.json` の scripts と上記コマンドを一致させ、migration / seed だけを owner 接続、`test:integration` は `cocolo_app` 接続で実行します。`test:integration` は実 PostgreSQL の RLS policy・transaction context・tenant A/B・owner/admin/guardian fixture を検証します。`test:e2e:local` は test-only Auth adapter、`test:e2e:staging` は staging Supabase のテスト専用ユーザーでログインし、外部 Supabase の実アカウントを local へ持ち込みません。
+`db:prepare:test` は migration owner 接続で `cocolo_app` ロール（`BYPASSRLS` なし）と必要な table grant を作成します。`package.json` の scripts と上記コマンドを一致させ、migration / seed だけを owner 接続、`test:integration` は `cocolo_app` 接続で実行します。`test:integration` は実 PostgreSQL の RLS policy・transaction context・tenant A/B・owner/admin/guardian fixture を検証します。`test:e2e:local` は破棄専用Supabase Authの合成ユーザー、`test:e2e:staging` は staging Supabase のテスト専用ユーザーでログインし、外部 Supabase の実アカウントを local へ持ち込みません。fixture scriptはloopbackの許可DBだけを受け付けます。
 
-Playwright は `playwright.config.ts` の `webServer` に `command: "pnpm dev:test"`、`url: "http://127.0.0.1:4173/health"`、`reuseExistingServer: false`、起動 timeout 120 秒を固定します。`dev:test` は test-only Auth adapter を有効化した Node/Hono + Vite preview を起動し、production build では adapter import が含まれないことを `pnpm build` 後の静的検査で確認します。
+Playwright は `playwright.config.ts` の `webServer` で実APIの `pnpm --filter @cocolo/api dev` とViteを起動し、API port `8788`、Web port `4173`、`reuseExistingServer: false`、起動 timeout 120 秒を固定します。Supabase test stackはPlaywright起動前に準備し、E2E終了後に`supabase stop --no-backup`で破棄します。
 
-`db:prepare:test` と integration test の開始時には `SELECT current_user`、`SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user`、`has_table_privilege` を検証します。`current_user != 'cocolo_app'`、`rolbypassrls = true`、owner 接続へのフォールバック、RLS未設定、context未設定時の全件取得があればテストを失敗させます。`test:e2e:local` は local test-only Auth + `dev:test`、`test:e2e:staging` は staging Supabase のテスト専用ユーザー + staging URL として scripts を分離し、production からはどちらも起動できないようにします。`verify:production-bundle` は production build の成果物に test-only Auth adapter と Service Role Key の文字列が含まれないことを検査します。レビュー成果物は `docs/reviews/` に日付付き Markdown で保存し、対象 SHA、指摘、重大度、修正コミット、再レビュー判定を必須項目にします。
+`db:prepare:test` と integration test の開始時には `SELECT current_user`、`SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user`、`has_table_privilege` を検証します。`current_user != 'cocolo_app'`、`rolbypassrls = true`、owner 接続へのフォールバック、RLS未設定、context未設定時の全件取得があればテストを失敗させます。`test:e2e:local` はSupabase test Auth + 実API、`test:e2e:staging` は staging Supabase のテスト専用ユーザー + staging URL として scripts を分離し、production からはどちらも起動できないようにします。`verify:production-bundle` は production build の成果物にfixture script、固定fixture資格情報、Service Role Keyの文字列が含まれないことを検査します。レビュー成果物は `docs/reviews/` に日付付き Markdown で保存し、対象 SHA、指摘、重大度、修正コミット、再レビュー判定を必須項目にします。
 
 ## 9. 実装タスク一覧と中断後の再開手順
 

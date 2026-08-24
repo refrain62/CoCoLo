@@ -62,7 +62,7 @@ PRでは単体テスト、APIテスト、実PostgreSQL統合テストまでを�
 対象SHAを形式検証してから明示的にcheckoutし、ブランチ名や未検証の入力をshellへ展開しません。
 将来staging E2Eを有効化する場合は、保護されたstaging資格情報とURLの完全一致を必須にします。
 
-日次、週次、手動のE2Eはtest-only Authと合成個人情報だけを使用します。
+日次、週次、手動のE2EはSupabase CLIの破棄専用`cocolo-test` stackと合成個人情報だけを使用します。
 trace、video、storage state、DB dump、環境変数、HTTP bodyはArtifactへ保存しません。
 保存対象は秘匿化した固定レポートだけとし、upload前にcanary secretと個人情報を検査します。
 
