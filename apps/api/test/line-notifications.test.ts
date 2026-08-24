@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import test from 'node:test';
 import { createInMemoryLineRepository } from '@cocolo/db/line';
+import { createApp } from '../dist/app.js';
 import {
   createFakeLineAdapter,
   createLineMessagingAdapter,
@@ -336,4 +337,35 @@ test('専用routeは未認証を拒否し、tenantId入力を受け付けず、s
     body: JSON.stringify({ groupId: 'Cgroup-a' }),
   });
   assert.equal(staff.status, 403);
+});
+
+test('LINEの認証済み操作を中央APIへmountできる', async () => {
+  const fixture = createFixture();
+  const app = createApp({
+    verifyToken: async (token) => ({
+      userId: token,
+      issuer: 'https://example.supabase.co/auth/v1',
+      audience: 'authenticated',
+      expiresAt: Math.floor(Date.now() / 1000) + 300,
+    }),
+    membershipRepository: {
+      findActiveByUserId: async () => ({ tenantId: TENANT_A, role: 'owner' }),
+    },
+    centralFeatures: { line: { service: fixture.service } },
+  });
+
+  const response = await app.request('/api/v1/line/status', {
+    headers: { authorization: 'Bearer owner-a' },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, {
+    status: 'disconnected',
+    groupId: null,
+  });
+
+  const notificationResponse = await app.request('/api/v1/line/notifications', {
+    headers: { authorization: 'Bearer owner-a' },
+  });
+  assert.equal(notificationResponse.status, 404);
 });

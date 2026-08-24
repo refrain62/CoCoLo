@@ -14,6 +14,7 @@ import {
   createBoardContactApp,
 } from './features/board-contact/index.js';
 import { createBulletinBoardApp } from './features/bulletin-board/bulletin-board-app.js';
+import { createLineNotificationApp } from './features/line-notifications/routes.js';
 import { createOrdersPaymentsApp } from './features/orders-payments/orders-payments-app.js';
 import {
   type RideRouteApp,
@@ -36,6 +37,9 @@ export type CentralFeatureRoutes = {
   boardContact?: { repository: BoardContactRepository };
   bulletinBoard?: { repository: BulletinBoardRepository };
   orders?: { repository: OrdersRepository };
+  line?: {
+    service: import('./features/line-notifications/line-service.js').LineNotificationService;
+  };
   ride?: { service: RideService };
 };
 
@@ -104,6 +108,17 @@ export function mountCentralFeatureRoutes(options: CentralFeatureRouteOptions) {
       createOrdersPaymentsApp({
         ordersRepository: features.orders.repository,
         useCentralAuth: true,
+      }),
+    );
+
+  if (features?.line)
+    options.rideApp.route(
+      '/',
+      createLineNotificationApp({
+        service: features.line.service,
+        useCentralAuth: true,
+        includeNotifications: false,
+        includeWebhook: false,
       }),
     );
 

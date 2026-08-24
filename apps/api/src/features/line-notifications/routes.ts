@@ -8,16 +8,23 @@ import { type Context, Hono, type MiddlewareHandler } from 'hono';
 import type { LineActor, LineNotificationService } from './line-service.js';
 
 type Membership = { tenantId: string; role: MemberRole };
+type CentralAuth = {
+  userId: string;
+  membership: Membership;
+};
 export type LineRouteOptions = {
   verifyToken?: TokenVerifier;
   findActiveMembership?: (userId: string) => Promise<Membership | null>;
   service: LineNotificationService;
+  useCentralAuth?: boolean;
+  includeNotifications?: boolean;
+  includeWebhook?: boolean;
 };
 
 type LineApiEnv = {
   Variables: {
     requestId: string;
-    auth: LineActor;
+    auth: LineActor | CentralAuth;
   };
 };
 
@@ -50,11 +57,23 @@ export function createLineNotificationApp(
 ): Hono<LineApiEnv> {
   const app = new Hono<LineApiEnv>();
   app.use('*', async (c, next) => {
-    const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+    const requestId =
+      c.get('requestId') ?? c.req.header('x-request-id') ?? crypto.randomUUID();
     c.set('requestId', requestId);
     c.header('x-request-id', requestId);
     await next();
   });
+
+  function currentActor(c: Context<LineApiEnv>): LineActor {
+    const auth = c.get('auth');
+    if ('membership' in auth)
+      return {
+        tenantId: auth.membership.tenantId,
+        userId: auth.userId,
+        role: auth.membership.role,
+      };
+    return auth;
+  }
 
   const authenticate: MiddlewareHandler<LineApiEnv> = async (c, next) => {
     const token = extractBearerToken(c.req.header('authorization') ?? null);
@@ -96,13 +115,14 @@ export function createLineNotificationApp(
     }
   };
 
-  for (const path of [
-    '/api/v1/line/status',
-    '/api/v1/line/connect',
-    '/api/v1/line/notifications',
-    '/api/v1/line/notifications/*',
-  ])
-    app.use(path, authenticate);
+  if (!options.useCentralAuth)
+    for (const path of [
+      '/api/v1/line/status',
+      '/api/v1/line/connect',
+      '/api/v1/line/notifications',
+      '/api/v1/line/notifications/*',
+    ])
+      app.use(path, authenticate);
 
   app.onError((error, c) => {
     void error;
@@ -115,13 +135,13 @@ export function createLineNotificationApp(
   });
 
   app.get('/api/v1/line/status', async (c) => {
-    const currentActor = c.get('auth');
-    const value = await options.service.status(currentActor);
+    const actor = currentActor(c);
+    const value = await options.service.status(actor);
     return c.json({
       data: {
         status: value.status,
         groupId:
-          currentActor.role === 'owner' || currentActor.role === 'admin'
+          actor.role === 'owner' || actor.role === 'admin'
             ? value.groupId
             : null,
       },
@@ -137,7 +157,7 @@ export function createLineNotificationApp(
     }
     try {
       return c.json(
-        { data: await options.service.connect(c.get('auth'), input) },
+        { data: await options.service.connect(currentActor(c), input) },
         201,
       );
     } catch (error) {
@@ -147,66 +167,74 @@ export function createLineNotificationApp(
 
   app.delete('/api/v1/line/connect', async (c) => {
     try {
-      await options.service.disconnect(c.get('auth'));
+      await options.service.disconnect(currentActor(c));
       return c.json({ data: { status: 'disconnected' } });
     } catch (error) {
       return serviceError(c, error);
     }
   });
 
-  app.post('/api/v1/line/notifications', async (c) => {
-    let input: unknown;
-    try {
-      input = await c.req.json();
-    } catch {
-      return errorResponse(c, 400, 'VALIDATION_ERROR', 'JSON入力が不正です。');
-    }
-    try {
-      const result = await options.service.enqueue(c.get('auth'), input);
-      return c.json({ data: result }, result.status === 'queued' ? 202 : 200);
-    } catch (error) {
-      return serviceError(c, error);
-    }
-  });
-
-  app.post('/api/v1/line/notifications/:notificationId/retry', async (c) => {
-    try {
-      const notification = await options.service.retry(
-        c.get('auth'),
-        c.req.param('notificationId'),
-      );
-      return c.json({ data: notification });
-    } catch (error) {
-      return serviceError(c, error);
-    }
-  });
-
-  app.post('/api/v1/line/webhook', async (c) => {
-    const rawBody = await c.req.text();
-    try {
-      const result = await options.service.receiveWebhook({
-        rawBody,
-        signature: c.req.header('x-line-signature') ?? null,
-      });
-      return c.json({ data: result });
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('署名'))
-        return errorResponse(
-          c,
-          401,
-          'LINE_SIGNATURE_INVALID',
-          'LINE webhookの署名が不正です。',
-        );
-      if (error instanceof SyntaxError)
+  if (options.includeNotifications !== false) {
+    app.post('/api/v1/line/notifications', async (c) => {
+      let input: unknown;
+      try {
+        input = await c.req.json();
+      } catch {
         return errorResponse(
           c,
           400,
           'VALIDATION_ERROR',
-          'Webhook JSONが不正です。',
+          'JSON入力が不正です。',
         );
-      return serviceError(c, error);
-    }
-  });
+      }
+      try {
+        const result = await options.service.enqueue(currentActor(c), input);
+        return c.json({ data: result }, result.status === 'queued' ? 202 : 200);
+      } catch (error) {
+        return serviceError(c, error);
+      }
+    });
+
+    app.post('/api/v1/line/notifications/:notificationId/retry', async (c) => {
+      try {
+        const notification = await options.service.retry(
+          currentActor(c),
+          c.req.param('notificationId'),
+        );
+        return c.json({ data: notification });
+      } catch (error) {
+        return serviceError(c, error);
+      }
+    });
+  }
+
+  if (options.includeWebhook !== false)
+    app.post('/api/v1/line/webhook', async (c) => {
+      const rawBody = await c.req.text();
+      try {
+        const result = await options.service.receiveWebhook({
+          rawBody,
+          signature: c.req.header('x-line-signature') ?? null,
+        });
+        return c.json({ data: result });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('署名'))
+          return errorResponse(
+            c,
+            401,
+            'LINE_SIGNATURE_INVALID',
+            'LINE webhookの署名が不正です。',
+          );
+        if (error instanceof SyntaxError)
+          return errorResponse(
+            c,
+            400,
+            'VALIDATION_ERROR',
+            'Webhook JSONが不正です。',
+          );
+        return serviceError(c, error);
+      }
+    });
 
   return app;
 }

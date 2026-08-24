@@ -70,4 +70,24 @@ describe('LINE通知APIクライアント', () => {
       }),
     );
   });
+
+  it('選択中チームを中央APIのheaderへ渡す', async () => {
+    let headers: Headers | undefined;
+    globalThis.fetch = async (_input, init) => {
+      headers = new Headers(init?.headers);
+      return new Response(
+        JSON.stringify({ data: { status: 'disconnected', groupId: null } }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+
+    await createLineNotificationApi({
+      getAccessToken: () => 'token',
+      getSelectedTeamId: () => '00000000-0000-7000-8000-000000000001',
+    }).status();
+
+    expect(headers?.get('X-CoCoLo-Team-Id')).toBe(
+      '00000000-0000-7000-8000-000000000001',
+    );
+  });
 });
