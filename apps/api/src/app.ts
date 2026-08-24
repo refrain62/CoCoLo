@@ -3,6 +3,14 @@ import {
   selectedTeamHeaderName,
   uuidv7Schema,
 } from '@cocolo/contracts/auth-team-selection';
+import {
+  lineConnectResponseSchema,
+  lineDisconnectResponseSchema,
+  lineEnqueueResponseSchema,
+  lineNotificationEnvelopeResponseSchema,
+  lineStatusResponseSchema,
+  lineWebhookResponseSchema,
+} from '@cocolo/contracts/line';
 import { lineDeliveryPublishSchema } from '@cocolo/contracts/line-delivery';
 import type {
   MemberCreateInput,
@@ -257,6 +265,48 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.cors) app.use('*', createCorsMiddleware(options.cors));
 
   const responseContracts: ResponseContract[] = [
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/line\/status$/,
+      status: 200,
+      schema: lineStatusResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/line\/connect$/,
+      status: 201,
+      schema: lineConnectResponseSchema,
+    },
+    {
+      method: 'DELETE',
+      path: /^\/api\/v1\/line\/connect$/,
+      status: 200,
+      schema: lineDisconnectResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/line\/webhook$/,
+      status: 200,
+      schema: lineWebhookResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/line\/notifications$/,
+      status: 200,
+      schema: lineEnqueueResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/line\/notifications$/,
+      status: 202,
+      schema: lineEnqueueResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/line\/notifications\/[^/]+\/retry$/,
+      status: 200,
+      schema: lineNotificationEnvelopeResponseSchema,
+    },
     {
       method: 'POST',
       path: /^\/api\/v1\/uploads$/,

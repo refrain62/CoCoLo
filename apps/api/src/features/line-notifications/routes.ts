@@ -1,5 +1,6 @@
 import { extractBearerToken, type TokenVerifier } from '@cocolo/auth';
 import type { MemberRole } from '@cocolo/contracts/member';
+import type { LineNotification } from '@cocolo/domain/line';
 import {
   LineConnectionConflictError,
   LineNotificationStateError,
@@ -49,6 +50,18 @@ function serviceError(c: Context<LineApiEnv>, error: unknown) {
   if (error instanceof Error && error.message.includes('権限'))
     return errorResponse(c, 403, 'FORBIDDEN', error.message);
   return errorResponse(c, 400, 'VALIDATION_ERROR', '入力値が不正です。');
+}
+
+// tenantや作成者などの内部項目をLINE操作APIの公開DTOへ含めない。
+function publicNotification(notification: LineNotification) {
+  return {
+    id: notification.id,
+    sourceType: notification.sourceType,
+    sourceId: notification.sourceId,
+    status: notification.status,
+    attempts: notification.attempts,
+    nextRetryAt: notification.nextRetryAt,
+  };
 }
 
 // LINE専用routeを単体で検証し、将来の中央appへmountできるよう既存app.tsを変更せず公開する。
@@ -189,7 +202,14 @@ export function createLineNotificationApp(
       }
       try {
         const result = await options.service.enqueue(currentActor(c), input);
-        return c.json({ data: result }, result.status === 'queued' ? 202 : 200);
+        const data =
+          result.status === 'queued'
+            ? {
+                ...result,
+                notification: publicNotification(result.notification),
+              }
+            : result;
+        return c.json({ data }, result.status === 'queued' ? 202 : 200);
       } catch (error) {
         return serviceError(c, error);
       }
@@ -201,7 +221,7 @@ export function createLineNotificationApp(
           currentActor(c),
           c.req.param('notificationId'),
         );
-        return c.json({ data: notification });
+        return c.json({ data: publicNotification(notification) });
       } catch (error) {
         return serviceError(c, error);
       }
