@@ -50,20 +50,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-    services:
-      postgres:
-        image: postgres@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: cocolo_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d cocolo_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - name: 検証済みSHAを取得
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -84,29 +70,15 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Chromiumを準備
         run: pnpm exec playwright install --with-deps chromium
-      - name: test-only Authと合成値をログから秘匿
+      - name: Auth fixtureと合成値をログから秘匿
         run: |
           printf '::add-mask::%s\n' "$E2E_TEST_EMAIL"
           printf '::add-mask::%s\n' "$E2E_TEST_PASSWORD"
-          printf '::add-mask::%s\n' "$DATABASE_URL"
-          printf '::add-mask::%s\n' "$DIRECT_URL"
           printf '::add-mask::%s\n' "$E2E_REPORT_CANARY"
         env:
-          DATABASE_URL: postgresql://cocolo_app:cocolo_app@127.0.0.1:5432/cocolo_test
-          DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/cocolo_test
           E2E_TEST_EMAIL: owner-a@example.test
           E2E_TEST_PASSWORD: owner-password
           E2E_REPORT_CANARY: t014-e2e-canary-must-not-appear
-      - name: テストDBのRLS用ロールを準備
-        run: pnpm db:prepare:test
-        env:
-          DATABASE_URL: postgresql://cocolo_app:cocolo_app@127.0.0.1:5432/cocolo_test
-          DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/cocolo_test
-      - name: テストDBへmigrationと合成fixtureを投入
-        run: pnpm --filter @cocolo/db exec prisma migrate deploy && pnpm db:seed:test
-        env:
-          DATABASE_URL: postgresql://cocolo_app:cocolo_app@127.0.0.1:5432/cocolo_test
-          DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/cocolo_test
       - name: 日次E2Eを実行
         run: pnpm test:e2e:periodic
         env:
@@ -122,8 +94,6 @@ jobs:
           E2E_SEED: t014-daily-seed-v1
           E2E_TEST_EMAIL: owner-a@example.test
           E2E_TEST_PASSWORD: owner-password
-          DATABASE_URL: postgresql://cocolo_app:cocolo_app@127.0.0.1:5432/cocolo_test
-          DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/cocolo_test
           TZ: UTC
           LANG: C.UTF-8
           LC_ALL: C.UTF-8
@@ -135,8 +105,6 @@ jobs:
           E2E_REPORT_CANARY: t014-e2e-canary-must-not-appear
           E2E_TEST_EMAIL: owner-a@example.test
           E2E_TEST_PASSWORD: owner-password
-          DATABASE_URL: postgresql://cocolo_app:cocolo_app@127.0.0.1:5432/cocolo_test
-          DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/cocolo_test
       - name: 固定レポートだけを保存
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

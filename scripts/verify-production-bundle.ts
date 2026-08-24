@@ -3,7 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// 配置前bundleを走査し、Service Role Keyやlocal test-only Authの識別子が公開成果物へ混入していないことを確認する。
+// 配置前bundleを走査し、Service Role Keyやlocal/test fixtureの識別子が公開成果物へ混入していないことを確認する。
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const forbidden = [
   'SUPABASE_SERVICE_ROLE_KEY',
@@ -11,6 +11,8 @@ const forbidden = [
   'TEST_ONLY_AUTH',
   'local-test-owner-token',
   'owner-password',
+  'owner-a@example.test',
+  'cocolo-test',
 ];
 const roots = [
   path.join(root, 'apps', 'web', 'dist'),

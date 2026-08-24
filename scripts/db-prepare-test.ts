@@ -1,55 +1,48 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { withPostgresClient } from './postgres-client.ts';
+import { assertTestDatabaseTarget } from './test-database-guard.ts';
 
-// migration owner接続でアプリroleとworker専用roleを準備し、どちらにもRLS bypassを与えない。
-assert.ok(process.env.DATABASE_URL, 'DATABASE_URL が必要です');
+assertTestDatabaseTarget();
 assert.ok(process.env.DIRECT_URL, 'DIRECT_URL が必要です');
-const sql = `
+
+const quoteLiteral = (value: string) => `'${value.replaceAll("'", "''")}'`;
+const appPassword = process.env.COCOLO_APP_PASSWORD ?? 'cocolo_app';
+const migrationPassword =
+  process.env.COCOLO_MIGRATION_PASSWORD ?? 'cocolo_migration';
+const workerPassword =
+  process.env.LINE_DELIVERY_WORKER_PASSWORD ?? 'line_delivery_worker';
+
+// migration ownerだけがschemaを変更し、アプリ・worker roleにはRLS bypassを与えない。
+const roleSql = `
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cocolo_app') THEN
-    CREATE ROLE cocolo_app LOGIN PASSWORD 'cocolo_app' NOSUPERUSER NOBYPASSRLS;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cocolo_migration') THEN
+    CREATE ROLE cocolo_migration LOGIN PASSWORD ${quoteLiteral(migrationPassword)} NOSUPERUSER NOBYPASSRLS;
   ELSE
-    ALTER ROLE cocolo_app NOSUPERUSER NOBYPASSRLS;
+    ALTER ROLE cocolo_migration LOGIN PASSWORD ${quoteLiteral(migrationPassword)} NOSUPERUSER NOBYPASSRLS;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cocolo_app') THEN
+    CREATE ROLE cocolo_app LOGIN PASSWORD ${quoteLiteral(appPassword)} NOSUPERUSER NOBYPASSRLS;
+  ELSE
+    ALTER ROLE cocolo_app LOGIN PASSWORD ${quoteLiteral(appPassword)} NOSUPERUSER NOBYPASSRLS;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'line_delivery_worker') THEN
-    CREATE ROLE line_delivery_worker LOGIN PASSWORD 'line_delivery_worker' NOSUPERUSER NOBYPASSRLS NOINHERIT;
+    CREATE ROLE line_delivery_worker LOGIN PASSWORD ${quoteLiteral(workerPassword)} NOSUPERUSER NOBYPASSRLS NOINHERIT;
   ELSE
-    ALTER ROLE line_delivery_worker NOSUPERUSER NOBYPASSRLS NOINHERIT;
+    ALTER ROLE line_delivery_worker LOGIN PASSWORD ${quoteLiteral(workerPassword)} NOSUPERUSER NOBYPASSRLS NOINHERIT;
   END IF;
 END
 $$;
-GRANT USAGE ON SCHEMA public TO cocolo_app;
-GRANT USAGE ON SCHEMA public TO line_delivery_worker;
-REVOKE ALL ON ALL TABLES IN SCHEMA public FROM line_delivery_worker;
 `;
-const dockerContainer = process.env.PSQL_DOCKER_CONTAINER;
-const dockerDatabase = process.env.PSQL_DOCKER_DATABASE ?? 'postgres';
-const command = dockerContainer
-  ? process.platform === 'win32'
-    ? 'docker.exe'
-    : 'docker'
-  : process.platform === 'win32'
-    ? 'psql.exe'
-    : 'psql';
-const args = dockerContainer
-  ? [
-      'exec',
-      dockerContainer,
-      'psql',
-      '--no-psqlrc',
-      '--username',
-      'postgres',
-      '--dbname',
-      dockerDatabase,
-      '--command',
-      sql,
-    ]
-  : ['--no-psqlrc', '--dbname', process.env.DIRECT_URL, '--command', sql];
-const result = spawnSync(command, args, {
-  stdio: 'inherit',
-  shell: process.platform === 'win32' && !dockerContainer,
+const grants = [
+  'GRANT USAGE, CREATE ON SCHEMA public TO cocolo_migration',
+  'GRANT USAGE ON SCHEMA public TO cocolo_app',
+  'GRANT USAGE ON SCHEMA public TO line_delivery_worker',
+  'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM line_delivery_worker',
+];
+
+await withPostgresClient(process.env.DIRECT_URL, async (client) => {
+  await client.$executeRawUnsafe(roleSql);
+  for (const statement of grants) await client.$executeRawUnsafe(statement);
 });
-if (result.error) throw result.error;
-assert.equal(result.status, 0, 'テスト DB の RLS 用ロール準備に失敗しました。');
-console.log('テスト DB の cocolo_app ロールと RLS 用ロールを準備しました。');
+console.log('テストDBのmigration、app、worker roleを準備しました。');

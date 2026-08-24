@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   createInitialFixedE2eReport,
   getFixedE2eReportPath,
@@ -52,16 +53,14 @@ const rawOutputPath = path.join(
 );
 mkdirSync(rawOutputPath, { recursive: true });
 
-const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const runnerScript = path.join(root, 'scripts', 'supabase-local.ts');
 const result = spawnSync(
-  pnpmCommand,
+  process.execPath,
   [
-    'exec',
-    'playwright',
-    'test',
-    '--config=playwright.config.ts',
-    '--project',
-    'local',
+    runnerScript,
+    'e2e',
+    '--',
     '--reporter=./scripts/e2e-fixed-reporter.ts',
     '--retries=0',
     '--trace=off',
@@ -76,7 +75,7 @@ const result = spawnSync(
       E2E_ENV: 'local',
     },
     shell: false,
-    stdio: 'ignore',
+    stdio: 'inherit',
   },
 );
 
