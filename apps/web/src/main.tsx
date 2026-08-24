@@ -4,6 +4,8 @@ import { StrictMode, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AuthProvider, LoginPage, useAuth } from './auth-context.js';
 import { type AuthRole, createAuthContextApi } from './auth-context-api.js';
+import { createAttachmentApi } from './features/attachments/attachment-api.js';
+import { AttachmentUploader } from './features/attachments/attachment-uploader.js';
 import {
   createTeamSelectionApi,
   SelectedTeamHeader,
@@ -121,6 +123,15 @@ function AuthenticatedApp() {
       }),
     [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
+  const attachmentApi = useMemo(
+    () =>
+      createAttachmentApi({
+        getAccessToken: () => session?.accessToken ?? null,
+        getSelectedTeamId: () => selectedTeamId,
+        fetcher: authenticatedFetch,
+      }),
+    [authenticatedFetch, selectedTeamId, session?.accessToken],
+  );
   useEffect(() => {
     if (!session || !selectedTeam) return;
     let active = true;
@@ -174,6 +185,9 @@ function AuthenticatedApp() {
       {eventsError ? <p role="alert">{eventsError}</p> : null}
       {role ? (
         <EventsPage api={eventsApi} role={role} memberOptions={eventMembers} />
+      ) : null}
+      {role && role !== 'guardian' ? (
+        <AttachmentUploader api={attachmentApi} />
       ) : null}
       <BoardContactPage
         api={boardContactApi}

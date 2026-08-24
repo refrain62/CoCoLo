@@ -1,4 +1,8 @@
 import type { AttachmentMediaType } from '@cocolo/domain/attachment';
+import {
+  getStoredSelectedTeamId,
+  selectedTeamHeaderName,
+} from '../auth-team-selection/selected-team-storage.js';
 
 export type UploadSession = {
   attachmentId: string;
@@ -56,15 +60,20 @@ async function readJson<T>(response: Response): Promise<T> {
 // access tokenはAPI呼び出し時だけ付与し、署名URLへのPUTへ認証ヘッダーを転送しない。
 export function createAttachmentApi(input: {
   getAccessToken: () => string | null;
+  getSelectedTeamId?: () => string | null;
   fetcher?: typeof fetch;
 }): AttachmentApi {
   const fetcher = input.fetcher ?? fetch;
+  const getSelectedTeamId = input.getSelectedTeamId ?? getStoredSelectedTeamId;
   const headers = () => {
     const token = input.getAccessToken();
     if (!token) throw new AttachmentApiError(401, 'ログインが必要です。');
     return {
       Accept: 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(getSelectedTeamId()
+        ? { [selectedTeamHeaderName]: getSelectedTeamId() as string }
+        : {}),
       'Content-Type': 'application/json',
     };
   };
