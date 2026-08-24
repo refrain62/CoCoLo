@@ -317,7 +317,7 @@ test('予定の保存transactionがLINE outboxへ即時通知と締切通知を�
     );
     assert.deepEqual(
       secondRows.map((row) => row.destination),
-      [nextGroupId, nextGroupId],
+      [nextGroupId, groupId],
     );
     assert.equal(
       secondRows
