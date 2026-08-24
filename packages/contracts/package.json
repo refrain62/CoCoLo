@@ -55,6 +55,10 @@
       "types": "./src/bulletin-board-contract.ts",
       "import": "./dist/bulletin-board-contract.js"
     },
+    "./bulletin-board-response": {
+      "types": "./src/bulletin-board-response-contract.ts",
+      "import": "./dist/bulletin-board-response-contract.js"
+    },
     "./events": {
       "types": "./src/event-contract.ts",
       "import": "./dist/event-contract.js"
