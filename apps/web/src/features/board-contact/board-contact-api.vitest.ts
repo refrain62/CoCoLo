@@ -73,4 +73,21 @@ describe('役員連絡先APIクライアント', () => {
     ).rejects.toMatchObject({ status: 401, code: 'UNAUTHENTICATED' });
     expect(called).toBe(false);
   });
+
+  it('選択中チームをヘッダーへ渡す', async () => {
+    let request: { init?: RequestInit } | undefined;
+    globalThis.fetch = async (_input, init) => {
+      request = { init };
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    };
+
+    await createBoardContactApi({
+      getAccessToken: () => 'token',
+      getSelectedTeamId: () => '00000000-0000-7000-8000-000000000001',
+    }).list();
+
+    expect(request?.init?.headers).toMatchObject({
+      'X-CoCoLo-Team-Id': '00000000-0000-7000-8000-000000000001',
+    });
+  });
 });

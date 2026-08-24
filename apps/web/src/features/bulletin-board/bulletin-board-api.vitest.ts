@@ -95,4 +95,24 @@ describe('回覧板APIクライアント', () => {
       '/api/v1/announcements/00000000-0000-7000-8000-000000001001/unread',
     ]);
   });
+
+  it('選択中チームをヘッダーへ渡す', async () => {
+    let request: { init?: RequestInit } | undefined;
+    globalThis.fetch = async (_input, init) => {
+      request = { init };
+      return new Response(
+        JSON.stringify({ data: [], page: 1, pageSize: 50, hasNext: false }),
+        { status: 200 },
+      );
+    };
+
+    await createBulletinBoardApi({
+      getAccessToken: () => 'token',
+      getSelectedTeamId: () => '00000000-0000-7000-8000-000000000001',
+    }).list();
+
+    expect(request?.init?.headers).toMatchObject({
+      'X-CoCoLo-Team-Id': '00000000-0000-7000-8000-000000000001',
+    });
+  });
 });

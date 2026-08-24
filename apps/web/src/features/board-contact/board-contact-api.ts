@@ -1,3 +1,8 @@
+import {
+  getStoredSelectedTeamId,
+  selectedTeamHeaderName,
+} from '../auth-team-selection/selected-team-storage.js';
+
 export type BoardContactRoleType = 'admin' | 'staff' | 'member';
 export type ContactPreference = 'line' | 'phone' | 'both';
 
@@ -54,6 +59,7 @@ export type BoardContactApi = {
 type BoardContactApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  getSelectedTeamId?: () => string | null;
   fetcher?: typeof fetch;
 };
 
@@ -82,6 +88,7 @@ async function readError(response: Response) {
 export function createBoardContactApi({
   baseUrl = '',
   getAccessToken = getStoredAccessToken,
+  getSelectedTeamId = getStoredSelectedTeamId,
   fetcher = fetch,
 }: BoardContactApiOptions = {}): BoardContactApi {
   const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
@@ -98,6 +105,7 @@ export function createBoardContactApi({
         'UNAUTHENTICATED',
         'ログインが必要です。',
       );
+    const selectedTeamId = getSelectedTeamId();
 
     const response = await fetcher(
       `${normalizedBaseUrl}/api/v1/board-members${path}`,
@@ -106,6 +114,9 @@ export function createBoardContactApi({
         headers: {
           Accept: 'application/json',
           Authorization: `Bearer ${accessToken}`,
+          ...(selectedTeamId
+            ? { [selectedTeamHeaderName]: selectedTeamId }
+            : {}),
           ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
           ...init?.headers,
         },
