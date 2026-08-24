@@ -604,6 +604,52 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - 添付Web画面の接続、local R2互換サービス起動、staging実バケットE2E、中央mount固有の結合テストをAPI-002、FIL-002の後続作業として管理します。
 
+## API-002 Web添付画面接続
+
+### 実施した変更
+
+- PR #105で、中央APIへmount済みの添付upload sessionをWebの`AttachmentUploader`へ接続しました。
+- 認証済みfetcher、選択中tenantの`X-CoCoLo-Team-Id`、既存のMIME・サイズ検証を接続し、guardianにはupload UIを表示しないようにしました。
+- 署名URLへの直接PUTは通常の`fetch`で実行し、Bearer tokenとtenant headerを署名URLへ転送しない境界を維持しました。
+
+### 検証結果
+
+- Web Vitest 69件、API unit 171件、`pnpm test:unit`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`git diff --check`が成功しました。
+- PR #105のquality run `32705511939`、database-integrity run `32705511824`、schema-drift run `32705511908`がすべて成功しました。
+
+### 敵対的レビュー
+
+- Critical 0、High 0でした。tenant header、guardian認可、署名URLへのBearer非転送を確認しました。
+- 残るMediumは、R2実環境CORS、complete失敗時の再試行・cleanup UI、complete/downloadの追加headerテスト、画面統合テストです。今回の最小スコープでは後続課題としてAPI-002/FIL-002へ残します。
+
+### GitHub反映
+
+- 実装PR #105はsquash commit `e4d7af0`として`develop`へ統合しました。
+
+### 残タスク
+
+- R2 CORSの実環境確認、complete失敗時のUI再試行・cleanup、添付画面の統合テストを後続作業で管理します。
+
+## T014-CI-LOCAL-001 CIのlocal-first整理
+
+### 実施した変更
+
+- PR #104でqualityを静的検査・OpenAPI・contract/unit・typecheck・build中心へ整理し、database integrity、schema drift、E2E、staging deployの自動起動を手動実行へ分離しました。
+- `pnpm ci:fast`、`pnpm ci:local`、`pnpm ci:staging`を追加し、local依存がない環境ではfail-closedで停止する構成を固定しました。
+
+### 検証結果
+
+- `pnpm ci:fast`、`pnpm test`、`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm lint:workflows`が成功しました。
+- `pnpm ci:local`はDocker / Podman未導入のため、実DB検証を成功扱いにせず停止しました。
+
+### GitHub反映
+
+- PR #104はsquash commit `0903dd6`として`develop`へ統合しました。
+
+### 残タスク
+
+- Docker / Podman等のlocal実DB依存を用いた統合検証、staging実サービスE2E、production昇格証跡はOPS/T014の外部条件として継続します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。

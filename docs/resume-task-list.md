@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-実装再開の基準となる`develop`は`ced1e71`（FIL-001実装PR #102のマージ）です。完了済み実装とdocs-only PRの履歴更新は`develop`へ反映済みです。
+実装再開の基準となる`develop`は`0903dd6`（PR #104、#105反映後の最新develop）です。添付APIの実装基準は`ced1e71`、添付Webの実装基準は`e4d7af0`です。完了済み実装とdocs-only PRの履歴更新は`develop`へ反映済みです。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
@@ -195,7 +195,8 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - PR #91でログイン後のactiveチーム一覧、複数所属時の選択画面、再読み込み時の候補照合、auth context/部員/予定APIへの選択tenant header付与を接続済みです。
   - PR #93で役員連絡先と回覧板のWeb画面をmountし、両APIへ選択tenant headerを付与しました。役員管理操作はowner/adminだけに表示します。
   - PR #102で添付upload APIを中央mountし、中央認証、選択tenant、rate limit、R2実adapter、response契約を接続済みです。Webの添付画面は未接続です。
-  - 残りはorders/LINE feature webhookのAPI接続、添付Web画面、送迎画面の予定選択、チーム選択前のlogout導線、全画面の統合テスト、staging Supabase E2E、feature固有response契約の厳密化です。古いPR #35はクローズしました。
+  - PR #105で添付Web画面を中央APIへ接続し、選択tenant headerとguardianの表示制御を追加しました。
+  - 残りはorders/LINE feature webhookのAPI接続、送迎画面の予定選択、チーム選択前のlogout導線、全画面の統合テスト、staging Supabase E2E、feature固有response契約の厳密化です。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**
