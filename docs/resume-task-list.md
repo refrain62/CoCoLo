@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-再開時点の`origin/develop`は`ec14ca8`（ローカルSupabase基盤PR #82のマージ）です。
+再開時点の`origin/develop`は`6e7a1d4`（EVT-002完了記録PR #86のマージ）です。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
@@ -35,10 +35,10 @@ GitHubの最新状態は、次のルールで扱います。
 - `develop`へ未統合のDraft PRは、CIが成功していても「未実装」として扱います。
 - #36、#43は、現行`develop`に既に存在するmigration、LINE webhook、release/trust-root検査と重複または契約不一致があるため、現PRをそのままマージしません。
 - #41、#42、#48は、古いbaseまたはtrusted rootへの依存が残るため、現行`develop`から再検証できる専用の小さなPRへ分解します。
-- #40、#49はLINE outboxと予定詳細の依存関係を先に確定し、#36の旧Webhook契約を前提にしません。
+- #40は旧LINE outbox統合と複数featureの古いbaseを含むため、そのままマージせず、現行developとの差分を機能単位に分解します。#36の旧Webhook契約を前提にしません。
 - #51と#6は`main`向けまたは`main`をbaseとするPRであり、`develop`向けの機能マージ候補から除外します。
 
-再開時点で`develop`向けに未マージの主なPRは、#29、#32、#35、#36、#37、#40、#41、#49です。#48と#51はtrusted rootの外部条件に依存し、#6はmain向けのため、developへの直接マージ候補から除外します。各PRの最新head、CI、レビュー結果を確認してから、同じ責務を持つ新規PRを作成します。
+再開時点で`develop`向けに未マージの主なPRは、#29、#32、#35、#36、#37、#40、#41です。#48と#51はtrusted rootの外部条件に依存し、#6はmain向けのため、developへの直接マージ候補から除外します。各PRの最新head、CI、レビュー結果を確認してから、同じ責務を持つ新規PRを作成します。
 
 ### 状態記号
 
