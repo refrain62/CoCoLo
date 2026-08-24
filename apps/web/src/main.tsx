@@ -230,7 +230,7 @@ function AuthenticatedApp() {
       <nav aria-label="ヘルプ">
         <a href="/manual">操作マニュアル</a>
       </nav>
-      <MemberManagementPage api={memberApi} />
+      <MemberManagementPage api={memberApi} role={role} />
       {eventsError ? <p role="alert">{eventsError}</p> : null}
       {role ? (
         <EventsPage api={eventsApi} role={role} memberOptions={eventMembers} />
