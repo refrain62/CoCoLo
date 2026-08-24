@@ -20,13 +20,13 @@
 
 ## 1. 停止時点の基準
 
-実装再開の基準となる`develop`は`76cb41b`（PR #149反映後）です。管理者再試行APIとworkerのロック順序修正、LINE Webhook受信境界、LINE公開レスポンス契約、役員連絡先、注文API、回覧板、認証チーム選択、添付、送迎の公開レスポンス契約、回覧添付のavailable状態DBガード、UUIDv7移行前検査、回覧板添付の短期URLダウンロード、LINE Web通知の現行producer接続まで反映済みです。完了済み実装の詳細は[完了タスクと実施履歴](resume-task-history.md)へ移しています。
+実装再開の基準となる`develop`は`9bd8867`（PR #152反映後）です。管理者再試行APIとworkerのロック順序修正、LINE Webhook受信境界、LINE公開レスポンス契約、役員連絡先、注文API、回覧板、認証チーム選択、添付、送迎の公開レスポンス契約、回覧添付のavailable状態DBガード、UUIDv7移行前検査、回覧板添付の短期URLダウンロード、LINE Web通知の現行producer接続、送迎WebのauthenticatedFetch接続、予定編集の全項目更新まで反映済みです。完了済み実装の詳細は[完了タスクと実施履歴](resume-task-history.md)へ移しています。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
 Draft PRに実装が存在しても、`develop`へ統合されていない機能は現行環境では未実装として扱います。
 
-再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、#77、#80、#82、#85、#89、#91、#93、#112、#113、#114、#115、#116、#143、#145、#147、#149、docs-only PR #55、#56、#57、#58、#61、#63、#66、#81、#83、#86、#87、#88、#90、#92、#144、#146、#148は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
+再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、#77、#80、#82、#85、#89、#91、#93、#112、#113、#114、#115、#116、#143、#145、#147、#149、#151、#152、docs-only PR #55、#56、#57、#58、#61、#63、#66、#81、#83、#86、#87、#88、#90、#92、#144、#146、#148は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
 
 ### 1.1 再開時のGitHub同期結果
 
@@ -39,7 +39,7 @@ GitHubの最新状態は、次のルールで扱います。
 - #35と#37は、現行developを起点に再構成したPR #89、既存中央schemaへ置換済みのためクローズしました。
 - #51と#6は`main`向けまたは`main`をbaseとするPRであり、`develop`向けの機能マージ候補から除外します。
 
-現時点で`develop`向けに未マージのPRは、#41です。#41はDraftでqualityが失敗しており、現行`develop`からの再構成と再検証が必要です。#32、#35、#37、#40は現行developへの安全な直接マージ候補ではありません。#48と#51はtrusted rootの外部条件に依存し、#6はmain向けのため、developへの直接マージ候補から除外します。
+現時点でopenのdevelop向けPRは#41ですが、古いbaseと重複するDraftでqualityが失敗しているため、直接マージしません。現行developにはPR信頼ゲートの実装がすでに存在するため、#41を再構成する必要はなく、main側のowner-only bootstrapとdefault branchでの有効化を外部停止条件として管理します。#32、#35、#37、#40は現行developへの安全な直接マージ候補ではありません。#48はクローズ済みで、#51と#6はmain向けのため、developへの直接マージ候補から除外します。
 
 ### 状態記号
 
@@ -124,17 +124,12 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
 
 ### 3.3 PR信頼ゲート
 
-- `[~]` **T014-PR-001：PR #41のbase正本ゲートを再検証する。**
-  - 対象：PR #41
-  - ブランチ：`feature/t014-pr-gate`
-  - 最新commit：`fcc4b83`
-  - 状態：実装と対象範囲の検証は完了していますが、全体`pnpm test`、GitHub Actions CI、trusted root bootstrap後の再検証が残っています。
-  - 実施済みの変更と検証結果：[T014-PR-001の履歴](resume-task-history.md#t014-pr-001)
-  - 依存：trusted rootがbootstrap済みになるまで、`pnpm verify:trust-root`が`manual-owner-bootstrap-required`で停止することは仕様どおりです。
-  - 現行確認：mainに`pr-trust-gate.yml`は存在せず、PR #65のactive checkにもtrust gateはありません。
-  - 現行判定：trust gate未展開のため、PR #65の機能、品質、セキュリティ判定ではtrusted manifest差分を非ブロッカーとして扱います。
-  - gate有効化条件：T014-PR-001でmainへworkflowをowner-only反映し、base側manifest、bootstrap extension、permissions、変更ファイルAPI検査を同時に確定します。
-  - 完了条件：#50のbootstrap後にCIを再実行し、PR head SHAとbase正本の比較、変更ファイルAPI、3000件上限、permissions、workflow改変検査が成功することです。
+- `[~]` **T014-PR-001：developのPR信頼ゲートをmainへ昇格する。**
+  - 対象：現行developの`.github/workflows/pr-trust-gate.yml`、`scripts/verify-trusted-pr.ts`、PR #41、PR #51
+  - PR #41は古いbaseと現行developの実装が重複するため、直接マージせず、現行develop側の実装を正本として扱います。
+  - developではbase SHA、trusted manifest、PR files API、PR本文7区画、protected pathの変更をfail-closedで検査します。
+  - main側のowner-only bootstrapとdefault branchでのworkflow実行確認が未完了です。
+  - 完了条件：owner-only bootstrapの記録、main向けCI、trusted root検査、悪性fixture検査、developへの同一root昇格確認が揃うことです。
 
 ### 3.4 DB整合性と権限検査
 
@@ -194,10 +189,10 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - PR #89でauth team選択、役員連絡先、回覧板、送迎のAPI routeを中央mountし、中央認証、tenant再解決、rate limit、CORS、response envelope契約を接続済みです。
   - PR #91でログイン後のactiveチーム一覧、複数所属時の選択画面、再読み込み時の候補照合、auth context/部員/予定APIへの選択tenant header付与を接続済みです。
   - PR #93で役員連絡先と回覧板のWeb画面をmountし、両APIへ選択tenant headerを付与しました。役員管理操作はowner/adminだけに表示します。
-  - PR #102で添付upload APIを中央mountし、中央認証、選択tenant、rate limit、R2実adapter、response契約を接続済みです。Webの添付画面は未接続です。
+  - PR #102で添付upload APIを中央mountし、中央認証、選択tenant、rate limit、R2実adapter、response契約を接続しました。
   - PR #105で添付Web画面を中央APIへ接続し、選択tenant headerとguardianの表示制御を追加しました。
   - PR #109で注文・集金APIをPrisma repositoryと中央mountへ接続し、PR #110で注文Web画面、選択tenant header、チーム切替時の状態破棄を接続しました。
-  - PR #123でowner/admin向けの管理者再試行APIを現行outboxへ接続し、PR #125でworker claimと管理者再試行のロック順序を統一しました。PR #127でWebhookの専用DB actor境界を追加し、PR #129でLINE公開レスポンス契約を厳密化し、PR #131で役員連絡先の公開レスポンス契約を追加し、PR #133で注文APIの公開レスポンス契約を追加し、PR #135で回覧板APIの公開レスポンス契約を追加し、PR #137で認証チーム選択の公開レスポンス契約を中央APIへ適用し、PR #139で添付APIの公開レスポンス契約を拡張し、PR #141で送迎APIの公開レスポンス契約を追加し、PR #147で回覧板詳細の添付ダウンロードを中央添付APIへ接続し、PR #149でLINE Web通知を現行producerへ接続しました。残りは全画面の統合テストとstaging Supabase E2Eです。送迎画面の予定選択はPR #112、チーム選択前のlogout導線はPR #113で完了しました。古いPR #35はクローズしました。
+  - PR #123でowner/admin向けの管理者再試行APIを現行outboxへ接続し、PR #125でworker claimと管理者再試行のロック順序を統一しました。PR #127でWebhookの専用DB actor境界を追加し、PR #129でLINE公開レスポンス契約を厳密化し、PR #131で役員連絡先の公開レスポンス契約を追加し、PR #133で注文APIの公開レスポンス契約を追加し、PR #135で回覧板APIの公開レスポンス契約を追加し、PR #137で認証チーム選択の公開レスポンス契約を中央APIへ適用し、PR #139で添付APIの公開レスポンス契約を拡張し、PR #141で送迎APIの公開レスポンス契約を追加し、PR #147で回覧板詳細の添付ダウンロードを中央添付APIへ接続し、PR #149でLINE Web通知を現行producerへ接続し、PR #151で送迎WebをauthenticatedFetch経路へ接続し、PR #152で予定編集の全項目更新とAsia/Tokyo日時変換を接続しました。残りは全画面の統合テストとstaging Supabase E2Eです。送迎画面の予定選択はPR #112、チーム選択前のlogout導線はPR #113で完了しました。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[~]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**

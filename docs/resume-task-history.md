@@ -1,6 +1,6 @@
 # 完了タスクと実施履歴
 
-更新日：2026-08-24
+更新日：2026-08-25
 
 状態：参照用アーカイブ
 
@@ -1171,6 +1171,63 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - 実LINE環境での接続・通知・再送・Webhook受入、staging worker送信は環境準備後に実施します。
 - staffが現行outboxへ通知登録できる権限を安全に付与する契約整理は継続します。
+
+## API-002/FIL-002 送迎Webを認証済みfetch経路へ接続
+
+### 実施した変更
+
+- PR #151で、送迎API clientへ`fetcher`注入を追加しました。
+- 中央WebはAuthProviderの`authenticatedFetch`を送迎APIへ渡し、セッション更新と401再試行の共通経路を利用します。
+- 送迎APIのBearer、selected team header、URL encodeの既存契約を維持しました。
+
+### 検証結果
+
+- `pnpm test:unit`、`pnpm build`、`pnpm typecheck`、`pnpm lint`が成功しました。
+- PR #151のquality run `32747958787`が成功しました。
+
+### 敵対的レビュー
+
+- 未認証時にfetchを呼ばず、認証済みfetcherだけを中央画面へ注入することを確認しました。
+- tenant、個人情報、権限、API response契約、DB境界の変更はありません。
+- CriticalとHighの未解消指摘はありません。
+
+### GitHub反映
+
+- PR #151は`c86656b`としてdevelopへsquash mergeしました。
+- 実装PRと台帳更新PRを分離しています。
+
+### 未完了条件
+
+- staging Supabase接続、実Google Maps運用、送迎画面のブラウザE2Eは環境準備後に実施します。
+
+## FS-EVT-001/API-002 予定編集の全項目更新と東京時刻変換
+
+### 実施した変更
+
+- PR #152で、予定編集画面から場所、持ち物、会費、案内画像添付ID、対戦相手、集合時刻、配車要否を更新できるようにしました。
+- 予定登録にも案内画像添付IDを追加し、登録と編集の`datetime-local`値をAsia/TokyoとしてISO日時へ変換します。
+- ISO日時と`datetime-local`値の変換テストを追加しました。
+
+### 検証結果
+
+- `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm typecheck`、`pnpm lint`が成功しました。
+- PR #152のquality run `32748667204`が成功しました。
+
+### 敵対的レビュー
+
+- 既存値を空へ戻す項目はnullとして送信し、試合の対戦相手と時刻関係は既存API契約で検証することを確認しました。
+- tenantIdや公開URLを画面へ追加せず、添付はIDだけを保持することを確認しました。
+- 実行環境のローカルtimezoneに依存しないことを確認しました。
+- CriticalとHighの未解消指摘はありません。
+
+### GitHub反映
+
+- PR #152は`9bd8867`としてdevelopへsquash mergeしました。
+- 実装PRと台帳更新PRを分離しています。
+
+### 未完了条件
+
+- 添付IDの選択UI、案内画像の短期URL表示、staging Supabase/R2接続、ブラウザE2Eは別検証として残ります。
 
 ## 履歴の更新規則
 
