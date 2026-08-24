@@ -103,10 +103,18 @@ export type LineDeliveryProducerInput = {
   idempotencyKey: string;
 };
 
+export type LineDeliveryRetryInput = {
+  tenantId: string;
+  actorUserId: string;
+  role: MemberRole;
+  notificationId: string;
+};
+
 export type LineDeliveryProducer = {
   publish: (
     input: LineDeliveryProducerInput,
   ) => Promise<{ notificationId: string }>;
+  retry: (input: LineDeliveryRetryInput) => Promise<{ notificationId: string }>;
 };
 
 export type EventLineDeliveryEnqueueInput = Omit<
@@ -136,6 +144,16 @@ export class LineDeliveryUnavailableError extends Error {
   }
 }
 
+export class LineDeliveryRetryConflictError extends Error {
+  readonly status = 409;
+  readonly code = 'LINE_DELIVERY_RETRY_CONFLICT';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'LineDeliveryRetryConflictError';
+  }
+}
+
 // 同一tenant内の別sourceによる冪等キーunique競合も、業務APIの409契約へ変換する。
 function isLineDeliveryConflict(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -152,6 +170,12 @@ function isLineDeliveryConflict(error: unknown): boolean {
 function isLineDeliveryUnavailable(error: unknown): boolean {
   return (
     error instanceof Error && /接続済みのLINEグループ以外/.test(error.message)
+  );
+}
+
+function isLineDeliveryRetryConflict(error: unknown): boolean {
+  return (
+    error instanceof Error && /LINE通知を再試行できません/.test(error.message)
   );
 }
 
@@ -494,6 +518,40 @@ export function createLineDeliveryProducer(
           },
         });
         return { notificationId };
+      }),
+    retry: (input) =>
+      client.$transaction(async (tx) => {
+        await setRlsContext(tx, {
+          tenantId: input.tenantId,
+          userId: input.actorUserId,
+          role: input.role,
+        });
+        try {
+          const rows = await tx.$queryRaw<Array<{ notification_id: string }>>`
+            SELECT notification_id
+              FROM app_retry_line_delivery_outbox(
+                ${input.tenantId}::uuid,
+                ${input.actorUserId},
+                ${input.notificationId}::uuid
+              )
+          `;
+          const notificationId = rows[0]?.notification_id;
+          if (!notificationId)
+            throw new LineDeliveryRetryConflictError(
+              'LINE通知を再試行できません。',
+            );
+          return { notificationId };
+        } catch (error) {
+          if (isLineDeliveryUnavailable(error))
+            throw new LineDeliveryUnavailableError(
+              'LINEが未接続か、通知の接続世代が古くなっています。',
+            );
+          if (isLineDeliveryRetryConflict(error))
+            throw new LineDeliveryRetryConflictError(
+              '失敗状態で再試行可能なLINE通知がありません。',
+            );
+          throw error;
+        }
       }),
   };
 }

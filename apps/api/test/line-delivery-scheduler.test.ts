@@ -90,6 +90,13 @@ const GUARD_HARDENING_MIGRATION = readFileSync(
   ),
   'utf8',
 );
+const RETRY_API_MIGRATION = readFileSync(
+  new URL(
+    '../../../packages/db/prisma/migrations/20260824150000_line_delivery_retry_api/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const SCHEDULER_SOURCE = readFileSync(
   new URL('../src/line-delivery-scheduler.ts', import.meta.url),
   'utf8',
@@ -889,6 +896,38 @@ test('LINE通知のcontext欠落・旧世代・冪等再送をDB関数でfail-cl
     /o\.connection_connected_at IS NULL[\s\S]*NOT EXISTS \([\s\S]*tenant_id <> o\.tenant_id/s,
   );
   assert.match(GUARD_HARDENING_MIGRATION, /c\.connected_at <= o\.created_at/);
+});
+
+test('LINE通知の管理者再試行は現行outboxと接続世代を再検証する', () => {
+  assert.match(
+    RETRY_API_MIGRATION,
+    /session_user <> 'cocolo_app'[\s\S]*current_setting\('app\.tenant_id', true\)/,
+  );
+  assert.match(
+    RETRY_API_MIGRATION,
+    /current_setting\('app\.role', true\).*NOT IN \('owner', 'admin'\)/,
+  );
+  assert.match(
+    RETRY_API_MIGRATION,
+    /NULLIF\(current_setting\('app\.role', true\), ''\) IS NULL/,
+  );
+  assert.match(
+    RETRY_API_MIGRATION,
+    /notification_status <> 'failed'[\s\S]*notification_attempt >= 5/s,
+  );
+  assert.match(
+    RETRY_API_MIGRATION,
+    /current_connection_at IS DISTINCT FROM notification_connection_at/,
+  );
+  assert.match(
+    RETRY_API_MIGRATION,
+    /status = 'pending'[\s\S]*last_error_code = NULL/s,
+  );
+  assert.match(RETRY_API_MIGRATION, /line_delivery\.retry_requested/);
+  assert.match(
+    RETRY_API_MIGRATION,
+    /GRANT EXECUTE ON FUNCTION app_retry_line_delivery_outbox[\s\S]*TO cocolo_app/s,
+  );
 });
 
 test('汎用LINE通知は別tenantによるgroup再利用時にclaim・送信前検証から除外する', () => {
