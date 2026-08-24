@@ -45,6 +45,12 @@ export type LineDeliveryClaimRepository = {
   }) => Promise<LineDeliveryClaim | null>;
   /** 接続切替と送信・結果確定を同じtenant lockで直列化する。 */
   withTenantLock?: <T>(tenantId: string, work: () => Promise<T>) => Promise<T>;
+  /** group再利用と送信・結果確定を同じgroup lockで直列化する。 */
+  withDeliveryLock?: <T>(
+    tenantId: string,
+    destination: string,
+    work: () => Promise<T>,
+  ) => Promise<T>;
   validateClaim?: (input: {
     tenantId: string;
     notificationId: string;
@@ -107,6 +113,11 @@ export type LineDeliveryDatabase = {
     }) => Promise<T>,
   ) => Promise<T>;
   withTenantLock?: <T>(tenantId: string, work: () => Promise<T>) => Promise<T>;
+  withDeliveryLock?: <T>(
+    tenantId: string,
+    destination: string,
+    work: () => Promise<T>,
+  ) => Promise<T>;
 };
 
 const MAX_BATCH_SIZE = 100;
@@ -114,6 +125,7 @@ const MAX_SCHEDULER_ATTEMPTS = 5;
 const MAX_NOTIFICATION_ATTEMPTS = 5;
 const MAX_RETRY_DELAY_MS = 60 * 60 * 1000;
 const MAX_SEND_TIMEOUT_MS = 120_000;
+const LINE_DELIVERY_TRANSACTION_TIMEOUT_MS = MAX_SEND_TIMEOUT_MS + 10_000;
 const MAX_LEASE_MS = 10 * 60 * 1000;
 
 type DatabaseAllowlist = Record<
@@ -448,6 +460,7 @@ export function createPostgresLineDeliveryRepository(
 ): LineDeliveryClaimRepository {
   return {
     withTenantLock: database.withTenantLock,
+    withDeliveryLock: database.withDeliveryLock,
     claimDue: ({ maxAttempts, leaseMs }) =>
       database.transaction(async (transaction) => {
         const rows = await transaction.queryRaw<ClaimRow[]>`
@@ -648,6 +661,12 @@ export function createLineDeliveryProcessor(input: {
           providerMessageId: sent.providerMessageId,
         });
       };
+      if (input.repository.withDeliveryLock)
+        return input.repository.withDeliveryLock(
+          claim.tenantId,
+          claim.destination,
+          processClaim,
+        );
       return input.repository.withTenantLock
         ? input.repository.withTenantLock(claim.tenantId, processClaim)
         : processClaim();
@@ -715,14 +734,34 @@ function createPrismaDatabase(
         }),
       ),
     withTenantLock: (tenantId, work) =>
-      client.$transaction(async (transaction) => {
-        await transaction.$executeRaw`
+      client.$transaction(
+        async (transaction) => {
+          await transaction.$executeRaw`
           SELECT pg_advisory_xact_lock(
             hashtextextended(${`line:${tenantId}`}, 0)
           )
         `;
-        return work();
-      }),
+          return work();
+        },
+        { timeout: LINE_DELIVERY_TRANSACTION_TIMEOUT_MS },
+      ),
+    withDeliveryLock: (tenantId, destination, work) =>
+      client.$transaction(
+        async (transaction) => {
+          await transaction.$executeRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtextextended(${`line:${tenantId}`}, 0)
+          )
+        `;
+          await transaction.$executeRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtextextended(${`line-group:${destination}`}, 0)
+          )
+        `;
+          return work();
+        },
+        { timeout: LINE_DELIVERY_TRANSACTION_TIMEOUT_MS },
+      ),
   };
 }
 

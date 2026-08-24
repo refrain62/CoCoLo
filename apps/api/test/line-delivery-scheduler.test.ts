@@ -69,6 +69,17 @@ const CONNECTION_GENERATION_MIGRATION = readFileSync(
   ),
   'utf8',
 );
+const GROUP_REUSE_MIGRATION = readFileSync(
+  new URL(
+    '../../../packages/db/prisma/migrations/20260824120000_line_delivery_group_reuse_guard/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const SCHEDULER_SOURCE = readFileSync(
+  new URL('../src/line-delivery-scheduler.ts', import.meta.url),
+  'utf8',
+);
 
 function environment(
   overrides: Record<string, string | undefined> = {},
@@ -436,6 +447,53 @@ test('tenant lockがあるrepositoryでは接続検証から送信・確定ま�
   ]);
 });
 
+test('group lockがあるrepositoryではtenant lockより優先してgroup再利用を直列化する', async () => {
+  const repository = repositoryFor();
+  const sequence: string[] = [];
+  repository.withTenantLock = async () => {
+    throw new Error('group lock must be preferred');
+  };
+  repository.withDeliveryLock = async (_tenantId, destination, work) => {
+    sequence.push(`lock:${destination}`);
+    const result = await work();
+    sequence.push('unlock');
+    return result;
+  };
+  repository.validateClaim = async () => {
+    sequence.push('validate');
+    return true;
+  };
+  repository.markSent = async (input) => {
+    sequence.push('mark-sent');
+    repository.sent.push(input);
+    return 'sent';
+  };
+  const processor = createLineDeliveryProcessor({
+    repository,
+    transport: {
+      send: async () => {
+        sequence.push('send');
+        return { providerMessageId: 'provider-request-id' };
+      },
+    },
+    maxAttempts: 5,
+    leaseMs: 500,
+    sendTimeoutMs: 100,
+    retryBaseDelayMs: 1000,
+  });
+  assert.equal(
+    await processor.processOne({ signal: new AbortController().signal }),
+    'sent',
+  );
+  assert.deepEqual(sequence, [
+    'lock:line-group',
+    'validate',
+    'send',
+    'mark-sent',
+    'unlock',
+  ]);
+});
+
 test('接続世代の再検証失敗は外部LINE送信前にstaleへ収束する', async () => {
   const repository = repositoryFor();
   repository.validateClaim = async () => false;
@@ -772,6 +830,36 @@ test('LINE通知claimは現行接続世代と一致するoutboxだけを送信�
   assert.doesNotMatch(
     CONNECTION_GENERATION_MIGRATION,
     /GRANT EXECUTE ON FUNCTION app_claim_line_delivery_outbox\(integer, integer\) TO cocolo_app/,
+  );
+});
+
+test('汎用LINE通知は別tenantによるgroup再利用時にclaim・送信前検証から除外する', () => {
+  assert.match(
+    GROUP_REUSE_MIGRATION,
+    /CREATE OR REPLACE FUNCTION app_claim_line_delivery_outbox/,
+  );
+  assert.match(
+    GROUP_REUSE_MIGRATION,
+    /o\.source_type NOT IN \('event', 'deadline'\)[\s\S]*c\.tenant_id <> o\.tenant_id/s,
+  );
+  assert.match(
+    GROUP_REUSE_MIGRATION,
+    /CREATE OR REPLACE FUNCTION app_validate_line_delivery_claim/,
+  );
+  assert.match(
+    GROUP_REUSE_MIGRATION,
+    /status = 'unknown'[\s\S]*connection_changed/s,
+  );
+});
+
+test('LINE送信中のadvisory lock transactionは外部送信timeoutより長く保持する', () => {
+  assert.match(
+    SCHEDULER_SOURCE,
+    /const LINE_DELIVERY_TRANSACTION_TIMEOUT_MS = MAX_SEND_TIMEOUT_MS \+ 10_000/,
+  );
+  assert.match(
+    SCHEDULER_SOURCE,
+    /withDeliveryLock:[\s\S]*client\.\$transaction[\s\S]*timeout: LINE_DELIVERY_TRANSACTION_TIMEOUT_MS/s,
   );
 });
 
