@@ -52,10 +52,30 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function toDateTimeLocal(value: string) {
+export function toDateTimeLocal(value: string) {
   const date = new Date(value);
-  const pad = (number: number) => String(number).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(date)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+export function toTokyoIso(value: string) {
+  const date = new Date(`${value}:00+09:00`);
+  if (Number.isNaN(date.getTime())) throw new Error('日時の形式が不正です。');
+  return date.toISOString();
 }
 
 function getErrorMessage(error: unknown) {
@@ -100,6 +120,22 @@ function EventCard({
   const [editDeadline, setEditDeadline] = useState(
     toDateTimeLocal(event.attendanceDeadline),
   );
+  const [editLocation, setEditLocation] = useState(event.location ?? '');
+  const [editItemsToBring, setEditItemsToBring] = useState(
+    event.itemsToBring ?? '',
+  );
+  const [editFee, setEditFee] = useState(String(event.fee));
+  const [
+    editAnnouncementImageAttachmentId,
+    setEditAnnouncementImageAttachmentId,
+  ] = useState(event.announcementImageAttachmentId ?? '');
+  const [editOpponent, setEditOpponent] = useState(event.opponent ?? '');
+  const [editMeetingTime, setEditMeetingTime] = useState(
+    event.meetingTime ? toDateTimeLocal(event.meetingTime) : '',
+  );
+  const [editTransportationRequired, setEditTransportationRequired] = useState(
+    event.transportationRequired,
+  );
 
   useEffect(() => {
     if (!memberOptions.some((member) => member.id === memberId))
@@ -143,9 +179,17 @@ function EventCard({
     try {
       await api.update(event.id, {
         title: editTitle.trim(),
-        startsAt: new Date(editStartsAt).toISOString(),
-        endsAt: new Date(editEndsAt).toISOString(),
-        attendanceDeadline: new Date(editDeadline).toISOString(),
+        startsAt: toTokyoIso(editStartsAt),
+        endsAt: toTokyoIso(editEndsAt),
+        attendanceDeadline: toTokyoIso(editDeadline),
+        location: editLocation.trim() || null,
+        itemsToBring: editItemsToBring.trim() || null,
+        fee: Number(editFee),
+        announcementImageAttachmentId:
+          editAnnouncementImageAttachmentId.trim() || null,
+        opponent: editOpponent.trim() || null,
+        meetingTime: editMeetingTime ? toTokyoIso(editMeetingTime) : null,
+        transportationRequired: editTransportationRequired,
       });
       setIsEditing(false);
       setMessage('予定を更新しました。');
@@ -208,6 +252,64 @@ function EventCard({
                 onChange={(input) => setEditEndsAt(input.target.value)}
                 required
               />
+              <label htmlFor={`event-${event.id}-edit-location`}>場所</label>
+              <input
+                id={`event-${event.id}-edit-location`}
+                value={editLocation}
+                onChange={(input) => setEditLocation(input.target.value)}
+              />
+              <label htmlFor={`event-${event.id}-edit-items`}>持ち物</label>
+              <textarea
+                id={`event-${event.id}-edit-items`}
+                value={editItemsToBring}
+                onChange={(input) => setEditItemsToBring(input.target.value)}
+              />
+              <label htmlFor={`event-${event.id}-edit-fee`}>会費（円）</label>
+              <input
+                id={`event-${event.id}-edit-fee`}
+                type="number"
+                min="0"
+                value={editFee}
+                onChange={(input) => setEditFee(input.target.value)}
+              />
+              <label htmlFor={`event-${event.id}-edit-attachment`}>
+                案内画像の添付ID
+              </label>
+              <input
+                id={`event-${event.id}-edit-attachment`}
+                value={editAnnouncementImageAttachmentId}
+                onChange={(input) =>
+                  setEditAnnouncementImageAttachmentId(input.target.value)
+                }
+              />
+              <label htmlFor={`event-${event.id}-edit-opponent`}>
+                対戦相手
+              </label>
+              <input
+                id={`event-${event.id}-edit-opponent`}
+                value={editOpponent}
+                onChange={(input) => setEditOpponent(input.target.value)}
+              />
+              <label htmlFor={`event-${event.id}-edit-meeting-time`}>
+                集合時刻
+              </label>
+              <input
+                id={`event-${event.id}-edit-meeting-time`}
+                type="datetime-local"
+                value={editMeetingTime}
+                onChange={(input) => setEditMeetingTime(input.target.value)}
+              />
+              <label htmlFor={`event-${event.id}-edit-transportation`}>
+                <input
+                  id={`event-${event.id}-edit-transportation`}
+                  type="checkbox"
+                  checked={editTransportationRequired}
+                  onChange={(input) =>
+                    setEditTransportationRequired(input.target.checked)
+                  }
+                />
+                配車が必要
+              </label>
               <label htmlFor={`event-${event.id}-edit-deadline`}>
                 出欠締切
               </label>
@@ -314,6 +416,8 @@ export function EventsPage({
   const [location, setLocation] = useState('');
   const [itemsToBring, setItemsToBring] = useState('');
   const [fee, setFee] = useState('0');
+  const [announcementImageAttachmentId, setAnnouncementImageAttachmentId] =
+    useState('');
   const [opponent, setOpponent] = useState('');
   const [meetingTime, setMeetingTime] = useState('');
   const [transportationRequired, setTransportationRequired] = useState(false);
@@ -371,22 +475,23 @@ export function EventsPage({
       await api.create({
         title: title.trim(),
         type,
-        startsAt: new Date(startsAt).toISOString(),
-        endsAt: new Date(endsAt).toISOString(),
-        attendanceDeadline: new Date(attendanceDeadline).toISOString(),
+        startsAt: toTokyoIso(startsAt),
+        endsAt: toTokyoIso(endsAt),
+        attendanceDeadline: toTokyoIso(attendanceDeadline),
         location: location.trim() || null,
         itemsToBring: itemsToBring.trim() || null,
         fee: Number(fee),
+        announcementImageAttachmentId:
+          announcementImageAttachmentId.trim() || null,
         ...(opponent.trim() ? { opponent: opponent.trim() } : {}),
-        ...(meetingTime
-          ? { meetingTime: new Date(meetingTime).toISOString() }
-          : {}),
+        ...(meetingTime ? { meetingTime: toTokyoIso(meetingTime) } : {}),
         transportationRequired,
       });
       setTitle('');
       setLocation('');
       setItemsToBring('');
       setFee('0');
+      setAnnouncementImageAttachmentId('');
       setOpponent('');
       setMeetingTime('');
       setTransportationRequired(false);
@@ -469,6 +574,16 @@ export function EventsPage({
             min="0"
             value={fee}
             onChange={(input) => setFee(input.target.value)}
+          />
+          <label htmlFor="event-announcement-attachment">
+            案内画像の添付ID
+          </label>
+          <input
+            id="event-announcement-attachment"
+            value={announcementImageAttachmentId}
+            onChange={(input) =>
+              setAnnouncementImageAttachmentId(input.target.value)
+            }
           />
           <label htmlFor="event-meeting-time">集合時刻</label>
           <input
