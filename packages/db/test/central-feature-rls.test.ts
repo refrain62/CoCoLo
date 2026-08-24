@@ -85,7 +85,9 @@ async function rejects(work: () => Promise<unknown>) {
 }
 
 const fixtureTables = [
+  'tenants',
   'tenant_memberships',
+  'members',
   'guardian_members',
   'attachments',
   'events',
