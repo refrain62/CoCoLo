@@ -163,8 +163,9 @@ function AuthenticatedApp() {
       createRideOperationsApi({
         getAccessToken: () => session?.accessToken ?? null,
         getSelectedTeamId: () => selectedTeamId,
+        fetcher: authenticatedFetch,
       }),
-    [selectedTeamId, session?.accessToken],
+    [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
   useEffect(() => {
     if (!session || !selectedTeam) return;

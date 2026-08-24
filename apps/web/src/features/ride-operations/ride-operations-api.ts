@@ -97,6 +97,7 @@ type RideApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
   getSelectedTeamId?: () => string | null;
+  fetcher?: typeof fetch;
 };
 
 type RideErrorBody = {
@@ -157,13 +158,14 @@ export function createRideOperationsApi({
   baseUrl = import.meta.env.VITE_API_URL ?? '',
   getAccessToken = getStoredAccessToken,
   getSelectedTeamId = getStoredSelectedTeamId,
+  fetcher = fetch,
 }: RideApiOptions = {}): RideOperationsApi {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
     if (!accessToken)
       throw new RideApiError(401, 'UNAUTHENTICATED', 'ログインが必要です。');
     const selectedTeamId = getSelectedTeamId();
-    const response = await fetch(`${baseUrl}/api/v1/ride-plans${path}`, {
+    const response = await fetcher(`${baseUrl}/api/v1/ride-plans${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',

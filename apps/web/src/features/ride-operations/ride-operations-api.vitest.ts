@@ -5,6 +5,28 @@ import {
 } from './ride-operations-api.js';
 
 describe('送迎Web API', () => {
+  it('中央画面から注入された認証済みfetcherを利用する', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await createRideOperationsApi({
+      getAccessToken: () => 'token',
+      fetcher,
+    }).listPlans();
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/v1/ride-plans',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+      }),
+    );
+  });
+
   it('送迎予定一覧を取得する', async () => {
     vi.stubGlobal(
       'fetch',
