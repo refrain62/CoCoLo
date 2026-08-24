@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-実装再開の基準となる`develop`は`b7de7dd`（PR #107反映後の最新develop）です。実装baselineは`0903dd6`（PR #104、#105を含む）で、添付APIは`ced1e71`、添付Webは`e4d7af0`です。完了済み実装とdocs-only PRの履歴更新は`develop`へ反映済みです。
+実装再開の基準となる`develop`は`750c08e`（PR #110反映後）です。実装baselineは`0903dd6`（PR #104、#105を含む）で、添付APIは`ced1e71`、添付Webは`e4d7af0`、注文・集金APIは`e708e96`、注文Webは`750c08e`まで反映済みです。完了済み実装とdocs-only PRの履歴更新は`develop`へ反映済みです。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
@@ -196,7 +196,8 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - PR #93で役員連絡先と回覧板のWeb画面をmountし、両APIへ選択tenant headerを付与しました。役員管理操作はowner/adminだけに表示します。
   - PR #102で添付upload APIを中央mountし、中央認証、選択tenant、rate limit、R2実adapter、response契約を接続済みです。Webの添付画面は未接続です。
   - PR #105で添付Web画面を中央APIへ接続し、選択tenant headerとguardianの表示制御を追加しました。
-  - 残りはorders/LINE feature webhookのAPI接続、送迎画面の予定選択、チーム選択前のlogout導線、全画面の統合テスト、staging Supabase E2E、feature固有response契約の厳密化です。古いPR #35はクローズしました。
+  - PR #109で注文・集金APIをPrisma repositoryと中央mountへ接続し、PR #110で注文Web画面、選択tenant header、チーム切替時の状態破棄を接続しました。
+  - 残りはLINE feature webhookのAPI接続、送迎画面の予定選択、チーム選択前のlogout導線、全画面の統合テスト、staging Supabase E2E、feature固有response契約の厳密化です。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**
@@ -220,10 +221,11 @@ EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume
   - 年度役職枠、担当者、前年度からの枠複製、電話番号表示設定、個人情報投影、owner/admin認可を中央schemaへ接続します。
   - 既存レビューのMediumである中央migration、RLS、実DB統合テストを完了します。
 
-- `[ ]` **ORD-001：共同購買と集金を本番DBへ統合する。**
+- `[~]` **ORD-001：共同購買と集金を本番DBへ統合する。**
   - 対象：PR #25、`feature/phase3-orders-payments-isolated`
   - 商品、選択肢、注文、担当部員境界、支払い状態、監査、集計、UTF-8 BOM付きCSVを統合します。
-  - feature側のmemory adapterをPrisma repositoryへ置き換え、migration、RLS、idempotency、CSV式注入対策を実DBで確認します。
+  - PR #109でfeature側のmemory adapterをPrisma repositoryへ置き換え、中央API、migration既存RLS、idempotency、監査、CSV式注入対策を接続しました。PR #110で注文Web画面と選択tenant headerを接続しました。
+  - 残りはlocal/staging PostgreSQLでのrepository・RLS・状態遷移・同時実行の実DB検証、staging Supabase E2E、feature固有response契約の厳密化です。詳細は[ORD-001の履歴](resume-task-history.md#ord-001-共同購買集金の中央接続)を参照してください。
 
 ## 8. Phase 4の未統合タスク
 
