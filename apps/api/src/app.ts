@@ -4,6 +4,11 @@ import {
   uuidv7Schema,
 } from '@cocolo/contracts/auth-team-selection';
 import {
+  boardContactCopyYearResponseSchema,
+  boardContactListResponseSchemaForRole,
+  boardContactManagerMutationResponseSchema,
+} from '@cocolo/contracts/board-contact-response';
+import {
   lineConnectResponseSchema,
   lineDisconnectResponseSchema,
   lineEnqueueResponseSchema,
@@ -265,6 +270,33 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.cors) app.use('*', createCorsMiddleware(options.cors));
 
   const responseContracts: ResponseContract[] = [
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/board-members$/,
+      status: 200,
+      schema: (c) =>
+        boardContactListResponseSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/board-members$/,
+      status: 201,
+      schema: boardContactManagerMutationResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/board-members\/copy-year$/,
+      status: 201,
+      schema: boardContactCopyYearResponseSchema,
+    },
+    {
+      method: 'PATCH',
+      path: /^\/api\/v1\/board-members\/[^/]+$/,
+      status: 200,
+      schema: boardContactManagerMutationResponseSchema,
+    },
     {
       method: 'GET',
       path: /^\/api\/v1\/line\/status$/,
