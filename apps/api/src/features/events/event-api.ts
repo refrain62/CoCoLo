@@ -240,6 +240,20 @@ export function createEventsApp(options: EventApiOptions): Hono<EventApiEnv> {
     return c.json({ data: events.map(projectEvent) });
   });
 
+  app.get('/:eventId', async (c) => {
+    const eventId = eventIdSchema.safeParse(c.req.param('eventId'));
+    if (!eventId.success)
+      return errorResponse(c, 404, 'NOT_FOUND', '対象の予定が見つかりません。');
+    const auth = c.get('auth');
+    const event = await options.eventRepository.get({
+      tenantId: auth.membership.tenantId,
+      actorUserId: auth.userId,
+      role: auth.membership.role,
+      eventId: eventId.data as string,
+    });
+    return c.json({ data: projectEvent(event) });
+  });
+
   app.post('/', async (c) => {
     const auth = c.get('auth');
     if (!canManageEvents(auth.membership.role))
@@ -328,6 +342,20 @@ export function createEventsApp(options: EventApiOptions): Hono<EventApiEnv> {
       ...input,
     });
     return c.json({ data: projectAttendance(attendance) });
+  });
+
+  app.get('/:eventId/attendance', async (c) => {
+    const eventId = eventIdSchema.safeParse(c.req.param('eventId'));
+    if (!eventId.success)
+      return errorResponse(c, 404, 'NOT_FOUND', '対象の予定が見つかりません。');
+    const auth = c.get('auth');
+    const attendance = await options.eventRepository.currentAttendance({
+      tenantId: auth.membership.tenantId,
+      actorUserId: auth.userId,
+      role: auth.membership.role,
+      eventId: eventId.data as string,
+    });
+    return c.json({ data: attendance.map(projectAttendance) });
   });
 
   app.get('/:eventId/attendance/summary', async (c) => {

@@ -5,6 +5,7 @@ import {
   useMemo,
   useState,
 } from 'react';
+import { EventDetailPage } from './event-detail-page.js';
 import {
   type AttendanceResponse,
   createEventsApi,
@@ -73,12 +74,14 @@ function EventCard({
   role,
   memberOptions,
   onChanged,
+  onOpenDetail,
 }: {
   event: EventSummary;
   api: EventsApi;
   role: EventRole;
   memberOptions: MemberOption[];
   onChanged: () => void;
+  onOpenDetail: () => void;
 }) {
   const [memberId, setMemberId] = useState(memberOptions[0]?.id ?? '');
   const [response, setResponse] = useState<AttendanceResponse>('pending');
@@ -158,6 +161,9 @@ function EventCard({
     <article className={`event-card event-card-${event.type}`}>
       <p className="event-type">{typeLabels[event.type]}</p>
       <h3>{event.title}</h3>
+      <button type="button" onClick={onOpenDetail}>
+        予定詳細を開く
+      </button>
       <p>
         {formatDate(event.startsAt)}〜{formatDate(event.endsAt)}
       </p>
@@ -312,6 +318,7 @@ export function EventsPage({
   const [meetingTime, setMeetingTime] = useState('');
   const [transportationRequired, setTransportationRequired] = useState(false);
   const [type, setType] = useState<'practice' | 'match' | 'event'>('practice');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
   const range = useMemo(
     () => (viewMode === 'month' ? monthRange() : weekRange()),
@@ -341,6 +348,20 @@ export function EventsPage({
         Date.parse(event.startsAt) < Date.parse(range.to),
     );
   }, [events, range.from, range.to, viewMode]);
+
+  const selectedEvent = events.find((event) => event.id === selectedEventId);
+  if (selectedEventId) {
+    return (
+      <EventDetailPage
+        api={api}
+        eventId={selectedEventId}
+        role={role}
+        memberOptions={memberOptions}
+        fallbackEvent={selectedEvent}
+        onBack={() => setSelectedEventId(null)}
+      />
+    );
+  }
 
   async function createEvent(eventSubmit: FormEvent<HTMLFormElement>) {
     eventSubmit.preventDefault();
@@ -509,6 +530,7 @@ export function EventsPage({
             role={role}
             memberOptions={memberOptions}
             onChanged={() => void loadEvents()}
+            onOpenDetail={() => setSelectedEventId(event.id)}
           />
         ))}
       </div>
