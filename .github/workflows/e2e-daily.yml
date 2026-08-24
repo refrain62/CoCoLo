@@ -1,8 +1,7 @@
 name: 日次ローカルE2E
 
 on:
-  schedule:
-    - cron: '17 2 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -112,7 +111,7 @@ jobs:
           name: e2e-fixed-report-daily-${{ github.run_id }}
           path: e2e-report/fixed-report.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
 
   issue:
     name: E2E失敗Issueを同期

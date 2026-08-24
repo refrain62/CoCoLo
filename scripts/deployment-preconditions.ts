@@ -10,6 +10,7 @@ import {
 } from './verify-release.ts';
 
 type DeploymentEnvironment = 'staging' | 'production';
+type VerifyDeployOptions = Readonly<{ localStaging?: boolean }>;
 
 type StagingEvidence = Readonly<{
   workflowName: string;
@@ -56,7 +57,11 @@ export function assertStagingEvidence(
     '.github/workflows/staging-deploy.yml',
     'staging証跡のworkflow pathが不一致です。',
   );
-  assert.equal(evidence.event, 'push', 'staging証跡のeventが不一致です。');
+  assert.equal(
+    evidence.event,
+    'workflow_dispatch',
+    'staging証跡のeventが不一致です。',
+  );
   assert.equal(
     evidence.headBranch,
     'main',
@@ -104,7 +109,26 @@ export function assertStagingEvidence(
 function assertGitHubDeploymentProvenance(
   environment: DeploymentEnvironment,
   artifactSha: string,
+  options: VerifyDeployOptions,
 ): void {
+  if (options.localStaging) {
+    assert.equal(
+      environment,
+      'staging',
+      'ローカルデプロイ経路はstagingに限定されています。',
+    );
+    assert.equal(
+      process.env.LOCAL_STAGING_DEPLOY,
+      'true',
+      'ローカルstagingデプロイの明示フラグがありません。',
+    );
+    assert.notEqual(
+      process.env.GITHUB_ACTIONS,
+      'true',
+      'ローカルstagingデプロイへGitHub Actionsの実行環境を流用できません。',
+    );
+    return;
+  }
   assert.equal(
     process.env.GITHUB_ACTIONS,
     'true',
@@ -147,9 +171,10 @@ export async function verifyDeployPreconditions(
   environment: DeploymentEnvironment,
   artifactSha: string,
   releaseDir: string,
+  options: VerifyDeployOptions = {},
 ): Promise<ReleaseManifest> {
   assertDeploymentEnvironment(environment);
-  assertGitHubDeploymentProvenance(environment, artifactSha);
+  assertGitHubDeploymentProvenance(environment, artifactSha, options);
   const manifest = await verifyReleaseArtifact(releaseDir, artifactSha);
   await verifyMigrationChecksum();
   const artifactSha256 = await readArtifactChecksum(releaseDir);

@@ -40,7 +40,7 @@ await mkdir('.evidence', { recursive: true });
 const evidence = {
   workflowName: 'ステージングへデプロイ',
   workflowPath: '.github/workflows/staging-deploy.yml',
-  event: 'push',
+  event: 'workflow_dispatch',
   headBranch: 'main',
   headSha: artifactSha,
   artifactSha,

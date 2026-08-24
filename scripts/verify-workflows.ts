@@ -38,8 +38,8 @@ const qualityContent = await readFile(
 );
 assert.match(
   qualityContent,
-  /pnpm\s+verify:pnpm-config[\s\S]*pnpm\s+lint:workflows/,
-  'quality Workflowからlint:workflowsを実行してください。',
+  /pnpm\s+ci:fast|pnpm\s+verify:pnpm-config[\s\S]*pnpm\s+lint:workflows/,
+  'quality Workflowからci:fastまたは静的検査を実行してください。',
 );
 assertSchemaDriftWorkflowConnected(
   await readFile(path.join(directory, 'schema-drift.yml'), 'utf8'),

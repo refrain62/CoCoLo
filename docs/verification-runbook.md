@@ -4,6 +4,25 @@
 
 依存関係、workspace の生成物、型検査、テスト、ビルドの実行順を固定し、環境準備不足による誤判定や、検証手順の抜けを防止します。
 
+## 現行CI契約（local-first）
+
+PRで自動実行するGitHub Actionsは`quality.yml`の短時間ゲートだけです。DB/RLS、migration適用、integration、Playwright、staging検証はローカルで実行し、古いPR実行はキャンセルされます。GitHub Actionsは標準`ubuntu-24.04`だけを使用し、Workflowのartifact保持期間は短くします。
+
+```powershell
+# PRのqualityと同じ検査
+pnpm ci:fast
+
+# local PostgreSQL/Supabase、migration、RLS、seed、integration、E2Eを含む検査
+pnpm ci:local
+
+# 明示的に分離したstaging接続先でのみ実行（secret値はレポートへ記録しない）
+pnpm ci:staging
+```
+
+`ci:staging`は`APP_ENV=staging`、`STAGING_DATABASE_URL`、`STAGING_DIRECT_URL`、`STAGING_DATABASE_ALLOWED_*`、`STAGING_SUPABASE_*`、`STAGING_R2_*`、`STAGING_PUBLIC_APP_URL`、`STAGING_RATE_LIMIT_ADAPTER_MODULE`、`STAGING_DEPLOY_ADAPTER`を要求します。実行時はそれらをstaging専用の接続先へマッピングし、production URL・DB・bucketの混入を拒否します。生成レポートは`.ci-reports/ci-*.json`にstep名、結果、所要時間、commit SHAだけを記録します。
+
+PR本文には、実行した入口、commit SHA、Node/pnpm版、成功/失敗、未実行の長時間検証、staging接続の有無、secret・個人情報を出力していないことを記録します。
+
 ## 実行前の確認
 
 1. 作業対象が最新の `develop` を起点にした専用ブランチであることを確認します。

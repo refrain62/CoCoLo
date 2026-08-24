@@ -30,6 +30,20 @@ Supabase CLI はローカルのマイグレーション / seed / テスト環境
 
 外部サービスの現行設定、責務境界、権限、監視、障害対応は [`docs/external-services-operations.md`](external-services-operations.md) を正本とします。Supabase PostgreSQL を将来別の PostgreSQL へ分離する場合の不変契約、移行対象、照合、切り戻しは [`docs/database-separation-plan.md`](database-separation-plan.md) に従います。R2は現時点で導入予定であり、実装済みの機能として扱いません。
 
+### 現行CI実行契約（2026-08-24）
+
+GitHub Freeのpublic repositoryを前提に、PRの自動Workflowは短時間の`quality`だけに限定します。`quality.yml`は`pnpm ci:fast`を実行し、static検査、OpenAPI差分、contract/unit test、typecheck、buildを担当します。PostgreSQL、migration適用、RLS、integration、PlaywrightはPR Workflowから除外します。
+
+長時間検証は次のNode.jsオーケストレーターから既存コマンドを同じ順序で呼び出します。
+
+| コマンド | 用途 |
+| --- | --- |
+| `pnpm ci:fast` | GitHub PR品質ゲートと同じ短時間検査 |
+| `pnpm ci:local` | local PostgreSQL/Supabase、migration、RLS、seed、unit、integration、local E2E、typecheck、build、production bundle |
+| `pnpm ci:staging` | `STAGING_*`接続先をfail-closedで検証したstaging migration、deploy、smoke、E2E |
+
+`database-integrity.yml`、`schema-drift.yml`、`e2e-daily.yml`、`e2e-weekly.yml`、`staging-deploy.yml`は自動PR/push/schedule起動を持たず、必要時の`workflow_dispatch`だけで実行します。`production-promote.yml`の手動承認、artifact SHA、staging証跡、migration検証は変更しません。レポートは個人情報・secret・URLの資格情報を含めず、`.ci-reports/`でGit管理外とします。
+
 
 主要機能の設計案
 マルチテナント構造（例: cocolo.app/team-a やテナントID管理）を前提とし、各チームが独立して利用できる基本機能の構成案です。
@@ -384,9 +398,11 @@ Stripe等のオンライン決済（見送り）: 決済手数料（3.6%等）�
 
 ## 6. CI/CD パイプライン仕様（GitHub Actions）
 
-GitHub にコードが Push された際は、まず staging 環境へ固定した成果物を配置し、staging DB のマイグレーション・スモークテスト・E2E テストが成功した場合だけ、本番承認で同じ成果物を production 環境へ昇格します。production DB へ main push から直接マイグレーションを適用しません。
+リリース候補を手動指定した際は、まず staging 環境へ固定した成果物を配置し、staging DB のマイグレーション・スモークテスト・E2E テストが成功した場合だけ、本番承認で同じ成果物を production 環境へ昇格します。production DB へ main push から直接マイグレーションを適用しません。
 
-PR の `quality.yml`、staging 用の `staging-deploy.yml`、production 用の `production-promote.yml` は分離します。production migration は GitHub Environment の protected secret、手動承認、`concurrency: production-migration`、staging 成功 SHA の一致を必須とし、branch protection で `quality` チェックを必須化します。
+PR の `quality.yml`、staging 用の `staging-deploy.yml`、production 用の `production-promote.yml` は分離します。現在のPR品質検査は`pnpm ci:fast`、長時間検証は`pnpm ci:local`を正規入口とします。production migration は GitHub Environment の protected secret、手動承認、`concurrency: production-migration`、staging 成功 SHA の一致を必須とし、branch protection で `quality` チェックを必須化します。
+
+以下のWorkflow例は過去の設計記録です。現行Workflowではstagingの自動push起動を停止し、必要なリリース候補の`workflow_dispatch`だけを許可します。
 
 ```
 # .github/workflows/staging-deploy.yml
@@ -535,13 +551,13 @@ jobs:
           [[ "$STAGING_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'staging_run_id must be numeric' >&2; exit 1; }
           [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'artifact_sha must be a lowercase 40-digit SHA-1' >&2; exit 1; }
           gh run view "$STAGING_RUN_ID" --json conclusion,headSha,workflowName,event,headBranch > .staging-run.json
-          jq -e --arg sha "$ARTIFACT_SHA" '.conclusion == "success" and .headSha == $sha and .workflowName == "ステージングへデプロイ" and .event == "push" and .headBranch == "main"' .staging-run.json
+          jq -e --arg sha "$ARTIFACT_SHA" '.conclusion == "success" and .headSha == $sha and .workflowName == "ステージングへデプロイ" and .event == "workflow_dispatch" and .headBranch == "main"' .staging-run.json
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID/jobs?per_page=100" > .staging-jobs.json
           jq -e '([.jobs[].steps[] | select(.name == "検証済みリリースのstagingマイグレーションを適用" or .name == "ステージングのスモークテストを実行" or .name == "ステージングの認証ユーザーでE2Eを実行")] | length) == 3 and ([.jobs[].steps[] | select(.name == "検証済みリリースのstagingマイグレーションを適用" or .name == "ステージングのスモークテストを実行" or .name == "ステージングの認証ユーザーでE2Eを実行")] | all(.[]; .conclusion == "success"))' .staging-jobs.json
           test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID" --jq '.path')" = ".github/workflows/staging-deploy.yml"
           gh run download "$STAGING_RUN_ID" --name "release-$ARTIFACT_SHA" --dir .release
           gh run download "$STAGING_RUN_ID" --name "staging-evidence-$ARTIFACT_SHA" --dir .evidence
-          jq -e --arg sha "$ARTIFACT_SHA" '.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "push" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success"' .evidence/evidence.json
+          jq -e --arg sha "$ARTIFACT_SHA" '.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "workflow_dispatch" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .migration == "success" and .smoke == "success" and .e2e == "success"' .evidence/evidence.json
       - name: 成果物のチェックサムと出所証明を検証
         env:
           GH_TOKEN: ${{ github.token }}
@@ -605,7 +621,7 @@ jobs:
         run: pnpm smoke:production --base-url "$BASE_URL"
 ```
 
-`package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、マイグレーションのチェックサムマニフェストを同じ変更不能なリリース成果物に含め、`.release/release.tar.gz` と `artifact.sha256` を生成します。staging の `publish:release` は GitHub Actions の成果物 `release-${{ github.sha }}` として保存し、production は `actions: read` で同名の成果物だけを取得します。staging は GitHub 公式の出所証明アクションを SHA 固定で実行し、production は checkout・pnpm install・リポジトリ内 script より前に標準 GitHub CLI の `gh attestation verify` で署名者リポジトリ、ワークフロー、ソースダイジェスト、SHA-256 を検証します。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・マイグレーションのチェックサム・成果物の SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリのマイグレーションを参照せず、検証済み `.release` 内のマイグレーションだけを `prisma migrate deploy` へ渡します。staging job の強い権限は main push かつ保護された staging Environment のこの job だけに限定し、PR の `quality.yml` は `contents: read` のみとします。将来 build と公開を job 分離する場合も、`actions: write`、`id-token: write`、`attestations: write` は公開・出所証明 job にだけ付与します。staging / production のワークフローは `APP_ENV`、Supabase URL/JWKS、R2 endpoint/bucket、公開 URL の allowlist を `verify:environment` で検証し、production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
+`package:release` は `apps/web`・`apps/api` の成果物、`packages/db/prisma/schema.prisma`、`packages/db/prisma/migrations`、マイグレーションのチェックサムマニフェストを同じ変更不能なリリース成果物に含め、`.release/release.tar.gz` と `artifact.sha256` を生成します。staging の `publish:release` は GitHub Actions の成果物 `release-${{ github.sha }}` として保存し、production は `actions: read` で同名の成果物だけを取得します。staging は GitHub 公式の出所証明アクションを SHA 固定で実行し、production は checkout・pnpm install・リポジトリ内 script より前に標準 GitHub CLI の `gh attestation verify` で署名者リポジトリ、ワークフロー、ソースダイジェスト、SHA-256 を検証します。`verify:staging-evidence` と `verify:release` は staging run の成功、commit SHA・マイグレーションのチェックサム・成果物の SHA の一致を検証します。production の `migrate:release` は checkout したリポジトリのマイグレーションを参照せず、検証済み `.release` 内のマイグレーションだけを `prisma migrate deploy` へ渡します。staging jobの強い権限はmainからの手動`workflow_dispatch`かつ保護されたstaging Environmentのこのjobだけに限定し、PRの`quality.yml`は`contents: read`のみとします。将来 build と公開を job 分離する場合も、`actions: write`、`id-token: write`、`attestations: write` は公開・出所証明 job にだけ付与します。staging / production のワークフローは `APP_ENV`、Supabase URL/JWKS、R2 endpoint/bucket、公開 URL の allowlist を `verify:environment` で検証し、production Environment の承認前に secret を読み出す step、任意の SHA を checkout する step、staging 未成功の promote は許可しません。
 `publish:staging-evidence` は `.evidence/evidence.json`（`workflowName`、`workflowPath`、`event`、`headBranch`、`headSha`、`artifactSha`、`migration`、`smoke`、`e2e`）を生成し、`staging-evidence-${{ github.sha }}` という上書き不可の成果物名で保存します。本番は GitHub run の `conclusion`、job step の直接結果、REST API のワークフロー path を権威情報として先に検証し、evidence JSON の詳細値は補助情報として同じ staging run から取得します。checkout 前に固定フィールドを検証します。
 
 ### 6.1 サプライチェーン攻撃対策
@@ -742,7 +758,7 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 * **API テスト:** 認証なし、別テナント、ロール別、正常系、入力不正、競合、トランザクション失敗を Hono の `app.request` で検証。
 * **UI テスト:** 部員検索・登録、出欠入力、支払い切り替え、権限による表示差分、読み込み中 / エラー / データなしの状態を Vitest + Testing Library で検証。
 * **E2E テスト:** Playwright でログイン後の主要導線を検証します。外部 LINE / Maps / R2 は実サービスではなくテスト用アダプターを使用します。
-* **CI ゲート:** PRでは `pnpm --filter @cocolo/db exec prisma validate`、`pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm build` を必須にします。負荷の高い `pnpm test:e2e:local` はPRごとに実行せず、日次、週次、手動のWorkflowで実行します。staging は本番昇格前に同一SHAの `pnpm test:e2e:staging` を要求し、失敗時は本番マイグレーションを許可しません。
+* **CI ゲート:** PRでは`pnpm ci:fast`（static、OpenAPI、contract/unit、typecheck、build）だけを自動実行します。`pnpm ci:local`はmigration、RLS、integration、local E2Eを含むローカル正規経路です。`pnpm ci:staging`はstaging専用の明示的な接続先をfail-closedで検証したうえで、migration、deploy、smoke、E2Eを手動実行します。stagingは本番昇格前に同一SHAの`pnpm test:e2e:staging`を要求し、失敗時は本番マイグレーションを許可しません。
 
 ### 8.7 環境・運用・監視
 
@@ -875,7 +891,7 @@ Phase 4 の `Attachment` は `id UUID`（UUIDv7）、`tenantId`、`ownerUserId`�
 
 ### 8.14 CI・TDD・レビュー成果物の実行契約
 
-CI強化後の契約は `docs/ci-hardening-plan.md` を正本とします。以下のWorkflow例は開発基盤を作成した時点の記録であり、E2EをPRごとに実行する箇所は日次、週次、手動実行へ置き換えます。
+CI強化後の契約は `docs/ci-hardening-plan.md` と上記の現行CI実行契約を正本とします。以下のWorkflow例は開発基盤を作成した時点の履歴資料であり、現在の実行入口ではありません。現行Workflowは`quality.yml`から`pnpm ci:fast`を呼び、長時間検証は`pnpm ci:local`または`pnpm ci:staging`で実行します。
 
 PR 用 `quality.yml` は次の順序とコマンドを固定します。Workflow が未作成の段階では、同じコマンドをローカルで実行した結果をタスク完了の証拠にします。
 
