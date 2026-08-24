@@ -367,7 +367,17 @@ async function runIntegration(): Promise<void> {
   const stack = stacks.test;
   const prepared = await prepareStack(stack, { forceFresh: true });
   try {
-    const result = runPnpm(['test:integration:raw'], prepared.env, {
+    // 統合テストのseed/cleanupはRLSを回避できるtest-only fixture roleで行う。
+    // アプリ本体のDATABASE_URLは引き続きcocolo_appを使い、migration roleを公開しない。
+    const integrationEnv = {
+      ...prepared.env,
+      DIRECT_URL: postgresUrl(
+        stack,
+        'cocolo_fixture',
+        baseEnvironment().COCOLO_FIXTURE_PASSWORD ?? 'cocolo_fixture',
+      ),
+    };
+    const result = runPnpm(['test:integration:raw'], integrationEnv, {
       allowFailure: true,
     });
     assert.equal(

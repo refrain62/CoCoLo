@@ -95,7 +95,7 @@
     "scripts/verify-workspace-boundaries.ts": "142ae19436873fc254f91c6351b9c3354a1675f392fc5183a4c669febc0efa74",
     "tsconfig.scripts.json": "b812bc3ef869600859f0df844e151987d45a651207f16f4161052ec98a7f319b",
     "scripts/local-auth-fixture.ts": "adb6ae86dee4bfd11823be09309dbe23244826e4d9fe168630a6570054c7dd56",
-    "scripts/supabase-local.ts": "31e7dadbe5a7fd95ffad972f79016e8d08f7b6c3c5036e0a3dce321e58e72bbb",
+    "scripts/supabase-local.ts": "b8e2bbda08f162a154371bcfc41a9c4bbc1570c905ab18eca357a50342130bde",
     "scripts/test-database-guard.test.ts": "8736869fa9916a9ea7eebfc0326d062c3ea7aba443ecbb5ba8424cfebcb88af3",
     "scripts/test-database-guard.ts": "b26d7e27b2a9e8a9e8df73d9fabea50b21e83d526af5f56dcb2863be9336970b"
   }
