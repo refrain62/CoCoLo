@@ -5,6 +5,32 @@ import {
 } from './ride-operations-api.js';
 
 describe('送迎Web API', () => {
+  it('送迎予定一覧を取得する', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ data: [{ id: 'plan-1', title: '練習試合' }] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+    );
+
+    const plans = await createRideOperationsApi({
+      getAccessToken: () => 'token',
+    }).listPlans();
+
+    expect(plans).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/v1/ride-plans',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+      }),
+    );
+  });
+
   it('access tokenなしでは送信せずログインエラーにする', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

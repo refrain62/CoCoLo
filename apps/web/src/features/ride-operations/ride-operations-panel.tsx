@@ -96,13 +96,15 @@ function Metrics({ metrics }: { metrics: RideMetrics }) {
 // 送迎の入力・利用者向け結果・管理者向け集計を同じ再読込経路へ揃え、古い割当表を表示し続けない。
 export function RideOperationsPanel({
   planId,
-  plans = [],
+  plans,
   members,
   isManager,
   api = defaultApi,
 }: RideOperationsPanelProps) {
+  const [loadedPlans, setLoadedPlans] = useState<RidePlan[]>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(plans === undefined);
   const [selectedPlanId, setSelectedPlanId] = useState(
-    () => planId ?? plans[0]?.id ?? '',
+    () => planId ?? plans?.[0]?.id ?? '',
   );
   const [snapshot, setSnapshot] = useState<RideSnapshot | null>(null);
   const [metrics, setMetrics] = useState<RideMetrics | null>(null);
@@ -117,17 +119,49 @@ export function RideOperationsPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const activePlanId =
-    plans.length > 0 ? selectedPlanId : (planId ?? selectedPlanId);
+  const planOptions = plans ?? loadedPlans;
+  const activePlanId = planOptions.length > 0 ? selectedPlanId : (planId ?? '');
 
   useEffect(() => {
-    if (plans.length === 0 && planId) {
+    if (plans !== undefined) {
+      setLoadedPlans(plans);
+      setIsLoadingPlans(false);
+      return;
+    }
+    let active = true;
+    setIsLoadingPlans(true);
+    setError(null);
+    void api
+      .listPlans()
+      .then((nextPlans) => {
+        if (!active) return;
+        setIsLoading(true);
+        setLoadedPlans(nextPlans);
+        setSelectedPlanId((current) =>
+          nextPlans.some((plan) => plan.id === current)
+            ? current
+            : (nextPlans[0]?.id ?? ''),
+        );
+      })
+      .catch((requestError) => {
+        if (active) setError(errorMessage(requestError));
+      })
+      .finally(() => {
+        if (active) setIsLoadingPlans(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, plans]);
+
+  useEffect(() => {
+    if (planOptions.length === 0 && planId) {
       setSelectedPlanId(planId);
       return;
     }
-    if (!plans.some((plan) => plan.id === selectedPlanId))
-      setSelectedPlanId(plans[0]?.id ?? '');
-  }, [planId, plans, selectedPlanId]);
+    if (!planOptions.some((plan) => plan.id === selectedPlanId))
+      setSelectedPlanId(planOptions[0]?.id ?? '');
+  }, [planId, planOptions, selectedPlanId]);
 
   const load = useCallback(async () => {
     if (!activePlanId) {
@@ -232,7 +266,7 @@ export function RideOperationsPanel({
     }
   }
 
-  if (plans.length > 0) {
+  if (planOptions.length > 0) {
     // 予定一覧は既存の中央API契約の呼び出し元から渡し、送迎APIに未定義の一覧エンドポイントを追加しない。
     return (
       <section aria-labelledby="ride-plan-selection-heading">
@@ -251,7 +285,7 @@ export function RideOperationsPanel({
             setNotice(null);
           }}
         >
-          {plans.map((plan) => (
+          {planOptions.map((plan) => (
             <option key={plan.id} value={plan.id}>
               {plan.title}（{new Date(plan.departureAt).toLocaleString('ja-JP')}
               ）
@@ -269,7 +303,14 @@ export function RideOperationsPanel({
     );
   }
 
-  if (!activePlanId) return <p role="status">送迎予定を選択してください。</p>;
+  if (!activePlanId)
+    return (
+      <p role="status">
+        {isLoadingPlans
+          ? '送迎予定を読み込み中…'
+          : (error ?? '送迎予定がありません。')}
+      </p>
+    );
   if (isLoading && !snapshot) return <p role="status">送迎情報を読み込み中…</p>;
   if (!snapshot)
     return <p role="alert">{error ?? '送迎情報を表示できません。'}</p>;

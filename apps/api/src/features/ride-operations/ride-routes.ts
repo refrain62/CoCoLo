@@ -83,6 +83,17 @@ export function registerRideRoutes(
   app: RideRouteApp,
   dependencies: RideRouteDependencies,
 ) {
+  app.get('/api/v1/ride-plans', async (context) => {
+    const auth = parseAuth(context, dependencies);
+    if (!auth)
+      return errorResponse(context, 401, 'UNAUTHENTICATED', '認証が必要です。');
+    try {
+      return context.json({ data: await dependencies.service.listPlans(auth) });
+    } catch (error) {
+      return handleError(context, error);
+    }
+  });
+
   app.post('/api/v1/ride-plans', async (context) => {
     const auth = parseAuth(context, dependencies);
     if (!auth)

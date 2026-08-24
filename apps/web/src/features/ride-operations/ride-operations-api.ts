@@ -116,6 +116,7 @@ export class RideApiError extends Error {
 }
 
 export type RideOperationsApi = {
+  listPlans: () => Promise<RidePlan[]>;
   createPlan: (input: RidePlanCreateInput) => Promise<RidePlan>;
   getSnapshot: (planId: string) => Promise<RideSnapshot>;
   createOffer: (
@@ -180,6 +181,10 @@ export function createRideOperationsApi({
   const planPath = (planId: string) => `/${encodeURIComponent(planId)}`;
 
   return {
+    async listPlans() {
+      const response = await request<{ data: RidePlan[] }>('');
+      return response.data;
+    },
     async createPlan(input) {
       const response = await request<{ data: RidePlan }>('', {
         method: 'POST',

@@ -48,6 +48,7 @@ export type RideDispatchView = {
 };
 
 export type RideService = {
+  listPlans: (actor: RideActor) => Promise<RidePlan[]>;
   createPlan: (
     actor: RideActor,
     input: RidePlanCreateInput,
@@ -128,6 +129,7 @@ function toSnapshotView(
 // 送迎機能の認可・入力正規化をserviceへ集約し、API handlerやWeb表示が権限境界を迂回できないようにする。
 export function createRideService(repository: RideRepository): RideService {
   return {
+    listPlans: (actor) => repository.listPlans(actor),
     createPlan: (actor, input) => {
       assertManager(actor);
       return repository.createPlan(actor, validatePlanInput(input));
