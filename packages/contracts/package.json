@@ -31,6 +31,10 @@
       "types": "./src/board-contact-response-contract.ts",
       "import": "./dist/board-contact-response-contract.js"
     },
+    "./orders-response": {
+      "types": "./src/orders-response-contract.ts",
+      "import": "./dist/orders-response-contract.js"
+    },
     "./line-delivery": {
       "types": "./src/line-delivery-contract.ts",
       "import": "./dist/line-delivery-contract.js"

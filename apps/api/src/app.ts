@@ -33,6 +33,14 @@ import {
 } from '@cocolo/contracts/member';
 import type { StructuredLogEntry } from '@cocolo/contracts/observability';
 import {
+  orderCampaignListResponseSchema,
+  orderCampaignResponseEnvelopeSchema,
+  orderEntryListResponseSchemaForRole,
+  orderEntryResponseEnvelopeSchemaForRole,
+  orderProductResponseEnvelopeSchema,
+  orderSummaryResponseEnvelopeSchema,
+} from '@cocolo/contracts/orders-response';
+import {
   attendanceListResponseSchema,
   attendanceResponseSchema,
   attendanceSummaryResponseSchema,
@@ -270,6 +278,78 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.cors) app.use('*', createCorsMiddleware(options.cors));
 
   const responseContracts: ResponseContract[] = [
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/orders$/,
+      status: 200,
+      schema: orderCampaignListResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/orders$/,
+      status: 201,
+      schema: orderCampaignResponseEnvelopeSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/orders\/[^/]+$/,
+      status: 200,
+      schema: orderCampaignResponseEnvelopeSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/orders\/[^/]+\/products$/,
+      status: 201,
+      schema: orderProductResponseEnvelopeSchema,
+    },
+    {
+      method: 'PATCH',
+      path: /^\/api\/v1\/orders\/[^/]+\/status$/,
+      status: 200,
+      schema: orderCampaignResponseEnvelopeSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/orders\/[^/]+\/entries$/,
+      status: 200,
+      schema: (c) =>
+        orderEntryListResponseSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/orders\/[^/]+\/entries$/,
+      status: 201,
+      schema: (c) =>
+        orderEntryResponseEnvelopeSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
+    },
+    {
+      method: 'PATCH',
+      path: /^\/api\/v1\/orders\/[^/]+\/entries\/[^/]+\/payment$/,
+      status: 200,
+      schema: (c) =>
+        orderEntryResponseEnvelopeSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/orders\/[^/]+\/summary$/,
+      status: 200,
+      schema: orderSummaryResponseEnvelopeSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/orders\/[^/]+\/unpaid$/,
+      status: 200,
+      schema: (c) =>
+        orderEntryListResponseSchemaForRole(
+          c.get('auth')?.membership.role ?? 'guardian',
+        ),
+    },
     {
       method: 'GET',
       path: /^\/api\/v1\/board-members$/,
