@@ -18,7 +18,7 @@
 
 ## 停止時点の基準
 
-停止時点の`develop`は`a0fb868`（回覧板APIの公開レスポンス契約を追加）です。
+停止時点の`develop`は`d375f46`（認証チーム選択の公開レスポンス契約を中央APIへ適用）です。
 
 `develop`へ反映済みの業務機能は、認証、テナント境界、部員一覧、検索、登録、編集、退部、学年表示、年度繰り上げです。
 
@@ -947,6 +947,36 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - 回覧板の実PostgreSQL/RLS検証、staging E2E、実ブラウザ統合テストはAPI-002の残タスクとして継続します。
 - 認証チーム選択、添付、送迎など未契約APIの公開response契約は後続featureで対応します。
+
+## API-002 認証チーム選択の公開レスポンス契約
+
+### 実施した変更
+
+- PR #137で、`GET /api/v1/auth/teams`へ`teamListResponseSchema`を適用しました。
+- PR #137で、`POST /api/v1/auth/teams/select`へ`teamSelectionResponseSchema`を適用しました。
+- tenantId、tenantName、role以外を公開しない既存projectionを中央runtime検証へ接続しました。
+- generic envelopeの`data: unknown`へのフォールバックを対象routeで無効化しました。
+
+### 検証結果
+
+- `pnpm test`、`pnpm build`、`pnpm lint`が成功しました。
+- 既存の認証チーム選択契約テストと中央mountテストを含むAPI unit 187件が成功しました。
+- PR #137のquality run `32734452823`が成功しました。
+
+### 敵対的レビュー
+
+- team responseにJWT、所属状態、作成日時、内部監査情報が混入しないことを確認し、CriticalとHighは0件です。
+- schema追加が認証・所属再検証・tenant選択の認可境界を置き換えていないことを確認しました。
+- DB、認証方式、所属再検証、Web画面は変更していません。
+
+### GitHub反映
+
+- PR #137は`d375f46`としてdevelopへsquash mergeしました。
+
+### 未完了条件
+
+- 認証チーム選択の実PostgreSQL/RLS検証、staging E2E、実ブラウザ統合テストはAPI-002の残タスクとして継続します。
+- 添付、送迎など未契約APIの公開response契約は後続featureで対応します。
 
 ## 履歴の更新規則
 
