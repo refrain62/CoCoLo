@@ -8,6 +8,10 @@ const mode = process.argv[2] ?? 'history';
 const target = process.argv[3] ?? root;
 const betterleaksImage =
   'ghcr.io/betterleaks/betterleaks:v1.7.2@sha256:1eb5e0920b47afe43f76671bc678c9fd4fd40c2d0c9b88a16f28021fd12d2347';
+const dockerUser =
+  typeof process.getuid === 'function' && typeof process.getgid === 'function'
+    ? `${process.getuid()}:${process.getgid()}`
+    : undefined;
 const config = `title = "CoCoLo Betterleaks 秘密情報検査"
 betterleaksMinVersion = "1.7.2"
 
@@ -78,6 +82,7 @@ try {
           '--read-only',
           '--tmpfs',
           '/tmp:rw,noexec,nosuid,size=256m',
+          ...(dockerUser ? ['--user', dockerUser] : []),
           '--mount',
           `type=bind,source=${root},target=/src,readonly`,
           '--mount',
