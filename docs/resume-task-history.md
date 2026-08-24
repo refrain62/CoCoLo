@@ -18,7 +18,7 @@
 
 ## 停止時点の基準
 
-停止時点の`develop`は`41c956d`（添付APIの公開レスポンス契約を拡張）です。
+停止時点の`develop`は`eaf5b27`（送迎APIの公開レスポンス契約を追加）です。
 
 `develop`へ反映済みの業務機能は、認証、テナント境界、部員一覧、検索、登録、編集、退部、学年表示、年度繰り上げです。
 
@@ -1008,6 +1008,36 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - 添付の実PostgreSQL/RLS検証、staging R2 E2E、実ブラウザ統合テストはFIL-002/API-002の残タスクとして継続します。
 - 送迎など未契約APIの公開response契約は後続featureで対応します。
+
+## FIL-002/API-002 送迎APIの公開レスポンス契約
+
+### 実施した変更
+
+- PR #141で、一覧、作成、snapshot、offer、request、match、assignment、dispatch、metricsの公開レスポンスschemaを追加しました。
+- 一般の一覧、snapshot、作成レスポンスからtenantId、driverUserId、requesterUserIdを除外しました。
+- 管理者専用dispatchでは、配車表に必要な運転者識別子と乗車希望者識別子だけを許可しました。
+- 中央APIでは、送迎routeとHTTP statusに対応する固有schemaを、汎用envelope schemaより先に適用します。
+
+### 検証結果
+
+- `pnpm test`、`pnpm build`、`pnpm lint`が成功しました。
+- contracts 35件、API unit 189件を含む全テストが成功しました。
+- PR #141のquality run `32737388819`が成功しました。
+
+### 敵対的レビュー
+
+- tenant越境を示すtenantIdと、一般利用者へ不要な操作者IDが公開されないことを確認し、CriticalとHighは0件です。
+- dispatchは既存の管理者認可を維持し、一般snapshotのassignment公開項目も既存画面の範囲に留めています。
+- tenant境界、入力検証、認可、状態遷移、DB、監査、RLSの実装は変更していません。
+
+### GitHub反映
+
+- PR #141は`eaf5b27`としてdevelopへsquash mergeしました。
+
+### 未完了条件
+
+- 送迎の実PostgreSQL/RLS検証、staging E2E、実ブラウザ統合テストはFIL-002/API-002の残タスクとして継続します。
+- 送迎画面の実データ接続確認と全画面の統合テストは後続検証で対応します。
 
 ## 履歴の更新規則
 
