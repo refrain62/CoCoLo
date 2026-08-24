@@ -771,6 +771,29 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - PR #117は`fb5c6ab`としてdevelopへsquash mergeしました。
 - PR #120は`cb5b63f`としてdevelopへsquash mergeしました。
 
+## API-002/NOT-001 LINE通知の管理者再試行API
+
+### 実施した変更
+
+- PR #123で`POST /api/v1/notifications/line/:notificationId/retry`を中央APIへ追加しました。owner/admin、JWTで解決したtenant、active membership、UUIDv7の通知ID、認証済みrate limit、response contractを接続しています。
+- `20260824150000_line_delivery_retry_api`のSECURITY DEFINER関数で、`cocolo_app`のcontext、tenant/user/role、接続世代、failedかつattempt上限未満の状態をDB内で再検証し、pendingへ戻します。通知本文、idempotency key、payload hash、provider retry key、attemptは変更しません。
+- 状態更新と`line_delivery.retry_requested`監査を同一DB transactionで行い、旧`line_notification_queue`とworker権限は使用していません。
+
+### 検証結果
+
+- `pnpm test`（API 179件）、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm lint:openapi`、`pnpm verify:migration-sql`、`pnpm verify:migration-checksum`、`pnpm verify:trust-root`が成功しました。
+- `pnpm test:database-integrity`（23件）、`pnpm test:schema-drift`（42件）、`pnpm test:local-infrastructure`（4件）が成功しました。
+- GitHub Actions quality run `32719039368`、squash commit `6d95154`が成功しました。最終確認はCritical 0、High 0です。
+
+### 未完了条件
+
+- Docker/Podmanが実行環境にないため、実PostgreSQLの再試行・RLS・同時実行・監査統合は未実施です。`verify:migration-history`もローカルの`DIRECT_URL`未設定で実行できません。
+- WebhookはJWT actorを持たないため、専用`line_webhook_receiver` actor、別DB接続、receipt記録用SECURITY DEFINER関数、JWT middleware外の公開入口を別PRで実装します。
+
+### GitHub反映
+
+- PR #123は`6d95154`としてdevelopへsquash mergeしました。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
