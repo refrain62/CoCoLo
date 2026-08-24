@@ -142,11 +142,15 @@ function runSupabase(
   args: string[],
   options: { capture?: boolean; allowFailure?: boolean } = {},
 ) {
-  return runPnpm(['exec', 'supabase', ...args], baseEnvironment(), {
-    ...options,
-    // CLIのworking directoryがproject_idとvolumeを決めるため、stackごとに固定する。
-    cwd: stack.directory,
-  });
+  return runPnpm(
+    ['exec', 'supabase', '--workdir', stack.directory, ...args],
+    baseEnvironment(),
+    {
+      ...options,
+      // CLIのworking directoryがproject_idとvolumeを決めるため、stackごとに固定する。
+      cwd: stack.directory,
+    },
+  );
 }
 
 function parseStatus(output: string, stack: Stack): SupabaseStatus {
