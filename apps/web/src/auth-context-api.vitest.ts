@@ -40,4 +40,25 @@ describe('認証context API client', () => {
     ).rejects.toMatchObject({ status: 401, code: 'UNAUTHENTICATED' });
     expect(fetcher).not.toHaveBeenCalled();
   });
+
+  it('選択中チームを中央APIへ明示する', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ data: { tenantId: TENANT_ID, role: 'owner' } }),
+          { status: 200 },
+        ),
+      );
+
+    await createAuthContextApi({
+      getAccessToken: () => 'access-token',
+      getSelectedTeamId: () => TENANT_ID,
+      fetcher,
+    }).get();
+
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+      'X-CoCoLo-Team-Id': TENANT_ID,
+    });
+  });
 });

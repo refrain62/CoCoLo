@@ -1,3 +1,6 @@
+import { selectedTeamHeaderName } from '@cocolo/contracts/auth-team-selection';
+import { getStoredSelectedTeamId } from './features/auth-team-selection/selected-team-storage.js';
+
 export type AuthRole = 'owner' | 'admin' | 'staff' | 'guardian';
 
 export type AuthContext = {
@@ -8,6 +11,7 @@ export type AuthContext = {
 type AuthContextApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  getSelectedTeamId?: () => string | null;
   fetcher?: typeof fetch;
 };
 
@@ -29,6 +33,7 @@ export class AuthContextApiError extends Error {
 export function createAuthContextApi({
   baseUrl = '',
   getAccessToken = () => null,
+  getSelectedTeamId = getStoredSelectedTeamId,
   fetcher = fetch,
 }: AuthContextApiOptions = {}) {
   return {
@@ -44,6 +49,9 @@ export function createAuthContextApi({
         headers: {
           Accept: 'application/json',
           Authorization: `Bearer ${accessToken}`,
+          ...(getSelectedTeamId()
+            ? { [selectedTeamHeaderName]: getSelectedTeamId() as string }
+            : {}),
         },
       });
       if (!response.ok) {

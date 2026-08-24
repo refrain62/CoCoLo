@@ -1,3 +1,6 @@
+import { selectedTeamHeaderName } from '@cocolo/contracts/auth-team-selection';
+import { getStoredSelectedTeamId } from './features/auth-team-selection/selected-team-storage.js';
+
 export type MemberCategory = 'student' | 'adult';
 export type MemberStatus = 'active' | 'suspended' | 'retired';
 
@@ -92,6 +95,7 @@ export type MemberApi = {
 type MemberApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  getSelectedTeamId?: () => string | null;
 };
 
 function getStoredAccessToken() {
@@ -113,6 +117,7 @@ async function readError(response: Response) {
 export function createMemberApi({
   baseUrl = '',
   getAccessToken = getStoredAccessToken,
+  getSelectedTeamId = getStoredSelectedTeamId,
 }: MemberApiOptions = {}): MemberApi {
   // すべての部員リクエストでaccess tokenを必須にし、APIへ匿名リクエストを送らない。
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -125,6 +130,9 @@ export function createMemberApi({
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${accessToken}`,
+        ...(getSelectedTeamId()
+          ? { [selectedTeamHeaderName]: getSelectedTeamId() as string }
+          : {}),
         ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
         ...init?.headers,
       },
