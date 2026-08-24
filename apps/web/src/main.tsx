@@ -13,6 +13,10 @@ import {
   getStoredSelectedTeamId,
   setStoredSelectedTeamId,
 } from './features/auth-team-selection/selected-team-storage.js';
+import { createBoardContactApi } from './features/board-contact/board-contact-api.js';
+import { BoardContactPage } from './features/board-contact/board-contact-page.js';
+import { createBulletinBoardApi } from './features/bulletin-board/bulletin-board-api.js';
+import { BulletinBoardPage } from './features/bulletin-board/bulletin-board-page.js';
 import { createEventsApi } from './features/events/events-api.js';
 import { EventsPage } from './features/events/events-page.js';
 import { createMemberApi } from './member-api.js';
@@ -93,6 +97,22 @@ function AuthenticatedApp() {
       }),
     [selectedTeamId, session?.accessToken],
   );
+  const boardContactApi = useMemo(
+    () =>
+      createBoardContactApi({
+        getAccessToken: () => session?.accessToken ?? null,
+        getSelectedTeamId: () => selectedTeamId,
+      }),
+    [selectedTeamId, session?.accessToken],
+  );
+  const bulletinBoardApi = useMemo(
+    () =>
+      createBulletinBoardApi({
+        getAccessToken: () => session?.accessToken ?? null,
+        getSelectedTeamId: () => selectedTeamId,
+      }),
+    [selectedTeamId, session?.accessToken],
+  );
   useEffect(() => {
     if (!session || !selectedTeam) return;
     let active = true;
@@ -143,6 +163,11 @@ function AuthenticatedApp() {
       {role ? (
         <EventsPage api={eventsApi} role={role} memberOptions={eventMembers} />
       ) : null}
+      <BoardContactPage
+        api={boardContactApi}
+        canManage={role === 'owner' || role === 'admin'}
+      />
+      {role ? <BulletinBoardPage api={bulletinBoardApi} role={role} /> : null}
     </AppShell>
   );
 }

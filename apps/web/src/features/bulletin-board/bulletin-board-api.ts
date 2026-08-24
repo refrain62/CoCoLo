@@ -1,3 +1,8 @@
+import {
+  getStoredSelectedTeamId,
+  selectedTeamHeaderName,
+} from '../auth-team-selection/selected-team-storage.js';
+
 export type BulletinBoardRole = 'owner' | 'admin' | 'staff' | 'guardian';
 
 export type BulletinAttachment = {
@@ -55,6 +60,7 @@ export class BulletinBoardApiError extends Error {
 type BulletinBoardApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  getSelectedTeamId?: () => string | null;
 };
 
 type ErrorBody = {
@@ -82,6 +88,7 @@ async function readError(response: Response) {
 export function createBulletinBoardApi({
   baseUrl = '',
   getAccessToken = getStoredAccessToken,
+  getSelectedTeamId = getStoredSelectedTeamId,
 }: BulletinBoardApiOptions = {}) {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
@@ -91,11 +98,13 @@ export function createBulletinBoardApi({
         'UNAUTHENTICATED',
         'ログインが必要です。',
       );
+    const selectedTeamId = getSelectedTeamId();
     const response = await fetch(`${baseUrl}/api/v1/announcements${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${accessToken}`,
+        ...(selectedTeamId ? { [selectedTeamHeaderName]: selectedTeamId } : {}),
         ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
         ...init?.headers,
       },

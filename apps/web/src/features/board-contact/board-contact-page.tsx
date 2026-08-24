@@ -77,10 +77,12 @@ function formFromContact(contact: BoardContactSummary): BoardContactFormState {
 
 function BoardContactTable({
   contacts,
+  canManage,
   onEdit,
   onRemove,
 }: {
   contacts: BoardContactSummary[];
+  canManage: boolean;
   onEdit: (contact: BoardContactSummary) => void;
   onRemove: (contact: BoardContactSummary) => void;
 }) {
@@ -95,7 +97,7 @@ function BoardContactTable({
           <th scope="col">役職</th>
           <th scope="col">種別</th>
           <th scope="col">連絡先</th>
-          <th scope="col">操作</th>
+          {canManage ? <th scope="col">操作</th> : null}
         </tr>
       </thead>
       <tbody>
@@ -104,14 +106,16 @@ function BoardContactTable({
             <td>{contact.roleName}</td>
             <td>{roleTypeLabels[contact.roleType]}</td>
             <td>{formatContact(contact)}</td>
-            <td>
-              <button type="button" onClick={() => onEdit(contact)}>
-                編集
-              </button>{' '}
-              <button type="button" onClick={() => onRemove(contact)}>
-                削除
-              </button>
-            </td>
+            {canManage ? (
+              <td>
+                <button type="button" onClick={() => onEdit(contact)}>
+                  編集
+                </button>{' '}
+                <button type="button" onClick={() => onRemove(contact)}>
+                  削除
+                </button>
+              </td>
+            ) : null}
           </tr>
         ))}
       </tbody>
@@ -122,8 +126,10 @@ function BoardContactTable({
 // 役職枠と連絡先の編集状態を管理し、表示できる個人情報だけをAPIレスポンスから描画する。
 export function BoardContactPage({
   api = createBoardContactApi(),
+  canManage = true,
 }: {
   api?: BoardContactApi;
+  canManage?: boolean;
 }) {
   const [fiscalYear, setFiscalYear] = useState(() => new Date().getFullYear());
   const [contacts, setContacts] = useState<BoardContactSummary[]>([]);
@@ -214,7 +220,7 @@ export function BoardContactPage({
   }
 
   return (
-    <main>
+    <section aria-labelledby="board-contact-heading">
       <header>
         <h1>年度役員と連絡先</h1>
         <p>役職枠を管理し、権限に応じて連絡先を確認できます。</p>
@@ -235,9 +241,11 @@ export function BoardContactPage({
             setSuccess(null);
           }}
         />
-        <button type="button" onClick={() => void copyPreviousYear()}>
-          前年度の役職枠を引き継ぐ
-        </button>
+        {canManage ? (
+          <button type="button" onClick={() => void copyPreviousYear()}>
+            前年度の役職枠を引き継ぐ
+          </button>
+        ) : null}
       </section>
 
       <section aria-labelledby="board-contact-list-heading">
@@ -246,153 +254,156 @@ export function BoardContactPage({
         {!isLoading ? (
           <BoardContactTable
             contacts={contacts}
+            canManage={canManage}
             onEdit={editContact}
             onRemove={(contact) => void remove(contact)}
           />
         ) : null}
       </section>
 
-      <section aria-labelledby="board-contact-form-heading">
-        <h2 id="board-contact-form-heading">
-          {editingId ? '役職を編集' : '役職を登録'}
-        </h2>
-        <form noValidate onSubmit={save}>
-          <div>
-            <label htmlFor="board-contact-role-name">役職名</label>
-            <input
-              id="board-contact-role-name"
-              maxLength={100}
-              required
-              value={form.roleName}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  roleName: event.target.value,
-                }))
-              }
-            />
-          </div>
-          <div>
-            <label htmlFor="board-contact-role-type">役職種別</label>
-            <select
-              id="board-contact-role-type"
-              value={form.roleType}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  roleType: event.target.value as BoardContactRoleType,
-                }))
-              }
-            >
-              <option value="admin">管理者</option>
-              <option value="staff">スタッフ</option>
-              <option value="member">部員</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="board-contact-assignee">担当者ID</label>
-            <input
-              id="board-contact-assignee"
-              maxLength={128}
-              value={form.assigneeUserId}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  assigneeUserId: event.target.value,
-                }))
-              }
-            />
-          </div>
-          <div>
-            <label htmlFor="board-contact-line">LINE連絡先</label>
-            <input
-              id="board-contact-line"
-              maxLength={200}
-              value={form.lineContact}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  lineContact: event.target.value,
-                }))
-              }
-            />
-          </div>
-          <div>
-            <label htmlFor="board-contact-phone">電話番号</label>
-            <input
-              id="board-contact-phone"
-              inputMode="tel"
-              maxLength={32}
-              value={form.phone}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  phone: event.target.value,
-                }))
-              }
-            />
-          </div>
-          <fieldset>
-            <legend>表示する連絡先</legend>
-            <label>
+      {canManage ? (
+        <section aria-labelledby="board-contact-form-heading">
+          <h2 id="board-contact-form-heading">
+            {editingId ? '役職を編集' : '役職を登録'}
+          </h2>
+          <form noValidate onSubmit={save}>
+            <div>
+              <label htmlFor="board-contact-role-name">役職名</label>
               <input
-                type="radio"
-                name="board-contact-preference"
-                value="line"
-                checked={form.contactPreference === 'line'}
-                onChange={() =>
+                id="board-contact-role-name"
+                maxLength={100}
+                required
+                value={form.roleName}
+                onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    contactPreference: 'line',
+                    roleName: event.target.value,
                   }))
                 }
               />
-              LINE
-            </label>{' '}
-            <label>
-              <input
-                type="radio"
-                name="board-contact-preference"
-                value="phone"
-                checked={form.contactPreference === 'phone'}
-                onChange={() =>
+            </div>
+            <div>
+              <label htmlFor="board-contact-role-type">役職種別</label>
+              <select
+                id="board-contact-role-type"
+                value={form.roleType}
+                onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    contactPreference: 'phone',
+                    roleType: event.target.value as BoardContactRoleType,
+                  }))
+                }
+              >
+                <option value="admin">管理者</option>
+                <option value="staff">スタッフ</option>
+                <option value="member">部員</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="board-contact-assignee">担当者ID</label>
+              <input
+                id="board-contact-assignee"
+                maxLength={128}
+                value={form.assigneeUserId}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    assigneeUserId: event.target.value,
                   }))
                 }
               />
-              電話
-            </label>{' '}
-            <label>
+            </div>
+            <div>
+              <label htmlFor="board-contact-line">LINE連絡先</label>
               <input
-                type="radio"
-                name="board-contact-preference"
-                value="both"
-                checked={form.contactPreference === 'both'}
-                onChange={() =>
+                id="board-contact-line"
+                maxLength={200}
+                value={form.lineContact}
+                onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    contactPreference: 'both',
+                    lineContact: event.target.value,
                   }))
                 }
               />
-              両方
-            </label>
-          </fieldset>
-          {error ? <p role="alert">{error}</p> : null}
-          {success ? <p role="status">{success}</p> : null}
-          <button type="submit" disabled={isSaving}>
-            {isSaving ? '保存中…' : editingId ? '更新する' : '登録する'}
-          </button>{' '}
-          {editingId ? (
-            <button type="button" onClick={resetForm}>
-              編集を取り消す
-            </button>
-          ) : null}
-        </form>
-      </section>
-    </main>
+            </div>
+            <div>
+              <label htmlFor="board-contact-phone">電話番号</label>
+              <input
+                id="board-contact-phone"
+                inputMode="tel"
+                maxLength={32}
+                value={form.phone}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    phone: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <fieldset>
+              <legend>表示する連絡先</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="board-contact-preference"
+                  value="line"
+                  checked={form.contactPreference === 'line'}
+                  onChange={() =>
+                    setForm((current) => ({
+                      ...current,
+                      contactPreference: 'line',
+                    }))
+                  }
+                />
+                LINE
+              </label>{' '}
+              <label>
+                <input
+                  type="radio"
+                  name="board-contact-preference"
+                  value="phone"
+                  checked={form.contactPreference === 'phone'}
+                  onChange={() =>
+                    setForm((current) => ({
+                      ...current,
+                      contactPreference: 'phone',
+                    }))
+                  }
+                />
+                電話
+              </label>{' '}
+              <label>
+                <input
+                  type="radio"
+                  name="board-contact-preference"
+                  value="both"
+                  checked={form.contactPreference === 'both'}
+                  onChange={() =>
+                    setForm((current) => ({
+                      ...current,
+                      contactPreference: 'both',
+                    }))
+                  }
+                />
+                両方
+              </label>
+            </fieldset>
+            {error ? <p role="alert">{error}</p> : null}
+            {success ? <p role="status">{success}</p> : null}
+            <button type="submit" disabled={isSaving}>
+              {isSaving ? '保存中…' : editingId ? '更新する' : '登録する'}
+            </button>{' '}
+            {editingId ? (
+              <button type="button" onClick={resetForm}>
+                編集を取り消す
+              </button>
+            ) : null}
+          </form>
+        </section>
+      ) : null}
+    </section>
   );
 }
 
