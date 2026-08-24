@@ -260,8 +260,9 @@ export function summarizeOrders(entries: OrderEntry[]): OrdersSummary {
   let paidAmount = 0;
   const unpaid: OrdersSummary['unpaid'] = [];
   for (const entry of entries) {
-    totalAmount += entry.totalAmount;
-    if (entry.paymentStatus === 'paid') paidAmount += entry.totalAmount;
+    totalAmount = addSafeSummaryAmount(totalAmount, entry.totalAmount);
+    if (entry.paymentStatus === 'paid')
+      paidAmount = addSafeSummaryAmount(paidAmount, entry.totalAmount);
     else
       unpaid.push({
         entryId: entry.id,
@@ -274,8 +275,11 @@ export function summarizeOrders(entries: OrderEntry[]): OrdersSummary {
       const key = `${line.productId}:${optionKey}`;
       const current = byProduct.get(key);
       if (current) {
-        current.quantity += line.quantity;
-        current.amount += line.amount;
+        current.quantity = addSafeSummaryAmount(
+          current.quantity,
+          line.quantity,
+        );
+        current.amount = addSafeSummaryAmount(current.amount, line.amount);
       } else {
         byProduct.set(key, {
           productId: line.productId,
@@ -295,6 +299,20 @@ export function summarizeOrders(entries: OrderEntry[]): OrdersSummary {
     byProduct: [...byProduct.values()],
     unpaid,
   };
+}
+
+function addSafeSummaryAmount(current: number, addition: number) {
+  if (
+    !Number.isSafeInteger(current) ||
+    !Number.isSafeInteger(addition) ||
+    addition < 0 ||
+    current > Number.MAX_SAFE_INTEGER - addition
+  )
+    throw new OrdersDomainError(
+      '集計金額または数量が上限を超えています。',
+      'INVALID_INPUT',
+    );
+  return current + addition;
 }
 
 export function createOrdersCsv(rows: OrderCsvRow[]) {

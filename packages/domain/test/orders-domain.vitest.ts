@@ -63,6 +63,28 @@ describe('共同購買の業務ルール', () => {
     expect(summary.byProduct[0]).toMatchObject({ quantity: 2, amount: 3000 });
   });
 
+  it('集計金額が安全整数を超える場合は拒否する', () => {
+    const common = {
+      tenantId: 'tenant-a',
+      campaignId: 'campaign-a',
+      ordererUserId: 'guardian-a',
+      ordererName: '山田 太郎',
+      memberId: 'member-a',
+      memberName: '山田 花子',
+      paymentStatus: 'unpaid' as const,
+      paymentConfirmedAt: null,
+      paymentConfirmedBy: null,
+      createdAt: '2026-08-22T00:00:00.000Z',
+      lines: [],
+    };
+    expect(() =>
+      summarizeOrders([
+        { ...common, id: 'order-a', totalAmount: Number.MAX_SAFE_INTEGER },
+        { ...common, id: 'order-b', totalAmount: 1 },
+      ]),
+    ).toThrow('集計金額または数量が上限を超えています');
+  });
+
   it('CSVへBOMを付け、式として解釈される値を文字列化する', () => {
     const csv = createOrdersCsv([
       {

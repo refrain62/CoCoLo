@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { selectedTeamHeaderName } from '@cocolo/contracts/auth-team-selection';
+import { createInMemoryOrdersRepository } from '@cocolo/db/orders';
 import { createApp } from '../dist/app.js';
 
 const USER_ID = 'user-central-a';
@@ -77,6 +78,9 @@ function createTestApp({ multipleMemberships = false } = {}) {
           copyYear: async () => [],
         },
       },
+      orders: {
+        repository: createInMemoryOrdersRepository(),
+      },
       ride: {
         service: {
           createPlan: async () => ({}),
@@ -146,6 +150,24 @@ test('選択中チームを中央APIの業務認証へ反映する', async () =>
   assert.equal(selected.status, 200);
 
   const unselected = await app.request('/api/v1/board-members', {
+    headers: { authorization: `Bearer ${USER_ID}` },
+  });
+  assert.equal(unselected.status, 403);
+});
+
+test('中央APIへ注文routeをmountし、選択中tenantとresponse契約を適用する', async () => {
+  const app = createTestApp({ multipleMemberships: true });
+  const response = await app.request('/api/v1/orders', {
+    headers: {
+      authorization: `Bearer ${USER_ID}`,
+      [selectedTeamHeaderName]: TENANT_ID,
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, []);
+
+  const unselected = await app.request('/api/v1/orders', {
     headers: { authorization: `Bearer ${USER_ID}` },
   });
   assert.equal(unselected.status, 403);
