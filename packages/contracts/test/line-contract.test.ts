@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   lineConnectInputSchema,
+  lineConnectResponseSchema,
   lineNotificationInputSchema,
+  lineStatusResponseSchema,
   lineWebhookBodySchema,
+  lineWebhookResponseSchema,
 } from '../src/line-contract.ts';
 
 test('LINE契約はtenantIdを入力として受け付けない', () => {
@@ -58,6 +61,27 @@ test('webhookイベントのgroupIdと重複排除IDを必須にする', () => {
     lineWebhookBodySchema.safeParse({
       destination: 'Udestination',
       events: [{ type: 'message', timestamp: 1, source: { type: 'group' } }],
+    }).success,
+    false,
+  );
+});
+
+test('LINE公開レスポンスはfeature固有の項目だけを許可する', () => {
+  assert.equal(
+    lineStatusResponseSchema.safeParse({
+      data: { status: 'connected', groupId: 'Cgroup-a' },
+    }).success,
+    true,
+  );
+  assert.equal(
+    lineConnectResponseSchema.safeParse({
+      data: { status: 'connected', groupId: 'Cgroup-a', tenantId: 'tenant-a' },
+    }).success,
+    false,
+  );
+  assert.equal(
+    lineWebhookResponseSchema.safeParse({
+      data: { accepted: 1, duplicates: 0, ignored: 0, tenantId: 'tenant-a' },
     }).success,
     false,
   );

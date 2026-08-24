@@ -64,14 +64,84 @@ export const lineWebhookBodySchema = z
   })
   .strict();
 
-export const lineNotificationResponseSchema = z.object({
-  id: z.string().uuid(),
-  sourceType: lineNotificationSourceSchema,
-  sourceId: z.string(),
-  status: z.enum(['pending', 'sending', 'sent', 'failed']),
-  attempts: z.number().int().nonnegative(),
-  nextRetryAt: z.string().datetime().nullable(),
-});
+const lineGroupIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(128)
+  .regex(/^C[A-Za-z0-9_-]+$/);
+
+export const lineNotificationResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    sourceType: lineNotificationSourceSchema,
+    sourceId: z.string(),
+    status: z.enum(['pending', 'sending', 'sent', 'failed']),
+    attempts: z.number().int().nonnegative(),
+    nextRetryAt: z.string().datetime().nullable(),
+  })
+  .strict();
+
+export const lineStatusResponseSchema = z
+  .object({
+    data: z
+      .object({
+        status: z.enum(['connected', 'disconnected']),
+        groupId: lineGroupIdSchema.nullable(),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const lineConnectResponseSchema = z
+  .object({
+    data: z
+      .object({
+        status: z.literal('connected'),
+        groupId: lineGroupIdSchema,
+      })
+      .strict(),
+  })
+  .strict();
+
+export const lineDisconnectResponseSchema = z
+  .object({ data: z.object({ status: z.literal('disconnected') }).strict() })
+  .strict();
+
+export const lineNotificationEnvelopeResponseSchema = z
+  .object({ data: lineNotificationResponseSchema })
+  .strict();
+
+export const lineEnqueueResponseSchema = z
+  .object({
+    data: z.union([
+      z
+        .object({
+          status: z.literal('queued'),
+          notification: lineNotificationResponseSchema,
+        })
+        .strict(),
+      z
+        .object({
+          status: z.literal('not_connected'),
+          notification: z.null(),
+        })
+        .strict(),
+    ]),
+  })
+  .strict();
+
+export const lineWebhookResponseSchema = z
+  .object({
+    data: z
+      .object({
+        accepted: z.number().int().nonnegative(),
+        duplicates: z.number().int().nonnegative(),
+        ignored: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
 
 export function parseLineConnectInput(input: unknown): LineConnectInput {
   return lineConnectInputSchema.parse(input);

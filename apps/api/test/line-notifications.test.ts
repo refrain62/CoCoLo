@@ -339,6 +339,51 @@ test('専用routeは未認証を拒否し、tenantId入力を受け付けず、s
   assert.equal(staff.status, 403);
 });
 
+test('LINE通知routeは内部項目を公開レスポンスへ含めない', async () => {
+  const fixture = createFixture();
+  const app = createLineNotificationApp({
+    service: fixture.service,
+    verifyToken: async (token) => ({
+      userId: token,
+      issuer: 'https://example.supabase.co/auth/v1',
+      audience: 'authenticated',
+      expiresAt: Math.floor(Date.now() / 1000) + 300,
+    }),
+    findActiveMembership: async () => ({ tenantId: TENANT_A, role: 'owner' }),
+  });
+
+  const connect = await app.request('/api/v1/line/connect', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer owner-a',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ groupId: 'Cgroup-a' }),
+  });
+  assert.equal(connect.status, 201);
+
+  const response = await app.request('/api/v1/line/notifications', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer owner-a',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(notificationInput()),
+  });
+  const body = (await response.json()) as {
+    data: { notification: Record<string, unknown> };
+  };
+  assert.equal(response.status, 202);
+  assert.deepEqual(Object.keys(body.data.notification).sort(), [
+    'attempts',
+    'id',
+    'nextRetryAt',
+    'sourceId',
+    'sourceType',
+    'status',
+  ]);
+});
+
 test('LINEの認証済み操作を中央APIへmountできる', async () => {
   const fixture = createFixture();
   const app = createApp({
