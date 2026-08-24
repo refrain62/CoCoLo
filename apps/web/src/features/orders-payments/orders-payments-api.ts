@@ -1,3 +1,5 @@
+import { selectedTeamHeaderName } from '@cocolo/contracts/auth-team-selection';
+
 export type OrdersProduct = {
   id: string;
   name: string;
@@ -111,6 +113,7 @@ export class OrdersPaymentsApiError extends Error {
 type ApiOptions = {
   baseUrl?: string;
   getAccessToken: () => string | null;
+  getSelectedTeamId?: () => string | null;
   fetcher?: typeof fetch;
 };
 
@@ -127,16 +130,19 @@ async function readError(response: Response) {
 export function createOrdersPaymentsApi({
   baseUrl = import.meta.env.VITE_API_URL ?? '',
   getAccessToken,
+  getSelectedTeamId = () => null,
   fetcher = fetch,
 }: ApiOptions): OrdersPaymentsApi {
   async function request(path: string, init: RequestInit = {}) {
     const token = getAccessToken();
     if (!token) throw new OrdersPaymentsApiError(401, 'ログインが必要です。');
+    const selectedTeamId = getSelectedTeamId();
     const response = await fetcher(`${baseUrl.replace(/\/$/, '')}${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${token}`,
+        ...(selectedTeamId ? { [selectedTeamHeaderName]: selectedTeamId } : {}),
         ...(init.body ? { 'Content-Type': 'application/json' } : {}),
         ...init.headers,
       },

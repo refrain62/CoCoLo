@@ -42,6 +42,21 @@ describe('共同購買API client', () => {
     expect(requestHeaders['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it('注文APIへ選択中チームIDを送る', async () => {
+    let request: { init?: RequestInit } | undefined;
+    globalThis.fetch = async (_input, init) => {
+      request = { init };
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    };
+    await createOrdersPaymentsApi({
+      getAccessToken: () => 'token',
+      getSelectedTeamId: () => '00000000-0000-7000-8000-000000000001',
+    }).listCampaigns();
+    expect(request?.init?.headers).toMatchObject({
+      'X-CoCoLo-Team-Id': '00000000-0000-7000-8000-000000000001',
+    });
+  });
+
   it('CSV出力はJSONとして解釈せずBlobを返す', async () => {
     globalThis.fetch = async () =>
       new Response('csv', {
