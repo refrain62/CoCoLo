@@ -44,7 +44,7 @@ const stacks: Record<StackName, Stack> = {
   test: {
     name: 'test',
     projectId: 'cocolo-test',
-    directory: path.join(root, 'test-infrastructure', 'supabase'),
+    directory: path.join(root, 'test-infrastructure'),
     apiPort: 55321,
     dbPort: 55322,
     appPort: 8788,
