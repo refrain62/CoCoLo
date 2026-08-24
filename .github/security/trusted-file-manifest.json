@@ -50,7 +50,7 @@
     "packages/db/prisma/migrations.sha256": "31e5d8f418730bdcc8a30cf603ba6792fbece2737a2a16422083054e58810d83",
     "packages/db/prisma/schema.prisma": "a697c97a01ba17117b0633701d3fc729b845573d4fd8e0085d35eeebeed9d0fe",
     "pnpm-lock.yaml": "a28a3a63eee8f0a5969ba1fdb7bc09029e6196fccecc818c172588189223c973",
-    "scripts/ci.ts": "fc6a384a5a727718bf67811e181afb5e8a4b5198cfca5439407c8217a8d8896f",
+    "scripts/ci.ts": "30f4ee209e51e74db994ef9c77b1021cbc69259f716143ecac3ec96c2654463f",
     "scripts/create-staging-evidence.ts": "99b2e9151b0bd2d6d81300544565f34ba8ef870f94cf17a61d66ece0cf478f6b",
     "scripts/create-pgpass.ts": "8316d901cb4ed2ab577997dc6cffc7412a83474697a8075096c19d95288fea1e",
     "scripts/db-prepare-test.ts": "809727bdc0c7fc766406a7e40184be80adeaf5a5c9e1c47dfb1cbc5e29abc216",
