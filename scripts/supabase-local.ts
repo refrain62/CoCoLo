@@ -286,6 +286,7 @@ async function prepareStack(
   if (fresh) {
     runNodeScript('local-auth-fixture.ts', {
       ...appEnv,
+      SUPABASE_ADMIN_DATABASE_URL: status.dbUrl,
       SUPABASE_SERVICE_ROLE_KEY: status.serviceRoleKey,
     });
   }
