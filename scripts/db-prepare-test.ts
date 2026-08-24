@@ -10,10 +10,15 @@ const appPassword = process.env.COCOLO_APP_PASSWORD ?? 'cocolo_app';
 const migrationRole = process.env.COCOLO_MIGRATION_ROLE?.trim();
 const fixtureGrantsOnly = process.env.COCOLO_FIXTURE_GRANTS_ONLY === 'true';
 const adminGrantsOnly = process.env.COCOLO_ADMIN_GRANTS_ONLY === 'true';
+const adminBypassRls = process.env.COCOLO_ADMIN_BYPASSRLS === 'true';
 assert.ok(
   (!fixtureGrantsOnly && !adminGrantsOnly) ||
     migrationRole === 'cocolo_migration',
   'fixture/admin専用権限付与はmigration roleと併用してください。',
+);
+assert.ok(
+  !adminBypassRls || migrationRole === 'cocolo_migration',
+  'COCOLO_ADMIN_BYPASSRLS はmigration roleと併用してください。',
 );
 assert.ok(
   !migrationRole || migrationRole === 'cocolo_migration',
@@ -79,6 +84,7 @@ BEGIN
   ELSE
     ALTER ROLE line_delivery_worker LOGIN PASSWORD ${quoteLiteral(workerPassword)} NOSUPERUSER NOBYPASSRLS NOINHERIT;
   END IF;
+  ${adminBypassRls ? 'ALTER ROLE postgres BYPASSRLS;' : ''}
 END
 $$;
 `;

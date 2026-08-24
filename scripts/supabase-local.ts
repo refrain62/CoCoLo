@@ -278,6 +278,7 @@ async function prepareStack(
     ...appEnv,
     DATABASE_URL: status.dbUrl,
     DIRECT_URL: status.dbUrl,
+    COCOLO_ADMIN_BYPASSRLS: stack.name === 'test' ? 'true' : 'false',
   });
   runPnpm(
     ['--filter', '@cocolo/db', 'exec', 'prisma', 'migrate', 'deploy'],
