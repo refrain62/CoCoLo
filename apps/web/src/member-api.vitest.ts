@@ -72,6 +72,26 @@ describe('年度繰り上げAPIクライアント', () => {
 });
 
 describe('部員ライフサイクルAPIクライアント', () => {
+  it('選択中チームを部員APIへ明示する', async () => {
+    let headers: HeadersInit | undefined;
+    globalThis.fetch = async (_input, init) => {
+      headers = init?.headers;
+      return new Response(
+        JSON.stringify({ data: { id: 'member-1', name: '部員' } }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+
+    await createMemberApi({
+      getAccessToken: () => 'token',
+      getSelectedTeamId: () => '00000000-0000-7000-8000-000000000001',
+    }).retire('member-1');
+
+    expect(headers).toMatchObject({
+      'X-CoCoLo-Team-Id': '00000000-0000-7000-8000-000000000001',
+    });
+  });
+
   it('編集は部員IDをURLへエンコードしてPATCHする', async () => {
     let request: { url: string; init?: RequestInit } | undefined;
     globalThis.fetch = async (input, init) => {

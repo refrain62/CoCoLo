@@ -1,3 +1,8 @@
+import {
+  getStoredSelectedTeamId,
+  selectedTeamHeaderName,
+} from '../auth-team-selection/selected-team-storage.js';
+
 export type EventType = 'practice' | 'match' | 'event';
 export type AttendanceResponse = 'attending' | 'absent' | 'pending';
 export type EventRole = 'owner' | 'admin' | 'staff' | 'guardian';
@@ -84,6 +89,7 @@ export type EventsApi = {
 type EventsApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  getSelectedTeamId?: () => string | null;
 };
 
 type ErrorBody = { error?: { code?: string; message?: string } };
@@ -106,6 +112,7 @@ async function readError(response: Response) {
 export function createEventsApi({
   baseUrl = '',
   getAccessToken = storedAccessToken,
+  getSelectedTeamId = getStoredSelectedTeamId,
 }: EventsApiOptions = {}): EventsApi {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
@@ -116,6 +123,9 @@ export function createEventsApi({
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${accessToken}`,
+        ...(getSelectedTeamId()
+          ? { [selectedTeamHeaderName]: getSelectedTeamId() as string }
+          : {}),
         ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
         ...init?.headers,
       },

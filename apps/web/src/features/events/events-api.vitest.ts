@@ -67,6 +67,25 @@ describe('createEventsApi', () => {
     fetcher.mockRestore();
   });
 
+  it('選択中チームを予定APIへ明示する', async () => {
+    const fetcher = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: [] }), { status: 200 }),
+      );
+    const api = createEventsApi({
+      getAccessToken: () => 'token-a',
+      getSelectedTeamId: () => '00000000-0000-7000-8000-000000000001',
+    });
+
+    await api.list('2026-08-01T00:00:00Z', '2026-09-01T00:00:00Z');
+
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+      'X-CoCoLo-Team-Id': '00000000-0000-7000-8000-000000000001',
+    });
+    fetcher.mockRestore();
+  });
+
   it('締切後エラーをAPIエラーとして保持する', async () => {
     const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
