@@ -369,3 +369,59 @@ test('LINEの認証済み操作を中央APIへmountできる', async () => {
   });
   assert.equal(notificationResponse.status, 404);
 });
+
+test('Webhook receiptは受信専用repositoryへ委譲し、tenant検索を公開経路で実行しない', async () => {
+  const fixture = createFixture();
+  const results = new Map<string, 'accepted' | 'duplicate' | 'ignored'>();
+  const service = createLineNotificationService({
+    repository: fixture.repository,
+    adapter: fixture.adapter,
+    channelSecret: CHANNEL_SECRET,
+    webhookDestination: 'Udestination',
+    publicAppUrl: BASE_URL,
+    webhookRepository: {
+      recordWebhookReceipt: async ({ groupId, webhookEventId }) => {
+        const key = `${groupId}:${webhookEventId}`;
+        const previous = results.get(key);
+        if (previous) return 'duplicate';
+        if (groupId !== 'Cgroup-a') return 'ignored';
+        results.set(key, 'accepted');
+        return 'accepted';
+      },
+    },
+  });
+
+  const first = await service.receiveWebhook({
+    rawBody: webhookBody(),
+    signature: signature(webhookBody()),
+  });
+  const second = await service.receiveWebhook({
+    rawBody: webhookBody(),
+    signature: signature(webhookBody()),
+  });
+  const ignored = await service.receiveWebhook({
+    rawBody: webhookBody('unknown-group', 'event-002'),
+    signature: signature(webhookBody('unknown-group', 'event-002')),
+  });
+
+  assert.deepEqual(first, { accepted: 1, duplicates: 0, ignored: 0 });
+  assert.deepEqual(second, { accepted: 0, duplicates: 1, ignored: 0 });
+  assert.deepEqual(ignored, { accepted: 0, duplicates: 0, ignored: 1 });
+});
+
+test('中央APIの公開WebhookはPOSTの正確なパスだけJWTを要求しない', async () => {
+  const fixture = createFixture();
+  const app = createApp({
+    centralFeatures: { line: { service: fixture.service, webhook: true } },
+  });
+  const body = webhookBody();
+  const webhook = await app.request('/api/v1/line/webhook', {
+    method: 'POST',
+    headers: { 'x-line-signature': signature(body) },
+    body,
+  });
+  const status = await app.request('/api/v1/line/status');
+
+  assert.equal(webhook.status, 200);
+  assert.equal(status.status, 503);
+});

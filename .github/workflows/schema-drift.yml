@@ -85,9 +85,10 @@ jobs:
           CREATE ROLE cocolo_shadow LOGIN PASSWORD :'shadow_password' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
           CREATE ROLE cocolo_app NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
           CREATE ROLE line_delivery_worker NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
+          CREATE ROLE line_webhook_receiver NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
           ALTER DATABASE cocolo_shadow OWNER TO cocolo_shadow;
           REVOKE ALL ON SCHEMA public FROM PUBLIC;
-          GRANT USAGE ON SCHEMA public TO cocolo_app, line_delivery_worker;
+          GRANT USAGE ON SCHEMA public TO cocolo_app, line_delivery_worker, line_webhook_receiver;
           SQL
           PGPASSFILE="$PGPASSFILE" psql --no-psqlrc --set=ON_ERROR_STOP=1 --host localhost --port 5433 --username postgres --dbname cocolo_shadow --file "$RUNNER_TEMP/shadow-bootstrap.sql"
         env:

@@ -16,6 +16,8 @@ const migrationPassword =
   process.env.COCOLO_MIGRATION_PASSWORD ?? 'cocolo_migration';
 const workerPassword =
   process.env.LINE_DELIVERY_WORKER_PASSWORD ?? 'line_delivery_worker';
+const webhookReceiverPassword =
+  process.env.LINE_WEBHOOK_RECEIVER_PASSWORD ?? 'line_webhook_receiver';
 
 // migration ownerはSupabase localで明示的に有効化し、FORCE RLS下のsecurity definerを実行できるようにする。
 const migrationCompatibilitySql = migrationRole
@@ -59,6 +61,11 @@ BEGIN
   ELSE
     ALTER ROLE line_delivery_worker LOGIN PASSWORD ${quoteLiteral(workerPassword)} NOSUPERUSER NOBYPASSRLS NOINHERIT;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'line_webhook_receiver') THEN
+    CREATE ROLE line_webhook_receiver LOGIN PASSWORD ${quoteLiteral(webhookReceiverPassword)} NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;
+  ELSE
+    ALTER ROLE line_webhook_receiver LOGIN PASSWORD ${quoteLiteral(webhookReceiverPassword)} NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;
+  END IF;
 END
 $$;
 `;
@@ -71,7 +78,9 @@ const grants = [
     : []),
   'GRANT USAGE ON SCHEMA public TO cocolo_app',
   'GRANT USAGE ON SCHEMA public TO line_delivery_worker',
+  'GRANT USAGE ON SCHEMA public TO line_webhook_receiver',
   'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM line_delivery_worker',
+  'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM line_webhook_receiver',
 ];
 
 await withPostgresClient(process.env.DIRECT_URL, async (client) => {
@@ -80,4 +89,6 @@ await withPostgresClient(process.env.DIRECT_URL, async (client) => {
   await client.$executeRawUnsafe(roleSql);
   for (const statement of grants) await client.$executeRawUnsafe(statement);
 });
-console.log('テストDBのmigration、app、worker roleを準備しました。');
+console.log(
+  'テストDBのmigration、app、worker、webhook receiver roleを準備しました。',
+);

@@ -6,6 +6,7 @@
     ".": "./dist/index.js",
     "./client": "./dist/index.js",
     "./line": "./dist/line-repository.js",
+    "./line-webhook": "./dist/line-webhook-repository.js",
     "./auth-team-selection": "./dist/auth-team-selection-repository.js",
     "./board-contact": "./dist/board-contact-repository.js",
     "./ride": {

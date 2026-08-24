@@ -6,6 +6,7 @@ import { createBoardContactRepository } from '@cocolo/db/board-contact';
 import { createBulletinBoardRepositories } from '@cocolo/db/bulletin-board';
 import { createEventRepository } from '@cocolo/db/events';
 import { createPrismaLineRepository } from '@cocolo/db/line';
+import { createPrismaLineWebhookRepository } from '@cocolo/db/line-webhook';
 import { createPrismaOrdersRepository } from '@cocolo/db/orders';
 import { createRideRepository } from '@cocolo/db/ride';
 import { serve } from '@hono/node-server';
@@ -16,6 +17,7 @@ import {
   createLineNotificationService,
 } from './features/line-notifications/index.js';
 import { createRideService } from './features/ride-operations/ride-service.js';
+import { resolveLineWebhookReceiverDatabaseUrl } from './line-webhook-environment.js';
 import { readRuntimeEnvironment } from './runtime-environment.js';
 import { loadDistributedRateLimitAdapter } from './security/rate-limit-adapter.js';
 import { createStructuredLogger } from './security/structured-logger.js';
@@ -31,11 +33,26 @@ const eventRepository = createEventRepository(prisma, {
 const lineChannelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
 const lineChannelSecret = process.env.LINE_CHANNEL_SECRET?.trim();
 const lineWebhookDestination = process.env.LINE_WEBHOOK_DESTINATION?.trim();
+const lineFeatureConfigured = Boolean(
+  lineChannelAccessToken && lineChannelSecret && lineWebhookDestination,
+);
+const lineWebhookReceiverDatabaseUrl = resolveLineWebhookReceiverDatabaseUrl({
+  appEnv: runtime.appEnv,
+  databaseUrl: runtime.databaseUrl,
+  configuredUrl: process.env.LINE_WEBHOOK_RECEIVER_DATABASE_URL,
+  lineFeatureConfigured,
+});
+const lineWebhookPrisma = lineWebhookReceiverDatabaseUrl
+  ? createPrismaClient(lineWebhookReceiverDatabaseUrl)
+  : undefined;
 const lineFeature =
   lineChannelAccessToken && lineChannelSecret && lineWebhookDestination
     ? {
         service: createLineNotificationService({
           repository: createPrismaLineRepository(prisma),
+          webhookRepository: lineWebhookPrisma
+            ? createPrismaLineWebhookRepository(lineWebhookPrisma)
+            : undefined,
           adapter: createLineMessagingAdapter({
             channelAccessToken: lineChannelAccessToken,
           }),
@@ -44,6 +61,7 @@ const lineFeature =
           publicAppUrl: runtime.publicAppUrl,
           liffId: process.env.LINE_LIFF_ID?.trim() || undefined,
         }),
+        webhook: Boolean(lineWebhookPrisma),
       }
     : undefined;
 const centralFeatures = {

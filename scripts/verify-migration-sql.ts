@@ -72,7 +72,9 @@ function assertForbiddenStatements(file: MigrationSqlFile) {
     assert.ok(grantees.length > 0, `${file.path}: GRANT先を解釈できません。`);
     for (const grantee of grantees)
       assert.ok(
-        grantee === 'cocolo_app' || grantee === 'line_delivery_worker',
+        grantee === 'cocolo_app' ||
+          grantee === 'line_delivery_worker' ||
+          grantee === 'line_webhook_receiver',
         `${file.path}: 許可された実行role以外へのGRANTは禁止です。`,
       );
     assert.doesNotMatch(
@@ -86,7 +88,7 @@ function assertForbiddenStatements(file: MigrationSqlFile) {
   for (const match of compact.matchAll(revokePattern))
     assert.match(
       match[0],
-      /^REVOKE\s+.+\s+ON\s+(?:TABLE\s+)?[^;]+\s+FROM\s+(?:PUBLIC|cocolo_app|line_delivery_worker)(?:\s*,\s*(?:PUBLIC|cocolo_app|line_delivery_worker))*\s*;$/i,
+      /^REVOKE\s+.+\s+ON\s+(?:TABLE\s+)?[^;]+\s+FROM\s+(?:PUBLIC|cocolo_app|line_delivery_worker|line_webhook_receiver)(?:\s*,\s*(?:PUBLIC|cocolo_app|line_delivery_worker|line_webhook_receiver))*\s*;$/i,
       `${file.path}: 許可されたrole以外へのREVOKEは禁止です。`,
     );
 }

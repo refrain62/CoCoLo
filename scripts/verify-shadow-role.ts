@@ -136,7 +136,7 @@ const expectedTablePrivileges = new Map<string, readonly string[]>([
   ['order_idempotency_keys', ['INSERT', 'SELECT', 'UPDATE']],
   ['line_connections', ['INSERT', 'SELECT', 'UPDATE']],
   ['line_notification_queue', ['INSERT', 'SELECT', 'UPDATE']],
-  ['line_webhook_receipts', ['INSERT', 'SELECT', 'UPDATE']],
+  ['line_webhook_receipts', ['SELECT']],
   ['ride_plans', ['INSERT', 'SELECT', 'UPDATE']],
   ['ride_offers', ['INSERT', 'SELECT', 'UPDATE']],
   ['ride_requests', ['INSERT', 'SELECT', 'UPDATE']],
@@ -192,9 +192,22 @@ export function buildExpectedShadowAclEntries(
     privilege: 'USAGE',
   });
   entries.push({
+    objectType: 'schema',
+    objectName: 'public',
+    grantee: 'line_webhook_receiver',
+    privilege: 'USAGE',
+  });
+  entries.push({
     objectType: 'function',
     objectName: 'public.app_guard_promotion_run_transition()',
     grantee: 'cocolo_app',
+    privilege: 'EXECUTE',
+  });
+  entries.push({
+    objectType: 'function',
+    objectName:
+      'public.app_record_line_webhook_receipt(character varying, character varying, timestamp with time zone)',
+    grantee: 'line_webhook_receiver',
     privilege: 'EXECUTE',
   });
   for (const [tableName, privileges] of expectedTablePrivileges) {
@@ -394,7 +407,7 @@ async function inspectShadowDatabase(
            FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
            CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) x
           WHERE n.nspname = 'public'
-            AND p.proname = 'app_guard_promotion_run_transition'
+            AND p.proname IN ('app_guard_promotion_run_transition', 'app_record_line_webhook_receipt')
             AND p.prokind IN ('f', 'p')
             AND x.grantee <> p.proowner`,
     ),
