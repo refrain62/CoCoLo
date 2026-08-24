@@ -20,13 +20,13 @@
 
 ## 1. 停止時点の基準
 
-実装再開の基準となる`develop`は`3dfce6f`（PR #147反映後）です。管理者再試行APIとworkerのロック順序修正、LINE Webhook受信境界、LINE公開レスポンス契約、役員連絡先、注文API、回覧板、認証チーム選択、添付、送迎の公開レスポンス契約、回覧添付のavailable状態DBガード、UUIDv7移行前検査、回覧板添付の短期URLダウンロードまで反映済みです。完了済み実装の詳細は[完了タスクと実施履歴](resume-task-history.md)へ移しています。
+実装再開の基準となる`develop`は`76cb41b`（PR #149反映後）です。管理者再試行APIとworkerのロック順序修正、LINE Webhook受信境界、LINE公開レスポンス契約、役員連絡先、注文API、回覧板、認証チーム選択、添付、送迎の公開レスポンス契約、回覧添付のavailable状態DBガード、UUIDv7移行前検査、回覧板添付の短期URLダウンロード、LINE Web通知の現行producer接続まで反映済みです。完了済み実装の詳細は[完了タスクと実施履歴](resume-task-history.md)へ移しています。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
 Draft PRに実装が存在しても、`develop`へ統合されていない機能は現行環境では未実装として扱います。
 
-再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、#77、#80、#82、#85、#89、#91、#93、#112、#113、#114、#115、#116、#143、#145、#147、docs-only PR #55、#56、#57、#58、#61、#63、#66、#81、#83、#86、#87、#88、#90、#92、#144、#146は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
+再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、#77、#80、#82、#85、#89、#91、#93、#112、#113、#114、#115、#116、#143、#145、#147、#149、docs-only PR #55、#56、#57、#58、#61、#63、#66、#81、#83、#86、#87、#88、#90、#92、#144、#146、#148は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
 
 ### 1.1 再開時のGitHub同期結果
 
@@ -197,7 +197,7 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - PR #102で添付upload APIを中央mountし、中央認証、選択tenant、rate limit、R2実adapter、response契約を接続済みです。Webの添付画面は未接続です。
   - PR #105で添付Web画面を中央APIへ接続し、選択tenant headerとguardianの表示制御を追加しました。
   - PR #109で注文・集金APIをPrisma repositoryと中央mountへ接続し、PR #110で注文Web画面、選択tenant header、チーム切替時の状態破棄を接続しました。
-  - PR #123でowner/admin向けの管理者再試行APIを現行outboxへ接続し、PR #125でworker claimと管理者再試行のロック順序を統一しました。PR #127でWebhookの専用DB actor境界を追加し、PR #129でLINE公開レスポンス契約を厳密化し、PR #131で役員連絡先の公開レスポンス契約を追加し、PR #133で注文APIの公開レスポンス契約を追加し、PR #135で回覧板APIの公開レスポンス契約を追加し、PR #137で認証チーム選択の公開レスポンス契約を中央APIへ適用し、PR #139で添付APIの公開レスポンス契約を拡張し、PR #141で送迎APIの公開レスポンス契約を追加し、PR #147で回覧板詳細の添付ダウンロードを中央添付APIへ接続しました。残りは全画面の統合テストとstaging Supabase E2Eです。送迎画面の予定選択はPR #112、チーム選択前のlogout導線はPR #113で完了しました。古いPR #35はクローズしました。
+  - PR #123でowner/admin向けの管理者再試行APIを現行outboxへ接続し、PR #125でworker claimと管理者再試行のロック順序を統一しました。PR #127でWebhookの専用DB actor境界を追加し、PR #129でLINE公開レスポンス契約を厳密化し、PR #131で役員連絡先の公開レスポンス契約を追加し、PR #133で注文APIの公開レスポンス契約を追加し、PR #135で回覧板APIの公開レスポンス契約を追加し、PR #137で認証チーム選択の公開レスポンス契約を中央APIへ適用し、PR #139で添付APIの公開レスポンス契約を拡張し、PR #141で送迎APIの公開レスポンス契約を追加し、PR #147で回覧板詳細の添付ダウンロードを中央添付APIへ接続し、PR #149でLINE Web通知を現行producerへ接続しました。残りは全画面の統合テストとstaging Supabase E2Eです。送迎画面の予定選択はPR #112、チーム選択前のlogout導線はPR #113で完了しました。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[~]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**
@@ -247,6 +247,7 @@ EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume
   - 対象：PR #28、PR #36
   - PR #114で接続状態・接続・解除を中央APIへmountし、PR #117で通知登録を現行`line_delivery_outbox`へ接続しました。接続済みの現在グループ以外は拒否し、接続世代をoutboxへ保存します。PR #120でcontext欠落、旧世代のNULL、同一冪等キーの再送をfail-closed化しました。
   - PR #127で、旧`line_notification_queue`と現行`line_delivery_outbox`を混在させずにWebhookを公開入口へ接続しました。専用のDB actor、別接続設定、署名検証、destination検証、receiptの重複排除、未知groupの無視、Webhook専用rate limitを実装済みです。管理者再試行APIはPR #123、workerのロック順序はPR #125で現行outboxへ接続済みです。
+  - PR #149でLINE Web画面の通知登録を現行`/api/v1/notifications/line` producerへ接続し、接続groupのdestination、冪等キー、owner/admin境界を適用しました。
   - LINE channel、groupIdとtenantの紐付け、未接続状態、署名検証、Webhook重複排除、未知group拒否、再試行、LIFF、deep linkを統合します。
   - `POST /api/v1/notifications/line`、Webhook route、outbox、workerを同一の認可と監査契約で確認します。
 

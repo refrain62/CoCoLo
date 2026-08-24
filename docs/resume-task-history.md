@@ -1138,6 +1138,40 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - 実ブラウザでのダウンロード、staging R2の署名URL期限・実体・認可確認は環境準備後に実施します。
 - 回覧板とイベント詳細を含む全画面統合テストは継続します。
 
+## NOT-001/API-002 LINE Web通知を現行producerへ接続
+
+### 実施した変更
+
+- PR #149で、認証済みWeb画面へLINE接続状態・接続・解除・通知登録panelをmountしました。
+- 通知登録を旧`/api/v1/line/notifications`から現行`/api/v1/notifications/line`へ切り替え、接続中groupをdestinationとして送信します。
+- Web clientでIdempotency-Keyを発行し、現行producerのpending response、Authorization、選択中team headerへ対応しました。
+- LINE未設定時にstatus endpointが404を返す場合は、エラーではなく未接続として表示します。
+- 現行producerのowner/admin認可に合わせ、staffには通知登録フォームを表示しません。
+
+### 検証結果
+
+- `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm lint:workflows`が成功しました。
+- `pnpm verify:trust-root`と`git diff --check`が成功しました。
+- PR #149の品質ゲート run `32746028441`が成功しました。
+- 実LINE、staging Supabase、Webhook、worker送信は環境接続がないため未実施です。
+
+### 敵対的レビュー
+
+- 通知登録が現行producerとdestination、冪等性、selected team、Authorizationの契約に一致することを確認しました。
+- 旧`line_notification_queue`への通知登録を再導入せず、LINE secretとprovider本文をWebへ露出しないことを確認しました。
+- LINE未設定、未認証、owner/admin以外の通知登録をfail-closedまたは未接続表示へ収束することを確認しました。
+- CriticalとHighの未解消指摘はありません。
+
+### GitHub反映
+
+- PR #149は`76cb41b`としてdevelopへsquash mergeしました。
+- 実装PRと台帳更新PRを分離しています。
+
+### 未完了条件
+
+- 実LINE環境での接続・通知・再送・Webhook受入、staging worker送信は環境準備後に実施します。
+- staffが現行outboxへ通知登録できる権限を安全に付与する契約整理は継続します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
