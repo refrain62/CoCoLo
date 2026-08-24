@@ -78,6 +78,17 @@ function createTestApp({ multipleMemberships = false } = {}) {
           copyYear: async () => [],
         },
       },
+      bulletinBoard: {
+        repository: {
+          list: async () => ({ data: [], hasNext: false }),
+          publish: async () => {
+            throw new Error('unused');
+          },
+          find: async () => null,
+          markRead: async () => null,
+          listUnread: async () => null,
+        },
+      },
       orders: {
         repository: createInMemoryOrdersRepository(),
       },
@@ -123,6 +134,20 @@ test('中央APIへ役員連絡先routeをmountする', async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).data, []);
+});
+
+test('中央APIへ回覧板routeをmountし、公開response契約を適用する', async () => {
+  const response = await createTestApp().request('/api/v1/announcements', {
+    headers: { authorization: `Bearer ${USER_ID}` },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    data: [],
+    page: 1,
+    pageSize: 50,
+    hasNext: false,
+  });
 });
 
 test('中央APIへ添付upload routeをmountし、中央認証を利用する', async () => {

@@ -9,6 +9,12 @@ import {
   boardContactManagerMutationResponseSchema,
 } from '@cocolo/contracts/board-contact-response';
 import {
+  announcementListResponseSchema,
+  announcementReadResponseSchema,
+  announcementResponseEnvelopeSchema,
+  announcementUnreadResponseSchema,
+} from '@cocolo/contracts/bulletin-board-response';
+import {
   lineConnectResponseSchema,
   lineDisconnectResponseSchema,
   lineEnqueueResponseSchema,
@@ -376,6 +382,36 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       path: /^\/api\/v1\/board-members\/[^/]+$/,
       status: 200,
       schema: boardContactManagerMutationResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/announcements$/,
+      status: 200,
+      schema: announcementListResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/announcements$/,
+      status: 201,
+      schema: announcementResponseEnvelopeSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/announcements\/[^/]+$/,
+      status: 200,
+      schema: announcementResponseEnvelopeSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/announcements\/[^/]+\/read$/,
+      status: 200,
+      schema: announcementReadResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/announcements\/[^/]+\/unread$/,
+      status: 200,
+      schema: announcementUnreadResponseSchema,
     },
     {
       method: 'GET',
