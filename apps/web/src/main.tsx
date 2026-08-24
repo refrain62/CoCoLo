@@ -22,6 +22,8 @@ import { createBulletinBoardApi } from './features/bulletin-board/bulletin-board
 import { BulletinBoardPage } from './features/bulletin-board/bulletin-board-page.js';
 import { createEventsApi } from './features/events/events-api.js';
 import { EventsPage } from './features/events/events-page.js';
+import { LineNotificationPanel } from './features/line-notifications/line-notification-panel.js';
+import { createLineNotificationApi } from './features/line-notifications/line-notifications-api.js';
 import {
   createOrdersPaymentsApi,
   OrdersPaymentsPage,
@@ -138,6 +140,15 @@ function AuthenticatedApp() {
       }),
     [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
+  const lineNotificationApi = useMemo(
+    () =>
+      createLineNotificationApi({
+        getAccessToken: () => session?.accessToken ?? null,
+        getSelectedTeamId: () => selectedTeamId,
+        fetcher: authenticatedFetch,
+      }),
+    [authenticatedFetch, selectedTeamId, session?.accessToken],
+  );
   const ordersApi = useMemo(
     () =>
       createOrdersPaymentsApi({
@@ -232,6 +243,9 @@ function AuthenticatedApp() {
           attachmentApi={attachmentApi}
           role={role}
         />
+      ) : null}
+      {role ? (
+        <LineNotificationPanel api={lineNotificationApi} role={role} />
       ) : null}
       {role && role !== 'staff' ? (
         <OrdersPaymentsPage

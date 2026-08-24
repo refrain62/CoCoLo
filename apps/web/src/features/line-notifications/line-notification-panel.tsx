@@ -1,9 +1,9 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import {
   createLineNotificationApi,
+  LineApiError,
   type LineConnectionStatus,
   type LineNotificationApi,
-  type LineNotificationSource,
 } from './line-notifications-api.js';
 
 type LineRole = 'owner' | 'admin' | 'staff' | 'guardian';
@@ -29,7 +29,6 @@ export function LineNotificationPanel({
   const [status, setStatus] = useState<LineConnectionStatus | null>(null);
   const [groupId, setGroupId] = useState('');
   const [inputGroupId, setInputGroupId] = useState('');
-  const [sourceType, setSourceType] = useState<LineNotificationSource>('event');
   const [sourceId, setSourceId] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -37,7 +36,7 @@ export function LineNotificationPanel({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const canManage = role === 'owner' || role === 'admin';
-  const canNotify = canManage || role === 'staff';
+  const canNotify = canManage;
 
   useEffect(() => {
     let active = true;
@@ -49,7 +48,16 @@ export function LineNotificationPanel({
         setGroupId(value.groupId ?? '');
       })
       .catch((requestError) => {
-        if (active) setError(errorMessage(requestError));
+        if (!active) return;
+        if (
+          requestError instanceof LineApiError &&
+          requestError.status === 404
+        ) {
+          setStatus('disconnected');
+          setGroupId('');
+          return;
+        }
+        setError(errorMessage(requestError));
       });
     return () => {
       active = false;
@@ -88,18 +96,18 @@ export function LineNotificationPanel({
     event.preventDefault();
     setError(null);
     setMessage(null);
+    if (!groupId) {
+      setMessage('LINEは未接続のため、通知を登録しませんでした。');
+      return;
+    }
     try {
-      const result = await api.enqueue({
-        sourceType,
+      await api.enqueue({
         sourceId: sourceId.trim(),
+        destination: groupId,
         title: title.trim(),
         body: body.trim(),
         deepLink: deepLink.trim(),
       });
-      if (result.status === 'not_connected') {
-        setMessage('LINEは未接続のため、通知を登録しませんでした。');
-        return;
-      }
       setMessage('LINE通知をキューへ登録しました。');
       setSourceId('');
       setTitle('');
@@ -133,18 +141,6 @@ export function LineNotificationPanel({
       {canNotify ? (
         <form onSubmit={enqueue}>
           <h3>通知を登録</h3>
-          <label htmlFor="line-source-type">通知種別</label>
-          <select
-            id="line-source-type"
-            value={sourceType}
-            onChange={(event) =>
-              setSourceType(event.target.value as LineNotificationSource)
-            }
-          >
-            <option value="event">予定</option>
-            <option value="deadline">締切</option>
-            <option value="bulletin">回覧</option>
-          </select>
           <label htmlFor="line-source-id">通知元ID</label>
           <input
             id="line-source-id"

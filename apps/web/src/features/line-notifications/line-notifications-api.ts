@@ -1,9 +1,6 @@
 import { selectedTeamHeaderName } from '../auth-team-selection/selected-team-storage.js';
 
 export type LineConnectionStatus = 'connected' | 'disconnected';
-export type LineNotificationSource = 'event' | 'deadline' | 'bulletin';
-
-export type LineNotificationStatus = 'pending' | 'sending' | 'sent' | 'failed';
 
 export type LineStatus = {
   status: LineConnectionStatus;
@@ -11,20 +8,16 @@ export type LineStatus = {
 };
 
 export type LineNotificationInput = {
-  sourceType: LineNotificationSource;
   sourceId: string;
+  destination: string;
   title: string;
   body: string;
   deepLink: string;
 };
 
-export type LineNotification = {
-  id: string;
-  sourceType: LineNotificationSource;
-  sourceId: string;
-  status: LineNotificationStatus;
-  attempts: number;
-  nextRetryAt: string | null;
+export type LineDeliveryResult = {
+  notificationId: string;
+  status: 'pending';
 };
 
 type LineApiErrorBody = {
@@ -46,19 +39,15 @@ export type LineNotificationApi = {
   status: () => Promise<LineStatus>;
   connect: (groupId: string) => Promise<LineStatus>;
   disconnect: () => Promise<void>;
-  enqueue: (
-    input: LineNotificationInput,
-  ) => Promise<
-    | { status: 'queued'; notification: LineNotification }
-    | { status: 'not_connected'; notification: null }
-  >;
-  retry: (notificationId: string) => Promise<LineNotification>;
+  enqueue: (input: LineNotificationInput) => Promise<LineDeliveryResult>;
+  retry: (notificationId: string) => Promise<LineDeliveryResult>;
 };
 
 type LineNotificationApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
   getSelectedTeamId?: () => string | null;
+  fetcher?: typeof fetch;
 };
 
 function getStoredAccessToken() {
@@ -80,13 +69,14 @@ export function createLineNotificationApi({
   baseUrl = '',
   getAccessToken = getStoredAccessToken,
   getSelectedTeamId,
+  fetcher = fetch,
 }: LineNotificationApiOptions = {}): LineNotificationApi {
-  async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  async function requestUrl<T>(url: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
     if (!accessToken)
       throw new LineApiError(401, 'UNAUTHENTICATED', 'ログインが必要です。');
     const selectedTeamId = getSelectedTeamId?.();
-    const response = await fetch(`${baseUrl}/api/v1/line${path}`, {
+    const response = await fetcher(url, {
       ...init,
       headers: {
         Accept: 'application/json',
@@ -98,6 +88,10 @@ export function createLineNotificationApi({
     });
     if (!response.ok) throw await readError(response);
     return (await response.json()) as T;
+  }
+
+  async function request<T>(path: string, init?: RequestInit): Promise<T> {
+    return requestUrl<T>(`${baseUrl}/api/v1/line${path}`, init);
   }
 
   return {
@@ -122,16 +116,19 @@ export function createLineNotificationApi({
       await request('/connect', { method: 'DELETE' });
     },
     async enqueue(input) {
-      const response = await request<{
-        data:
-          | { status: 'queued'; notification: LineNotification }
-          | { status: 'not_connected'; notification: null };
-      }>('/notifications', { method: 'POST', body: JSON.stringify(input) });
+      const response = await requestUrl<{ data: LineDeliveryResult }>(
+        `${baseUrl}/api/v1/notifications/line`,
+        {
+          method: 'POST',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify(input),
+        },
+      );
       return response.data;
     },
     async retry(notificationId) {
-      const response = await request<{ data: LineNotification }>(
-        `/notifications/${encodeURIComponent(notificationId)}/retry`,
+      const response = await requestUrl<{ data: LineDeliveryResult }>(
+        `${baseUrl}/api/v1/notifications/line/${encodeURIComponent(notificationId)}/retry`,
         { method: 'POST' },
       );
       return response.data;

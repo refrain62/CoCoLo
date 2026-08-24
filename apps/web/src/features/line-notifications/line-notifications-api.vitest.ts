@@ -31,21 +31,18 @@ describe('LINE通知APIクライアント', () => {
   });
 
   it('通知登録は認証トークン付きでdeep-linkを送る', async () => {
+    let url: string | undefined;
+    let headers: Headers | undefined;
     let body: string | undefined;
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = async (input, init) => {
+      url = String(input);
+      headers = new Headers(init?.headers);
       body = String(init?.body);
       return new Response(
         JSON.stringify({
           data: {
-            status: 'queued',
-            notification: {
-              id: '00000000-0000-7000-8000-000000000001',
-              sourceType: 'event',
-              sourceId: 'event-001',
-              status: 'pending',
-              attempts: 0,
-              nextRetryAt: null,
-            },
+            notificationId: '00000000-0000-7000-8000-000000000001',
+            status: 'pending',
           },
         }),
         { status: 202, headers: { 'content-type': 'application/json' } },
@@ -53,17 +50,20 @@ describe('LINE通知APIクライアント', () => {
     };
 
     await createLineNotificationApi({ getAccessToken: () => 'token' }).enqueue({
-      sourceType: 'event',
       sourceId: 'event-001',
+      destination: 'Cgroup-001',
       title: '予定',
       body: '本文',
       deepLink: 'https://staging.example.test/events/event-001',
     });
 
+    expect(url).toBe('/api/v1/notifications/line');
+    expect(headers?.get('Authorization')).toBe('Bearer token');
+    expect(headers?.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
     expect(body).toBe(
       JSON.stringify({
-        sourceType: 'event',
         sourceId: 'event-001',
+        destination: 'Cgroup-001',
         title: '予定',
         body: '本文',
         deepLink: 'https://staging.example.test/events/event-001',
