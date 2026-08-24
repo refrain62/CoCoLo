@@ -713,6 +713,35 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - local/staging PostgreSQLのRLS・同時実行検証、staging Supabase E2E、staging専用LINE channel/groupの実サービス受入れを継続します。
 - feature固有response contractの厳密化と全画面の実ブラウザ統合テストを継続します。
 
+## Betterleaks秘密情報混入防止
+
+### 実施した変更
+
+- PR #116で`mise.toml`へGo 1.25.0とBetterleaks v1.7.2を固定導入し、`pnpm ci:fast`の履歴検査と`.githooks/pre-commit`のstaged検査へ接続しました。
+- Betterleaksは`redact`付きで実行し、検出レポートを一時ディレクトリへ保存して終了時に削除します。CIのDocker実行はdigest固定、network none、read-only、capability削減、ホストUID/GIDを使用します。
+- password、token等を検査対象とし、migrationとtrust manifestの正本として必要なSHA-256 checksumだけを除外しました。検査設定と保護対象のハッシュはtrust manifestへ反映しました。
+- READMEへmise導入、pre-commit設定、checksum除外理由を記載しました。
+
+### 検証結果
+
+- `pnpm build`、`pnpm test`（175件）、`pnpm lint`、`pnpm typecheck`、`pnpm lint:biome`、trust root検証、`git diff --check`が成功しました。
+- GitHub Actions quality run `32713902923`はDockerの一時設定ファイル権限で失敗しましたが、ホストUID/GID実行へ修正し、run `32714974037`で成功しました。
+- PR本文は規定7区画のフォーマット検証に成功しました。
+
+### 敵対的レビュー
+
+- アプリケーションのtenant、認可、個人情報、状態遷移は変更していません。
+- 検査失敗時の終了コード伝播、秘密値のredact、レポート削除、CI image digest固定、checksum除外範囲を確認しました。Critical 0、High 0です。
+- ローカルのmise導入とpre-commit hook設定は各開発環境で必要です。CIではPR品質ゲートが強制します。
+
+### GitHub反映
+
+- PR #116は`d350f87`として`develop`へsquash mergeしました。
+
+### 残タスク
+
+- 各開発環境で`mise install`と`git config core.hooksPath .githooks`を実行します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
