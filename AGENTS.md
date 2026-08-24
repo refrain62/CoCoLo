@@ -19,6 +19,7 @@
 - **Branch Strategy:** 直接 `main` や `develop` ブランチへコミットや push をしないでください。すべての機能開発は `develop` ブランチを起点とし、専用の作業用ブランチ（例: `feature/xxx`）を作成して作業を行ってください。機能単位でブランチを切り替え、別機能の変更を同じブランチへ混在させないでください。機能の実装・敵対的レビュー・修正・検証・Draft PR作成が完了してから、次の機能ブランチへ切り替えてください。リモートに `develop` が存在しない場合は、機能ブランチを作る前に `origin/main` から `develop` を作成し、ローカル追跡ブランチも同期してください。
 - **Commit Granularity:** 意味のある単位でこまめに**日本語**でコミットを作成し、メッセージは変更内容が伝わるよう簡潔に記述してください。
 - **Push & PR:** feature単位の実装完了時、リモートに push し、`gh` CLI で `develop` 宛ての Draft PR を作成してください。タイトルと概要はレビュアーが把握できる要約を日本語で記述してください。
+- **PR本文:** `.github/pull_request_template.md` と `docs/pull-request-guidelines.md` の7区画・改行・検証ルールに従い、`pnpm verify:pr-description`を通過させてください。
 
 ### Verification Rules
 - **Package Manager:** パッケージ管理には `pnpm` を使用してください。

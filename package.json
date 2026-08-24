@@ -9,7 +9,7 @@
   "scripts": {
     "test": "pnpm -r --if-present test",
     "test:contracts": "node --test packages/contracts/test/*.test.ts",
-    "test:unit": "vitest run && pnpm -r --if-present test:unit",
+    "test:unit": "node --test scripts/verify-pr-description.test.ts && vitest run && pnpm -r --if-present test:unit",
     "test:integration": "node scripts/supabase-local.ts integration",
     "test:integration:raw": "pnpm -r --workspace-concurrency=1 --if-present test:integration",
     "test:e2e:local": "node scripts/run-e2e.ts local",
@@ -38,6 +38,7 @@
     "verify:shadow-role": "node scripts/verify-shadow-role.ts",
     "test:schema-drift": "node --test scripts/verify-schema-drift.test.ts scripts/verify-shadow-role.test.ts scripts/database-security.test.ts scripts/deployment-preconditions.test.ts",
     "verify:pnpm-config": "node scripts/verify-pnpm-config.ts",
+    "verify:pr-description": "node scripts/verify-pr-description.ts",
     "verify:database-version": "node scripts/verify-database-version.ts",
     "verify:environment": "node scripts/verify-environment.ts",
     "verify:production-bundle": "node scripts/verify-production-bundle.ts",
