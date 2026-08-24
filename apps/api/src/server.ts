@@ -1,8 +1,13 @@
 import { createSupabaseTokenVerifier } from '@cocolo/auth';
 import { createMemberRepositories, createPrismaClient } from '@cocolo/db';
+import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
+import { createBoardContactRepository } from '@cocolo/db/board-contact';
+import { createBulletinBoardRepositories } from '@cocolo/db/bulletin-board';
 import { createEventRepository } from '@cocolo/db/events';
+import { createRideRepository } from '@cocolo/db/ride';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
+import { createRideService } from './features/ride-operations/ride-service.js';
 import { readRuntimeEnvironment } from './runtime-environment.js';
 import { loadDistributedRateLimitAdapter } from './security/rate-limit-adapter.js';
 import { createStructuredLogger } from './security/structured-logger.js';
@@ -15,6 +20,20 @@ const repositories = createMemberRepositories(prisma);
 const eventRepository = createEventRepository(prisma, {
   notificationPublicAppUrl: runtime.publicAppUrl,
 });
+const centralFeatures = {
+  authTeamSelection: {
+    repository: createAuthTeamSelectionRepository(prisma),
+  },
+  boardContact: {
+    repository: createBoardContactRepository(prisma),
+  },
+  bulletinBoard: {
+    repository: createBulletinBoardRepositories(prisma).bulletinBoardRepository,
+  },
+  ride: {
+    service: createRideService(createRideRepository(prisma)),
+  },
+};
 const distributedRateLimitAdapter = runtime.rateLimitAdapterModule
   ? await loadDistributedRateLimitAdapter(runtime.rateLimitAdapterModule)
   : undefined;
@@ -37,6 +56,7 @@ const app = createApp({
   },
   ...repositories,
   eventRepository,
+  centralFeatures,
 });
 serve({ fetch: app.fetch, port });
 console.log(`CoCoLo API listening on ${port}`);

@@ -30,6 +30,7 @@ export type BulletinBoardAppOptions = {
   verifyToken?: TokenVerifier;
   membershipRepository?: BulletinBoardMembershipRepository;
   bulletinBoardRepository?: BulletinBoardRepository;
+  useCentralAuth?: boolean;
 };
 
 type ApiEnv = {
@@ -168,12 +169,13 @@ export function createBulletinBoardApp(
 ): Hono<ApiEnv> {
   const app = new Hono<ApiEnv>();
 
-  app.use('*', async (c, next) => {
-    const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
-    c.set('requestId', requestId);
-    c.header('x-request-id', requestId);
-    await next();
-  });
+  if (!options.useCentralAuth)
+    app.use('*', async (c, next) => {
+      const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+      c.set('requestId', requestId);
+      c.header('x-request-id', requestId);
+      await next();
+    });
 
   app.onError((error, c) => {
     void error;
@@ -233,8 +235,10 @@ export function createBulletinBoardApp(
     }
   };
 
-  app.use('/api/v1/announcements', authenticate);
-  app.use('/api/v1/announcements/*', authenticate);
+  if (!options.useCentralAuth) {
+    app.use('/api/v1/announcements', authenticate);
+    app.use('/api/v1/announcements/*', authenticate);
+  }
 
   app.get('/api/v1/announcements', async (c) => {
     if (!options.bulletinBoardRepository)

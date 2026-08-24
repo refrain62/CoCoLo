@@ -25,7 +25,8 @@ test('許可されたoriginのpreflightだけを204で返す', async () => {
     headers: {
       Origin: ALLOWED_ORIGIN,
       'Access-Control-Request-Method': 'GET',
-      'Access-Control-Request-Headers': 'Authorization, Content-Type',
+      'Access-Control-Request-Headers':
+        'Authorization, Content-Type, X-CoCoLo-Team-Id',
     },
   });
 
@@ -49,6 +50,10 @@ test('許可されたoriginのpreflightだけを204で返す', async () => {
   assert.match(
     response.headers.get('Access-Control-Allow-Headers') ?? '',
     /Authorization/i,
+  );
+  assert.match(
+    response.headers.get('Access-Control-Allow-Headers') ?? '',
+    /X-CoCoLo-Team-Id/i,
   );
 });
 

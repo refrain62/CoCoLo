@@ -79,6 +79,7 @@ export type BoardContactAppOptions = {
     ) => Promise<BoardContactMembership | null>;
   };
   boardContactRepository?: BoardContactRepository;
+  useCentralAuth?: boolean;
 };
 
 type BoardContactApiEnv = {
@@ -181,12 +182,13 @@ export function createBoardContactApp(
 ): Hono<BoardContactApiEnv> {
   const app = new Hono<BoardContactApiEnv>();
 
-  app.use('*', async (c, next) => {
-    const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
-    c.set('requestId', requestId);
-    c.header('x-request-id', requestId);
-    await next();
-  });
+  if (!options.useCentralAuth)
+    app.use('*', async (c, next) => {
+      const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+      c.set('requestId', requestId);
+      c.header('x-request-id', requestId);
+      await next();
+    });
 
   app.onError((error, c) => {
     if (error instanceof BoardContactValidationError)
@@ -256,8 +258,10 @@ export function createBoardContactApp(
     }
   };
 
-  app.use('/api/v1/board-members', authenticate);
-  app.use('/api/v1/board-members/*', authenticate);
+  if (!options.useCentralAuth) {
+    app.use('/api/v1/board-members', authenticate);
+    app.use('/api/v1/board-members/*', authenticate);
+  }
 
   app.get('/api/v1/board-members', async (c) => {
     if (!options.boardContactRepository) return repositoryUnavailable(c);

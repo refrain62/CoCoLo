@@ -193,6 +193,12 @@ export const authContextResponseSchema = z
   })
   .strict();
 
+// feature appの個別projectionを尊重しつつ、中央APIではdata envelopeだけを共通検証する。
+// 個人情報やtenant境界の投影は各feature契約とrepository側で検証する。
+export const featureEnvelopeResponseSchema = z
+  .object({ data: z.unknown() })
+  .passthrough();
+
 export const errorResponseSchema = z
   .object({
     error: z

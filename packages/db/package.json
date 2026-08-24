@@ -7,6 +7,7 @@
     "./client": "./dist/index.js",
     "./line": "./dist/line-repository.js",
     "./auth-team-selection": "./dist/auth-team-selection-repository.js",
+    "./board-contact": "./dist/board-contact-repository.js",
     "./ride": {
       "types": "./dist/ride-repository.d.ts",
       "import": "./dist/ride-repository.js"
