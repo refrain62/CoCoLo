@@ -153,8 +153,11 @@ function fastSteps(): Array<readonly [string, () => void]> {
     ],
     ['unit/contract test', () => runPnpm(['test:contract'])],
     ['unit test', () => runPnpm(['test:unit'])],
+    ['workspace test', () => runPnpm(['test'])],
     ['typecheck', () => runPnpm(['typecheck'])],
+    ['workspace lint', () => runPnpm(['lint'])],
     ['build', () => runPnpm(['build'], publicBuildEnv)],
+    ['production bundleを検証', () => runPnpm(['verify:production-bundle'])],
   ];
 }
 
