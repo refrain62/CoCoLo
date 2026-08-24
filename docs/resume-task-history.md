@@ -1286,7 +1286,36 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 ### 未完了条件
 
-- TOOL-002のCRLF検査結果統一、TOOL-003のNode.js 20警告整理、通常install経路の実効pnpm設定検証は継続します。
+- TOOL-003のNode.js 20警告整理、通常install経路の実効pnpm設定検証は継続します。
+
+## TOOL-002 CR改行検査の結果統一
+
+### 実施した変更
+
+- `git ls-files --eol`の属性結果で追跡対象をtextとbinaryへ分け、textのHEAD blob（CI）またはworktree（local）をバイト検査する`verify:line-endings`を追加しました。
+- BOM、無効UTF-8、CR改行、空でないファイルの末尾LF欠落をfail-closedで検出し、未追跡ファイルは対象外として件数をJSON証跡へ記録します。
+- PRイベントのbase SHA...head SHAを`git diff --check`へ渡し、`core.whitespace`を固定してCI環境差を抑えました。PRイベントがないlocal実行ではunstaged/staged差分を検査します。
+- `ci:fast`へ改行検査を接続し、byte scan、`git diff --check`、Biomeを同じquality実行で確認します。trusted-file-manifestへ変更ファイルのSHAを反映しました。
+
+### 検証結果
+
+- 専用単体テスト4件、`pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`が成功しました。
+- `pnpm verify:line-endings`は追跡402ファイル、text 402件、binary 0件、CR・BOM・invalid UTF-8・末尾LF欠落0件を出力しました。
+- `pnpm verify:trust-root`、staged/unstagedの`git diff --check`、GitHub quality run `32790533866`が成功しました。
+
+### 敵対的レビュー
+
+- 初回レビューで指摘されたPR差分範囲、BOM/UTF-8/末尾LF、binary誤検知、WindowsのworktreeとGit正本の混同を修正しました。
+- 修正後の変更範囲にCritical / Highの未解消指摘はありません。Biomeは対象言語、改行byte scanはtext追跡対象、`git diff --check`はPR差分という責務分離を維持しています。
+
+### GitHub反映
+
+- 実装PR #163は`b18e359`として`develop`へsquash mergeしました。
+- 実装コードと台帳・実施記録は分離し、この変更はdocs-only PRで提出します。
+
+### 未完了条件
+
+- TOOL-003のNode.js 20警告整理と通常install経路の実効設定検証、UI-002/003、RIDE-002、T-013は継続します。
 
 ## 履歴の更新規則
 
