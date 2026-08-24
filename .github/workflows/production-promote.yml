@@ -81,6 +81,10 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      - name: 既存UUIDv4行のmigration前検査
+        run: pnpm verify:uuidv7-migration
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: 検証済みマイグレーションだけを適用
         run: pnpm exec prisma migrate deploy --schema .release/extracted/packages/db/prisma/schema.prisma
         env:

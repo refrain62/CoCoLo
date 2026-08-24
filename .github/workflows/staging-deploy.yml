@@ -68,6 +68,10 @@ jobs:
           RATE_LIMIT_STORE: distributed
           RATE_LIMIT_FAIL_CLOSED: 'true'
           RATE_LIMIT_ADAPTER_MODULE: ${{ vars.RATE_LIMIT_ADAPTER_MODULE }}
+      - name: 既存UUIDv4行のmigration前検査
+        run: pnpm verify:uuidv7-migration
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: staging環境へマイグレーションを適用
         run: pnpm --filter @cocolo/db exec prisma migrate deploy
         env:

@@ -59,6 +59,10 @@ jobs:
         env:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+      - name: 既存UUIDv4行のmigration前検査
+        run: pnpm verify:uuidv7-migration
+        env:
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
       - name: 空DBへmigrationを適用
         run: pnpm --filter @cocolo/db exec prisma migrate deploy
         env:
