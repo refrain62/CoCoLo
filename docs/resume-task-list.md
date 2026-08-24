@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-実装再開の基準となる`develop`は`34b2083`（PR #131反映後）です。管理者再試行APIとworkerのロック順序修正、LINE Webhook受信境界、LINE公開レスポンス契約、役員連絡先の公開レスポンス契約まで反映済みです。完了済み実装の詳細は[完了タスクと実施履歴](resume-task-history.md)へ移しています。
+実装再開の基準となる`develop`は`7056aac`（PR #133反映後）です。管理者再試行APIとworkerのロック順序修正、LINE Webhook受信境界、LINE公開レスポンス契約、役員連絡先と注文APIの公開レスポンス契約まで反映済みです。完了済み実装の詳細は[完了タスクと実施履歴](resume-task-history.md)へ移しています。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
@@ -197,7 +197,7 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - PR #102で添付upload APIを中央mountし、中央認証、選択tenant、rate limit、R2実adapter、response契約を接続済みです。Webの添付画面は未接続です。
   - PR #105で添付Web画面を中央APIへ接続し、選択tenant headerとguardianの表示制御を追加しました。
   - PR #109で注文・集金APIをPrisma repositoryと中央mountへ接続し、PR #110で注文Web画面、選択tenant header、チーム切替時の状態破棄を接続しました。
-  - PR #123でowner/admin向けの管理者再試行APIを現行outboxへ接続し、PR #125でworker claimと管理者再試行のロック順序を統一しました。PR #127でWebhookの専用DB actor境界を追加し、PR #129でLINE公開レスポンス契約を厳密化し、PR #131で役員連絡先の公開レスポンス契約を追加しました。残りは全画面の統合テストとstaging Supabase E2Eです。送迎画面の予定選択はPR #112、チーム選択前のlogout導線はPR #113で完了しました。古いPR #35はクローズしました。
+  - PR #123でowner/admin向けの管理者再試行APIを現行outboxへ接続し、PR #125でworker claimと管理者再試行のロック順序を統一しました。PR #127でWebhookの専用DB actor境界を追加し、PR #129でLINE公開レスポンス契約を厳密化し、PR #131で役員連絡先の公開レスポンス契約を追加し、PR #133で注文APIの公開レスポンス契約を追加しました。残りは全画面の統合テストとstaging Supabase E2Eです。送迎画面の予定選択はPR #112、チーム選択前のlogout導線はPR #113で完了しました。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**
@@ -225,7 +225,7 @@ EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume
   - 対象：PR #25、`feature/phase3-orders-payments-isolated`
   - 商品、選択肢、注文、担当部員境界、支払い状態、監査、集計、UTF-8 BOM付きCSVを統合します。
   - PR #109でfeature側のmemory adapterをPrisma repositoryへ置き換え、中央API、migration既存RLS、idempotency、監査、CSV式注入対策を接続しました。PR #110で注文Web画面と選択tenant headerを接続しました。
-  - 残りはlocal/staging PostgreSQLでのrepository・RLS・状態遷移・同時実行の実DB検証、staging Supabase E2E、feature固有response契約の厳密化です。詳細は[ORD-001の履歴](resume-task-history.md#ord-001-共同購買集金の中央接続)を参照してください。
+  - 残りはlocal/staging PostgreSQLでのrepository・RLS・状態遷移・同時実行の実DB検証とstaging Supabase E2Eです。注文APIのfeature固有response契約はPR #133で完了しました。詳細は[ORD-001の履歴](resume-task-history.md#ord-001-共同購買集金の中央接続)と[注文APIレスポンス契約の履歴](resume-task-history.md#api-002ord-001-注文apiの公開レスポンス契約)を参照してください。
 
 ## 8. Phase 4の未統合タスク
 

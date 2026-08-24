@@ -18,7 +18,7 @@
 
 ## 停止時点の基準
 
-停止時点の`develop`は`34b2083`（役員連絡先の公開レスポンス契約を追加）です。
+停止時点の`develop`は`7056aac`（注文APIの公開レスポンス契約を追加）です。
 
 `develop`へ反映済みの業務機能は、認証、テナント境界、部員一覧、検索、登録、編集、退部、学年表示、年度繰り上げです。
 
@@ -888,6 +888,35 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 ### 未完了条件
 
 - 役員連絡先の実PostgreSQL/RLS検証、staging E2E、他featureの固有response契約は残タスク台帳で管理します。
+
+## API-002/ORD-001 注文APIの公開レスポンス契約
+
+### 実施した変更
+
+- PR #133で、注文キャンペーン、商品、注文、注文明細、支払確認、注文概要の公開レスポンスschemaを追加しました。
+- 中央APIでは、注文APIのrouteとHTTP statusに対応する固有schemaを、汎用envelope schemaより先に適用します。
+- `paymentConfirmedBy`はmanager/admin系ロールだけに許可し、guardian/staffの公開レスポンスから除外しました。
+- tenant識別子、未知項目、内部管理項目が公開レスポンスへ入らないことを契約テストで確認しました。
+
+### 検証結果
+
+- `pnpm test`、`pnpm build`、`pnpm lint`が成功しました。
+- contracts 27件、API unit 186件を含む全テストが成功しました。
+- PR #133のquality run `32731890174`が成功しました。
+
+### 敵対的レビュー
+
+- tenant越境、guardian/staffとmanager/adminの項目境界、未知フィールド、個人情報と内部管理項目の混入を確認し、CriticalとHighは0件です。
+- DB migration、認証方式、認可、注文状態遷移は変更していません。
+
+### GitHub反映
+
+- PR #133は`7056aac`としてdevelopへsquash mergeしました。
+
+### 未完了条件
+
+- local/staging PostgreSQLでのrepository・RLS・状態遷移・同時実行の実DB検証とstaging Supabase E2EはORD-001/API-002の残タスクとして継続します。
+- 他featureの固有response契約と全画面の実ブラウザ統合テストは残タスク台帳で管理します。
 
 ## 履歴の更新規則
 
