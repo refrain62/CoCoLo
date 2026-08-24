@@ -1,6 +1,8 @@
 import { extractBearerToken, type TokenVerifier } from '@cocolo/auth';
 import {
   selectedTeamHeaderName,
+  teamListResponseSchema,
+  teamSelectionResponseSchema,
   uuidv7Schema,
 } from '@cocolo/contracts/auth-team-selection';
 import {
@@ -412,6 +414,18 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       path: /^\/api\/v1\/announcements\/[^/]+\/unread$/,
       status: 200,
       schema: announcementUnreadResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/auth\/teams$/,
+      status: 200,
+      schema: teamListResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/auth\/teams\/select$/,
+      status: 200,
+      schema: teamSelectionResponseSchema,
     },
     {
       method: 'GET',
