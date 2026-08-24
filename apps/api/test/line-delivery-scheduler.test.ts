@@ -76,6 +76,13 @@ const GROUP_REUSE_MIGRATION = readFileSync(
   ),
   'utf8',
 );
+const CONNECTION_GUARD_MIGRATION = readFileSync(
+  new URL(
+    '../../../packages/db/prisma/migrations/20260824130000_line_delivery_connection_guard/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const SCHEDULER_SOURCE = readFileSync(
   new URL('../src/line-delivery-scheduler.ts', import.meta.url),
   'utf8',
@@ -830,6 +837,26 @@ test('LINE通知claimは現行接続世代と一致するoutboxだけを送信�
   assert.doesNotMatch(
     CONNECTION_GENERATION_MIGRATION,
     /GRANT EXECUTE ON FUNCTION app_claim_line_delivery_outbox\(integer, integer\) TO cocolo_app/,
+  );
+});
+
+test('公開LINE通知は現在の接続groupと接続世代をoutboxへ固定する', () => {
+  assert.match(CONNECTION_GUARD_MIGRATION, /session_user <> 'cocolo_app'/);
+  assert.match(
+    CONNECTION_GUARD_MIGRATION,
+    /FROM line_connections[\s\S]*tenant_id = p_tenant_id[\s\S]*group_id = p_destination[\s\S]*status = 'connected'/,
+  );
+  assert.match(
+    CONNECTION_GUARD_MIGRATION,
+    /接続済みのLINEグループ以外へ通知できません/,
+  );
+  assert.match(
+    CONNECTION_GUARD_MIGRATION,
+    /connection_connected_at\s*\n\s*\) VALUES[\s\S]*calculated_hash, connection_connected_at/s,
+  );
+  assert.match(
+    CONNECTION_GUARD_MIGRATION,
+    /pg_advisory_xact_lock\([\s\S]*'line:' \|\| p_tenant_id::text/s,
   );
 });
 

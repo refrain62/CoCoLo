@@ -911,12 +911,17 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
         202,
       );
     } catch (error) {
-      if (error instanceof Error && 'status' in error && error.status === 409)
+      const deliveryError = error as { status?: unknown; code?: unknown };
+      if (error instanceof Error && deliveryError.status === 409)
         return errorResponse(
           c,
           409,
-          'LINE_DELIVERY_CONFLICT',
-          '同じtenant内で通知の冪等キーまたはpayloadが競合しました。',
+          typeof deliveryError.code === 'string'
+            ? deliveryError.code
+            : 'LINE_DELIVERY_CONFLICT',
+          deliveryError.code === 'LINE_NOT_CONNECTED'
+            ? 'LINEが未接続か、通知先が現在の接続先と一致しません。'
+            : '同じtenant内で通知の冪等キーまたはpayloadが競合しました。',
         );
       throw error;
     }
