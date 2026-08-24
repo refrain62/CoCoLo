@@ -49,6 +49,23 @@ function createTestApp({ multipleMemberships = false } = {}) {
               : null,
         },
       },
+      attachments: {
+        repository: {
+          createSession: async () => ({}),
+        },
+        storage: {
+          createSignedUpload: async () => ({
+            url: 'https://uploads.example.test/signed',
+            expiresAt: new Date(Date.now() + 60_000),
+          }),
+          readObject: async () => null,
+          createSignedDownload: async () => ({
+            url: 'https://uploads.example.test/download',
+            expiresAt: new Date(Date.now() + 60_000),
+          }),
+          deleteObject: async () => undefined,
+        },
+      },
       boardContact: {
         repository: {
           list: async () => [],
@@ -102,6 +119,20 @@ test('中央APIへ役員連絡先routeをmountする', async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).data, []);
+});
+
+test('中央APIへ添付upload routeをmountし、中央認証を利用する', async () => {
+  const response = await createTestApp().request('/api/v1/uploads', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${USER_ID}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ mediaType: 'image/png', byteSize: 4 }),
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).mediaType, 'image/png');
 });
 
 test('選択中チームを中央APIの業務認証へ反映する', async () => {

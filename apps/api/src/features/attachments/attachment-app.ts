@@ -30,6 +30,7 @@ export type AttachmentAppOptions = {
   membershipRepository?: MembershipRepository;
   attachmentRepository: AttachmentRepository;
   storage: AttachmentStorage;
+  useCentralAuth?: boolean;
   now?: () => Date;
   createId?: () => string;
 };
@@ -43,6 +44,12 @@ type AttachmentApiEnv = {
       role: AttachmentRole;
     };
   };
+};
+
+type AttachmentAuth = {
+  userId: string;
+  tenantId: string;
+  role: AttachmentRole;
 };
 
 const uploadRoles = new Set<AttachmentRole>(['owner', 'admin', 'staff']);
@@ -67,6 +74,19 @@ function errorResponse(
     },
     status,
   );
+}
+
+function getAttachmentAuth(c: Context<AttachmentApiEnv>): AttachmentAuth {
+  const auth = c.get('auth') as unknown as
+    | AttachmentAuth
+    | { userId: string; membership: Omit<AttachmentAuth, 'userId'> };
+  if ('membership' in auth)
+    return {
+      userId: auth.userId,
+      tenantId: auth.membership.tenantId,
+      role: auth.membership.role,
+    };
+  return auth;
 }
 
 function isStatusError(error: unknown, status: number): boolean {
@@ -138,12 +158,14 @@ export function createAttachmentApp(
   const createId =
     options.createId ?? (() => createAttachmentId(now().getTime()));
 
-  app.use('*', async (c, next) => {
-    const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
-    c.set('requestId', requestId);
-    c.header('x-request-id', requestId);
-    await next();
-  });
+  if (!options.useCentralAuth) {
+    app.use('*', async (c, next) => {
+      const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+      c.set('requestId', requestId);
+      c.header('x-request-id', requestId);
+      await next();
+    });
+  }
 
   app.onError((error, c) => {
     void error;
@@ -201,11 +223,13 @@ export function createAttachmentApp(
     }
   };
 
-  app.use('/api/v1/uploads', authenticate);
-  app.use('/api/v1/uploads/*', authenticate);
+  if (!options.useCentralAuth) {
+    app.use('/api/v1/uploads', authenticate);
+    app.use('/api/v1/uploads/*', authenticate);
+  }
 
   app.post('/api/v1/uploads', async (c) => {
-    const auth = c.get('auth');
+    const auth = getAttachmentAuth(c);
     if (!uploadRoles.has(auth.role))
       return errorResponse(
         c,
@@ -281,7 +305,7 @@ export function createAttachmentApp(
   });
 
   app.post('/api/v1/uploads/cleanup-expired', async (c) => {
-    const auth = c.get('auth');
+    const auth = getAttachmentAuth(c);
     if (!uploadRoles.has(auth.role))
       return errorResponse(
         c,
@@ -323,7 +347,7 @@ export function createAttachmentApp(
   });
 
   app.post('/api/v1/uploads/:id/complete', async (c) => {
-    const auth = c.get('auth');
+    const auth = getAttachmentAuth(c);
     const id = uploadIdSchema.safeParse(c.req.param('id'));
     if (!id.success)
       return errorResponse(c, 400, 'VALIDATION_ERROR', '添付IDが不正です。');
@@ -432,7 +456,7 @@ export function createAttachmentApp(
   });
 
   app.get('/api/v1/uploads/:id/download', async (c) => {
-    const auth = c.get('auth');
+    const auth = getAttachmentAuth(c);
     const id = uploadIdSchema.safeParse(c.req.param('id'));
     if (!id.success)
       return errorResponse(c, 400, 'VALIDATION_ERROR', '添付IDが不正です。');
@@ -466,7 +490,7 @@ export function createAttachmentApp(
   });
 
   app.post('/api/v1/uploads/:id/cleanup', async (c) => {
-    const auth = c.get('auth');
+    const auth = getAttachmentAuth(c);
     if (!uploadRoles.has(auth.role))
       return errorResponse(c, 403, 'FORBIDDEN', 'cleanup権限がありません。');
     const id = uploadIdSchema.safeParse(c.req.param('id'));
