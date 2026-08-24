@@ -55,6 +55,20 @@ const UNKNOWN_LEASE_MIGRATION = readFileSync(
   ),
   'utf8',
 );
+const EVENT_LINE_DELIVERY_MIGRATION = readFileSync(
+  new URL(
+    '../../../packages/db/prisma/migrations/20260824100000_event_line_delivery_schedule/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const CONNECTION_GENERATION_MIGRATION = readFileSync(
+  new URL(
+    '../../../packages/db/prisma/migrations/20260824110000_line_delivery_connection_generation/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 function environment(
   overrides: Record<string, string | undefined> = {},
@@ -249,7 +263,7 @@ test('必須設定、件数、worker moduleをfail-closed検証する', () => {
   assert.equal(parsed.leaseMs, 500);
 });
 
-test('schedulerは長時間transaction lockを使わずworkerへclaim処理を渡す', async () => {
+test('schedulerはworkerへclaim処理を渡して件数上限を委譲する', async () => {
   let receivedMaxItems = 0;
   let processed = 0;
   const result = await runLineDeliveryScheduler({
@@ -344,6 +358,8 @@ test('claim transactionは外部LINE送信前に終了し、attempt token付きs
                   lease_expires_at: claim().leaseExpiresAt,
                 },
               ] as Row;
+            if (sql.includes('app_validate_line_delivery_claim'))
+              return [{ current: true }] as Row;
             return [{ outcome: 'sent' }] as Row;
           },
         });
@@ -373,7 +389,76 @@ test('claim transactionは外部LINE送信前に終了し、attempt token付きs
   });
   assert.equal(result, 'sent');
   assert.equal(sentWhileTransaction, false);
-  assert.equal(transactionCalls, 2);
+  assert.equal(transactionCalls, 3);
+});
+
+test('tenant lockがあるrepositoryでは接続検証から送信・確定までlock内で実行する', async () => {
+  const repository = repositoryFor();
+  const sequence: string[] = [];
+  repository.withTenantLock = async (_tenantId, work) => {
+    sequence.push('lock');
+    const result = await work();
+    sequence.push('unlock');
+    return result;
+  };
+  repository.validateClaim = async () => {
+    sequence.push('validate');
+    return true;
+  };
+  repository.markSent = async (input) => {
+    sequence.push('mark-sent');
+    repository.sent.push(input);
+    return 'sent';
+  };
+  const processor = createLineDeliveryProcessor({
+    repository,
+    transport: {
+      send: async () => {
+        sequence.push('send');
+        return { providerMessageId: 'provider-request-id' };
+      },
+    },
+    maxAttempts: 5,
+    leaseMs: 500,
+    sendTimeoutMs: 100,
+    retryBaseDelayMs: 1000,
+  });
+  assert.equal(
+    await processor.processOne({ signal: new AbortController().signal }),
+    'sent',
+  );
+  assert.deepEqual(sequence, [
+    'lock',
+    'validate',
+    'send',
+    'mark-sent',
+    'unlock',
+  ]);
+});
+
+test('接続世代の再検証失敗は外部LINE送信前にstaleへ収束する', async () => {
+  const repository = repositoryFor();
+  repository.validateClaim = async () => false;
+  let sendCount = 0;
+  const processor = createLineDeliveryProcessor({
+    repository,
+    transport: {
+      send: async () => {
+        sendCount += 1;
+        return { providerMessageId: 'must-not-send' };
+      },
+    },
+    maxAttempts: 5,
+    leaseMs: 500,
+    sendTimeoutMs: 100,
+    retryBaseDelayMs: 1000,
+  });
+  assert.equal(
+    await processor.processOne({ signal: new AbortController().signal }),
+    'stale',
+  );
+  assert.equal(sendCount, 0);
+  assert.deepEqual(repository.sent, []);
 });
 
 test('timeoutはAbortSignalを実際にabortし、lease期限以降の再試行状態を保存する', async () => {
@@ -613,6 +698,81 @@ test('provider retry key migrationはpayload冪等性と同じoutbox行へ固定
     /provider_retry_key, updated\.payload_hash/,
   );
   assert.match(PROVIDER_RETRY_MIGRATION, /status IN \('pending', 'failed'\)/);
+});
+
+test('予定LINE通知migrationは対象予定・接続先・状態遷移をDB側で固定する', () => {
+  assert.match(
+    EVENT_LINE_DELIVERY_MIGRATION,
+    /p_source_id !~\* '\^\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-7/,
+  );
+  assert.match(
+    EVENT_LINE_DELIVERY_MIGRATION,
+    /p_idempotency_key <> p_source_type \|\| ':' \|\| normalized_source_id/,
+  );
+  assert.match(
+    EVENT_LINE_DELIVERY_MIGRATION,
+    /normalized_source_id := p_source_id::uuid::text/,
+  );
+  assert.match(
+    EVENT_LINE_DELIVERY_MIGRATION,
+    /pg_advisory_xact_lock\([\s\S]*p_tenant_id::text \|\| ':' \|\| p_actor_user_id/s,
+  );
+  assert.match(
+    EVENT_LINE_DELIVERY_MIGRATION,
+    /FROM events[\s\S]*tenant_id = p_tenant_id[\s\S]*id = normalized_source_id::uuid/,
+  );
+  assert.match(
+    EVENT_LINE_DELIVERY_MIGRATION,
+    /FROM line_connections[\s\S]*tenant_id = p_tenant_id[\s\S]*group_id = p_destination[\s\S]*FOR KEY SHARE/,
+  );
+  assert.match(
+    EVENT_LINE_DELIVERY_MIGRATION,
+    /status IN \('pending', 'failed'\)/,
+  );
+  assert.match(
+    EVENT_LINE_DELIVERY_MIGRATION,
+    /status = CASE[\s\S]*ELSE line_delivery_outbox\.status/s,
+  );
+  assert.match(
+    EVENT_LINE_DELIVERY_MIGRATION,
+    /REVOKE ALL ON FUNCTION app_enqueue_event_line_delivery[\s\S]*GRANT EXECUTE[\s\S]*TO cocolo_app/s,
+  );
+  assert.match(
+    EVENT_LINE_DELIVERY_MIGRATION,
+    /connection_connected_at timestamptz/,
+  );
+});
+
+test('LINE通知claimは現行接続世代と一致するoutboxだけを送信対象にする', () => {
+  assert.match(
+    CONNECTION_GENERATION_MIGRATION,
+    /(?:FROM|JOIN) line_connections c[\s\S]*c\.status = 'connected'/,
+  );
+  assert.match(
+    CONNECTION_GENERATION_MIGRATION,
+    /c\.connected_at = o\.connection_connected_at/,
+  );
+  assert.match(
+    CONNECTION_GENERATION_MIGRATION,
+    /c\.connected_at <= o\.created_at/,
+  );
+  assert.match(
+    CONNECTION_GENERATION_MIGRATION,
+    /o\.source_type NOT IN \('event', 'deadline'\)/,
+  );
+  assert.match(CONNECTION_GENERATION_MIGRATION, /FOR UPDATE OF o SKIP LOCKED/);
+  assert.match(
+    CONNECTION_GENERATION_MIGRATION,
+    /pg_advisory_xact_lock\([\s\S]*'line:' \|\| candidate_tenant_id::text/s,
+  );
+  assert.match(
+    CONNECTION_GENERATION_MIGRATION,
+    /CREATE FUNCTION app_validate_line_delivery_claim[\s\S]*status = 'unknown'[\s\S]*connection_changed/s,
+  );
+  assert.doesNotMatch(
+    CONNECTION_GENERATION_MIGRATION,
+    /GRANT EXECUTE ON FUNCTION app_claim_line_delivery_outbox\(integer, integer\) TO cocolo_app/,
+  );
 });
 
 test('unknown確定migrationはtokenと有効leaseを同じUPDATE条件で検証する', () => {

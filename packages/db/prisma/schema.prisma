@@ -583,6 +583,7 @@ model LineDeliveryOutbox {
   payloadHash       String   @map("payload_hash") @db.Char(64)
   providerCheckedAt DateTime? @map("provider_checked_at") @db.Timestamptz(6)
   providerRetryKey  String   @default(dbgenerated("gen_random_uuid()")) @map("provider_retry_key") @db.Uuid
+  connectionConnectedAt DateTime? @map("connection_connected_at") @db.Timestamptz(6)
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, sourceType, sourceId])
