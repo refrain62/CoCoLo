@@ -76,6 +76,18 @@ mise exec -- pnpm install
 
 .env.exampleには各変数の用途、local / staging / productionでの違い、secretの扱いを記載しています。実際の鍵やパスワードは.envまたはCI/CDのsecretへ設定し、.env.exampleへ書き戻さないでください。
 
+### 秘密情報の混入防止
+
+Betterleaksをmiseで固定導入し、`pnpm ci:fast` とPull Requestの品質ゲートで秘密情報を検査します。ローカルのコミット前検査を有効にするには、リポジトリルートで次を一度実行します。
+
+~~~powershell
+mise install
+git config core.hooksPath .githooks
+pnpm security:betterleaks:staged
+~~~
+
+API key、token、password、password hashなどは検出時にコミットを拒否します。検証用のSHA-256 checksumは、migrationとtrust manifestの正本として必要なため検査対象から除外しています。Betterleaksの検出結果を保存せず、ログにも秘密値を出力しません。
+
 ### ローカル開発DBとAPI/Webの起動
 
 次の一つのコマンドでSupabaseを起動し、未適用migrationだけを適用してAPIとWebをホスト起動します。

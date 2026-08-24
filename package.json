@@ -45,6 +45,8 @@
     "verify:release": "node scripts/verify-release.ts",
     "verify:trust-root": "node scripts/verify-trust-root.ts",
     "lint:workflows": "node scripts/verify-workflows.ts",
+    "security:betterleaks": "node scripts/run-betterleaks.ts history",
+    "security:betterleaks:staged": "node scripts/run-betterleaks.ts staged",
     "ci:fast": "node scripts/ci.ts fast",
     "ci:local": "node scripts/ci.ts local",
     "ci:staging": "node scripts/ci.ts staging",
