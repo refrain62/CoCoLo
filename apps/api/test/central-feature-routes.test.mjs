@@ -53,6 +53,7 @@ function createTestApp({ multipleMemberships = false } = {}) {
       attachments: {
         repository: {
           createSession: async () => ({}),
+          listExpiredUploaded: async () => [],
         },
         storage: {
           createSignedUpload: async () => ({
@@ -162,6 +163,21 @@ test('中央APIへ添付upload routeをmountし、中央認証を利用する', 
 
   assert.equal(response.status, 201);
   assert.equal((await response.json()).mediaType, 'image/png');
+});
+
+test('中央APIへ添付cleanup routeをmountし、公開response契約を適用する', async () => {
+  const response = await createTestApp().request(
+    '/api/v1/uploads/cleanup-expired',
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${USER_ID}` },
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    data: { scannedCount: 0, cleanedCount: 0, pendingCount: 0 },
+  });
 });
 
 test('選択中チームを中央APIの業務認証へ反映する', async () => {
