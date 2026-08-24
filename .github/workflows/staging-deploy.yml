@@ -62,11 +62,6 @@ jobs:
           RATE_LIMIT_STORE: distributed
           RATE_LIMIT_FAIL_CLOSED: 'true'
           RATE_LIMIT_ADAPTER_MODULE: ${{ vars.RATE_LIMIT_ADAPTER_MODULE }}
-      - name: staging環境のRLS用ロールを準備
-        run: pnpm db:prepare:test
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: staging環境へマイグレーションを適用
         run: pnpm --filter @cocolo/db exec prisma migrate deploy
         env:
@@ -76,11 +71,6 @@ jobs:
         run: pnpm verify:database-version --expected-major 17
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - name: staging環境へテストデータを投入
-        run: pnpm db:seed:test
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: アプリとマイグレーションの固定リリース成果物を作成
         run: pnpm build && pnpm package:release --artifact-sha "${GITHUB_SHA}" --output .release
         env:

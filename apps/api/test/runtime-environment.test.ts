@@ -55,6 +55,27 @@ test('API起動時に許可されたstaging環境を解決する', () => {
   );
 });
 
+test('test stackのSupabase URLをlocal環境として許可する', () => {
+  assert.doesNotThrow(() =>
+    readRuntimeEnvironment({
+      APP_ENV: 'local',
+      DATABASE_URL: 'postgresql://app@127.0.0.1:55322/cocolo_test',
+      DIRECT_URL: 'postgresql://migration@127.0.0.1:55322/cocolo_test',
+      SUPABASE_URL: 'http://127.0.0.1:55321',
+      SUPABASE_JWKS_URL: 'http://127.0.0.1:55321/auth/v1/.well-known/jwks.json',
+      SUPABASE_ANON_KEY: 'local-anon-key',
+      R2_BUCKET: 'cocolo-local',
+      R2_ENDPOINT: 'http://127.0.0.1:9000',
+      R2_ACCESS_KEY_ID: 'local-r2-access-key',
+      R2_SECRET_ACCESS_KEY: 'local-r2-secret-key',
+      PUBLIC_APP_URL: 'http://localhost:4173',
+      PUBLIC_APP_URL_ALLOWLIST: 'http://localhost:4173,http://127.0.0.1:4173',
+      RATE_LIMIT_STORE: 'memory',
+      RATE_LIMIT_FAIL_CLOSED: 'true',
+    }),
+  );
+});
+
 test('stagingで分散storeとadapter moduleを省略した起動を拒否する', () => {
   const environment: Record<string, string | undefined> = {
     ...validStagingEnvironment,

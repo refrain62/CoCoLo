@@ -84,29 +84,72 @@ async function rejects(work: () => Promise<unknown>) {
   await assert.rejects(work);
 }
 
-async function seedFixture(client: PrismaClient) {
-  await execute(
-    client,
-    `INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status)
-     VALUES
-       ('00000000-0000-7000-8000-000000000104', $1::uuid, 'admin-a', 'admin', 'active'),
-       ('00000000-0000-7000-8000-000000000105', $1::uuid, 'staff-a', 'staff', 'active'),
-       ('00000000-0000-7000-8000-000000000106', $1::uuid, 'guardian-a2', 'guardian', 'active')
-     ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = EXCLUDED.role, status = EXCLUDED.status`,
-    tenantA,
-  );
-  await execute(
-    client,
-    `INSERT INTO guardian_members (id, tenant_id, user_id, member_id, relationship)
-     VALUES ('00000000-0000-7000-8000-000000000302', $1::uuid, 'guardian-a2', $2::uuid, '父')
-     ON CONFLICT (tenant_id, user_id, member_id) DO NOTHING`,
-    tenantA,
-    memberA2,
-  );
+const fixtureTables = [
+  'tenants',
+  'tenant_memberships',
+  'members',
+  'guardian_members',
+  'attachments',
+  'events',
+  'attendance_responses',
+  'board_contacts',
+  'purchase_orders',
+  'order_products',
+  'order_entries',
+  'order_lines',
+  'order_idempotency_keys',
+  'announcements',
+  'announcement_attachments',
+  'line_connections',
+  'line_notification_queue',
+  'line_webhook_receipts',
+  'ride_plans',
+  'ride_offers',
+  'ride_requests',
+  'ride_assignments',
+  'audit_logs',
+];
 
-  await execute(
-    client,
-    `INSERT INTO attachments
+async function withRlsDisabled<T>(
+  client: PrismaClient,
+  work: () => Promise<T>,
+): Promise<T> {
+  try {
+    for (const table of fixtureTables)
+      await execute(client, `ALTER TABLE ${table} DISABLE ROW LEVEL SECURITY`);
+    return await work();
+  } finally {
+    for (const table of fixtureTables) {
+      await execute(client, `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
+      await execute(client, `ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`);
+    }
+  }
+}
+
+async function seedFixture(client: PrismaClient) {
+  return withRlsDisabled(client, async () => {
+    await execute(
+      client,
+      `INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status)
+     VALUES
+       ('00000000-0000-7000-8000-000000000114', $1::uuid, 'admin-a', 'admin', 'active'),
+       ('00000000-0000-7000-8000-000000000115', $1::uuid, 'staff-a', 'staff', 'active'),
+       ('00000000-0000-7000-8000-000000000116', $1::uuid, 'guardian-a2', 'guardian', 'active')
+     ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = EXCLUDED.role, status = EXCLUDED.status`,
+      tenantA,
+    );
+    await execute(
+      client,
+      `INSERT INTO guardian_members (id, tenant_id, user_id, member_id, relationship)
+     VALUES ('00000000-0000-7000-8000-000000000312', $1::uuid, 'guardian-a2', $2::uuid, '父')
+     ON CONFLICT (tenant_id, user_id, member_id) DO NOTHING`,
+      tenantA,
+      memberA2,
+    );
+
+    await execute(
+      client,
+      `INSERT INTO attachments
        (id, tenant_id, owner_user_id, object_key, media_type, byte_size, sha256, status,
         expires_at, complete_attempts, cleanup_attempts, created_at, available_at)
        VALUES
@@ -114,25 +157,25 @@ async function seedFixture(client: PrismaClient) {
          NULL, 'uploaded', '2099-01-01T00:00:00Z', 0, 0, now(), NULL),
         ($2::uuid, $4::uuid, 'owner-b', 'tenant-b/00000000-0000-7000-8000-000000000502', 'application/pdf', 5,
          NULL, 'uploaded', '2099-01-01T00:00:00Z', 0, 0, now(), NULL)`,
-    attachmentA,
-    attachmentB,
-    tenantA,
-    tenantB,
-  );
-  await execute(
-    client,
-    `UPDATE attachments
+      attachmentA,
+      attachmentB,
+      tenantA,
+      tenantB,
+    );
+    await execute(
+      client,
+      `UPDATE attachments
         SET status = 'available',
             sha256 = CASE WHEN id = $1::uuid THEN repeat('a', 64) ELSE repeat('b', 64) END,
             complete_attempts = 1,
             available_at = now()
       WHERE id IN ($1::uuid, $2::uuid)`,
-    attachmentA,
-    attachmentB,
-  );
-  await execute(
-    client,
-    `INSERT INTO events
+      attachmentA,
+      attachmentB,
+    );
+    await execute(
+      client,
+      `INSERT INTO events
        (id, tenant_id, title, event_type, starts_at, ends_at, attendance_deadline,
         announcement_image_attachment_id, created_by_user_id, updated_by_user_id)
      VALUES
@@ -140,315 +183,332 @@ async function seedFixture(client: PrismaClient) {
         '2099-02-01T09:00:00Z', $5::uuid, 'owner-a', 'owner-a'),
        ($2::uuid, $4::uuid, 'テナントB予定', 'practice', '2099-02-01T10:00:00Z', '2099-02-01T12:00:00Z',
         '2099-02-01T09:00:00Z', NULL, 'owner-b', 'owner-b')`,
-    eventA,
-    eventB,
-    tenantA,
-    tenantB,
-    attachmentA,
-  );
-  await withContext(client, tenantA, 'guardian-a2', 'guardian', async (tx) => {
-    await execute(
-      tx,
-      `INSERT INTO attendance_responses
+      eventA,
+      eventB,
+      tenantA,
+      tenantB,
+      attachmentA,
+    );
+    await withContext(
+      client,
+      tenantA,
+      'guardian-a2',
+      'guardian',
+      async (tx) => {
+        await execute(
+          tx,
+          `INSERT INTO attendance_responses
          (id, tenant_id, event_id, user_id, member_id, response)
        VALUES ('00000000-0000-7000-8000-000000000411', $1::uuid, $2::uuid, 'guardian-a2', $3::uuid, 'attending')`,
-      tenantA,
-      eventA,
-      memberA2,
+          tenantA,
+          eventA,
+          memberA2,
+        );
+      },
     );
-  });
-  await withContext(client, tenantA, 'owner-a', 'owner', async (tx) => {
-    await execute(
-      tx,
-      `INSERT INTO attendance_responses
+    await withContext(client, tenantA, 'owner-a', 'owner', async (tx) => {
+      await execute(
+        tx,
+        `INSERT INTO attendance_responses
          (id, tenant_id, event_id, user_id, member_id, response)
        VALUES ('00000000-0000-7000-8000-000000000412', $1::uuid, $2::uuid, 'owner-a', $3::uuid, 'absent')`,
-      tenantA,
-      eventA,
-      memberA,
-    );
-  });
-  await execute(
-    client,
-    `INSERT INTO board_contacts
+        tenantA,
+        eventA,
+        memberA,
+      );
+    });
+    await execute(
+      client,
+      `INSERT INTO board_contacts
        (id, tenant_id, fiscal_year, role_name, role_type, assignee_user_id, line_contact, phone, contact_preference)
      VALUES ($1::uuid, $2::uuid, 2099, '代表', 'admin', 'admin-a', 'line-contact-a', '090-0000-0000', 'both')`,
-    boardContactA,
-    tenantA,
-  );
-  await execute(
-    client,
-    `INSERT INTO purchase_orders (id, tenant_id, title, deadline, status)
+      boardContactA,
+      tenantA,
+    );
+    await execute(
+      client,
+      `INSERT INTO purchase_orders (id, tenant_id, title, deadline, status)
      VALUES ($1::uuid, $2::uuid, 'テスト購買', '2099-03-01T00:00:00Z', 'open')`,
-    orderA,
-    tenantA,
-  );
-  await execute(
-    client,
-    `INSERT INTO order_products
+      orderA,
+      tenantA,
+    );
+    await execute(
+      client,
+      `INSERT INTO order_products
        (id, tenant_id, order_id, name, unit_price, options, requires_back_number, requires_back_name)
      VALUES ($1::uuid, $2::uuid, $3::uuid, '練習着', 1000, '[{"name":"size","values":["M"]}]'::jsonb, false, false)`,
-    productA,
-    tenantA,
-    orderA,
-  );
-  await client.$transaction(async (transaction) => {
-    await execute(
-      transaction as unknown as PrismaClient,
-      `INSERT INTO order_entries
-         (id, tenant_id, order_id, orderer_user_id, orderer_name, member_id, total_amount, payment_status)
-       VALUES ($1::uuid, $2::uuid, $3::uuid, 'guardian-a2', '注文者A', $4::uuid, 1000, 'unpaid')`,
-      entryA,
+      productA,
       tenantA,
       orderA,
-      memberA2,
     );
-    await execute(
-      transaction as unknown as PrismaClient,
-      `INSERT INTO order_lines
+    await client.$transaction(async (transaction) => {
+      await execute(
+        transaction as unknown as PrismaClient,
+        `INSERT INTO order_entries
+         (id, tenant_id, order_id, orderer_user_id, orderer_name, member_id, total_amount, payment_status)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, 'guardian-a2', '注文者A', $4::uuid, 1000, 'unpaid')`,
+        entryA,
+        tenantA,
+        orderA,
+        memberA2,
+      );
+      await execute(
+        transaction as unknown as PrismaClient,
+        `INSERT INTO order_lines
          (id, tenant_id, order_entry_id, product_id, product_name, unit_price, quantity, selected_options, amount)
        VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, '練習着', 1000, 1, '{"size":"M"}'::jsonb, 1000)`,
-      lineA,
-      tenantA,
-      entryA,
-      productA,
-    );
-  });
-  await execute(
-    client,
-    `INSERT INTO order_idempotency_keys
+        lineA,
+        tenantA,
+        entryA,
+        productA,
+      );
+    });
+    await execute(
+      client,
+      `INSERT INTO order_idempotency_keys
        (id, tenant_id, actor_user_id, idempotency_key, request_hash, resource_type, resource_id)
      VALUES ($1::uuid, $2::uuid, 'guardian-a2', 'fixture-key', repeat('c', 64), 'order_entry', $3::uuid)`,
-    idempotencyA,
-    tenantA,
-    entryA,
-  );
-  await execute(
-    client,
-    `INSERT INTO announcements (id, tenant_id, author_user_id, title, body, status, published_at)
+      idempotencyA,
+      tenantA,
+      entryA,
+    );
+    await execute(
+      client,
+      `INSERT INTO announcements (id, tenant_id, author_user_id, title, body, status, published_at)
      VALUES ($1::uuid, $2::uuid, 'staff-a', '回覧A', '本文A', 'published', '2099-04-01T00:00:00Z')`,
-    announcementA,
-    tenantA,
-  );
-  await execute(
-    client,
-    `INSERT INTO announcement_attachments
+      announcementA,
+      tenantA,
+    );
+    await execute(
+      client,
+      `INSERT INTO announcement_attachments
        (tenant_id, announcement_id, attachment_id, position, media_type, byte_size)
      VALUES ($1::uuid, $2::uuid, $3::uuid, 0, 'image/png', 8)`,
-    tenantA,
-    announcementA,
-    attachmentA,
-  );
-  await execute(
-    client,
-    `INSERT INTO line_connections (tenant_id, group_id, status, connected_at)
+      tenantA,
+      announcementA,
+      attachmentA,
+    );
+    await execute(
+      client,
+      `INSERT INTO line_connections (tenant_id, group_id, status, connected_at)
      VALUES ($1::uuid, 'CcentralA', 'connected', '2099-05-01T00:00:00Z'),
             ($2::uuid, 'CcentralB', 'connected', '2099-05-01T00:00:00Z')
      ON CONFLICT (tenant_id) DO UPDATE SET group_id = EXCLUDED.group_id, status = EXCLUDED.status,
        connected_at = EXCLUDED.connected_at`,
-    tenantA,
-    tenantB,
-  );
-  const notificationRows = await rows<{ id: string }>(
-    client,
-    `INSERT INTO line_notification_queue
-       (tenant_id, group_id, created_by_user_id, source_type, source_id, title, body, deep_link, status)
-     VALUES ($1::uuid, 'CcentralA', 'staff-a', 'event', $2::uuid, '予定通知', '本文', 'https://example.test/events/fixture', 'pending')
-     RETURNING id`,
-    tenantA,
-    eventA,
-  );
-  notificationA = notificationRows[0]?.id ?? '';
-  assert.match(notificationA, /^[0-9a-f-]{36}$/);
-  const notificationUuidRows = await rows<{ is_uuidv7: boolean }>(
-    client,
-    `SELECT app_is_uuidv7($1::uuid) AS is_uuidv7`,
-    notificationA,
-  );
-  assert.equal(notificationUuidRows[0]?.is_uuidv7, true);
-  await execute(
-    client,
-    `INSERT INTO line_webhook_receipts (tenant_id, group_id, webhook_event_id, received_at)
-     VALUES ($1::uuid, 'CcentralA', 'webhook-fixture', '2099-05-01T00:00:00Z')`,
-    tenantA,
-  );
-  await execute(
-    client,
-    `INSERT INTO ride_plans (id, tenant_id, title, departure_at, status)
-     VALUES ($1::uuid, $2::uuid, '送迎A', '2099-06-01T08:00:00Z', 'draft')`,
-    ridePlanA,
-    tenantA,
-  );
-  await execute(
-    client,
-    `UPDATE ride_plans SET status = 'open' WHERE id = $1::uuid`,
-    ridePlanA,
-  );
-  await execute(
-    client,
-    `INSERT INTO ride_offers (id, tenant_id, plan_id, driver_user_id, capacity, status)
-     VALUES ($1::uuid, $2::uuid, $3::uuid, 'staff-a', 4, 'open')`,
-    rideOfferA,
-    tenantA,
-    ridePlanA,
-  );
-  await execute(
-    client,
-    `INSERT INTO ride_requests (id, tenant_id, plan_id, member_id, requester_user_id, passenger_count, status)
-       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'guardian-a2', 1, 'pending')`,
-    rideRequestA,
-    tenantA,
-    ridePlanA,
-    memberA2,
-  );
-  await execute(
-    client,
-    `INSERT INTO ride_assignments (id, tenant_id, plan_id, request_id, offer_id, passenger_count)
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 1)`,
-    rideAssignmentA,
-    tenantA,
-    ridePlanA,
-    rideRequestA,
-    rideOfferA,
-  );
-  await execute(
-    client,
-    `INSERT INTO audit_logs (id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata)
-     VALUES ($1::uuid, $2::uuid, 'admin-a', 'board_contact.update', 'board_contact', $3::uuid, '{"hasPhone":true}'::jsonb)`,
-    auditA,
-    tenantA,
-    boardContactA,
-  );
-}
-
-async function cleanupFixture(client: PrismaClient) {
-  await client.$transaction(async (transaction) => {
-    const tx = transaction as unknown as PrismaClient;
-    await execute(
-      tx,
-      `DELETE FROM ride_assignments WHERE id = $1::uuid`,
-      rideAssignmentA,
-    );
-    await execute(
-      tx,
-      `DELETE FROM ride_requests WHERE id = $1::uuid`,
-      rideRequestA,
-    );
-    await execute(
-      tx,
-      `DELETE FROM ride_offers WHERE id = $1::uuid`,
-      rideOfferA,
-    );
-    await execute(tx, `DELETE FROM ride_plans WHERE id = $1::uuid`, ridePlanA);
-    if (notificationA) {
-      await execute(
-        tx,
-        `DELETE FROM line_notification_queue WHERE id = $1::uuid`,
-        notificationA,
-      );
-    }
-    await execute(
-      tx,
-      `DELETE FROM line_webhook_receipts WHERE group_id = 'CcentralA'`,
-    );
-    await execute(
-      tx,
-      `DELETE FROM line_connections WHERE tenant_id IN ($1::uuid, $2::uuid)`,
       tenantA,
       tenantB,
     );
+    const notificationRows = await rows<{ id: string }>(
+      client,
+      `INSERT INTO line_notification_queue
+       (tenant_id, group_id, created_by_user_id, source_type, source_id, title, body, deep_link, status)
+     VALUES ($1::uuid, 'CcentralA', 'staff-a', 'event', $2::uuid, '予定通知', '本文', 'https://example.test/events/fixture', 'pending')
+     RETURNING id`,
+      tenantA,
+      eventA,
+    );
+    notificationA = notificationRows[0]?.id ?? '';
+    assert.match(notificationA, /^[0-9a-f-]{36}$/);
+    const notificationUuidRows = await rows<{ is_uuidv7: boolean }>(
+      client,
+      `SELECT app_is_uuidv7($1::uuid) AS is_uuidv7`,
+      notificationA,
+    );
+    assert.equal(notificationUuidRows[0]?.is_uuidv7, true);
     await execute(
-      tx,
-      `DELETE FROM announcement_reads WHERE announcement_id = $1::uuid`,
-      announcementA,
+      client,
+      `INSERT INTO line_webhook_receipts (tenant_id, group_id, webhook_event_id, received_at)
+     VALUES ($1::uuid, 'CcentralA', 'webhook-fixture', '2099-05-01T00:00:00Z')`,
+      tenantA,
     );
     await execute(
-      tx,
-      `DELETE FROM announcement_attachments WHERE announcement_id = $1::uuid`,
-      announcementA,
+      client,
+      `INSERT INTO ride_plans (id, tenant_id, title, departure_at, status)
+     VALUES ($1::uuid, $2::uuid, '送迎A', '2099-06-01T08:00:00Z', 'draft')`,
+      ridePlanA,
+      tenantA,
     );
     await execute(
-      tx,
-      `DELETE FROM announcements WHERE id = $1::uuid`,
-      announcementA,
-    );
-    // 注文明細を先に消すと合計不一致になるため、fixture削除中だけ遅延検証を止める。
-    await execute(
-      tx,
-      `ALTER TABLE order_entries DISABLE TRIGGER order_entries_total_guard`,
+      client,
+      `UPDATE ride_plans SET status = 'open' WHERE id = $1::uuid`,
+      ridePlanA,
     );
     await execute(
-      tx,
-      `ALTER TABLE order_lines DISABLE TRIGGER order_lines_total_guard`,
-    );
-    await execute(tx, `DELETE FROM order_lines WHERE id = $1::uuid`, lineA);
-    await execute(tx, `DELETE FROM order_entries WHERE id = $1::uuid`, entryA);
-    await execute(
-      tx,
-      `ALTER TABLE order_lines ENABLE TRIGGER order_lines_total_guard`,
+      client,
+      `INSERT INTO ride_offers (id, tenant_id, plan_id, driver_user_id, capacity, status)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, 'staff-a', 4, 'open')`,
+      rideOfferA,
+      tenantA,
+      ridePlanA,
     );
     await execute(
-      tx,
-      `ALTER TABLE order_entries ENABLE TRIGGER order_entries_total_guard`,
+      client,
+      `INSERT INTO ride_requests (id, tenant_id, plan_id, member_id, requester_user_id, passenger_count, status)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'guardian-a2', 1, 'pending')`,
+      rideRequestA,
+      tenantA,
+      ridePlanA,
+      memberA2,
     );
     await execute(
-      tx,
-      `DELETE FROM order_idempotency_keys WHERE id = $1::uuid`,
-      idempotencyA,
+      client,
+      `INSERT INTO ride_assignments (id, tenant_id, plan_id, request_id, offer_id, passenger_count)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 1)`,
+      rideAssignmentA,
+      tenantA,
+      ridePlanA,
+      rideRequestA,
+      rideOfferA,
     );
     await execute(
-      tx,
-      `DELETE FROM order_products WHERE id = $1::uuid`,
-      productA,
-    );
-    await execute(
-      tx,
-      `DELETE FROM purchase_orders WHERE id = $1::uuid`,
-      orderA,
-    );
-    await execute(
-      tx,
-      `DELETE FROM board_contacts WHERE id = $1::uuid`,
+      client,
+      `INSERT INTO audit_logs (id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata)
+     VALUES ($1::uuid, $2::uuid, 'admin-a', 'board_contact.update', 'board_contact', $3::uuid, '{"hasPhone":true}'::jsonb)`,
+      auditA,
+      tenantA,
       boardContactA,
     );
-    await execute(
-      tx,
-      `DELETE FROM attendance_responses WHERE event_id IN ($1::uuid, $2::uuid)`,
-      eventA,
-      eventB,
-    );
-    await execute(
-      tx,
-      `DELETE FROM events WHERE id IN ($1::uuid, $2::uuid)`,
-      eventA,
-      eventB,
-    );
-    await execute(
-      tx,
-      `DELETE FROM attachments WHERE id IN ($1::uuid, $2::uuid)`,
-      attachmentA,
-      attachmentB,
-    );
-    // 監査ログは本番契約で追記専用のため、fixture cleanupだけtriggerを一時停止する。
-    await execute(
-      tx,
-      `ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_append_only_guard`,
-    );
-    await execute(tx, `DELETE FROM audit_logs WHERE id = $1::uuid`, auditA);
-    await execute(
-      tx,
-      `ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_append_only_guard`,
-    );
-    await execute(
-      tx,
-      `DELETE FROM guardian_members WHERE user_id = 'guardian-a2' AND tenant_id = $1::uuid`,
-      tenantA,
-    );
-    await execute(
-      tx,
-      `DELETE FROM tenant_memberships WHERE user_id IN ('admin-a', 'staff-a', 'guardian-a2') AND tenant_id = $1::uuid`,
-      tenantA,
-    );
+  });
+}
+
+async function cleanupFixture(client: PrismaClient) {
+  return withRlsDisabled(client, async () => {
+    await client.$transaction(async (transaction) => {
+      const tx = transaction as unknown as PrismaClient;
+      await execute(
+        tx,
+        `DELETE FROM ride_assignments WHERE id = $1::uuid`,
+        rideAssignmentA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM ride_requests WHERE id = $1::uuid`,
+        rideRequestA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM ride_offers WHERE id = $1::uuid`,
+        rideOfferA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM ride_plans WHERE id = $1::uuid`,
+        ridePlanA,
+      );
+      if (notificationA) {
+        await execute(
+          tx,
+          `DELETE FROM line_notification_queue WHERE id = $1::uuid`,
+          notificationA,
+        );
+      }
+      await execute(
+        tx,
+        `DELETE FROM line_webhook_receipts WHERE group_id = 'CcentralA'`,
+      );
+      await execute(
+        tx,
+        `DELETE FROM line_connections WHERE tenant_id IN ($1::uuid, $2::uuid)`,
+        tenantA,
+        tenantB,
+      );
+      await execute(
+        tx,
+        `DELETE FROM announcement_reads WHERE announcement_id = $1::uuid`,
+        announcementA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM announcement_attachments WHERE announcement_id = $1::uuid`,
+        announcementA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM announcements WHERE id = $1::uuid`,
+        announcementA,
+      );
+      // 注文明細を先に消すと合計不一致になるため、fixture削除中だけ遅延検証を止める。
+      await execute(
+        tx,
+        `ALTER TABLE order_entries DISABLE TRIGGER order_entries_total_guard`,
+      );
+      await execute(
+        tx,
+        `ALTER TABLE order_lines DISABLE TRIGGER order_lines_total_guard`,
+      );
+      await execute(tx, `DELETE FROM order_lines WHERE id = $1::uuid`, lineA);
+      await execute(
+        tx,
+        `DELETE FROM order_entries WHERE id = $1::uuid`,
+        entryA,
+      );
+      await execute(
+        tx,
+        `ALTER TABLE order_lines ENABLE TRIGGER order_lines_total_guard`,
+      );
+      await execute(
+        tx,
+        `ALTER TABLE order_entries ENABLE TRIGGER order_entries_total_guard`,
+      );
+      await execute(
+        tx,
+        `DELETE FROM order_idempotency_keys WHERE id = $1::uuid`,
+        idempotencyA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM order_products WHERE id = $1::uuid`,
+        productA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM purchase_orders WHERE id = $1::uuid`,
+        orderA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM board_contacts WHERE id = $1::uuid`,
+        boardContactA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM attendance_responses WHERE event_id IN ($1::uuid, $2::uuid)`,
+        eventA,
+        eventB,
+      );
+      await execute(
+        tx,
+        `DELETE FROM events WHERE id IN ($1::uuid, $2::uuid)`,
+        eventA,
+        eventB,
+      );
+      await execute(
+        tx,
+        `DELETE FROM attachments WHERE id IN ($1::uuid, $2::uuid)`,
+        attachmentA,
+        attachmentB,
+      );
+      // 監査ログは本番契約で追記専用のため、fixture cleanupだけtriggerを一時停止する。
+      await execute(
+        tx,
+        `ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_append_only_guard`,
+      );
+      await execute(tx, `DELETE FROM audit_logs WHERE id = $1::uuid`, auditA);
+      await execute(
+        tx,
+        `ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_append_only_guard`,
+      );
+      await execute(
+        tx,
+        `DELETE FROM guardian_members WHERE user_id = 'guardian-a2' AND tenant_id = $1::uuid`,
+        tenantA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM tenant_memberships WHERE user_id IN ('admin-a', 'staff-a', 'guardian-a2') AND tenant_id = $1::uuid`,
+        tenantA,
+      );
+    });
   });
 }
 

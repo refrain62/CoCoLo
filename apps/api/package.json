@@ -5,7 +5,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "pnpm test:unit",
-    "dev:test": "tsx test/test-server.ts",
+    "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "line:schedule": "node dist/line-delivery-scheduler.js",
     "lint": "pnpm --filter @cocolo/auth build && pnpm --filter @cocolo/contracts build && pnpm --filter @cocolo/db build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",

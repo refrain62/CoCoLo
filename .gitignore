@@ -7,6 +7,9 @@ coverage/
 !.env.example
 .release/
 .evidence/
+.temp/
+supabase/.temp/
+test-infrastructure/supabase/.temp/
 .mise.local.toml
 test-results/
 playwright-report/

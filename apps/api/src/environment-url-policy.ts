@@ -11,9 +11,17 @@ export const environmentUrlPolicies: Readonly<
   Record<AppEnvironment, EnvironmentUrlPolicy>
 > = {
   local: {
-    supabaseUrls: ['http://127.0.0.1:54321'],
-    supabaseJwksUrls: ['http://127.0.0.1:54321/auth/v1/.well-known/jwks.json'],
-    publicAppUrls: ['http://localhost:5173'],
+    supabaseUrls: ['http://127.0.0.1:54321', 'http://127.0.0.1:55321'],
+    supabaseJwksUrls: [
+      'http://127.0.0.1:54321/auth/v1/.well-known/jwks.json',
+      'http://127.0.0.1:55321/auth/v1/.well-known/jwks.json',
+    ],
+    publicAppUrls: [
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'http://localhost:4173',
+      'http://127.0.0.1:4173',
+    ],
   },
   staging: {
     supabaseUrls: ['https://staging.example.supabase.co'],

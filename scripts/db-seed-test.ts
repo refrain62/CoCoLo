@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import { withPostgresClient } from './postgres-client.ts';
+import { assertTestDatabaseTarget } from './test-database-guard.ts';
 
 // テナントA/Bとrole別fixtureを冪等に投入し、RLS・認可・guardian境界の統合テストを再現可能にする。
-assert.ok(process.env.DATABASE_URL, 'DATABASE_URL が必要です');
+assertTestDatabaseTarget();
 assert.ok(process.env.DIRECT_URL, 'DIRECT_URL が必要です');
+const authUserId = process.env.TEST_AUTH_USER_ID?.trim();
+if (authUserId && !/^[0-9a-f-]{36}$/i.test(authUserId))
+  throw new Error('TEST_AUTH_USER_ID はUUIDである必要があります。');
 const statements = [
   `
 INSERT INTO tenants (id, name)
@@ -34,8 +38,40 @@ VALUES
   ('00000000-0000-7000-8000-000000000301', '00000000-0000-7000-8000-000000000001', 'guardian-a', '00000000-0000-7000-8000-000000000201', '母')
 ON CONFLICT (tenant_id, user_id, member_id) DO NOTHING;
 `,
+  ...(authUserId
+    ? [
+        `
+INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status)
+VALUES ('00000000-0000-7000-8000-000000000104', '00000000-0000-7000-8000-000000000001', '${authUserId}', 'owner', 'active')
+ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = 'owner', status = 'active';
+`,
+      ]
+    : []),
+];
+const fixtureTables = [
+  'tenants',
+  'tenant_memberships',
+  'members',
+  'guardian_members',
 ];
 await withPostgresClient(process.env.DIRECT_URL, async (client) => {
-  for (const statement of statements) await client.$executeRawUnsafe(statement);
+  // FORCE RLSは本番の越境防止に必要なため、test専用fixture投入の間だけowner権限で停止する。
+  try {
+    for (const table of fixtureTables)
+      await client.$executeRawUnsafe(
+        `ALTER TABLE ${table} DISABLE ROW LEVEL SECURITY`,
+      );
+    for (const statement of statements)
+      await client.$executeRawUnsafe(statement);
+  } finally {
+    for (const table of fixtureTables) {
+      await client.$executeRawUnsafe(
+        `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`,
+      );
+      await client.$executeRawUnsafe(
+        `ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`,
+      );
+    }
+  }
 });
 console.log('テストデータを投入しました。');
