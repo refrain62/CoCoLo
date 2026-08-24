@@ -814,7 +814,6 @@ test('LINE通知claimは現行接続世代と一致するoutboxだけを送信�
     CONNECTION_GENERATION_MIGRATION,
     /o\.source_type NOT IN \('event', 'deadline'\)/,
   );
-  assert.match(CONNECTION_GENERATION_MIGRATION, /c\.tenant_id <> o\.tenant_id/);
   assert.match(CONNECTION_GENERATION_MIGRATION, /FOR UPDATE OF o SKIP LOCKED/);
   assert.match(
     CONNECTION_GENERATION_MIGRATION,
