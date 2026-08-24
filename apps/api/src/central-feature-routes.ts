@@ -2,8 +2,11 @@ import type { TokenVerifier } from '@cocolo/auth';
 import type { MemberRole } from '@cocolo/contracts/member';
 import type { AuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import type { BulletinBoardRepository } from '@cocolo/db/bulletin-board';
+import type { AttachmentRepository } from '@cocolo/domain/attachment';
 import type { Context, Hono } from 'hono';
 import type { ApiEnv } from './app.js';
+import { createAttachmentApp } from './features/attachments/attachment-app.js';
+import type { AttachmentStorage } from './features/attachments/attachment-storage.js';
 import { createAuthTeamSelectionApp } from './features/auth-team-selection/app.js';
 import {
   type BoardContactRepository,
@@ -24,6 +27,10 @@ export type CentralFeatureMembershipRepository = {
 
 export type CentralFeatureRoutes = {
   authTeamSelection?: { repository: AuthTeamSelectionRepository };
+  attachments?: {
+    repository: AttachmentRepository;
+    storage: AttachmentStorage;
+  };
   boardContact?: { repository: BoardContactRepository };
   bulletinBoard?: { repository: BulletinBoardRepository };
   ride?: { service: RideService };
@@ -55,6 +62,16 @@ export function mountCentralFeatureRoutes(options: CentralFeatureRouteOptions) {
       createAuthTeamSelectionApp({
         verifyToken: options.verifyToken,
         repository: features.authTeamSelection.repository,
+      }),
+    );
+
+  if (features?.attachments)
+    options.rideApp.route(
+      '/',
+      createAttachmentApp({
+        attachmentRepository: features.attachments.repository,
+        storage: features.attachments.storage,
+        useCentralAuth: true,
       }),
     );
 

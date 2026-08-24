@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-実装再開の基準となる`develop`は`b14f891`（AUTH-002実装PR #96のマージ）です。docs-only PR #97、#98の履歴更新は`develop`へ反映済みです。
+実装再開の基準となる`develop`は`ced1e71`（FIL-001実装PR #102のマージ）です。完了済み実装とdocs-only PRの履歴更新は`develop`へ反映済みです。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
@@ -194,7 +194,8 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - PR #89でauth team選択、役員連絡先、回覧板、送迎のAPI routeを中央mountし、中央認証、tenant再解決、rate limit、CORS、response envelope契約を接続済みです。
   - PR #91でログイン後のactiveチーム一覧、複数所属時の選択画面、再読み込み時の候補照合、auth context/部員/予定APIへの選択tenant header付与を接続済みです。
   - PR #93で役員連絡先と回覧板のWeb画面をmountし、両APIへ選択tenant headerを付与しました。役員管理操作はowner/adminだけに表示します。
-  - 残りはattachments/orders/LINE feature webhookのAPI接続、送迎画面の予定選択、チーム選択前のlogout導線、全画面の統合テスト、staging Supabase E2E、feature固有response契約の厳密化です。古いPR #35はクローズしました。
+  - PR #102で添付upload APIを中央mountし、中央認証、選択tenant、rate limit、R2実adapter、response契約を接続済みです。Webの添付画面は未接続です。
+  - 残りはorders/LINE feature webhookのAPI接続、添付Web画面、送迎画面の予定選択、チーム選択前のlogout導線、全画面の統合テスト、staging Supabase E2E、feature固有response契約の厳密化です。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**
@@ -225,14 +226,10 @@ EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume
 
 ## 8. Phase 4の未統合タスク
 
-- `[ ]` **FIL-001：R2添付のupload sessionを中央APIへ統合する。**
-  - 対象：PR #26、`feature/phase4-r2-attachments`
-  - upload session、署名URL、MIME、magic bytes、サイズ、SHA-256、TTL、complete再試行、rejected cleanup、tenantとowner境界を統合します。
-  - feature側の中央mount、Prisma model、migration、RLS、staging E2Eを完了します。
-
-- `[ ]` **FIL-002：Cloudflare R2の実adapterをstagingへ接続する。**
+- `[~]` **FIL-002：Cloudflare R2の実adapterをstagingへ接続する。**
   - 対象：PR #39、`feature/phase4-r2-real-adapter`
-  - private bucket、環境別bucket、HTTPS、署名URL期限、object key、HEADまたはGET metadata、PUT、GET、DELETEを実環境で確認します。
+  - PR #102でprivate bucket向けのR2実adapter、環境別bucket、HTTPS、署名URL期限、object key、HEADまたはGET metadata、PUT、GET、DELETEのAPI wiringを完了しました。
+  - stagingで実バケットを使った署名URL期限、実体検証、cleanup、認可済みdownloadを確認します。
   - local fake adapterとproduction adapterの切り替えを環境変数だけで認可根拠にしないことを確認します。
 
 - `[ ]` **ANN-001：回覧板と既読管理を統合する。**
