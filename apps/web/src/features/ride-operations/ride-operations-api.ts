@@ -11,7 +11,6 @@ import {
 
 export type RidePlan = {
   id: string;
-  tenantId: string;
   title: string;
   departureAt: string;
   pickupMapsUrl: string | null;

@@ -95,6 +95,7 @@ function createTestApp({ multipleMemberships = false } = {}) {
       },
       ride: {
         service: {
+          listPlans: async () => [],
           createPlan: async () => ({}),
           createOffer: async () => ({}),
           createRequest: async () => ({}),
@@ -220,4 +221,13 @@ test('中央APIへmountした送迎routeは認証前に未認証を拒否する'
   );
 
   assert.equal(response.status, 401);
+});
+
+test('中央APIへ送迎routeをmountし、公開response契約を適用する', async () => {
+  const response = await createTestApp().request('/api/v1/ride-plans', {
+    headers: { authorization: `Bearer ${USER_ID}` },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { data: [] });
 });
