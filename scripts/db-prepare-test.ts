@@ -79,29 +79,20 @@ BEGIN
 END
 $$;
 `;
-const fixtureTableGrant = `DO $$
-DECLARE
-  table_name text;
-BEGIN
-  FOREACH table_name IN ARRAY ARRAY['tenants', 'tenant_memberships', 'members', 'guardian_members'] LOOP
-    IF to_regclass(format('public.%I', table_name)) IS NOT NULL THEN
-      EXECUTE format(
-        'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO cocolo_fixture',
-        table_name
-      );
-    END IF;
-  END LOOP;
-END
-$$;`;
+const fixtureTableGrants = [
+  'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO cocolo_fixture',
+  'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO cocolo_fixture',
+];
 const grants = fixtureGrantsOnly
-  ? [fixtureTableGrant]
+  ? fixtureTableGrants
   : [
       ...(migrationRole
         ? [
             'GRANT USAGE, CREATE ON SCHEMA public TO cocolo_migration',
             'GRANT USAGE ON SCHEMA extensions TO cocolo_migration',
             'GRANT USAGE ON SCHEMA public TO cocolo_fixture',
-            fixtureTableGrant,
+            'GRANT cocolo_migration TO cocolo_fixture',
+            ...fixtureTableGrants,
           ]
         : []),
       'GRANT USAGE ON SCHEMA public TO cocolo_app',
