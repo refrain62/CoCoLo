@@ -35,17 +35,23 @@ BEGIN
   SELECT o.id, o.tenant_id
     INTO candidate_id, candidate_tenant_id
     FROM line_delivery_outbox o
-    JOIN line_connections c
-      ON c.tenant_id = o.tenant_id
-     AND c.group_id = o.destination
-     AND c.status = 'connected'::line_connection_status
-     AND (
-       (o.connection_connected_at IS NOT NULL
-        AND c.connected_at = o.connection_connected_at)
-       OR (o.connection_connected_at IS NULL
-           AND c.connected_at <= o.created_at)
-     )
    WHERE o.attempt < p_max_attempts
+     AND (
+       o.source_type NOT IN ('event', 'deadline')
+       OR EXISTS (
+         SELECT 1
+           FROM line_connections c
+          WHERE c.tenant_id = o.tenant_id
+            AND c.group_id = o.destination
+            AND c.status = 'connected'::line_connection_status
+            AND (
+              (o.connection_connected_at IS NOT NULL
+               AND c.connected_at = o.connection_connected_at)
+              OR (o.connection_connected_at IS NULL
+                  AND c.connected_at <= o.created_at)
+            )
+       )
+     )
      AND (
        (o.status IN ('pending', 'failed')
         AND (o.next_retry_at IS NULL OR o.next_retry_at <= db_now))
@@ -65,18 +71,24 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
       FROM line_delivery_outbox o
-      JOIN line_connections c
-        ON c.tenant_id = o.tenant_id
-       AND c.group_id = o.destination
-       AND c.status = 'connected'::line_connection_status
-       AND (
-         (o.connection_connected_at IS NOT NULL
-          AND c.connected_at = o.connection_connected_at)
-         OR (o.connection_connected_at IS NULL
-             AND c.connected_at <= o.created_at)
-       )
      WHERE o.id = candidate_id
        AND o.attempt < p_max_attempts
+       AND (
+         o.source_type NOT IN ('event', 'deadline')
+         OR EXISTS (
+           SELECT 1
+             FROM line_connections c
+            WHERE c.tenant_id = o.tenant_id
+              AND c.group_id = o.destination
+              AND c.status = 'connected'::line_connection_status
+              AND (
+                (o.connection_connected_at IS NOT NULL
+                 AND c.connected_at = o.connection_connected_at)
+                OR (o.connection_connected_at IS NULL
+                    AND c.connected_at <= o.created_at)
+              )
+         )
+       )
        AND (
          (o.status IN ('pending', 'failed')
           AND (o.next_retry_at IS NULL OR o.next_retry_at <= db_now))
@@ -130,21 +142,27 @@ BEGIN
   SELECT EXISTS (
     SELECT 1
       FROM line_delivery_outbox o
-      JOIN line_connections c
-        ON c.tenant_id = o.tenant_id
-       AND c.group_id = o.destination
-       AND c.status = 'connected'::line_connection_status
-       AND (
-         (o.connection_connected_at IS NOT NULL
-          AND c.connected_at = o.connection_connected_at)
-         OR (o.connection_connected_at IS NULL
-             AND c.connected_at <= o.created_at)
-       )
      WHERE o.tenant_id = p_tenant_id
        AND o.id = p_notification_id
        AND o.status = 'sending'
        AND o.attempt_token = p_attempt_token
        AND o.lease_expires_at > clock_timestamp()
+       AND (
+         o.source_type NOT IN ('event', 'deadline')
+         OR EXISTS (
+           SELECT 1
+             FROM line_connections c
+            WHERE c.tenant_id = o.tenant_id
+              AND c.group_id = o.destination
+              AND c.status = 'connected'::line_connection_status
+              AND (
+                (o.connection_connected_at IS NOT NULL
+                 AND c.connected_at = o.connection_connected_at)
+                OR (o.connection_connected_at IS NULL
+                    AND c.connected_at <= o.created_at)
+              )
+         )
+       )
   ) INTO is_current;
   IF is_current THEN
     RETURN true;

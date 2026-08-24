@@ -120,7 +120,7 @@ BEGIN
     connection_connected_at
   ) VALUES (
     p_id, p_tenant_id, p_actor_user_id, p_source_type, normalized_source_id,
-    p_destination, p_title, p_body, trim(p_idempotency_key), calculated_hash,
+    p_destination, p_title, p_body, p_deep_link, trim(p_idempotency_key), calculated_hash,
     CASE WHEN p_deliver_at <= db_now THEN NULL ELSE p_deliver_at END,
     connection_connected_at
   )

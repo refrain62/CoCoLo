@@ -746,7 +746,7 @@ test('予定LINE通知migrationは対象予定・接続先・状態遷移をDB�
 test('LINE通知claimは現行接続世代と一致するoutboxだけを送信対象にする', () => {
   assert.match(
     CONNECTION_GENERATION_MIGRATION,
-    /JOIN line_connections c[\s\S]*c\.status = 'connected'/,
+    /(?:FROM|JOIN) line_connections c[\s\S]*c\.status = 'connected'/,
   );
   assert.match(
     CONNECTION_GENERATION_MIGRATION,
@@ -755,6 +755,10 @@ test('LINE通知claimは現行接続世代と一致するoutboxだけを送信�
   assert.match(
     CONNECTION_GENERATION_MIGRATION,
     /c\.connected_at <= o\.created_at/,
+  );
+  assert.match(
+    CONNECTION_GENERATION_MIGRATION,
+    /o\.source_type NOT IN \('event', 'deadline'\)/,
   );
   assert.match(CONNECTION_GENERATION_MIGRATION, /FOR UPDATE OF o SKIP LOCKED/);
   assert.match(
