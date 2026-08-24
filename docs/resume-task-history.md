@@ -18,7 +18,7 @@
 
 ## 停止時点の基準
 
-停止時点の`develop`は`d375f46`（認証チーム選択の公開レスポンス契約を中央APIへ適用）です。
+停止時点の`develop`は`41c956d`（添付APIの公開レスポンス契約を拡張）です。
 
 `develop`へ反映済みの業務機能は、認証、テナント境界、部員一覧、検索、登録、編集、退部、学年表示、年度繰り上げです。
 
@@ -977,6 +977,37 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - 認証チーム選択の実PostgreSQL/RLS検証、staging E2E、実ブラウザ統合テストはAPI-002の残タスクとして継続します。
 - 添付、送迎など未契約APIの公開response契約は後続featureで対応します。
+
+## FIL-002/API-002 添付APIの公開レスポンス契約
+
+### 実施した変更
+
+- PR #139で、complete、download、cleanup-expired、cleanupの公開レスポンスschemaを追加しました。
+- complete responseはattachmentId、available、MIME、サイズ、SHA-256だけを許可します。
+- download responseはattachmentId、短期download URL、期限だけを許可します。
+- cleanup responseは公開用の件数、attachmentId、削除完了状態だけを許可します。
+- 中央APIでは、添付のrouteとHTTP statusに対応する固有schemaを、汎用envelope schemaより先に適用します。
+
+### 検証結果
+
+- `pnpm test`、`pnpm build`、`pnpm lint`が成功しました。
+- contracts 31件、API unit 188件を含む全テストが成功しました。
+- PR #139のquality run `32735403808`が成功しました。
+
+### 敵対的レビュー
+
+- ownerUserId、tenantId、object key、R2内部情報の公開混入を確認し、CriticalとHighは0件です。
+- download URLの期限検証、tenant・所有者認可、ファイル検証、状態遷移は既存実装を維持しています。
+- DB、R2 adapter、認証、認可、ファイル検証、状態遷移の実装は変更していません。
+
+### GitHub反映
+
+- PR #139は`41c956d`としてdevelopへsquash mergeしました。
+
+### 未完了条件
+
+- 添付の実PostgreSQL/RLS検証、staging R2 E2E、実ブラウザ統合テストはFIL-002/API-002の残タスクとして継続します。
+- 送迎など未契約APIの公開response契約は後続featureで対応します。
 
 ## 履歴の更新規則
 
