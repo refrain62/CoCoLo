@@ -1,5 +1,6 @@
 import type { TeamOption } from '@cocolo/contracts/auth-team-selection';
 import { useEffect, useState } from 'react';
+import { useAuth } from '../../auth-context.js';
 import {
   type TeamSelectionApi,
   TeamSelectionApiError,
@@ -19,6 +20,7 @@ const roleLabels: Record<TeamOption['role'], string> = {
 
 // 利用可能なactive所属を選択させ、選択完了前に業務画面へ進ませない。
 export function TeamSelectionPage({ api, onSelected }: TeamSelectionPageProps) {
+  const { isLoggingOut, logout } = useAuth();
   const [teams, setTeams] = useState<TeamOption[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -72,6 +74,13 @@ export function TeamSelectionPage({ api, onSelected }: TeamSelectionPageProps) {
     <main aria-labelledby="team-selection-title">
       <h1 id="team-selection-title">利用するチームを選択</h1>
       <p>操作対象のチームを選択してください。</p>
+      <button
+        disabled={isLoggingOut}
+        onClick={() => void logout()}
+        type="button"
+      >
+        {isLoggingOut ? 'ログアウト中…' : 'ログアウト'}
+      </button>
       {isLoading ? <p role="status">チーム一覧を読み込んでいます。</p> : null}
       {error ? <p role="alert">{error}</p> : null}
       {!isLoading && teams.length > 0 ? (
