@@ -1,5 +1,7 @@
-import { selectedTeamHeaderName } from '@cocolo/contracts/auth-team-selection';
-import { getStoredSelectedTeamId } from '../auth-team-selection/selected-team-storage.js';
+import {
+  getStoredSelectedTeamId,
+  selectedTeamHeaderName,
+} from '../auth-team-selection/selected-team-storage.js';
 
 export type EventType = 'practice' | 'match' | 'event';
 export type AttendanceResponse = 'attending' | 'absent' | 'pending';

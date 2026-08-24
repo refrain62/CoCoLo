@@ -1,5 +1,8 @@
 const selectedTeamStorageKey = 'cocolo.selectedTeamId';
 
+// Vitestはworkspace packageのbuild前に実行されるため、ブラウザ側の固定header名をここで持つ。
+export const selectedTeamHeaderName = 'X-CoCoLo-Team-Id';
+
 // tenantIdだけを保存し、再読み込み後もサーバー側でactive所属を再検証できるようにする。
 export function getStoredSelectedTeamId(): string | null {
   if (typeof window === 'undefined') return null;

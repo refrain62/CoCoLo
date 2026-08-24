@@ -1,5 +1,7 @@
-import { selectedTeamHeaderName } from '@cocolo/contracts/auth-team-selection';
-import { getStoredSelectedTeamId } from './features/auth-team-selection/selected-team-storage.js';
+import {
+  getStoredSelectedTeamId,
+  selectedTeamHeaderName,
+} from './features/auth-team-selection/selected-team-storage.js';
 
 export type MemberCategory = 'student' | 'adult';
 export type MemberStatus = 'active' | 'suspended' | 'retired';
