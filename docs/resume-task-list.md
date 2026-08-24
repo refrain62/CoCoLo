@@ -20,7 +20,7 @@
 
 ## 1. 停止時点の基準
 
-実装再開の基準となる`develop`は`7056aac`（PR #133反映後）です。管理者再試行APIとworkerのロック順序修正、LINE Webhook受信境界、LINE公開レスポンス契約、役員連絡先と注文APIの公開レスポンス契約まで反映済みです。完了済み実装の詳細は[完了タスクと実施履歴](resume-task-history.md)へ移しています。
+実装再開の基準となる`develop`は`a0fb868`（PR #135反映後）です。管理者再試行APIとworkerのロック順序修正、LINE Webhook受信境界、LINE公開レスポンス契約、役員連絡先、注文API、回覧板の公開レスポンス契約まで反映済みです。完了済み実装の詳細は[完了タスクと実施履歴](resume-task-history.md)へ移しています。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
@@ -197,7 +197,7 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - PR #102で添付upload APIを中央mountし、中央認証、選択tenant、rate limit、R2実adapter、response契約を接続済みです。Webの添付画面は未接続です。
   - PR #105で添付Web画面を中央APIへ接続し、選択tenant headerとguardianの表示制御を追加しました。
   - PR #109で注文・集金APIをPrisma repositoryと中央mountへ接続し、PR #110で注文Web画面、選択tenant header、チーム切替時の状態破棄を接続しました。
-  - PR #123でowner/admin向けの管理者再試行APIを現行outboxへ接続し、PR #125でworker claimと管理者再試行のロック順序を統一しました。PR #127でWebhookの専用DB actor境界を追加し、PR #129でLINE公開レスポンス契約を厳密化し、PR #131で役員連絡先の公開レスポンス契約を追加し、PR #133で注文APIの公開レスポンス契約を追加しました。残りは全画面の統合テストとstaging Supabase E2Eです。送迎画面の予定選択はPR #112、チーム選択前のlogout導線はPR #113で完了しました。古いPR #35はクローズしました。
+  - PR #123でowner/admin向けの管理者再試行APIを現行outboxへ接続し、PR #125でworker claimと管理者再試行のロック順序を統一しました。PR #127でWebhookの専用DB actor境界を追加し、PR #129でLINE公開レスポンス契約を厳密化し、PR #131で役員連絡先の公開レスポンス契約を追加し、PR #133で注文APIの公開レスポンス契約を追加し、PR #135で回覧板APIの公開レスポンス契約を追加しました。残りは全画面の統合テストとstaging Supabase E2Eです。送迎画面の予定選択はPR #112、チーム選択前のlogout導線はPR #113で完了しました。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**
