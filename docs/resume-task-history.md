@@ -1,6 +1,6 @@
 # 完了タスクと実施履歴
 
-更新日：2026-08-23
+更新日：2026-08-24
 
 状態：参照用アーカイブ
 
@@ -407,6 +407,35 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - LINE providerのstaging接続、専用channel/groupを使ったE2E、provider送達確認と`unknown`照合運用は`LINE-DELIVERY-002`および`NOT-002`、`OPS-004`として残ります。
 - EVT-002の予定詳細・出欠回答状態の統合、実DB検証が未完了のため、次の実装候補として残します。
+
+## LOCAL-SUPABASE-001
+
+### 実施した変更
+
+- 旧PR #78のquality失敗を起点に、ローカルSupabaseをDockerで起動し、DB role、migration、Auth fixture、RLS fixture、R2 worker環境を同一stackへ接続するPR #82へ再構成しました。
+- Auth fixtureからDB fixtureを起動するときに管理者用DB URLを子プロセスへ渡さないよう修正し、fixture投入時だけ対象テーブルのRLSを停止し、必ずRLSとFORCE RLSを復元するようにしました。
+- ローカルstackのmigration roleだけを`BYPASSRLS`として作成し、app roleとworker roleは通常のRLS境界を維持しました。ローカルSupabase URLのallowlist、秘密情報のログマスク、local R2固定、失敗時のstack cleanupも追加しました。
+- 共有DBを使う統合テストを直列化し、固定fixture IDの衝突を解消しました。
+
+### 検証結果
+
+- ローカルで`pnpm test` 162件、`pnpm build`、`pnpm typecheck`、Biome検査、trust-root、production bundle、workflow検査が成功しました。
+- Docker Engineはローカルに存在しないためlocal stack自体の起動証跡は作成できませんでしたが、PR #82のCIでquality run `32690000983`、database-integrity run `32690000984`、schema-drift run `32690000976`がすべて成功しました。
+
+### 敵対的レビュー
+
+- 初回レビューで検出された秘密情報のログ露出、fixture権限、ローカルURL許可範囲、失敗時cleanupの問題を修正しました。
+- 修正後の判定はCritical 0、High 0です。実Dockerを使ったローカル再現ができない制約はCI結果で補完し、Medium/Lowの追加改善は完成を妨げないため後続扱いとしました。
+
+### GitHub反映
+
+- 旧PR #78は修正内容をPR #82へ移行したためクローズしました。
+- PR #82は`ec14ca87baf39788ca254242084e1f7c2f59c439`として`develop`へマージしました。
+- 本記録と残タスク台帳の更新は、実装PRと分離したdocs-only PRで反映します。
+
+### 残タスク
+
+- Supabase Auth、PostgreSQL、R2、LINE、分散rate limitのstaging接続と実サービスE2Eは、既存のOPS/LINE残タスクとして継続します。
 
 ## 履歴の更新規則
 
