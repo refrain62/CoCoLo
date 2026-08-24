@@ -64,7 +64,10 @@ $$;
 `;
 const grants = [
   ...(migrationRole
-    ? ['GRANT USAGE, CREATE ON SCHEMA public TO cocolo_migration']
+    ? [
+        'GRANT USAGE, CREATE ON SCHEMA public TO cocolo_migration',
+        'GRANT USAGE ON SCHEMA extensions TO cocolo_migration',
+      ]
     : []),
   'GRANT USAGE ON SCHEMA public TO cocolo_app',
   'GRANT USAGE ON SCHEMA public TO line_delivery_worker',
