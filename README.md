@@ -164,6 +164,8 @@ staging / productionの配置手順は docs/deployment-guide.md、配置アダ�
 5. Critical / Highの指摘を解消し、Node.js 24で検証したうえでdevelop宛てDraft PRを作成する。
 6. タスク完了時は、実装PRと別にタスク関連の台帳、仕様、運用記録だけを含むPRを作成し、レビューとCI完了後にdevelopへマージする。
 
+PR本文の共通フォーマット、改行規則、既存PRの見直し手順は [docs/pull-request-guidelines.md](docs/pull-request-guidelines.md) を参照してください。本文の機械検査は `pnpm verify:pr-description` で実行します。
+
 コードだけでは分かりにくい前提・制約・競合対策は、近接する日本語コメントまたは/docsへ記録します。
 
 ## 仕様・設計ドキュメント

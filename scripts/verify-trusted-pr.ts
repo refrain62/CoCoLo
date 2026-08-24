@@ -5,9 +5,10 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertTrustRootReady, readTrustRoot } from './trust-root.ts';
+import { assertPullRequestDescription } from './verify-pr-description.ts';
 
 type PullRequestFile = { filename?: string; status?: string };
-type PullRequestMetadata = { changed_files?: number };
+type PullRequestMetadata = { changed_files?: number; body?: string | null };
 type ContentsResponse = { content?: string; encoding?: string };
 type TrustedManifest = {
   protected_paths?: string[];
@@ -121,6 +122,7 @@ async function main(): Promise<void> {
     expectedChangedFiles < maxChangedFiles,
     `PRのchanged_filesが上限${maxChangedFiles}件以上です。`,
   );
+  assertPullRequestDescription(pullRequest.body ?? '');
 
   const changed: PullRequestFile[] = [];
   for (let page = 1; changed.length < expectedChangedFiles; page += 1) {
