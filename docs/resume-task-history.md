@@ -123,7 +123,28 @@ Draft PRに実装が存在しても、`develop`へ統合されていない機能
 ### 残存条件
 
 - T014-PR-001の既存trust bootstrap・PR trust gate展開は別タスクとして継続します。
-- T014-DB-002の悪性fixture拡充と、残るMedium以下の後続検証は残タスク台帳で管理します。
+- 残るMedium以下の後続検証は残タスク台帳で管理します。
+
+## T014-DB-002 / T014-BOUNDARY-001（現行develop再構成）
+
+### 実施した変更
+
+- 現行`origin/develop` `16992813765535e255e82cddd78cc8ccced8e406`を起点に、DB security boundary検査を再構成しました。
+- 実装PRは#74（`feature/t014-db-security-current`）で、`develop`へsquash commit `eff61c8414df7ad090a247d5cc663b3b2af3de5d`として統合しました。
+- `DATABASE_URL`のapp roleと`DIRECT_URL`のadmin roleを分離して接続し、role属性、DB/schema/object owner、membership、ACL、default ACL、RLS、policy、app_guard functionを実DBのcatalogから検査するようにしました。
+- 既存migrationは編集せず、enum・schema・app_guardの権限境界を追加しました。central feature schemaによる関数再作成で設定が失われないよう、後段の`20260823170000_finalize_app_guard_security` migrationでSECURITY INVOKER、`search_path=pg_catalog, public`、PUBLIC EXECUTE拒否、app role EXECUTEを再固定しています。
+- Shadow DBは現行全テーブルのowner、ACL、default ACL、membership、RLSを検査し、実DB側は正本対象のphase1 tableと公告掲載者membership policyを検査します。検査対象外の関数を誤って要求しないよう、app_guard functionだけを明示対象にしました。
+- PR #42と#43は、#69/#72/#74への再構成・統合済みとしてsuperseded closeしました。
+
+### 検証結果
+
+- ローカルでmigration checksum 17件、migration SQL、trust root、DB integrity 23/23、schema drift 42/42、workflow、typecheck、lint、build、全test（API 157件を含む）が成功しました。
+- CI run `32679398348`のdatabase-integrity、`32679398455`のschema-drift、`32679398312`のqualityがすべて成功しました。
+- 敵対的レビューでtenant越境、認可、個人情報、入力検証、状態遷移への実装影響を確認し、Critical / Highの指摘はありませんでした。
+
+### 残存条件
+
+- T014-PR-001のtrust bootstrap・PR trust gate展開、T014-E2E-001、分散rate limit、staging接続などは残タスク台帳で継続します。
 
 ## T014-DRIFT-001
 
