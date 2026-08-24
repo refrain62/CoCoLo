@@ -20,13 +20,13 @@
 
 ## 1. 停止時点の基準
 
-再開時点の`origin/develop`は`0db4fde`（Webチーム選択統合PR #91のマージ）です。
+再開時点の`origin/develop`は`31a4c04`（Web役員連絡先と回覧板接続PR #93のマージ）です。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
 Draft PRに実装が存在しても、`develop`へ統合されていない機能は現行環境では未実装として扱います。
 
-再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、#77、#80、#82、#85、#89、docs-only PR #55、#56、#57、#58、#61、#63、#66、#81、#83、#86、#87、#88は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
+再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、#77、#80、#82、#85、#89、#91、#93、docs-only PR #55、#56、#57、#58、#61、#63、#66、#81、#83、#86、#87、#88、#90、#92は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
 
 ### 1.1 再開時のGitHub同期結果
 
@@ -197,8 +197,9 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
 - `[~]` **API-002：WebとAPIの中央mountを統合する。**
   - 対象：PR #32、現行develop起点のPR #89
   - PR #89でauth team選択、役員連絡先、回覧板、送迎のAPI routeを中央mountし、中央認証、tenant再解決、rate limit、CORS、response envelope契約を接続済みです。
-  - PR #91でログイン後のactiveチーム一覧、複数所属時の選択画面、再読み込み時の候補照合、auth context/部員/予定APIへの選択tenant header付与を接続済みです。
-  - 残りはattachments/orders/LINE feature webhookのAPI接続、board/bulletin/ride等のWeb画面mount、loading/empty/error/権限不足表示、feature固有response契約の厳密化です。古いPR #35はクローズしました。
+- PR #91でログイン後のactiveチーム一覧、複数所属時の選択画面、再読み込み時の候補照合、auth context/部員/予定APIへの選択tenant header付与を接続済みです。
+  - PR #93で役員連絡先と回覧板のWeb画面をmountし、両APIへ選択tenant headerを付与しました。役員管理操作はowner/adminだけに表示します。
+  - 残りはattachments/orders/LINE feature webhookのAPI接続、送迎画面の予定選択、全画面の統合テスト、Auth session lifecycle、feature固有response契約の厳密化です。古いPR #35はクローズしました。
   - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**

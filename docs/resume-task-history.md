@@ -521,6 +521,35 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - attachments/orders/LINE feature webhookのAPI接続、board/bulletin/ride等のWeb画面mount、logout時の選択状態整理、チーム切替UI、Auth session lifecycle、feature固有response契約の厳密化を継続します。
 
+## API-002 Webの役員連絡先と回覧板接続
+
+### 実施した変更
+
+- 現行developを起点にPR #93を作成し、ログイン後の中央Webへ役員連絡先画面と回覧板画面を接続しました。
+- 役員連絡先APIと回覧板APIの全リクエストに、選択中チームの`X-CoCoLo-Team-Id`を付与しました。中央API側で認証所属を再検証するため、画面からtenant IDを業務入力として送信しません。
+- 役員連絡先画面では、owner/adminだけに登録、編集、削除、年度引き継ぎを表示します。staffなどの一覧では、APIが投影した範囲の連絡先だけを表示します。
+- 年度切替時に取得失敗した場合は旧年度の一覧を残さず、見出しのアクセシビリティ属性も接続しました。
+
+### 検証結果
+
+- Web Vitest 65件、workspace `pnpm test:unit`、`pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`git diff --check`が成功しました。
+- PR #93のquality run `32698162776`、database-integrity run `32698162800`、schema-drift run `32698162801`がすべて成功しました。
+
+### 敵対的レビュー
+
+- Critical 0、High 0でした。tenant越境、選択チームheaderの付与、役員連絡先のPII投影、回覧板の未読者境界、非管理者の管理操作表示を確認しました。
+- Mediumのうち、権限表示の既定値、年度切替時の旧データ表示、見出し参照先は修正しました。
+- 残るMediumは、mainからのmountとrole制御、初期ロードや既読処理を含む画面統合テストです。既存のAPI単体テストでheader付与を確認しており、今回のマージを妨げない後続課題としてAPI-002へ残します。
+
+### GitHub反映
+
+- 実装PR #93はready化後、squash commit `31a4c04`として`develop`へ統合しました。
+- 本記録と残タスク台帳の更新は、実装PRと分離したdocs-only PRで反映します。
+
+### 残タスク
+
+- attachments/orders/LINE feature webhookのAPI接続、送迎画面の予定選択、全画面の統合テスト、logout時の選択状態整理、チーム切替UI、Auth session lifecycle、feature固有response契約の厳密化を継続します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
