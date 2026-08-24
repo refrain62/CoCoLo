@@ -8,6 +8,8 @@ import {
   summarizeAttendance,
 } from '@cocolo/domain/event';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { enqueueEventLineDelivery } from './index.js';
+import { uuidv7 } from './uuidv7.js';
 
 export type EventRecord = {
   id: string;
@@ -118,6 +120,11 @@ export type EventWriteInput = {
 };
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
+
+type EventRepositoryOptions = {
+  notificationPublicAppUrl?: string;
+  now?: () => Date;
+};
 
 const MAX_EVENT_LIST_RANGE_MS = 93 * 24 * 60 * 60 * 1000;
 
@@ -297,7 +304,68 @@ async function findAssignedMember(
 }
 
 // イベントと回答を同一transactionで更新し、締切判定・担当部員・監査をDB境界内で確定する。
-export function createEventRepository(client: PrismaClient): EventRepository {
+export function createEventRepository(
+  client: PrismaClient,
+  options: EventRepositoryOptions = {},
+): EventRepository {
+  const publicAppUrl = options.notificationPublicAppUrl?.replace(/\/$/, '');
+  const now = options.now ?? (() => new Date());
+  const enqueueEventNotifications = async (
+    tx: Prisma.TransactionClient,
+    input: EventRepositoryInput,
+    event: EventRecord,
+    includeCreatedNotification: boolean,
+  ) => {
+    if (!publicAppUrl) return;
+    const connectionRows = await tx.$queryRaw<Array<{ group_id: string }>>`
+      SELECT group_id
+        FROM line_connections
+       WHERE tenant_id = ${input.tenantId}::uuid
+         AND status = 'connected'::line_connection_status
+    `;
+    const destination = connectionRows[0]?.group_id;
+    if (!destination) return;
+
+    const timestamp = now();
+    const deepLink = `${publicAppUrl}/events/${event.id}`;
+    if (includeCreatedNotification)
+      await enqueueEventLineDelivery(tx, {
+        id: uuidv7(),
+        tenantId: input.tenantId,
+        actorUserId: input.actorUserId,
+        role: input.role,
+        sourceType: 'event',
+        sourceId: event.id,
+        destination,
+        title: '予定のお知らせ',
+        body: '予定の詳細を確認してください。',
+        deepLink,
+        idempotencyKey: `event:${event.id}`,
+        deliverAt: timestamp,
+      });
+
+    // 締切の24時間前を通知時刻とし、締切が近い予定は保存直後に送る。
+    const deliverAt = new Date(
+      Math.max(
+        timestamp.getTime(),
+        Date.parse(event.attendanceDeadline) - 24 * 60 * 60 * 1000,
+      ),
+    );
+    await enqueueEventLineDelivery(tx, {
+      id: uuidv7(),
+      tenantId: input.tenantId,
+      actorUserId: input.actorUserId,
+      role: input.role,
+      sourceType: 'deadline',
+      sourceId: event.id,
+      destination,
+      title: '出欠締切のお知らせ',
+      body: '出欠締切が近づいています。予定の詳細を確認してください。',
+      deepLink,
+      idempotencyKey: `deadline:${event.id}`,
+      deliverAt,
+    });
+  };
   return {
     list: (input) => {
       const rangeMs = input.to.getTime() - input.from.getTime();
@@ -375,7 +443,9 @@ export function createEventRepository(client: PrismaClient): EventRepository {
           type: input.type,
           startsAt: input.startsAt.toISOString(),
         });
-        return toEventRecord(row);
+        const created = toEventRecord(row);
+        await enqueueEventNotifications(tx, input, created, true);
+        return created;
       }),
     update: (input) =>
       client.$transaction(async (tx) => {
@@ -458,7 +528,9 @@ export function createEventRepository(client: PrismaClient): EventRepository {
               key !== 'eventId',
           ),
         });
-        return toEventRecord(row);
+        const updated = toEventRecord(row);
+        await enqueueEventNotifications(tx, input, updated, false);
+        return updated;
       }),
     upsertAttendance: (input) =>
       client.$transaction(async (tx) => {

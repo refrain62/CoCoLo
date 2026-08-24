@@ -43,6 +43,13 @@ export type LineDeliveryClaimRepository = {
     leaseMs: number;
     signal: AbortSignal;
   }) => Promise<LineDeliveryClaim | null>;
+  /** 接続切替と送信・結果確定を同じtenant lockで直列化する。 */
+  withTenantLock?: <T>(tenantId: string, work: () => Promise<T>) => Promise<T>;
+  validateClaim?: (input: {
+    tenantId: string;
+    notificationId: string;
+    attemptToken: string;
+  }) => Promise<boolean>;
   markSent: (input: {
     tenantId: string;
     notificationId: string;
@@ -99,6 +106,7 @@ export type LineDeliveryDatabase = {
       ) => Promise<Row>;
     }) => Promise<T>,
   ) => Promise<T>;
+  withTenantLock?: <T>(tenantId: string, work: () => Promise<T>) => Promise<T>;
 };
 
 const MAX_BATCH_SIZE = 100;
@@ -349,9 +357,8 @@ function failedResult(
   };
 }
 
-// 旧実装のadvisory transaction lock検証は廃止した。lock保持中の送信継続を許すため、
-// claim transactionの短時間確定とattempt token付きleaseを検証する契約へ置き換える。
-// workerへclaim処理だけを渡し、scheduler自身が長時間transactionを保持しない。
+// claim transactionは短時間で確定する。一方、接続切替との競合を避けるため、
+// productionのprocessorはtenant advisory lockを送信・結果確定まで保持する。
 export async function runLineDeliveryScheduler(input: {
   config: LineDeliverySchedulerConfig;
   worker: LineDeliveryWorker;
@@ -434,11 +441,13 @@ function toClaim(row: ClaimRow | undefined): LineDeliveryClaim | null {
   };
 }
 
-// claim/finalizeは各々短いtransactionで確定し、LINE送信はtransaction外で行う。
+// claim/finalizeは各々短いtransactionで確定する。外部送信はDB transactionを
+// 占有しないが、productionではtenant advisory lockを送信・結果確定まで保持する。
 export function createPostgresLineDeliveryRepository(
   database: LineDeliveryDatabase,
 ): LineDeliveryClaimRepository {
   return {
+    withTenantLock: database.withTenantLock,
     claimDue: ({ maxAttempts, leaseMs }) =>
       database.transaction(async (transaction) => {
         const rows = await transaction.queryRaw<ClaimRow[]>`
@@ -450,6 +459,18 @@ export function createPostgresLineDeliveryRepository(
         if (!Array.isArray(rows) || rows.length > 1)
           throw new Error('LINE配信claimの応答が不正です。');
         return toClaim(rows[0]);
+      }),
+    validateClaim: ({ tenantId, notificationId, attemptToken }) =>
+      database.transaction(async (transaction) => {
+        const rows = await transaction.queryRaw<Array<{ current: boolean }>>`
+          SELECT app_validate_line_delivery_claim(
+            ${tenantId}::uuid, ${notificationId}::uuid, ${attemptToken}::uuid
+          ) AS current
+        `;
+        const current = rows[0]?.current;
+        if (typeof current !== 'boolean')
+          throw new Error('LINE配信claimの接続検証応答が不正です。');
+        return current;
       }),
     markSent: ({ tenantId, notificationId, attemptToken, providerMessageId }) =>
       database.transaction(async (transaction) => {
@@ -582,40 +603,54 @@ export function createLineDeliveryProcessor(input: {
         signal,
       });
       if (!claim) return 'idle';
-      let sent: { providerMessageId: string };
-      try {
-        sent = await sendWithTimeout(
-          input.transport,
-          claim,
-          signal,
-          input.sendTimeoutMs,
-        );
-      } catch (error) {
-        const errorCode = getErrorCode(error, signal);
-        if (isUnknownDeliveryError(errorCode))
-          return await input.repository.markUnknown({
+      const processClaim = async (): Promise<LineDeliveryItemStatus> => {
+        if (
+          input.repository.validateClaim &&
+          !(await input.repository.validateClaim({
+            tenantId: claim.tenantId,
+            notificationId: claim.notificationId,
+            attemptToken: claim.attemptToken,
+          }))
+        )
+          return 'stale';
+        let sent: { providerMessageId: string };
+        try {
+          sent = await sendWithTimeout(
+            input.transport,
+            claim,
+            signal,
+            input.sendTimeoutMs,
+          );
+        } catch (error) {
+          const errorCode = getErrorCode(error, signal);
+          if (isUnknownDeliveryError(errorCode))
+            return await input.repository.markUnknown({
+              tenantId: claim.tenantId,
+              notificationId: claim.notificationId,
+              attemptToken: claim.attemptToken,
+              errorCode,
+            });
+          return await input.repository.markFailed({
             tenantId: claim.tenantId,
             notificationId: claim.notificationId,
             attemptToken: claim.attemptToken,
             errorCode,
+            retryDelayMs:
+              claim.attempt < input.maxAttempts
+                ? retryDelayMs(claim.attempt, input.retryBaseDelayMs)
+                : 0,
           });
-        return await input.repository.markFailed({
+        }
+        return input.repository.markSent({
           tenantId: claim.tenantId,
           notificationId: claim.notificationId,
           attemptToken: claim.attemptToken,
-          errorCode,
-          retryDelayMs:
-            claim.attempt < input.maxAttempts
-              ? retryDelayMs(claim.attempt, input.retryBaseDelayMs)
-              : 0,
+          providerMessageId: sent.providerMessageId,
         });
-      }
-      return input.repository.markSent({
-        tenantId: claim.tenantId,
-        notificationId: claim.notificationId,
-        attemptToken: claim.attemptToken,
-        providerMessageId: sent.providerMessageId,
-      });
+      };
+      return input.repository.withTenantLock
+        ? input.repository.withTenantLock(claim.tenantId, processClaim)
+        : processClaim();
     },
   };
 }
@@ -679,6 +714,15 @@ function createPrismaDatabase(
           ) => transaction.$queryRaw<Row>(strings, ...values),
         }),
       ),
+    withTenantLock: (tenantId, work) =>
+      client.$transaction(async (transaction) => {
+        await transaction.$executeRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtextextended(${`line:${tenantId}`}, 0)
+          )
+        `;
+        return work();
+      }),
   };
 }
 

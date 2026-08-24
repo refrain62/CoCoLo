@@ -12,7 +12,9 @@ const runtime = readRuntimeEnvironment(process.env);
 const port = Number(process.env.PORT ?? 8787);
 const prisma = createPrismaClient();
 const repositories = createMemberRepositories(prisma);
-const eventRepository = createEventRepository(prisma);
+const eventRepository = createEventRepository(prisma, {
+  notificationPublicAppUrl: runtime.publicAppUrl,
+});
 const distributedRateLimitAdapter = runtime.rateLimitAdapterModule
   ? await loadDistributedRateLimitAdapter(runtime.rateLimitAdapterModule)
   : undefined;

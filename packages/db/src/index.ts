@@ -109,6 +109,14 @@ export type LineDeliveryProducer = {
   ) => Promise<{ notificationId: string }>;
 };
 
+export type EventLineDeliveryEnqueueInput = Omit<
+  LineDeliveryEnqueueInput,
+  'sourceType'
+> & {
+  sourceType: 'event' | 'deadline';
+  deliverAt: Date;
+};
+
 export class LineDeliveryConflictError extends Error {
   readonly status = 409;
 
@@ -196,6 +204,33 @@ export async function enqueueLineDelivery(
   const id = rows[0]?.id;
   if (!id) throw new Error('LINE通知outboxへの登録に失敗しました。');
   return id;
+}
+
+// 予定の保存transactionから即時・締切前の通知を登録し、staffを含む予定管理者だけへ許可する。
+export async function enqueueEventLineDelivery(
+  client: Prisma.TransactionClient,
+  input: EventLineDeliveryEnqueueInput,
+): Promise<string | null> {
+  // 予定保存と所属変更の同時実行を同じtransaction内で直列化する。
+  const membershipLockKey = `${input.tenantId}:${input.actorUserId}`;
+  await client.$executeRaw`
+    SELECT pg_advisory_xact_lock(hashtextextended(${membershipLockKey}, 0))
+  `;
+  await setRlsContext(client, {
+    tenantId: input.tenantId,
+    userId: input.actorUserId,
+    role: input.role,
+  });
+  const rows = await client.$queryRaw<Array<{ id: string }>>`
+    SELECT app_enqueue_event_line_delivery(
+      ${input.id}::uuid, ${input.tenantId}::uuid, ${input.actorUserId},
+      ${input.sourceType}, ${input.sourceId}, ${input.destination},
+      ${input.title}, ${input.body}, ${input.deepLink},
+      ${input.idempotencyKey}, ${input.deliverAt}
+    ) AS id
+  `;
+  const id = rows[0]?.id;
+  return id ?? null;
 }
 
 // Prismaのenum型と日時をAPI/DB repositoryの共通recordへ変換する。
