@@ -288,8 +288,8 @@ async function prepareStack(
   if (appEnv.COCOLO_MIGRATION_ROLE) {
     runNodeScript('db-prepare-test.ts', {
       ...appEnv,
-      DATABASE_URL: status.dbUrl,
-      DIRECT_URL: status.dbUrl,
+      DATABASE_URL: appEnv.DIRECT_URL,
+      DIRECT_URL: appEnv.DIRECT_URL,
       COCOLO_FIXTURE_GRANTS_ONLY: 'true',
     });
   }

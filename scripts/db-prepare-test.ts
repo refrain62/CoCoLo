@@ -79,13 +79,7 @@ BEGIN
 END
 $$;
 `;
-const grants = [
-  ...(migrationRole
-    ? [
-        'GRANT USAGE, CREATE ON SCHEMA public TO cocolo_migration',
-        'GRANT USAGE ON SCHEMA extensions TO cocolo_migration',
-        'GRANT USAGE ON SCHEMA public TO cocolo_fixture',
-        `DO $$
+const fixtureTableGrant = `DO $$
 DECLARE
   table_name text;
 BEGIN
@@ -98,13 +92,22 @@ BEGIN
     END IF;
   END LOOP;
 END
-$$;`,
-      ]
-    : []),
-  'GRANT USAGE ON SCHEMA public TO cocolo_app',
-  'GRANT USAGE ON SCHEMA public TO line_delivery_worker',
-  'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM line_delivery_worker',
-];
+$$;`;
+const grants = fixtureGrantsOnly
+  ? [fixtureTableGrant]
+  : [
+      ...(migrationRole
+        ? [
+            'GRANT USAGE, CREATE ON SCHEMA public TO cocolo_migration',
+            'GRANT USAGE ON SCHEMA extensions TO cocolo_migration',
+            'GRANT USAGE ON SCHEMA public TO cocolo_fixture',
+            fixtureTableGrant,
+          ]
+        : []),
+      'GRANT USAGE ON SCHEMA public TO cocolo_app',
+      'GRANT USAGE ON SCHEMA public TO line_delivery_worker',
+      'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM line_delivery_worker',
+    ];
 
 await withPostgresClient(process.env.DIRECT_URL, async (client) => {
   if (migrationCompatibilitySql)
