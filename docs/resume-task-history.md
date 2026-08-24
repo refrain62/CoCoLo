@@ -742,6 +742,31 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - 各開発環境で`mise install`と`git config core.hooksPath .githooks`を実行します。
 
+## API-002/NOT-001 LINE通知outboxの接続先・接続世代hardening
+
+### 実施した変更
+
+- PR #117で`POST /api/v1/notifications/line`の登録を現行`line_delivery_outbox`へ接続しました。現在接続中のLINEグループ以外を拒否し、接続時刻をoutboxへ保存することで、切断後の旧接続先への登録を防止しました。
+- 敵対的レビューで、context欠落のfail-open、旧世代NULL行のclaim fallback、同一冪等再送時の接続世代未更新というHigh 3件を確認しました。
+- PR #120で上記3件を後続migrationとして修正しました。tenant/user/role context欠落を拒否し、旧世代NULL行は作成時刻と接続時刻を照合し、pending/failedの同一冪等再送では接続世代を更新します。
+
+### 検証結果
+
+- PR #117 quality run `32714508735`、squash commit `fb5c6ab`。
+- PR #120 quality run `32715968099`、squash commit `cb5b63f`。
+- `pnpm test`（API 177件を含む）、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm verify:migration-sql`、`pnpm verify:migration-checksum`、`pnpm verify:trust-root`が成功しました。
+- PR #120の再レビューはCritical 0、High 0でした。
+
+### 未完了条件
+
+- Docker/Podmanが実行環境にないため、`pnpm test:integration`はSupabase起動前に停止し、実PostgreSQL・RLS・worker統合は未実施です。staging Supabase/LINE実サービス、実ブラウザE2Eも未実施です。
+- 再試行APIとWebhookは、旧`line_notification_queue`と混在させない現行outbox契約、署名検証、専用DB actor境界を分離して実装します。
+
+### GitHub反映
+
+- PR #117は`fb5c6ab`としてdevelopへsquash mergeしました。
+- PR #120は`cb5b63f`としてdevelopへsquash mergeしました。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
