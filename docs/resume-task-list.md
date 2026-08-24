@@ -20,13 +20,13 @@
 
 ## 1. 停止時点の基準
 
-再開時点の`origin/develop`は`6e7a1d4`（EVT-002完了記録PR #86のマージ）です。
+再開時点の`origin/develop`は`1e17288`（中央API route mount実装PR #89のマージ）です。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
 Draft PRに実装が存在しても、`develop`へ統合されていない機能は現行環境では未実装として扱います。
 
-再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、docs-only PR #55、#56、#57、#58、#61、#63、#66は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
+再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、#77、#80、#82、#85、#89、docs-only PR #55、#56、#57、#58、#61、#63、#66、#81、#83、#86、#87、#88は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
 
 ### 1.1 再開時のGitHub同期結果
 
@@ -35,10 +35,11 @@ GitHubの最新状態は、次のルールで扱います。
 - `develop`へ未統合のDraft PRは、CIが成功していても「未実装」として扱います。
 - #36、#43は、現行`develop`に既に存在するmigration、LINE webhook、release/trust-root検査と重複または契約不一致があるため、現PRをそのままマージしません。
 - #41、#42、#48は、古いbaseまたはtrusted rootへの依存が残るため、現行`develop`から再検証できる専用の小さなPRへ分解します。
-- #40は旧LINE outbox統合と複数featureの古いbaseを含むため、そのままマージせず、現行developとの差分を機能単位に分解します。#36の旧Webhook契約を前提にしません。
+- #40は旧LINE outbox統合と複数featureの古いbaseを含むためクローズしました。追加通知は現行developのoutboxへ機能単位に接続します。#36の旧Webhook契約を前提にしません。
+- #35と#37は、現行developを起点に再構成したPR #89、既存中央schemaへ置換済みのためクローズしました。
 - #51と#6は`main`向けまたは`main`をbaseとするPRであり、`develop`向けの機能マージ候補から除外します。
 
-再開時点で`develop`向けに未マージの主なPRは、#32、#35、#36、#37、#40、#41です。#48と#51はtrusted rootの外部条件に依存し、#6はmain向けのため、developへの直接マージ候補から除外します。各PRの最新head、CI、レビュー結果を確認してから、同じ責務を持つ新規PRを作成します。
+現時点で`develop`向けに未マージの主なPRは、#32、#41です。#35、#37、#40は重複・契約不一致のためクローズしました。#48と#51はtrusted rootの外部条件に依存し、#6はmain向けのため、developへの直接マージ候補から除外します。各PRの最新head、CI、レビュー結果を確認してから、同じ責務を持つ新規PRを作成します。
 
 ### 状態記号
 
@@ -190,13 +191,14 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
   - 対象：PR #29、`feature/api-hardening`
   - CORS allowlistはPR #59、認証後のtenantとuser単位rate limitはPR #60で`develop`へ接続済みです。
   - 構造化ログとruntime response schema検証はPR #62で`apps/api/src/app.ts`へ接続済みです。
-  - LINE feature app、複数tenant所属時の明示的チーム選択、Auth session lifecycleの中央mountは別タスクとして残っています。
+  - 中央APIの複数tenant所属時の明示的チーム選択はPR #89で接続済みです。LINE feature app、Auth session lifecycleの中央mount、Web側の選択状態は別タスクとして残っています。
   - staging、productionでは分散rate limit adapterを必須にし、in-memory fallbackを許可しません。
 
-- `[ ]` **API-002：WebとAPIの中央mountを統合する。**
-  - 対象：PR #32、PR #35
-  - `apps/web/src/main.tsx`と`apps/api/src/app.ts`へ各機能を登録します。
-  - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証、Webのloading、empty、error、権限不足表示を確認します。
+- `[~]` **API-002：WebとAPIの中央mountを統合する。**
+  - 対象：PR #32、現行develop起点のPR #89
+  - PR #89でauth team選択、役員連絡先、回覧板、送迎のAPI routeを中央mountし、中央認証、tenant再解決、rate limit、CORS、response envelope契約を接続済みです。
+  - 残りはattachments/orders/LINE feature webhookのAPI接続、Web画面の中央mount、loading/empty/error/権限不足表示、feature固有response契約の厳密化です。古いPR #35はクローズしました。
+  - route重複、認証middlewareの順序、OpenAPI生成、レスポンスruntime検証はPR #89で確認済みです。
 
 - `[ ]` **DB-002：T037の残存Medium境界を後続mount前に解消する。**
   - 対象：既存UUIDv4行の移行前検査、回覧添付のavailable状態、board contact PIIのDB直接SELECT、Webhook receipt INSERT権限の専用actor限定です。
