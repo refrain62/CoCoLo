@@ -137,20 +137,9 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
 
 ### 3.4 DB整合性と権限検査
 
-- `[ ]` **T014-DB-002：DB検査の悪性fixtureを再実行する。**
-  - tenant-only policy、`role IS NOT NULL`だけのpolicy、user_id条件を除いたmembership policy、column GRANT、GRANT OPTION、想定外のSECURITY DEFINER functionを拒否することを確認します。
-  - 通常の関数をSECURITY DEFINER関数として誤検出しないことを確認します。
-  - migrationに存在しないfunctionを検査対象へ要求しないことを確認します。
-
 ### 3.5 schema driftとdeploy provenance
 
 ### 3.6 T-014の周辺タスク
-
-- `[ ]` **T014-BOUNDARY-001：PR #45のDB security boundaryを再レビューする。**
-  - ブランチ：`feature/t014-database-security-boundary`
-  - 最新commit：`05d373c`
-  - DB role、owner、BYPASSRLS、membership、ACL、RLS、function検査の実DB証拠を確認します。
-  - #41/#42の検査ロジックと重複する場合は、検査責務を一つへ集約して二重の正本を作りません。
 
 - `[ ]` **T014-E2E-001：PR #46のperiodic E2Eを再検証する。**
   - ブランチ：`feature/t014-periodic-e2e`
