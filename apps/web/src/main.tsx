@@ -22,6 +22,10 @@ import { createBulletinBoardApi } from './features/bulletin-board/bulletin-board
 import { BulletinBoardPage } from './features/bulletin-board/bulletin-board-page.js';
 import { createEventsApi } from './features/events/events-api.js';
 import { EventsPage } from './features/events/events-page.js';
+import {
+  createOrdersPaymentsApi,
+  OrdersPaymentsPage,
+} from './features/orders-payments/index.js';
 import { createMemberApi } from './member-api.js';
 import { MemberManagementPage } from './member-management-page.js';
 import { UserManualPage } from './user-manual-page.js';
@@ -132,6 +136,15 @@ function AuthenticatedApp() {
       }),
     [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
+  const ordersApi = useMemo(
+    () =>
+      createOrdersPaymentsApi({
+        getAccessToken: () => session?.accessToken ?? null,
+        getSelectedTeamId: () => selectedTeamId,
+        fetcher: authenticatedFetch,
+      }),
+    [authenticatedFetch, selectedTeamId, session?.accessToken],
+  );
   useEffect(() => {
     if (!session || !selectedTeam) return;
     let active = true;
@@ -194,6 +207,14 @@ function AuthenticatedApp() {
         canManage={role === 'owner' || role === 'admin'}
       />
       {role ? <BulletinBoardPage api={bulletinBoardApi} role={role} /> : null}
+      {role && role !== 'staff' ? (
+        <OrdersPaymentsPage
+          key={selectedTeamId}
+          api={ordersApi}
+          role={role}
+          members={eventMembers}
+        />
+      ) : null}
     </AppShell>
   );
 }

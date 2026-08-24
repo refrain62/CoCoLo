@@ -57,7 +57,9 @@ export function OrdersPaymentsPage({
     try {
       const next = await api.listCampaigns();
       setCampaigns(next);
-      setSelectedCampaignId((current) => current || next[0]?.id || '');
+      setSelectedCampaignId(next[0]?.id || '');
+      setEntries([]);
+      setSummary(null);
     } catch (requestError) {
       setError(message(requestError));
     } finally {
