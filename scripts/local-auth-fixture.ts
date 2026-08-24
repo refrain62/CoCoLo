@@ -9,9 +9,18 @@ const password = process.env.E2E_TEST_PASSWORD ?? 'owner-password';
 const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, '');
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const adminDatabaseUrl = process.env.SUPABASE_ADMIN_DATABASE_URL;
+const fixtureDatabaseUrl = adminDatabaseUrl
+  ? new URL(adminDatabaseUrl)
+  : undefined;
+if (fixtureDatabaseUrl) {
+  fixtureDatabaseUrl.username = 'cocolo_fixture';
+  fixtureDatabaseUrl.password =
+    process.env.COCOLO_FIXTURE_PASSWORD ?? 'cocolo_fixture';
+}
 assert.ok(supabaseUrl, 'SUPABASE_URL が必要です。');
 assert.ok(serviceRoleKey, 'Supabase localのService Role Keyが必要です。');
 assert.ok(adminDatabaseUrl, 'Supabase localの管理者DB URLが必要です。');
+assert.ok(fixtureDatabaseUrl, 'Supabase localのfixture DB URLが必要です。');
 const parsedSupabaseUrl = new URL(supabaseUrl);
 assert.equal(parsedSupabaseUrl.protocol, 'http:');
 assert.ok(
@@ -27,6 +36,10 @@ assertTestDatabaseTarget();
 assertTestDatabaseTarget({
   databaseUrl: adminDatabaseUrl,
   directUrl: adminDatabaseUrl,
+});
+assertTestDatabaseTarget({
+  databaseUrl: fixtureDatabaseUrl.toString(),
+  directUrl: fixtureDatabaseUrl.toString(),
 });
 
 const headers = {
@@ -90,8 +103,8 @@ const userId = await ensureUser();
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const childEnv = {
   ...process.env,
-  DATABASE_URL: adminDatabaseUrl,
-  DIRECT_URL: adminDatabaseUrl,
+  DATABASE_URL: fixtureDatabaseUrl.toString(),
+  DIRECT_URL: fixtureDatabaseUrl.toString(),
   TEST_AUTH_USER_ID: userId,
   TEST_DATABASE_RESET_ALLOWED: 'true',
 };

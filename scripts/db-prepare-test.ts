@@ -14,6 +14,7 @@ assert.ok(
 );
 const migrationPassword =
   process.env.COCOLO_MIGRATION_PASSWORD ?? 'cocolo_migration';
+const fixturePassword = process.env.COCOLO_FIXTURE_PASSWORD ?? 'cocolo_fixture';
 const workerPassword =
   process.env.LINE_DELIVERY_WORKER_PASSWORD ?? 'line_delivery_worker';
 
@@ -49,6 +50,15 @@ BEGIN
   END IF;`
       : ''
   }
+  ${
+    migrationRole
+      ? `IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cocolo_fixture') THEN
+    CREATE ROLE cocolo_fixture LOGIN PASSWORD ${quoteLiteral(fixturePassword)} NOSUPERUSER BYPASSRLS;
+  ELSE
+    ALTER ROLE cocolo_fixture LOGIN PASSWORD ${quoteLiteral(fixturePassword)} NOSUPERUSER BYPASSRLS;
+  END IF;`
+      : ''
+  }
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cocolo_app') THEN
     CREATE ROLE cocolo_app LOGIN PASSWORD ${quoteLiteral(appPassword)} NOSUPERUSER NOBYPASSRLS;
   ELSE
@@ -67,6 +77,8 @@ const grants = [
     ? [
         'GRANT USAGE, CREATE ON SCHEMA public TO cocolo_migration',
         'GRANT USAGE ON SCHEMA extensions TO cocolo_migration',
+        'GRANT USAGE ON SCHEMA public TO cocolo_fixture',
+        'GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, tenant_memberships, members, guardian_members TO cocolo_fixture',
       ]
     : []),
   'GRANT USAGE ON SCHEMA public TO cocolo_app',
