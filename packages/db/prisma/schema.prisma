@@ -155,7 +155,6 @@ model Tenant {
   auditLogs    AuditLog[]
   promotionRuns PromotionRun[]
   events        Event[]
-  attendanceResponses AttendanceResponseRecord[]
   boardContacts BoardContact[]
   attachments   Attachment[]
   purchaseOrders PurchaseOrder[]
@@ -164,8 +163,6 @@ model Tenant {
   orderLines    OrderLine[]
   orderIdempotencyKeys OrderIdempotencyKey[]
   announcements Announcement[]
-  announcementAttachments AnnouncementAttachment[]
-  announcementReads AnnouncementRead[]
   lineConnections LineConnection[]
   lineNotificationQueue LineNotificationQueue[]
   lineDeliveryOutboxes LineDeliveryOutbox[]
@@ -306,15 +303,15 @@ model AttendanceResponseRecord {
   correctionReason String?  @map("correction_reason") @db.VarChar(500)
   respondedAt      DateTime @default(now()) @map("responded_at") @db.Timestamptz(6)
   updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
-  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   event            Event    @relation(fields: [tenantId, eventId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   member           Member   @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
+  @@unique([tenantId, id])
   @@unique([tenantId, eventId, userId, memberId])
   @@index([tenantId, eventId, memberId], map: "attendance_responses_event_idx")
   @@index([tenantId, eventId, memberId], map: "attendance_responses_event_member_idx")
   @@index([tenantId, userId, memberId], map: "attendance_responses_user_idx")
-  @@index([tenantId, eventId, memberId, updatedAt], map: "attendance_responses_event_member_updated_idx")
+  @@index([tenantId, eventId, memberId, updatedAt(sort: Desc), id(sort: Desc)], map: "attendance_responses_event_member_updated_idx")
   @@map("attendance_responses")
 }
 
@@ -362,7 +359,6 @@ model Attachment {
   @@unique([tenantId, id])
   @@unique([tenantId, objectKey])
   @@index([tenantId, status, createdAt], map: "attachments_tenant_status_idx")
-  @@index([status, cleanupCompletedAt], map: "attachments_cleanup_idx")
   @@index([tenantId, status, expiresAt], map: "attachments_tenant_status_expiry_idx")
   @@map("attachments")
 }
@@ -489,7 +485,6 @@ model AnnouncementAttachment {
   position       Int          @db.SmallInt
   mediaType      String       @map("media_type") @db.VarChar(100)
   byteSize       Int          @map("byte_size")
-  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   announcement   Announcement @relation(fields: [tenantId, announcementId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
   attachment     Attachment   @relation(fields: [tenantId, attachmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "announcement_attachments_tenant_attachment_fk")
 
@@ -503,8 +498,7 @@ model AnnouncementRead {
   tenantId       String       @map("tenant_id") @db.Uuid
   announcementId String       @map("announcement_id") @db.Uuid
   userId         String       @map("user_id") @db.VarChar(128)
-  readAt         DateTime     @map("read_at") @db.Timestamptz(6)
-  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  readAt         DateTime     @default(now()) @map("read_at") @db.Timestamptz(6)
   announcement   Announcement @relation(fields: [tenantId, announcementId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
 
   @@id([tenantId, announcementId, userId])
