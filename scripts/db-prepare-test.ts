@@ -7,20 +7,29 @@ assert.ok(process.env.DIRECT_URL, 'DIRECT_URL が必要です');
 
 const quoteLiteral = (value: string) => `'${value.replaceAll("'", "''")}'`;
 const appPassword = process.env.COCOLO_APP_PASSWORD ?? 'cocolo_app';
+const migrationRole = process.env.COCOLO_MIGRATION_ROLE?.trim();
+assert.ok(
+  !migrationRole || migrationRole === 'cocolo_migration',
+  'COCOLO_MIGRATION_ROLE が許可されていません。',
+);
 const migrationPassword =
   process.env.COCOLO_MIGRATION_PASSWORD ?? 'cocolo_migration';
 const workerPassword =
   process.env.LINE_DELIVERY_WORKER_PASSWORD ?? 'line_delivery_worker';
 
-// migration ownerだけがschemaを変更し、アプリ・worker roleにはRLS bypassを与えない。
+// migration ownerはSupabase localで明示的に有効化し、CIの既存security期待値には追加しない。
 const roleSql = `
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cocolo_migration') THEN
+  ${
+    migrationRole
+      ? `IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cocolo_migration') THEN
     CREATE ROLE cocolo_migration LOGIN PASSWORD ${quoteLiteral(migrationPassword)} NOSUPERUSER NOBYPASSRLS;
   ELSE
     ALTER ROLE cocolo_migration LOGIN PASSWORD ${quoteLiteral(migrationPassword)} NOSUPERUSER NOBYPASSRLS;
-  END IF;
+  END IF;`
+      : ''
+  }
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cocolo_app') THEN
     CREATE ROLE cocolo_app LOGIN PASSWORD ${quoteLiteral(appPassword)} NOSUPERUSER NOBYPASSRLS;
   ELSE
@@ -35,7 +44,9 @@ END
 $$;
 `;
 const grants = [
-  'GRANT USAGE, CREATE ON SCHEMA public TO cocolo_migration',
+  ...(migrationRole
+    ? ['GRANT USAGE, CREATE ON SCHEMA public TO cocolo_migration']
+    : []),
   'GRANT USAGE ON SCHEMA public TO cocolo_app',
   'GRANT USAGE ON SCHEMA public TO line_delivery_worker',
   'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM line_delivery_worker',

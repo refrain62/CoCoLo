@@ -213,6 +213,7 @@ function createApplicationEnvironment(
     ...env,
     APP_ENV: 'local',
     TEST_STACK_PROJECT: stack.projectId,
+    COCOLO_MIGRATION_ROLE: 'cocolo_migration',
     TEST_DATABASE_RESET_ALLOWED: stack.name === 'test' ? 'true' : 'false',
     DATABASE_URL: appDbUrl,
     DIRECT_URL: migrationDbUrl,
