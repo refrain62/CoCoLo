@@ -713,6 +713,60 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - local/staging PostgreSQLのRLS・同時実行検証、staging Supabase E2E、staging専用LINE channel/groupの実サービス受入れを継続します。
 - feature固有response contractの厳密化と全画面の実ブラウザ統合テストを継続します。
 
+## Betterleaks秘密情報混入防止
+
+### 実施した変更
+
+- PR #116で`mise.toml`へGo 1.25.0とBetterleaks v1.7.2を固定導入し、`pnpm ci:fast`の履歴検査と`.githooks/pre-commit`のstaged検査へ接続しました。
+- Betterleaksは`redact`付きで実行し、検出レポートを一時ディレクトリへ保存して終了時に削除します。CIのDocker実行はdigest固定、network none、read-only、capability削減、ホストUID/GIDを使用します。
+- password、token等を検査対象とし、migrationとtrust manifestの正本として必要なSHA-256 checksumだけを除外しました。検査設定と保護対象のハッシュはtrust manifestへ反映しました。
+- READMEへmise導入、pre-commit設定、checksum除外理由を記載しました。
+
+### 検証結果
+
+- `pnpm build`、`pnpm test`（175件）、`pnpm lint`、`pnpm typecheck`、`pnpm lint:biome`、trust root検証、`git diff --check`が成功しました。
+- GitHub Actions quality run `32713902923`はDockerの一時設定ファイル権限で失敗しましたが、ホストUID/GID実行へ修正し、run `32714974037`で成功しました。
+- PR本文は規定7区画のフォーマット検証に成功しました。
+
+### 敵対的レビュー
+
+- アプリケーションのtenant、認可、個人情報、状態遷移は変更していません。
+- 検査失敗時の終了コード伝播、秘密値のredact、レポート削除、CI image digest固定、checksum除外範囲を確認しました。Critical 0、High 0です。
+- ローカルのmise導入とpre-commit hook設定は各開発環境で必要です。CIではPR品質ゲートが強制します。
+
+### GitHub反映
+
+- PR #116は`d350f87`として`develop`へsquash mergeしました。
+
+### 残タスク
+
+- 各開発環境で`mise install`と`git config core.hooksPath .githooks`を実行します。
+
+## API-002/NOT-001 LINE通知outboxの接続先・接続世代hardening
+
+### 実施した変更
+
+- PR #117で`POST /api/v1/notifications/line`の登録を現行`line_delivery_outbox`へ接続しました。現在接続中のLINEグループ以外を拒否し、接続時刻をoutboxへ保存することで、切断後の旧接続先への登録を防止しました。
+- 敵対的レビューで、context欠落のfail-open、旧世代NULL行のclaim fallback、同一冪等再送時の接続世代未更新というHigh 3件を確認しました。
+- PR #120で上記3件を後続migrationとして修正しました。tenant/user/role context欠落を拒否し、旧世代NULL行は作成時刻と接続時刻を照合し、pending/failedの同一冪等再送では接続世代を更新します。
+
+### 検証結果
+
+- PR #117 quality run `32714508735`、squash commit `fb5c6ab`。
+- PR #120 quality run `32715968099`、squash commit `cb5b63f`。
+- `pnpm test`（API 177件を含む）、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm verify:migration-sql`、`pnpm verify:migration-checksum`、`pnpm verify:trust-root`が成功しました。
+- PR #120の再レビューはCritical 0、High 0でした。
+
+### 未完了条件
+
+- Docker/Podmanが実行環境にないため、`pnpm test:integration`はSupabase起動前に停止し、実PostgreSQL・RLS・worker統合は未実施です。staging Supabase/LINE実サービス、実ブラウザE2Eも未実施です。
+- 再試行APIとWebhookは、旧`line_notification_queue`と混在させない現行outbox契約、署名検証、専用DB actor境界を分離して実装します。
+
+### GitHub反映
+
+- PR #117は`fb5c6ab`としてdevelopへsquash mergeしました。
+- PR #120は`cb5b63f`としてdevelopへsquash mergeしました。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。

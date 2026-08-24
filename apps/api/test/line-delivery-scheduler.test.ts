@@ -83,6 +83,13 @@ const CONNECTION_GUARD_MIGRATION = readFileSync(
   ),
   'utf8',
 );
+const GUARD_HARDENING_MIGRATION = readFileSync(
+  new URL(
+    '../../../packages/db/prisma/migrations/20260824140000_line_delivery_guard_hardening/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const SCHEDULER_SOURCE = readFileSync(
   new URL('../src/line-delivery-scheduler.ts', import.meta.url),
   'utf8',
@@ -858,6 +865,30 @@ test('公開LINE通知は現在の接続groupと接続世代をoutboxへ固定�
     CONNECTION_GUARD_MIGRATION,
     /pg_advisory_xact_lock\([\s\S]*'line:' \|\| p_tenant_id::text/s,
   );
+});
+
+test('LINE通知のcontext欠落・旧世代・冪等再送をDB関数でfail-closedにする', () => {
+  assert.match(
+    GUARD_HARDENING_MIGRATION,
+    /NULLIF\(current_setting\('app\.tenant_id', true\), ''\) IS NULL/,
+  );
+  assert.match(
+    GUARD_HARDENING_MIGRATION,
+    /NULLIF\(current_setting\('app\.user_id', true\), ''\) IS NULL/,
+  );
+  assert.match(
+    GUARD_HARDENING_MIGRATION,
+    /NULLIF\(current_setting\('app\.role', true\), ''\) IS NULL/,
+  );
+  assert.match(
+    GUARD_HARDENING_MIGRATION,
+    /connection_connected_at = CASE[\s\S]*EXCLUDED\.connection_connected_at/s,
+  );
+  assert.doesNotMatch(
+    GUARD_HARDENING_MIGRATION,
+    /o\.connection_connected_at IS NULL[\s\S]*NOT EXISTS \([\s\S]*tenant_id <> o\.tenant_id/s,
+  );
+  assert.match(GUARD_HARDENING_MIGRATION, /c\.connected_at <= o\.created_at/);
 });
 
 test('汎用LINE通知は別tenantによるgroup再利用時にclaim・送信前検証から除外する', () => {
