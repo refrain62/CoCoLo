@@ -126,7 +126,7 @@ function BoardContactTable({
 // 役職枠と連絡先の編集状態を管理し、表示できる個人情報だけをAPIレスポンスから描画する。
 export function BoardContactPage({
   api = createBoardContactApi(),
-  canManage = true,
+  canManage = false,
 }: {
   api?: BoardContactApi;
   canManage?: boolean;
@@ -143,6 +143,7 @@ export function BoardContactPage({
   const loadContacts = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setContacts([]);
     try {
       setContacts(await api.list(fiscalYear));
     } catch (requestError) {
@@ -222,7 +223,7 @@ export function BoardContactPage({
   return (
     <section aria-labelledby="board-contact-heading">
       <header>
-        <h1>年度役員と連絡先</h1>
+        <h1 id="board-contact-heading">年度役員と連絡先</h1>
         <p>役職枠を管理し、権限に応じて連絡先を確認できます。</p>
       </header>
 
