@@ -8,6 +8,11 @@ assert.ok(process.env.DIRECT_URL, 'DIRECT_URL が必要です');
 const quoteLiteral = (value: string) => `'${value.replaceAll("'", "''")}'`;
 const appPassword = process.env.COCOLO_APP_PASSWORD ?? 'cocolo_app';
 const migrationRole = process.env.COCOLO_MIGRATION_ROLE?.trim();
+const fixtureGrantsOnly = process.env.COCOLO_FIXTURE_GRANTS_ONLY === 'true';
+assert.ok(
+  !fixtureGrantsOnly || migrationRole === 'cocolo_migration',
+  'COCOLO_FIXTURE_GRANTS_ONLY はmigration roleと併用してください。',
+);
 assert.ok(
   !migrationRole || migrationRole === 'cocolo_migration',
   'COCOLO_MIGRATION_ROLE が許可されていません。',
@@ -38,7 +43,9 @@ END
 $$;
 `
   : '';
-const roleSql = `
+const roleSql = fixtureGrantsOnly
+  ? ''
+  : `
 DO $$
 BEGIN
   ${
@@ -102,7 +109,7 @@ $$;`,
 await withPostgresClient(process.env.DIRECT_URL, async (client) => {
   if (migrationCompatibilitySql)
     await client.$executeRawUnsafe(migrationCompatibilitySql);
-  await client.$executeRawUnsafe(roleSql);
+  if (roleSql) await client.$executeRawUnsafe(roleSql);
   for (const statement of grants) await client.$executeRawUnsafe(statement);
 });
 console.log('テストDBのmigration、app、worker roleを準備しました。');

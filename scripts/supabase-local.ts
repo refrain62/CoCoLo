@@ -290,6 +290,7 @@ async function prepareStack(
       ...appEnv,
       DATABASE_URL: status.dbUrl,
       DIRECT_URL: status.dbUrl,
+      COCOLO_FIXTURE_GRANTS_ONLY: 'true',
     });
   }
   if (fresh) {

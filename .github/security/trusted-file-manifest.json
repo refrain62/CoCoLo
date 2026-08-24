@@ -45,7 +45,7 @@
     "pnpm-lock.yaml": "a28a3a63eee8f0a5969ba1fdb7bc09029e6196fccecc818c172588189223c973",
     "scripts/create-staging-evidence.ts": "5728af722e0635d90a6834ad5241eb91d40d1736370ad7627329fbb10306db01",
     "scripts/create-pgpass.ts": "8b5c4ef10457ef8a95f774aa121034d36c9f9c19452e663248b8e659eabf90bb",
-    "scripts/db-prepare-test.ts": "9a6d0a880c16371f7649a4499b7dd6596a341f66b56beba614033f511b4bd5a5",
+    "scripts/db-prepare-test.ts": "5e09b82836c95180bef2bf272cbd642198546ac7020accdc20792504d258e2d3",
     "scripts/db-seed-test.ts": "100960606f5d76523e1311d8f2e03366df2722100bcf57518dae735faa524e5d",
     "scripts/database-security.test.ts": "b99fd0450dcd5c4bc519fac0308fa95c1162023018e55853b39e619cbff93bce",
     "scripts/database-security.ts": "5ece07a981a7fbfe730c311b91c0c70ad7a12a0ecece0d11526459f30deca54a",
@@ -95,7 +95,7 @@
     "scripts/verify-workspace-boundaries.ts": "142ae19436873fc254f91c6351b9c3354a1675f392fc5183a4c669febc0efa74",
     "tsconfig.scripts.json": "b812bc3ef869600859f0df844e151987d45a651207f16f4161052ec98a7f319b",
     "scripts/local-auth-fixture.ts": "adb6ae86dee4bfd11823be09309dbe23244826e4d9fe168630a6570054c7dd56",
-    "scripts/supabase-local.ts": "a05fcda32d2ccc9ff31090df8b56258fced2d125d7889e6b07d7cb92afe3e73a",
+    "scripts/supabase-local.ts": "5a0a702823b46053ab9d10f8eafb7e1b69f1b7bafaf041d232513a365dcf6541",
     "scripts/test-database-guard.test.ts": "8736869fa9916a9ea7eebfc0326d062c3ea7aba443ecbb5ba8424cfebcb88af3",
     "scripts/test-database-guard.ts": "b26d7e27b2a9e8a9e8df73d9fabea50b21e83d526af5f56dcb2863be9336970b"
   }
