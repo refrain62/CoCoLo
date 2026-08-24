@@ -1039,6 +1039,38 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - 送迎の実PostgreSQL/RLS検証、staging E2E、実ブラウザ統合テストはFIL-002/API-002の残タスクとして継続します。
 - 送迎画面の実データ接続確認と全画面の統合テストは後続検証で対応します。
 
+## DB-002 回覧添付のavailable状態をDBで強制
+
+### 実施した変更
+
+- PR #143で、回覧板へ紐付ける添付ファイルをavailable状態に限定するmigrationを追加しました。
+- 既存の回覧添付に不正状態がある場合は、migrationをfail-closedで停止します。
+- 回覧添付のINSERT・UPDATE時と、参照中添付の状態変更時にDBトリガーで状態境界を強制します。
+- migration checksumとtrusted manifestを更新し、RLS統合テストへuploaded、rejected、参照中添付の拒否ケースを追加しました。
+
+### 検証結果
+
+- `pnpm test`、`pnpm build`、`pnpm lint`、`pnpm verify:migration-sql`、`pnpm verify:migration-checksum`が成功しました。
+- `pnpm verify:trust-root`と`git diff --check`が成功しました。
+- `pnpm --filter @cocolo/db test:unit`が成功しました。
+- `pnpm --filter @cocolo/db test:integration`はDATABASE_URLとDIRECT_URLが未設定のため1件skipしました。
+- PR #143の品質ゲート run `32739971339`が成功しました。
+
+### 敵対的レビュー
+
+- tenant_idとattachment_idの複合境界、available状態、参照中添付の状態遷移、既存不正データのfail-closedを確認しました。
+- APIとWebの公開契約、認証、認可、既存の添付保存処理は変更していません。
+- CriticalとHighの未解消指摘はありません。
+
+### GitHub反映
+
+- PR #143は`2f938ec`としてdevelopへsquash mergeしました。
+
+### 未完了条件
+
+- 実PostgreSQL/RLS統合テストとstaging E2Eは環境準備後に実施します。
+- 既存UUIDv4行の移行前検査とboard contact PIIのDB直接SELECT見直しはDB-002の残タスクとして継続します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
