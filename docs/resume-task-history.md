@@ -680,6 +680,39 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - local/staging PostgreSQLでのrepository・RLS・状態遷移・同時実行の実DB検証、staging Supabase E2E、feature固有response契約の厳密化をORD-001/API-002の後続作業として管理します。
 
+## API-002 送迎・logout・LINE接続の中央接続
+
+### 実施した変更
+
+- PR #112で送迎予定一覧APIを追加し、中央認証後のtenantだけをtransaction-local RLSで検索するようにしました。Webの送迎APIへ選択tenant headerを付与し、一覧から予定を選択して詳細、車登録、乗車希望、補助マッチング、配車表を操作できる画面をmainへ接続しました。予定切替時は旧予定のsnapshot、集計、配車表を破棄します。
+- PR #113で、複数所属時のチーム選択画面から既存AuthProviderのlogoutを実行できる導線を追加しました。処理中は二重送信を防ぎ、認証・tenant選択の契約は変更していません。
+- PR #114でLINEの接続状態確認、グループ接続、接続解除を中央認証、選択tenant、認証済みrate limit、Prisma transaction、transaction-local RLSへ接続しました。WebのLINE API clientにも選択tenant headerを付与しました。
+- LINEの通知登録・再試行・Webhookは中央mountから意図的に除外しました。既存featureの`line_notification_queue`と現行schedulerの`line_delivery_outbox`が別契約であり、公開すると登録成功後にschedulerが処理しない状態になるためです。Webhookは公開入口にJWT actorがなく、現行SQL repositoryのactive membership actor境界も別途必要です。
+
+### 検証結果
+
+- `pnpm --filter @cocolo/db test:unit`、`pnpm --filter @cocolo/api test:unit`、`pnpm --filter @cocolo/web typecheck`、`pnpm --filter @cocolo/web build`を実行しました。
+- API unitは174件が成功しました。送迎一覧のtenant境界、LINE中央mountの認証済みstatus、中央mountで未統合通知routeを公開しないことを追加テストで固定しました。
+- Webの送迎APIテスト5件、LINE API clientテスト3件、logout対象テスト3件が成功しました。`git diff --check`とBiome対象検査も成功しています。
+- PR #112 quality run `32712208656`、PR #113 quality run `32712244248`、PR #114 quality run `32712448036`が成功し、いずれもsquashマージ済みです。
+
+### 敵対的レビュー
+
+- Critical 0、High 0です。確認対象はtenant越境、中央認証前の未認証、role境界、チーム切替時の旧状態、logout二重送信、LINE通知queue/outbox混在、Webhook actor境界です。
+- 実ブラウザE2E、実PostgreSQL repository/RLS統合、staging Supabase/LINE実サービス接続は未実施です。これらを完了扱いにはしていません。
+
+### GitHub反映
+
+- PR #112はsquash commit `9e89c9c`としてdevelopへ統合しました。
+- PR #113はsquash commit `18cac79`としてdevelopへ統合しました。
+- PR #114はsquash commit `8c96baf`としてdevelopへ統合しました。
+
+### 残タスク
+
+- LINE通知登録・再試行を現行`line_delivery_outbox`と同一認可・監査契約へ接続し、公開Webhookの署名、destination、重複排除、未知group、RLS actor境界を統合します。
+- local/staging PostgreSQLのRLS・同時実行検証、staging Supabase E2E、staging専用LINE channel/groupの実サービス受入れを継続します。
+- feature固有response contractの厳密化と全画面の実ブラウザ統合テストを継続します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
