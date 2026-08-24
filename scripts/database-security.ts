@@ -253,7 +253,7 @@ const expectedPolicies: readonly PolicyExpectation[] = [
     roles: ['public'],
     usingMarkers: [],
     withCheckMarkers: [
-      "current_setting('app.tenant_id'",
+      'app_has_active_membership',
       "current_setting('app.user_id'",
     ],
     usingRequired: false,

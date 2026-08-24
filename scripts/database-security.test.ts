@@ -96,7 +96,7 @@ const policies: DatabasePolicyInspection[] = [
     command: 'INSERT',
     usingExpression: null,
     withCheckExpression:
-      "tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid AND actor_user_id = current_setting('app.user_id', true)",
+      "app_has_active_membership(tenant_id) AND actor_user_id = current_setting('app.user_id', true)",
   },
   {
     tableName: 'public.promotion_runs',
