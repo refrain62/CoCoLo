@@ -19,7 +19,7 @@
     ".github/workflows/staging-deploy.yml": "e4a82c9fa91961fb6a8e262f7a8054dfbaa7cdbe8d5564c1f38a527f648e0cf6",
     "biome.json": "9fe165cbc8d77253da190097b5788bd1de9ad248b7ecb5c8e967f078ca720272",
     "package.json": "dcb7044272fb3f2ece88de95e48c69cd42dc3a4525d07e53f7eda315be3b9029",
-    "packages/db/package.json": "c724085d37cd6a8ada3dd632b9b96ef08c02b948a0e018b1148ebe0d353ad7b8",
+    "packages/db/package.json": "b143162415dd5dfb12396c95f44cbf0315e4d0c1049cc7e1999e0e5b979626f7",
     "packages/db/prisma/migrations/20260822090000_phase1_foundation/migration.sql": "f2d8156b3e4c4580ce7cf7e546b44f601fb884a61b0166da11749b9e61f528db",
     "packages/db/prisma/migrations/20260822100000_phase1_member_rls_hardening/migration.sql": "6e03ae514ba0663b6be71bd1f1911eb35c6708cc53fb56ecaeab58de99ed2d3f",
     "packages/db/prisma/migrations/20260822120000_promotion_state_guard/migration.sql": "e6654c0139834193ec6d334c598bac2be6472f8df26d69d47f55483d1a9b1121",
