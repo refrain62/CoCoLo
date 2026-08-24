@@ -37,8 +37,10 @@ const temporaryDirectory = mkdtempSync(
 );
 const configPath = path.join(temporaryDirectory, 'betterleaks.toml');
 const reportPath = path.join(temporaryDirectory, 'report.json');
-writeFileSync(configPath, config, { encoding: 'utf8', mode: 0o600 });
-chmodSync(configPath, 0o600);
+// コンテナ内の非root実行ユーザーもread-only bind mountを読める必要がある。
+// 設定には秘密値を含めないため、権限は所有者以外も読める範囲に限定する。
+writeFileSync(configPath, config, { encoding: 'utf8', mode: 0o644 });
+chmodSync(configPath, 0o644);
 
 const scanArguments = [
   mode === 'dir' ? 'dir' : 'git',
