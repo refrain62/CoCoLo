@@ -48,7 +48,30 @@ ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = 'owner', status = 'active'
       ]
     : []),
 ];
+const fixtureTables = [
+  'tenants',
+  'tenant_memberships',
+  'members',
+  'guardian_members',
+];
 await withPostgresClient(process.env.DIRECT_URL, async (client) => {
-  for (const statement of statements) await client.$executeRawUnsafe(statement);
+  // FORCE RLSは本番の越境防止に必要なため、test専用fixture投入の間だけowner権限で停止する。
+  try {
+    for (const table of fixtureTables)
+      await client.$executeRawUnsafe(
+        `ALTER TABLE ${table} DISABLE ROW LEVEL SECURITY`,
+      );
+    for (const statement of statements)
+      await client.$executeRawUnsafe(statement);
+  } finally {
+    for (const table of fixtureTables) {
+      await client.$executeRawUnsafe(
+        `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`,
+      );
+      await client.$executeRawUnsafe(
+        `ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`,
+      );
+    }
+  }
 });
 console.log('テストデータを投入しました。');
