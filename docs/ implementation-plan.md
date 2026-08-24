@@ -1068,6 +1068,8 @@ Playwright は `playwright.config.ts` の `webServer` で実APIの `pnpm --filte
 * [x] **T-011 指摘修正とリリース判定:** T010-H-001〜T010-H-004を修正し、Critical / Highをゼロ化した。修正コミット: `05a101a`、`85c08f6`、`8c9eb58`、`e8e1967`、`a0a6854`、`5f5ff98`。Node 24のlocal lint/typecheck/test/unit/build/bundle/workflow検査、配置契約4件、GitHub quality run `32555164603`（実PostgreSQL統合テストを含む）が成功。再レビュー: `docs/reviews/t011-remediation-release-review-2026-08-22.md`。
 * [x] **T-012 Phase 1完了機能:** 年度繰り上げを別の Red → Green → Refactor 縦切りとして実装し、`PromotionRun` のスキーマ・冪等性・プレビュー・監査ログを検証する。実装、敵対的レビュー、PR CIの実PostgreSQL検証が完了。実装・修正コミット: `143a328`〜`7cc5b17`。品質ゲート: `32557510191`。レビュー: `docs/reviews/t012-promotion-adversarial-review-2026-08-22.md`。
 * [ ] **T-013 CI強化:** `docs/ci-hardening-plan.md` に従い、PR品質ゲート、カバレッジ、migrationとRLS、供給網検査、日次、週次、手動E2E、GitHub設定、デプロイ停止を実装する。実装後の敵対的レビューでCriticalとHighを0件にする。
+* [~] **UI-001 PC・スマートフォン対応の全体UI再設計:** shadcn/uiの設計思想に沿う共通UIプリミティブ、デザイントークン、AppShell、カード、フォーム、状態表示を整備し、既存の認証・tenant・role境界を変えずに全画面の情報設計と操作体験を改善する。専用ブランチは`feature/frontend-chadcn-responsive`とする。
+* [ ] **UI-002 UI/UX受入検証:** 390px、430px、768px、1280px以上の画面幅で主要導線を確認し、loading、success、error、empty、disabled、権限不足、未接続状態、キーボード操作、visible focus、コントラスト、reduced-motion、タップ領域、ページ横スクロール禁止を検証する。UI変更後は`pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`を実行し、Critical / High 0件で`develop`へ統合する。
 * [ ] **ORIG-REQ-001 当初要求差分の実装:** `docs/original-requirements-traceability.md` と `docs/functional-specification.md` に追加した Web と LINE の責務、表示名と保護者連携、月間表、当番、出欠リマインド、地図、未払い通知、商品と予定の画像、LINE deep link、配車表の状態、モバイル表示を、機能単位の DB、API、Web、テストへ分解して実装する。文書反映だけでは完了とせず、テナント境界、認可、個人情報、入力検証、状態遷移、冪等性、競合、外部サービス障害の検証と、staging E2E、敵対的レビュー、`develop` へのPR統合を完了条件とする。
 
 ### 9.2 タスク完了記録
