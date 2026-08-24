@@ -8,10 +8,6 @@ const mode = process.argv[2] ?? 'history';
 const target = process.argv[3] ?? root;
 const betterleaksImage =
   'ghcr.io/betterleaks/betterleaks:v1.7.2@sha256:1eb5e0920b47afe43f76671bc678c9fd4fd40c2d0c9b88a16f28021fd12d2347';
-const dockerUser =
-  typeof process.getuid === 'function' && typeof process.getgid === 'function'
-    ? `${process.getuid()}:${process.getgid()}`
-    : undefined;
 const config = `title = "CoCoLo Betterleaks 秘密情報検査"
 betterleaksMinVersion = "1.7.2"
 
@@ -41,8 +37,10 @@ const temporaryDirectory = mkdtempSync(
 );
 const configPath = path.join(temporaryDirectory, 'betterleaks.toml');
 const reportPath = path.join(temporaryDirectory, 'report.json');
-writeFileSync(configPath, config, { encoding: 'utf8', mode: 0o600 });
-chmodSync(configPath, 0o600);
+// コンテナ内の非root実行ユーザーもread-only bind mountを読める必要がある。
+// 設定には秘密値を含めないため、権限は所有者以外も読める範囲に限定する。
+writeFileSync(configPath, config, { encoding: 'utf8', mode: 0o644 });
+chmodSync(configPath, 0o644);
 
 const scanArguments = [
   mode === 'dir' ? 'dir' : 'git',
@@ -82,16 +80,24 @@ try {
           '--read-only',
           '--tmpfs',
           '/tmp:rw,noexec,nosuid,size=256m',
-          ...(dockerUser ? ['--user', dockerUser] : []),
           '--mount',
           `type=bind,source=${root},target=/src,readonly`,
           '--mount',
-          `type=bind,source=${temporaryDirectory},target=/out`,
+          `type=bind,source=${configPath},target=/config/betterleaks.toml,readonly`,
+          '--tmpfs',
+          '/out:rw,noexec,nosuid,size=16m',
+          // bind mountはrunnerとcontainerのUIDが異なるため、対象repoだけをGitの安全な場所として明示する。
+          '-e',
+          'GIT_CONFIG_COUNT=1',
+          '-e',
+          'GIT_CONFIG_KEY_0=safe.directory',
+          '-e',
+          'GIT_CONFIG_VALUE_0=/src',
           image,
           mode === 'dir' ? 'dir' : 'git',
           '/src',
           '--config',
-          '/out/betterleaks.toml',
+          '/config/betterleaks.toml',
           '--redact',
           '--no-banner',
           '--report-format',
