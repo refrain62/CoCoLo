@@ -125,6 +125,7 @@ const MAX_SCHEDULER_ATTEMPTS = 5;
 const MAX_NOTIFICATION_ATTEMPTS = 5;
 const MAX_RETRY_DELAY_MS = 60 * 60 * 1000;
 const MAX_SEND_TIMEOUT_MS = 120_000;
+const LINE_DELIVERY_TRANSACTION_TIMEOUT_MS = MAX_SEND_TIMEOUT_MS + 10_000;
 const MAX_LEASE_MS = 10 * 60 * 1000;
 
 type DatabaseAllowlist = Record<
@@ -733,28 +734,34 @@ function createPrismaDatabase(
         }),
       ),
     withTenantLock: (tenantId, work) =>
-      client.$transaction(async (transaction) => {
-        await transaction.$executeRaw`
+      client.$transaction(
+        async (transaction) => {
+          await transaction.$executeRaw`
           SELECT pg_advisory_xact_lock(
             hashtextextended(${`line:${tenantId}`}, 0)
           )
         `;
-        return work();
-      }),
+          return work();
+        },
+        { timeout: LINE_DELIVERY_TRANSACTION_TIMEOUT_MS },
+      ),
     withDeliveryLock: (tenantId, destination, work) =>
-      client.$transaction(async (transaction) => {
-        await transaction.$executeRaw`
+      client.$transaction(
+        async (transaction) => {
+          await transaction.$executeRaw`
           SELECT pg_advisory_xact_lock(
             hashtextextended(${`line:${tenantId}`}, 0)
           )
         `;
-        await transaction.$executeRaw`
+          await transaction.$executeRaw`
           SELECT pg_advisory_xact_lock(
             hashtextextended(${`line-group:${destination}`}, 0)
           )
         `;
-        return work();
-      }),
+          return work();
+        },
+        { timeout: LINE_DELIVERY_TRANSACTION_TIMEOUT_MS },
+      ),
   };
 }
 

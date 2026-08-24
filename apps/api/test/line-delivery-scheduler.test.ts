@@ -76,6 +76,10 @@ const GROUP_REUSE_MIGRATION = readFileSync(
   ),
   'utf8',
 );
+const SCHEDULER_SOURCE = readFileSync(
+  new URL('../src/line-delivery-scheduler.ts', import.meta.url),
+  'utf8',
+);
 
 function environment(
   overrides: Record<string, string | undefined> = {},
@@ -845,6 +849,17 @@ test('汎用LINE通知は別tenantによるgroup再利用時にclaim・送信前
   assert.match(
     GROUP_REUSE_MIGRATION,
     /status = 'unknown'[\s\S]*connection_changed/s,
+  );
+});
+
+test('LINE送信中のadvisory lock transactionは外部送信timeoutより長く保持する', () => {
+  assert.match(
+    SCHEDULER_SOURCE,
+    /const LINE_DELIVERY_TRANSACTION_TIMEOUT_MS = MAX_SEND_TIMEOUT_MS \+ 10_000/,
+  );
+  assert.match(
+    SCHEDULER_SOURCE,
+    /withDeliveryLock:[\s\S]*client\.\$transaction[\s\S]*timeout: LINE_DELIVERY_TRANSACTION_TIMEOUT_MS/s,
   );
 });
 
