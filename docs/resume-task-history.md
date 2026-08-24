@@ -1229,6 +1229,36 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - 添付IDの選択UI、案内画像の短期URL表示、staging Supabase/R2接続、ブラウザE2Eは別検証として残ります。
 
+## UI-001/UI-002 継続：操作安全性と権限別表示
+
+### 実施した変更
+
+- 実装PR #158で、予定登録、注文登録、支払状態変更、CSV出力、LINE接続・解除・通知登録に処理中表示とdisabled制御を追加しました。
+- `MemberManagementPage`へ認証roleを伝播し、guardianには部員の閲覧だけを許可して、登録・編集・退部・年度繰り上げを表示しないようにしました。API側の認可は変更していません。
+- empty状態、LINE接続状態の確認中・確認失敗、必須入力を利用者が判断できる状態表示へ揃えました。
+
+### 検証結果
+
+- `pnpm test`が成功しました。workspace testとAPI 189件を含みます。
+- `pnpm build`、`pnpm --filter @cocolo/web typecheck`、変更ファイルのBiome検査、`git diff --check`が成功しました。
+- Web関連APIテスト18件が成功し、GitHub quality run `32757114738`も成功しました。
+
+### 敵対的レビュー
+
+- 二重送信、権限不足操作の表示、入力検証、loading・empty・error・success・未接続状態、tenant・PII境界を確認しました。
+- 変更範囲にCritical / Highの未解消指摘はありません。UIのdisabledは通信再送や複数クライアントの冪等性を保証しないため、サーバー側の安定した冪等キー契約をUI-003へ残しました。
+- 実認証role別のブラウザ受入、local実DBおよびstagingの外部サービス接続確認は未実施であり、UI-002・UI-003の停止条件として継続します。
+
+### GitHub反映
+
+- 実装PR #158は`9a6d054`として`develop`へsquash mergeしました。
+- 実装コードと台帳・実施記録は分離し、この変更はdocs-only PRで提出します。
+
+### 未完了条件
+
+- authenticated main screensの実機幅・キーボード・role別ブラウザ受入とstaging確認を完了するまでUI-002は継続します。
+- 保存APIの安定した冪等キー、通信タイムアウト・再試行・競合、外部LINE障害時のPlaywright記録を完了するまでUI-003は未完了です。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
