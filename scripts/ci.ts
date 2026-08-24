@@ -128,6 +128,7 @@ function fastSteps(): Array<readonly [string, () => void]> {
       () => runPnpm(['verify:trust-root']),
     ],
     ['Betterleaks秘密情報検査', () => runPnpm(['security:betterleaks'])],
+    ['Node.jsとpnpmのtoolchainを検証', () => runPnpm(['verify:toolchain'])],
     ['pnpm設定を検証', () => runPnpm(['verify:pnpm-config'])],
     ['Workflowを検証', () => runPnpm(['lint:workflows'])],
     ['migration SQLを静的検証', () => runPnpm(['verify:migration-sql'])],

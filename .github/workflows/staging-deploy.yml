@@ -26,7 +26,7 @@ jobs:
       - name: Node.js環境を準備
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 24
+          node-version: 24.12.0
           cache: pnpm
       - name: 依存関係を固定インストール
         run: pnpm install --frozen-lockfile
