@@ -1104,6 +1104,40 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - stagingとproductionの実DBで既存データを検査する作業は、環境接続後に実施します。
 - board contact PIIのDB直接SELECT見直しはDB-002の残タスクとして継続します。
 
+## FIL-002/ANN-001 回覧板添付の短期URLダウンロード
+
+### 実施した変更
+
+- PR #147で、回覧板詳細の添付ごとにダウンロードボタンを追加しました。
+- ダウンロード操作時だけ認証済みattachment APIへ問い合わせ、返却された短期URLを新しいタブで開くようにしました。
+- 添付URLを回覧データやAPI requestへ保存せず、`target=_blank`に`noreferrer`を設定しました。
+- 中央画面からAttachmentApiを必須注入し、選択中teamと認証情報を既存clientから引き継ぐ構成にしました。
+
+### 検証結果
+
+- `pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm lint:workflows`が成功しました。
+- 添付APIと回覧板APIの対象Vitest 8件が成功しました。
+- `pnpm verify:trust-root`と`git diff --check`が成功しました。
+- PR #147の品質ゲート run `32744165808`が成功しました。
+- 実ブラウザ、staging R2、実PostgreSQLは環境接続がないため未実施です。
+
+### 敵対的レビュー
+
+- 短期URLは認証済みAPIから操作時だけ取得し、永続化または公開responseへの混入を行わないことを確認しました。
+- tenant、membership、available状態の認可は既存API境界を利用し、WebへtenantId入力を追加していないことを確認しました。
+- ダウンロードURL取得失敗は画面内エラーへ収束し、二重操作中はボタンを無効化することを確認しました。
+- CriticalとHighの未解消指摘はありません。
+
+### GitHub反映
+
+- PR #147は`3dfce6f`としてdevelopへsquash mergeしました。
+- 実装PRと台帳更新PRを分離しています。
+
+### 未完了条件
+
+- 実ブラウザでのダウンロード、staging R2の署名URL期限・実体・認可確認は環境準備後に実施します。
+- 回覧板とイベント詳細を含む全画面統合テストは継続します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
