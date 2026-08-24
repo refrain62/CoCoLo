@@ -226,7 +226,13 @@ function AuthenticatedApp() {
         api={boardContactApi}
         canManage={role === 'owner' || role === 'admin'}
       />
-      {role ? <BulletinBoardPage api={bulletinBoardApi} role={role} /> : null}
+      {role ? (
+        <BulletinBoardPage
+          api={bulletinBoardApi}
+          attachmentApi={attachmentApi}
+          role={role}
+        />
+      ) : null}
       {role && role !== 'staff' ? (
         <OrdersPaymentsPage
           key={selectedTeamId}

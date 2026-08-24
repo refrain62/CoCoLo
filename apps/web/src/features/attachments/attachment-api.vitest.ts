@@ -57,4 +57,28 @@ describe('添付API client', () => {
       'X-CoCoLo-Team-Id': '00000000-0000-7000-8000-000000000001',
     });
   });
+
+  it('認証済みAPIから短期ダウンロードURLを取得する', async () => {
+    const fetcher = vi.fn(async (input, init) => {
+      expect(input).toBe('/api/v1/uploads/attachment-1/download');
+      expect(init?.headers).toMatchObject({ Authorization: 'Bearer token' });
+      return new Response(
+        JSON.stringify({
+          data: {
+            attachmentId: 'attachment-1',
+            downloadUrl: 'https://fake-r2.local/download/1?signature=short',
+            expiresAt: '2026-08-22T00:15:00.000Z',
+          },
+        }),
+        { status: 200 },
+      );
+    });
+
+    await expect(
+      createAttachmentApi({
+        getAccessToken: () => 'token',
+        fetcher,
+      }).createDownloadUrl('attachment-1'),
+    ).resolves.toBe('https://fake-r2.local/download/1?signature=short');
+  });
 });
