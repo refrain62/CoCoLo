@@ -10,6 +10,7 @@ import type {
   EnqueueLineNotificationInput,
   LineNotificationRepository,
 } from '@cocolo/db/line';
+import type { LineWebhookRepository } from '@cocolo/db/line-webhook';
 import {
   buildLineDeepLink,
   buildLineLiffLink,
@@ -62,6 +63,7 @@ export type LineNotificationService = {
 
 export type CreateLineNotificationServiceOptions = {
   repository: LineNotificationRepository;
+  webhookRepository?: LineWebhookRepository;
   adapter: LineMessagingAdapter;
   channelSecret: string;
   webhookDestination: string;
@@ -132,6 +134,7 @@ function parseWebhook(rawBody: string): LineWebhookBody {
 // LINE APIを直接画面へ公開せず、接続状態・キュー・署名検証・再試行を一つの状態境界に集約する。
 export function createLineNotificationService({
   repository,
+  webhookRepository,
   adapter,
   channelSecret,
   webhookDestination,
@@ -262,6 +265,17 @@ export function createLineNotificationService({
         const groupId = event.source.groupId;
         if (!groupId) {
           ignored += 1;
+          continue;
+        }
+        if (webhookRepository) {
+          const result = await webhookRepository.recordWebhookReceipt({
+            groupId,
+            webhookEventId: event.webhookEventId,
+            receivedAt: now(),
+          });
+          if (result === 'accepted') accepted += 1;
+          else if (result === 'duplicate') duplicates += 1;
+          else ignored += 1;
           continue;
         }
         const binding = await repository.findTenantByConnectedGroupId(groupId);

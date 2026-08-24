@@ -4,6 +4,7 @@ import { contextRequestId, hasUnsafeControlCharacter } from './request-id.js';
 
 export const rateLimitPolicies = {
   authenticated: { limit: 60, windowMs: 60_000 },
+  lineWebhook: { limit: 300, windowMs: 60_000 },
   uploadSession: { limit: 10, windowMs: 60_000 },
 } as const;
 

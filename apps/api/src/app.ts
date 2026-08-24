@@ -441,7 +441,13 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   app.get('/health', (c) => c.json({ status: 'ok', service: 'api' }));
 
   // JWTの有効期限とactive membershipを確認してから後続handlerへ認証コンテキストを渡す。失敗はfail-closedとする。
+  const isPublicLineWebhook = (c: Context<ApiEnv>) =>
+    options.centralFeatures?.line?.webhook === true &&
+    c.req.method === 'POST' &&
+    c.req.path === '/api/v1/line/webhook';
+
   const authenticate: MiddlewareHandler<ApiEnv> = async (c, next) => {
+    if (isPublicLineWebhook(c)) return next();
     const token = extractBearerToken(c.req.header('authorization') ?? null);
     if (!options.verifyToken || !options.membershipRepository)
       return errorResponse(
@@ -559,6 +565,13 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       };
     },
   });
+  const authenticatedRateLimitForRoutes: MiddlewareHandler<ApiEnv> = async (
+    c,
+    next,
+  ) => {
+    if (isPublicLineWebhook(c)) return next();
+    return authenticatedRateLimit(c, next);
+  };
   app.use('/api/v1/members/*', authenticatedRateLimit);
   app.use('/api/v1/notifications/line', authenticatedRateLimit);
   app.use(
@@ -590,8 +603,26 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     app.use('/api/v1/announcements/*', authenticatedRateLimit);
   }
   if (options.centralFeatures?.line) {
-    app.use('/api/v1/line', authenticatedRateLimit);
-    app.use('/api/v1/line/*', authenticatedRateLimit);
+    if (options.centralFeatures.line.webhook) {
+      app.use(
+        '/api/v1/line/webhook',
+        createRateLimitMiddleware({
+          scope: 'line-webhook',
+          ...rateLimitPolicies.lineWebhook,
+          store: rateLimitStore,
+          now: rateLimitOptions.now,
+          namespace: rateLimitNamespace,
+          timeoutMs: rateLimitOptions.timeoutMs,
+          keyResolver: () => ({
+            kind: 'client',
+            clientId: 'line-webhook',
+            ipAddress: 'global',
+          }),
+        }),
+      );
+    }
+    app.use('/api/v1/line', authenticatedRateLimitForRoutes);
+    app.use('/api/v1/line/*', authenticatedRateLimitForRoutes);
   }
   if (options.centralFeatures?.ride) {
     app.use('/api/v1/ride-plans', authenticatedRateLimit);

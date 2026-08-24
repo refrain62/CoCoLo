@@ -39,6 +39,7 @@ export type CentralFeatureRoutes = {
   orders?: { repository: OrdersRepository };
   line?: {
     service: import('./features/line-notifications/line-service.js').LineNotificationService;
+    webhook?: boolean;
   };
   ride?: { service: RideService };
 };
@@ -118,7 +119,7 @@ export function mountCentralFeatureRoutes(options: CentralFeatureRouteOptions) {
         service: features.line.service,
         useCentralAuth: true,
         includeNotifications: false,
-        includeWebhook: false,
+        includeWebhook: features.line.webhook === true,
       }),
     );
 

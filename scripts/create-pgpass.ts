@@ -60,6 +60,15 @@ if (
     password: process.env.SHADOW_DATABASE_ADMIN_PASSWORD,
   });
 }
+if (
+  process.env.LINE_WEBHOOK_RECEIVER_DATABASE_URL &&
+  process.env.LINE_WEBHOOK_RECEIVER_PASSWORD
+) {
+  entries.push({
+    url: process.env.LINE_WEBHOOK_RECEIVER_DATABASE_URL,
+    password: process.env.LINE_WEBHOOK_RECEIVER_PASSWORD,
+  });
+}
 const uniqueLines = [...new Set(entries.map(entryLine))];
 await writeFile(output, `${uniqueLines.join('\n')}\n`, {
   encoding: 'utf8',

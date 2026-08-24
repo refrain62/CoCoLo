@@ -235,6 +235,11 @@ function createApplicationEnvironment(
     'line_delivery_worker',
     env.LINE_DELIVERY_WORKER_PASSWORD ?? 'line_delivery_worker',
   );
+  const webhookReceiverDbUrl = postgresUrl(
+    stack,
+    'line_webhook_receiver',
+    env.LINE_WEBHOOK_RECEIVER_PASSWORD ?? 'line_webhook_receiver',
+  );
   delete env.SUPABASE_SERVICE_ROLE_KEY;
   delete env.SUPABASE_ADMIN_DATABASE_URL;
   return {
@@ -246,6 +251,7 @@ function createApplicationEnvironment(
     DATABASE_URL: appDbUrl,
     DIRECT_URL: migrationDbUrl,
     LINE_DELIVERY_WORKER_DATABASE_URL: workerDbUrl,
+    LINE_WEBHOOK_RECEIVER_DATABASE_URL: webhookReceiverDbUrl,
     SUPABASE_URL: status.apiUrl.replace(/\/$/, ''),
     SUPABASE_JWKS_URL: `${status.apiUrl.replace(/\/$/, '')}/auth/v1/.well-known/jwks.json`,
     SUPABASE_ANON_KEY: status.anonKey,

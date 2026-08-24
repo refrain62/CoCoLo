@@ -110,6 +110,7 @@ Supabase Auth のユーザー停止と CoCoLo の所属停止は別の状態で�
 | --- | --- | --- | --- |
 | アプリケーション接続 | `DATABASE_URL` | API の通常クエリとトランザクション | `cocolo_app`。`BYPASSRLS` を持たない |
 | マイグレーション接続 | `DIRECT_URL` | Prisma マイグレーション、RLS・権限変更 | migration owner。API の実行経路から参照しない |
+| LINE Webhook受信接続 | `LINE_WEBHOOK_RECEIVER_DATABASE_URL` | 公開Webhookのreceipt記録 | `line_webhook_receiver`。専用関数のEXECUTEだけを持つ |
 | セキュリティ所有者 | DB 内で管理 | RLS の `SECURITY DEFINER` 関数など | `cocolo_app` から変更できない |
 
 `DATABASE_URL` は接続プールやアプリ用プールエンドポイントを使用できますが、`DIRECT_URL` はマイグレーションが確実に実行できる直接接続を使用します。どちらも TLS を必須とし、接続先のホスト名と DB 名を環境の許可値へ固定します。
@@ -217,6 +218,8 @@ provider の本文、token、個人情報をエラー記録や監視ラベルへ
 ### 7.3 Webhook
 
 Webhook は raw body の HMAC-SHA256 署名、destination、group ID の接続状態を順に検証します。
+
+公開WebhookはJWTを要求しませんが、`/api/v1/line/webhook` のPOSTだけに限定し、受信DB roleは `app_record_line_webhook_receipt` の実行権限だけを持ちます。`cocolo_app` はreceiptの直接INSERT・UPDATE・DELETEを行いません。
 
 `group_id + webhook_event_id` の重複排除キーを保存し、同じイベントを二度処理しません。
 
