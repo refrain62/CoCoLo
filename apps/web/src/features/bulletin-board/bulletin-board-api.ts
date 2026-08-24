@@ -61,6 +61,7 @@ type BulletinBoardApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
   getSelectedTeamId?: () => string | null;
+  fetcher?: typeof fetch;
 };
 
 type ErrorBody = {
@@ -89,6 +90,7 @@ export function createBulletinBoardApi({
   baseUrl = '',
   getAccessToken = getStoredAccessToken,
   getSelectedTeamId = getStoredSelectedTeamId,
+  fetcher = fetch,
 }: BulletinBoardApiOptions = {}) {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
@@ -99,7 +101,7 @@ export function createBulletinBoardApi({
         'ログインが必要です。',
       );
     const selectedTeamId = getSelectedTeamId();
-    const response = await fetch(`${baseUrl}/api/v1/announcements${path}`, {
+    const response = await fetcher(`${baseUrl}/api/v1/announcements${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',

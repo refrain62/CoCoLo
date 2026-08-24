@@ -2,6 +2,22 @@ import { describe, expect, it, vi } from 'vitest';
 import { createEventsApi, EventsApiError } from './events-api.js';
 
 describe('createEventsApi', () => {
+  it('注入した認証済みfetcherを利用する', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: [] }), { status: 200 }),
+      );
+    const api = createEventsApi({
+      getAccessToken: () => 'token-a',
+      fetcher,
+    });
+
+    await api.list('2026-08-01T00:00:00Z', '2026-09-01T00:00:00Z');
+
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it('Bearerと期間を予定一覧へ渡す', async () => {
     const fetcher = vi
       .spyOn(globalThis, 'fetch')

@@ -98,6 +98,7 @@ type MemberApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
   getSelectedTeamId?: () => string | null;
+  fetcher?: typeof fetch;
 };
 
 function getStoredAccessToken() {
@@ -120,6 +121,7 @@ export function createMemberApi({
   baseUrl = '',
   getAccessToken = getStoredAccessToken,
   getSelectedTeamId = getStoredSelectedTeamId,
+  fetcher = fetch,
 }: MemberApiOptions = {}): MemberApi {
   // すべての部員リクエストでaccess tokenを必須にし、APIへ匿名リクエストを送らない。
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -127,7 +129,7 @@ export function createMemberApi({
     if (!accessToken)
       throw new MemberApiError(401, 'UNAUTHENTICATED', 'ログインが必要です。');
 
-    const response = await fetch(`${baseUrl}/api/v1/members${path}`, {
+    const response = await fetcher(`${baseUrl}/api/v1/members${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',

@@ -10,6 +10,7 @@ import {
   TeamSelectionPage,
 } from './features/auth-team-selection/index.js';
 import {
+  clearStoredSelectedTeamId,
   getStoredSelectedTeamId,
   setStoredSelectedTeamId,
 } from './features/auth-team-selection/selected-team-storage.js';
@@ -26,7 +27,7 @@ import './styles.css';
 
 function AuthenticatedApp() {
   // 認証状態が確定するまでLoginPageを表示し、部員APIへ到達できる画面をsession保有者に限定する。
-  const { session } = useAuth();
+  const { authenticatedFetch, isLoggingOut, logout, session } = useAuth();
   const [selectedTeam, setSelectedTeam] = useState<TeamOption | null>(null);
   const [isResolvingTeam, setIsResolvingTeam] = useState(true);
   const [teamError, setTeamError] = useState<string | null>(null);
@@ -39,11 +40,13 @@ function AuthenticatedApp() {
     () =>
       createTeamSelectionApi({
         getAccessToken: () => session?.accessToken ?? null,
+        fetcher: authenticatedFetch,
       }),
-    [session?.accessToken],
+    [authenticatedFetch, session?.accessToken],
   );
   useEffect(() => {
     if (!session) {
+      clearStoredSelectedTeamId();
       setSelectedTeam(null);
       setTeamError(null);
       setIsResolvingTeam(false);
@@ -78,40 +81,45 @@ function AuthenticatedApp() {
       createMemberApi({
         getAccessToken: () => session?.accessToken ?? null,
         getSelectedTeamId: () => selectedTeamId,
+        fetcher: authenticatedFetch,
       }),
-    [selectedTeamId, session?.accessToken],
+    [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
   const authContextApi = useMemo(
     () =>
       createAuthContextApi({
         getAccessToken: () => session?.accessToken ?? null,
         getSelectedTeamId: () => selectedTeamId,
+        fetcher: authenticatedFetch,
       }),
-    [selectedTeamId, session?.accessToken],
+    [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
   const eventsApi = useMemo(
     () =>
       createEventsApi({
         getAccessToken: () => session?.accessToken ?? null,
         getSelectedTeamId: () => selectedTeamId,
+        fetcher: authenticatedFetch,
       }),
-    [selectedTeamId, session?.accessToken],
+    [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
   const boardContactApi = useMemo(
     () =>
       createBoardContactApi({
         getAccessToken: () => session?.accessToken ?? null,
         getSelectedTeamId: () => selectedTeamId,
+        fetcher: authenticatedFetch,
       }),
-    [selectedTeamId, session?.accessToken],
+    [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
   const bulletinBoardApi = useMemo(
     () =>
       createBulletinBoardApi({
         getAccessToken: () => session?.accessToken ?? null,
         getSelectedTeamId: () => selectedTeamId,
+        fetcher: authenticatedFetch,
       }),
-    [selectedTeamId, session?.accessToken],
+    [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
   useEffect(() => {
     if (!session || !selectedTeam) return;
@@ -154,7 +162,11 @@ function AuthenticatedApp() {
 
   return (
     <AppShell>
-      <SelectedTeamHeader team={selectedTeam} />
+      <SelectedTeamHeader
+        isLoggingOut={isLoggingOut}
+        onLogout={() => void logout()}
+        team={selectedTeam}
+      />
       <nav aria-label="ヘルプ">
         <a href="/manual">操作マニュアル</a>
       </nav>

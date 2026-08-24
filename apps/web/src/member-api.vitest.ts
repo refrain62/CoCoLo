@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMemberApi } from './member-api.js';
 
 const originalFetch = globalThis.fetch;
@@ -8,6 +8,31 @@ afterEach(() => {
 });
 
 describe('年度繰り上げAPIクライアント', () => {
+  it('注入した認証済みfetcherを利用する', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            mode: 'preview',
+            fiscalYear: 2026,
+            status: 'preview',
+            previewCount: 0,
+            promotedCount: 0,
+            result: null,
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await createMemberApi({
+      getAccessToken: () => 'token',
+      fetcher,
+    }).promote({ mode: 'preview', fiscalYear: 2026 });
+
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it('プレビューは年度だけを JSON で送信する', async () => {
     let request: { url: string; init?: RequestInit } | undefined;
     globalThis.fetch = async (input, init) => {

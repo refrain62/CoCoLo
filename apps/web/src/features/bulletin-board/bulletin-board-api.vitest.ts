@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBulletinBoardApi } from './bulletin-board-api.js';
 
 const originalFetch = globalThis.fetch;
@@ -8,6 +8,24 @@ afterEach(() => {
 });
 
 describe('回覧板APIクライアント', () => {
+  it('注入した認証済みfetcherを利用する', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ data: [], page: 1, pageSize: 50, hasNext: false }),
+          { status: 200 },
+        ),
+      );
+
+    await createBulletinBoardApi({
+      getAccessToken: () => 'token',
+      fetcher,
+    }).list();
+
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it('一覧取得にBearerとページ条件を付ける', async () => {
     let request: { url: string; init?: RequestInit } | undefined;
     globalThis.fetch = async (input, init) => {
