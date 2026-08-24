@@ -6,7 +6,7 @@
 
 対象実装は`apps/web/src/auth-client.ts`と`apps/web/src/auth-context.tsx`であり、APIのJWT検証、チーム選択、中央Web mountは変更しない。
 
-`local`では既存のtest-only Auth adapterを使い、`staging`と`production`では`VITE_SUPABASE_URL`と`VITE_SUPABASE_ANON_KEY`だけをブラウザへ渡す。
+`local`と`test`ではDocker上のSupabase Authへ接続し、`staging`と`production`では`VITE_SUPABASE_URL`と`VITE_SUPABASE_ANON_KEY`だけをブラウザへ渡す。
 
 Service Role Key、test-only固定token、test-onlyパスワードはWebの実行時設定とproduction bundleへ渡さない。
 
@@ -70,7 +70,7 @@ bodyが再利用できない`ReadableStream`の要求は、refresh後に再送�
 
 ## 環境境界
 
-`local`のtest-only Authは`APP_ENV=local`を要求する既存の境界を維持する。
+local/testのAuth fixtureはloopbackの `cocolo-local` / `cocolo-test` projectだけを受け付ける。固定tokenを返すtest-only Auth adapterはE2Eの起動経路で使用しない。
 
 `staging`と`production`のAuth endpointは`VITE_SUPABASE_URL`から組み立て、公開anon key以外の秘密値を入力として受け付けない。
 

@@ -30,7 +30,7 @@ main ── push ──▶ staging deploy
 - staging Workflow は `main` への push で自動起動する。`develop` への push では起動しない。
 - production Workflow は `workflow_dispatch` による手動起動だけとし、入力された 40 桁 SHA に対応する staging 成功記録を先に検証する。
 - production ではアプリや migration を再ビルドしない。staging で作成した `release.tar.gz`、manifest、migration を検証してそのまま使用する。
-- production のデータベースへ staging fixture や test-only Auth を持ち込まない。`db:seed:test` と Playwright E2E は staging / local 専用である。
+- production のデータベースへ staging fixture や test-only Auth を持ち込まない。DB fixtureとAuth fixtureはloopbackのlocal / test stack専用であり、staging deployとproduction promoteでは実行しない。
 
 ## 2. GitHub Environment の設定
 
@@ -166,17 +166,15 @@ pnpm verify:production-bundle
 
 1. pnpm 10.26.0 と Node.js 24 を準備し、`pnpm install --frozen-lockfile` を実行する。
 2. `verify:environment --expected staging` で環境名、DB URL、Supabase URL/JWKS、R2 bucket、公開URL、allowlist、分散rate-limit adapter設定を検証する。
-3. `db:prepare:test` をmigration owner接続で実行し、RLSを回避しない `cocolo_app` roleとtable grantを準備する。
-4. stagingへ Prisma migrationを適用する。
-5. PostgreSQL major version 17を検証する。
-6. `db:seed:test` でstaging専用のtenant / role / guardian fixtureを冪等投入する。
-7. API/Web/DB schema/migrationをビルドして `release.tar.gz`、manifest、SHA-256 checksumを作成する。
-8. artifact SHAとSHA-256を検証し、GitHub build provenance attestationを付与する。
-9. staging deploy adapterでartifactを配置し、配置記録を検証する。
-10. staging URLへPlaywright E2E smokeを実行する。ログイン、部員登録、Bearer token送信を確認する。
-11. 複数API instanceからの同時リクエストで分散rate-limitの原子性と障害時の `503` を確認する。
-12. migration、smoke、E2E、配置URL、artifact SHAを `.evidence/evidence.json` へ束ねる。
-13. release artifactとstaging evidenceをGitHub Actions artifactとして保存する。保存期間は14日である。
+3. stagingへ Prisma migrationを適用する。
+4. PostgreSQL major version 17を検証する。
+5. API/Web/DB schema/migrationをビルドして `release.tar.gz`、manifest、SHA-256 checksumを作成する。
+6. artifact SHAとSHA-256を検証し、GitHub build provenance attestationを付与する。
+7. staging deploy adapterでartifactを配置し、配置記録を検証する。
+8. staging URLへPlaywright E2E smokeを実行する。ログイン、部員登録、Bearer token送信を確認する。
+9. 複数API instanceからの同時リクエストで分散rate-limitの原子性と障害時の `503` を確認する。
+10. migration、smoke、E2E、配置URL、artifact SHAを `.evidence/evidence.json` へ束ねる。
+11. release artifactとstaging evidenceをGitHub Actions artifactとして保存する。保存期間は14日である。
 
 配置後は、Workflowの全stepが成功し、次の値を記録します。
 
@@ -190,7 +188,7 @@ pnpm verify:production-bundle
 
 - 環境検証失敗: Environmentの値を修正し、同じcommitを無理に再実行せず、修正後のcommitで再度検証する。
 - migration失敗: DBのmigration状態とproviderログを確認する。SQLを手編集して再実行しない。
-- fixture失敗: staging専用fixtureの既存データ、DB接続role、migration適用状態を確認する。productionには同じseedを実行しない。
+- E2E失敗: staging専用Authユーザー、migration適用状態、配置先のAPIログを確認する。DB fixtureのseedをstagingやproductionへ追加実行しない。
 - adapter / E2E失敗: 配置先の実状態、公開URL、Supabase E2Eユーザー、APIログを確認する。evidenceが作成されていないSHAはproductionへ昇格できない。
 
 ## 5. production promote 手順

@@ -4,7 +4,7 @@
 
 ## 現在の実装範囲
 
-Phase 1 MVPでは、Supabase AuthのJWT検証、部員一覧・検索・登録、役割別の表示・操作制御、PostgreSQL RLS、監査ログ、OpenAPI契約、local test-only AuthのE2E検証を実装しています。
+Phase 1 MVPでは、Supabase AuthのJWT検証、部員一覧・検索・登録、役割別の表示・操作制御、PostgreSQL RLS、監査ログ、OpenAPI契約、Docker上のSupabaseを使うE2E検証を実装しています。
 
 年度繰り上げ（FS-MEM-005）、予定・出欠、役員、共同購買、添付、通知、送迎は、docs/functional-specification.md と docs/ implementation-plan.md の仕様・実装計画に従って順次追加します。
 
@@ -20,6 +20,7 @@ Cloudflare R2はPhase 4で導入予定です。現在の外部サービス構成
 | API | Hono / TypeScript |
 | DB | PostgreSQL 17 / Prisma 6 |
 | 認証 | Supabase Auth / JWKS |
+| ローカル基盤 | Supabase CLI 2.115.0 / Docker |
 | 契約 | ZodからOpenAPI 3.1を生成 |
 | テスト | Node test runner / Vitest / Playwright |
 | 品質 | Biome / dependency-cruiser / GitHub Actions |
@@ -50,9 +51,9 @@ WebからDB・認証実装を直接参照せず、APIが認証・認可・RLS下
 
 ## ローカル開発
 
-前提はNode.js 24.12.0、pnpm 10.26.0、PostgreSQL 17、接続可能なpsqlです。Node.jsとpnpmは、プロジェクトルートの `mise.toml` でバージョンを固定しています。Dockerコンテナ内でDB操作する場合は PSQL_DOCKER_CONTAINER を設定します。
+前提はNode.js 24.12.0、pnpm 10.26.0、Docker Desktopです。Node.jsとpnpmは、プロジェクトルートの `mise.toml` でバージョンを固定しています。Supabase CLIはプロジェクト依存として固定しています。
 
-Supabase AuthはlocalではSupabase CLIの環境またはE2E用test-only Authを使用できます。test-only Authは APP_ENV=local のときだけ有効です。
+ローカルのAPIとWebはホストで起動し、Supabase AuthとPostgreSQLだけをDockerコンテナで起動します。開発用スタックは `cocolo-local` projectとDocker volumeを使い、起動のたびにDBをresetしません。
 
 ### 初期設定
 
@@ -75,31 +76,34 @@ mise exec -- pnpm install
 
 .env.exampleには各変数の用途、local / staging / productionでの違い、secretの扱いを記載しています。実際の鍵やパスワードは.envまたはCI/CDのsecretへ設定し、.env.exampleへ書き戻さないでください。
 
-### DBの準備
+### ローカル開発DBとAPI/Webの起動
 
-DATABASE_URLにはRLSを適用する cocolo_app、DIRECT_URLにはmigration ownerの接続先を設定します。テスト用DBを使う場合は、既存データを壊さないよう専用DBを使用してください。
-
-~~~powershell
-pnpm db:prepare:test
-pnpm --filter @cocolo/db exec prisma migrate deploy
-pnpm db:seed:test
-~~~
-
-### APIとWebの起動
-
-別々のターミナルで起動します。
+次の一つのコマンドでSupabaseを起動し、未適用migrationだけを適用してAPIとWebをホスト起動します。
 
 ~~~powershell
-# local test-only Authを含むAPI（APP_ENV=local専用）
-pnpm dev:test
+pnpm dev:local
 ~~~
+
+初回の空DBだけ、`owner-a@example.test` と匿名fixtureを投入します。2回目以降は既存データを保持し、Prismaの `migrate deploy` が未適用migrationだけを適用します。
+
+`Ctrl+C` はAPIとWebを停止し、Supabaseのvolumeを保持します。状態確認は `pnpm local:status`、Supabase停止は `pnpm local:stop` です。
+
+開発DBを明示的に作り直す場合だけ、データ消失を確認した上で `$env:LOCAL_DATABASE_RESET='true'; pnpm local:reset` を実行します。
+
+### テストDBとテストデータ
+
+統合テストとlocal E2Eは `cocolo-test` project、別ポート、別volumeのSupabaseスタックを使います。
 
 ~~~powershell
-# Web: http://127.0.0.1:5173
-pnpm --filter @cocolo/web dev --host 127.0.0.1 --port 5173
+pnpm test:integration
+pnpm test:e2e:local
 ~~~
 
-WebのVite proxyは /api、/auth、/health を http://127.0.0.1:8787 へ転送します。local E2Eでは VITE_SUPABASE_URL を空欄にするとtest-only Authへ接続できます。
+各コマンドはテスト開始時にテストスタックを再構築し、Prisma migration、Authの合成ユーザー、DB fixtureを投入します。終了時に `supabase stop --no-backup` でテストDBを破棄します。
+
+テストfixtureはloopbackの `cocolo-local` / `cocolo-test` 以外へ接続できず、stagingとproductionでは実行できません。fixture投入経路はrelease artifactへ含めず、本番へテストユーザーやテストデータを適用しません。
+
+APIとWebはホットリロードのためホストで起動します。開発用Webは `http://localhost:5173`、local E2EのWebは `http://localhost:4173`、Supabase APIはそれぞれ `54321` / `55321` で待ち受けます。
 
 ## 主なコマンド
 
@@ -107,8 +111,12 @@ WebのVite proxyは /api、/auth、/health を http://127.0.0.1:8787 へ転送�
 | --- | --- |
 | pnpm test | workspaceで定義された基本テスト |
 | pnpm test:unit | Vitest、contracts/domain、API単体テスト |
-| pnpm test:integration | PostgreSQLを使う統合テスト |
-| pnpm test:e2e:local | local API・Web・test-only AuthのE2E |
+| pnpm test:integration | 破棄専用Supabase test DBを毎回作る統合テスト |
+| pnpm test:e2e:local | 破棄専用Supabase Auth・DBを使うlocal E2E |
+| pnpm dev:local | 永続SupabaseとホストAPI/Webの開発起動 |
+| pnpm local:status | 永続Supabaseの状態確認 |
+| pnpm local:stop | 永続Supabaseの停止。volumeは保持 |
+| pnpm local:reset | 明示承認付きの永続Supabase再構築 |
 | pnpm lint | Biome、workspace lint、依存境界 |
 | pnpm typecheck | 全workspaceの型検査 |
 | pnpm build | API、Web、各packageのビルド |

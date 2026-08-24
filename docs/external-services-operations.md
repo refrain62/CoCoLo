@@ -48,8 +48,9 @@ GitHub Actions
 
 | 環境 | Auth | PostgreSQL | R2 | データの制約 | 秘密情報の投入元 |
 | --- | --- | --- | --- | --- | --- |
-| `local` | ローカル Supabase Auth | ローカル PostgreSQL | 導入後は `cocolo-local` | 実データ持ち込み禁止 | 開発者の `.env`。Git に登録しない |
-| `staging` | staging 専用 Supabase project | production と分離した PostgreSQL | `cocolo-staging-private` | 匿名化したテストデータだけ | GitHub の `staging` Environment |
+| `local` | Supabase CLIで起動するDocker Auth | Supabase CLIで起動するDocker PostgreSQL | 導入後は `cocolo-local` | 実データ持ち込み禁止。volumeを保持する | 開発者の `.env`。Git に登録しない |
+| `test` | 毎回破棄するSupabase CLI Auth | 毎回破棄するDocker PostgreSQL | 使用しない | 合成fixtureだけ。localとはproject・port・volumeを分離 | Workflowまたはローカルの一時環境 |
+| `staging` | staging 専用 Supabase project | production と分離した PostgreSQL | `cocolo-staging-private` | 本番データをコピーしない。local/test fixtureを適用しない | GitHub の `staging` Environment |
 | `production` | production 専用 Supabase project | production 専用 PostgreSQL | `cocolo-production-private` | 実データ。staging からコピーしない | GitHub の保護された `production` Environment |
 
 環境をまたいで、次の値を共有してはいけません。
@@ -71,7 +72,7 @@ API 起動時は `APP_ENV`、Supabase URL/JWKS URL、R2 endpoint、R2 バケッ�
 
 | 項目 | 内容 |
 | --- | --- |
-| プロジェクト | `local`、`staging`、`production` で分離 |
+| プロジェクト | `local`、`test`、`staging`、`production` で分離 |
 | ログイン方式 | Phase 1 はメールアドレスとパスワード |
 | API への伝達 | `Authorization: Bearer <access token>` |
 | API の検証 | issuer、audience、署名、`exp`、`nbf`、JWT subject を検証 |
@@ -80,6 +81,8 @@ API 起動時は `APP_ENV`、Supabase URL/JWKS URL、R2 endpoint、R2 バケッ�
 | ブラウザへ渡してはいけない値 | Service Role Key、DB URL、R2 秘密鍵 |
 
 `SUPABASE_URL` と `SUPABASE_JWKS_URL` は環境ごとの許可値と完全一致させます。JWT 検証ができない場合、API は認証済みとして処理せず `401` または設定エラーとして停止します。
+
+localとtestはどちらもSupabase GoTrueが発行する実JWTを使います。固定tokenを返すtest-only Auth adapterはlocal起動経路から使用しません。Authの合成ユーザーはtest stackのloopback URLへService Role Keyで冪等作成し、WebへService Role Keyを渡しません。
 
 ### 4.2 ユーザー・所属の運用
 
@@ -131,7 +134,15 @@ production のスキーマ変更は、リポジトリ上の検証済みリリー
 
 管理画面からの SQL 実行、手動で編集した production の schema、`prisma db push` による本番変更は禁止します。
 
-### 5.4 PostgreSQL 障害時
+localのSupabase起動では、Docker volumeを保持したまま `prisma migrate deploy` を実行します。既適用migrationは再実行せず、未適用の差分だけを適用します。test DBだけは実行前にstackを破棄するため、毎回migrationを最初から適用します。
+
+### 5.4 テストfixtureの境界
+
+`db:seed:test` は `127.0.0.1` または `localhost` のPostgreSQLと許可されたテストDB名だけを受け付け、Auth fixtureはそれに加えて `cocolo-local` / `cocolo-test` のloopback Supabase projectだけを受け付けます。stagingやproductionのURL、linked project、任意のリモートURLは拒否します。
+
+qualityやDB整合性Workflowの通常PostgreSQLはテスト用ホストとしてfixtureを使います。日次・週次・手動E2Eは`cocolo-test` Supabase stackでfixtureを作成し、実行後にstackを破棄します。staging deployとproduction promoteにはfixture投入stepを置きません。
+
+### 5.5 PostgreSQL 障害時
 
 - API の接続エラーを検知したら、まず対象環境、接続 URL、TLS、DB の稼働状態、接続数上限、RLS ロールを確認します。
 - 接続先を別環境へ差し替えて復旧させてはいけません。`APP_ENV` と DB の環境ガードが一致することを確認します。
