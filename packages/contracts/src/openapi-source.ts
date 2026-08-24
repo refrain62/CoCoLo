@@ -98,6 +98,33 @@ export const openapiDocument = {
       },
     },
     '/events/{eventId}': {
+      get: {
+        operationId: 'getEvent',
+        summary: '予定詳細を取得',
+        parameters: [
+          {
+            name: 'eventId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          200: {
+            description: '予定詳細',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/EventMutationResponse' },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          404: { $ref: '#/components/responses/NotFound' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
       patch: {
         operationId: 'updateEvent',
         summary: '予定を編集',
@@ -137,6 +164,35 @@ export const openapiDocument = {
       },
     },
     '/events/{eventId}/attendance': {
+      get: {
+        operationId: 'getCurrentAttendance',
+        summary: '現在の出欠回答を取得',
+        parameters: [
+          {
+            name: 'eventId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          200: {
+            description: '現在の出欠回答',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/AttendanceListResponse',
+                },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          404: { $ref: '#/components/responses/NotFound' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
       put: {
         operationId: 'upsertEventAttendance',
         summary: '予定の出欠を登録または修正',
@@ -759,6 +815,30 @@ export const openapiDocument = {
                 enum: ['attending', 'absent', 'pending'],
               },
               updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+        },
+      },
+      AttendanceListResponse: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['eventId', 'memberId', 'response', 'updatedAt'],
+              additionalProperties: false,
+              properties: {
+                eventId: { type: 'string', format: 'uuid' },
+                memberId: { type: 'string', format: 'uuid' },
+                response: {
+                  type: 'string',
+                  enum: ['attending', 'absent', 'pending'],
+                },
+                updatedAt: { type: 'string', format: 'date-time' },
+              },
             },
           },
         },

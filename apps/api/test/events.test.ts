@@ -73,6 +73,19 @@ function createFakeRepository(): EventRepository & {
     responses,
     list: async ({ tenantId }) =>
       events.filter((current) => current.tenantId === tenantId),
+    get: async ({ tenantId, eventId }) => {
+      const current = events.find(
+        (candidate) =>
+          candidate.id === eventId && candidate.tenantId === tenantId,
+      );
+      if (!current) {
+        const error = Object.assign(new Error('予定が見つかりません。'), {
+          status: 404,
+        });
+        throw error;
+      }
+      return current;
+    },
     create: async ({ tenantId, actorUserId, ...input }) => {
       assertEvent(input);
       const created = event({
@@ -192,6 +205,13 @@ function createFakeRepository(): EventRepository & {
       );
       return value;
     },
+    currentAttendance: async ({ tenantId, eventId, actorUserId, role }) =>
+      [...responses.values()].filter(
+        (candidate) =>
+          candidate.tenantId === tenantId &&
+          candidate.eventId === eventId &&
+          (role !== 'guardian' || candidate.userId === actorUserId),
+      ),
     summary: async ({ tenantId, eventId }): Promise<AttendanceSummary> => {
       const values = [...responses.values()].filter(
         (candidate) =>
@@ -287,6 +307,43 @@ test('ownerは所属tenantの予定だけを取得し、tenantIdをDTOへ返さ�
   assert.equal(response.status, 200);
   assert.equal(payload.data.length, 1);
   assert.equal(payload.data[0].tenantId, undefined);
+});
+
+test('予定詳細と現在の出欠回答は所属tenant内だけを返す', async () => {
+  const repository = createFakeRepository();
+  const app = createTestApp(repository);
+  const detail = await app.request(`/${EVENT_A}`, {
+    headers: auth('owner-a'),
+  });
+  assert.equal(detail.status, 200);
+  const detailPayload = await json(detail);
+  assert.equal(detailPayload.data.id, EVENT_A);
+  assert.equal(detailPayload.data.tenantId, undefined);
+
+  const answer = await app.request(`/${EVENT_A}/attendance`, {
+    method: 'PUT',
+    headers: { ...auth('guardian-a'), 'content-type': 'application/json' },
+    body: JSON.stringify({ memberId: MEMBER_A, response: 'attending' }),
+  });
+  assert.equal(answer.status, 200);
+  const answerPayload = await json(answer);
+  const current = await app.request(`/${EVENT_A}/attendance`, {
+    headers: auth('guardian-a'),
+  });
+  assert.equal(current.status, 200);
+  assert.deepEqual((await json(current)).data, [
+    {
+      eventId: EVENT_A,
+      memberId: MEMBER_A,
+      response: 'attending',
+      updatedAt: answerPayload.data.updatedAt,
+    },
+  ]);
+
+  const crossTenant = await app.request(`/${EVENT_A}`, {
+    headers: auth('owner-b'),
+  });
+  assert.equal(crossTenant.status, 404);
 });
 
 test('guardianは担当部員の締切前回答を一意に更新できる', async () => {

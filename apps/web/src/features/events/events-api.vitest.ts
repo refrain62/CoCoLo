@@ -21,6 +21,41 @@ describe('createEventsApi', () => {
     fetcher.mockRestore();
   });
 
+  it('予定詳細と現在の出欠を取得する', async () => {
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                eventId: 'event-a',
+                memberId: 'member-a',
+                response: 'attending',
+                updatedAt: '2026-08-24T00:00:00Z',
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    const api = createEventsApi({ getAccessToken: () => 'token-a' });
+
+    await api.get('event-a');
+    await api.currentAttendance('event-a');
+
+    expect(fetcher).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/events/event-a',
+      expect.anything(),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/events/event-a/attendance',
+      expect.anything(),
+    );
+    fetcher.mockRestore();
+  });
+
   it('tokenがなければAPIへ送信しない', async () => {
     const fetcher = vi.spyOn(globalThis, 'fetch');
     const api = createEventsApi({ getAccessToken: () => null });

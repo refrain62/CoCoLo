@@ -56,9 +56,11 @@ const summary: AttendanceSummary = {
 function createRepository(): EventRepository {
   return {
     list: async () => [event],
+    get: async () => event,
     create: async () => event,
     update: async () => event,
     upsertAttendance: async () => attendance,
+    currentAttendance: async () => [attendance],
     summary: async () => summary,
   };
 }
@@ -157,6 +159,16 @@ test('中央APIのevents全操作を公開response契約へ接続する', async 
     body: JSON.stringify(eventInput),
   });
   assert.equal(created.status, 201);
+
+  const detail = await app.request(`/api/v1/events/${EVENT_ID}`, {
+    headers: auth('owner-a'),
+  });
+  assert.equal(detail.status, 200);
+
+  const current = await app.request(`/api/v1/events/${EVENT_ID}/attendance`, {
+    headers: auth('owner-a'),
+  });
+  assert.equal(current.status, 200);
 
   const updated = await app.request(`/api/v1/events/${EVENT_ID}`, {
     method: 'PATCH',

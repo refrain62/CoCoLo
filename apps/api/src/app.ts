@@ -16,6 +16,7 @@ import {
 } from '@cocolo/contracts/member';
 import type { StructuredLogEntry } from '@cocolo/contracts/observability';
 import {
+  attendanceListResponseSchema,
   attendanceResponseSchema,
   attendanceSummaryResponseSchema,
   authContextResponseSchema,
@@ -264,6 +265,12 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
         ),
     },
     {
+      method: 'GET',
+      path: /^\/api\/v1\/events\/[^/]+$/,
+      status: 200,
+      schema: eventMutationResponseSchema,
+    },
+    {
       method: 'PATCH',
       path: /^\/api\/v1\/members\/[^/]+$/,
       status: 200,
@@ -310,6 +317,12 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       path: /^\/api\/v1\/events\/[^/]+$/,
       status: 200,
       schema: eventMutationResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/events\/[^/]+\/attendance$/,
+      status: 200,
+      schema: attendanceListResponseSchema,
     },
     {
       method: 'PUT',

@@ -46,6 +46,13 @@ export type AttendanceSummary = {
   unansweredMemberIds: string[];
 };
 
+export type CurrentAttendance = {
+  eventId: string;
+  memberId: string;
+  response: AttendanceResponse;
+  updatedAt: string;
+};
+
 export class EventsApiError extends Error {
   constructor(
     readonly status: number,
@@ -59,6 +66,7 @@ export class EventsApiError extends Error {
 
 export type EventsApi = {
   list: (from: string, to: string) => Promise<EventSummary[]>;
+  get: (eventId: string) => Promise<EventSummary>;
   create: (input: EventCreateInput) => Promise<EventSummary>;
   update: (eventId: string, input: EventUpdateInput) => Promise<EventSummary>;
   answer: (
@@ -68,12 +76,8 @@ export type EventsApi = {
       response: AttendanceResponse;
       correctionReason?: string;
     },
-  ) => Promise<{
-    eventId: string;
-    memberId: string;
-    response: AttendanceResponse;
-    updatedAt: string;
-  }>;
+  ) => Promise<CurrentAttendance>;
+  currentAttendance: (eventId: string) => Promise<CurrentAttendance[]>;
   summary: (eventId: string) => Promise<AttendanceSummary>;
 };
 
@@ -126,6 +130,10 @@ export function createEventsApi({
       const result = await request<{ data: EventSummary[] }>(`?${params}`);
       return result.data;
     },
+    async get(eventId) {
+      const result = await request<{ data: EventSummary }>(`/${eventId}`);
+      return result.data;
+    },
     async create(input) {
       const result = await request<{ data: EventSummary }>('', {
         method: 'POST',
@@ -141,17 +149,19 @@ export function createEventsApi({
       return result.data;
     },
     async answer(eventId, input) {
-      const result = await request<{
-        data: {
-          eventId: string;
-          memberId: string;
-          response: AttendanceResponse;
-          updatedAt: string;
-        };
-      }>(`/${eventId}/attendance`, {
-        method: 'PUT',
-        body: JSON.stringify(input),
-      });
+      const result = await request<{ data: CurrentAttendance }>(
+        `/${eventId}/attendance`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(input),
+        },
+      );
+      return result.data;
+    },
+    async currentAttendance(eventId) {
+      const result = await request<{ data: CurrentAttendance[] }>(
+        `/${eventId}/attendance`,
+      );
       return result.data;
     },
     async summary(eventId) {

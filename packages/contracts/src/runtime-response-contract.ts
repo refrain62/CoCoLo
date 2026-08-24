@@ -150,17 +150,21 @@ export const eventMutationResponseSchema = z
   .object({ data: eventPublicResponseSchema })
   .strict();
 
-export const attendanceResponseSchema = z
+const attendanceItemResponseSchema = z
   .object({
-    data: z
-      .object({
-        eventId: uuidV7,
-        memberId: uuidV7,
-        response: z.enum(['attending', 'absent', 'pending']),
-        updatedAt: z.string().datetime({ offset: true }),
-      })
-      .strict(),
+    eventId: uuidV7,
+    memberId: uuidV7,
+    response: z.enum(['attending', 'absent', 'pending']),
+    updatedAt: z.string().datetime({ offset: true }),
   })
+  .strict();
+
+export const attendanceResponseSchema = z
+  .object({ data: attendanceItemResponseSchema })
+  .strict();
+
+export const attendanceListResponseSchema = z
+  .object({ data: z.array(attendanceItemResponseSchema) })
   .strict();
 
 export const attendanceSummaryResponseSchema = z
