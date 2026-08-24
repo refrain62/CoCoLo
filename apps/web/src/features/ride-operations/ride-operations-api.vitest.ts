@@ -45,6 +45,37 @@ describe('送迎Web API', () => {
     );
   });
 
+  it('選択中のtenantを中央APIのheaderへ付ける', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: {
+              plan: { id: 'plan-1' },
+              offers: [],
+              requests: [],
+              assignments: [],
+              history: [],
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    );
+    const api = createRideOperationsApi({
+      getAccessToken: () => 'token',
+      getSelectedTeamId: () => 'team-1',
+    });
+    await api.getSnapshot('plan-1');
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/v1/ride-plans/plan-1',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'X-CoCoLo-Team-Id': 'team-1' }),
+      }),
+    );
+  });
+
   it('APIエラーのcodeとmessageを保持する', async () => {
     vi.stubGlobal(
       'fetch',

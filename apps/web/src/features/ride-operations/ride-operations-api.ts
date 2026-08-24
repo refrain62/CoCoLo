@@ -4,6 +4,10 @@ import type {
   RidePlanCreateInput,
   RideRequestCreateInput,
 } from '@cocolo/contracts/ride';
+import {
+  getStoredSelectedTeamId,
+  selectedTeamHeaderName,
+} from '../auth-team-selection/selected-team-storage.js';
 
 export type RidePlan = {
   id: string;
@@ -93,6 +97,7 @@ export type RideMetrics = {
 type RideApiOptions = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  getSelectedTeamId?: () => string | null;
 };
 
 type RideErrorBody = {
@@ -149,18 +154,21 @@ async function readError(response: Response) {
 
 // 送迎APIのBearer付与と共通エラー変換を集約し、画面ごとの認証実装の揺れを防ぐ。
 export function createRideOperationsApi({
-  baseUrl = '',
+  baseUrl = import.meta.env.VITE_API_URL ?? '',
   getAccessToken = getStoredAccessToken,
+  getSelectedTeamId = getStoredSelectedTeamId,
 }: RideApiOptions = {}): RideOperationsApi {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
     if (!accessToken)
       throw new RideApiError(401, 'UNAUTHENTICATED', 'ログインが必要です。');
+    const selectedTeamId = getSelectedTeamId();
     const response = await fetch(`${baseUrl}/api/v1/ride-plans${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${accessToken}`,
+        ...(selectedTeamId ? { [selectedTeamHeaderName]: selectedTeamId } : {}),
         ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
         ...init?.headers,
       },
