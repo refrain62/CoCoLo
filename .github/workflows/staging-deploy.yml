@@ -56,7 +56,10 @@ jobs:
           SUPABASE_ALLOWED_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ALLOWED_JWKS_URL: ${{ vars.SUPABASE_JWKS_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
           R2_BUCKET: cocolo-staging-private
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
           PUBLIC_APP_URL_ALLOWLIST: ${{ vars.PUBLIC_APP_URL_ALLOWLIST }}
           RATE_LIMIT_STORE: distributed
@@ -99,6 +102,10 @@ jobs:
         run: pnpm deploy:staging --artifact-sha "${GITHUB_SHA}" --release-dir .release
         env:
           STAGING_DEPLOY_ADAPTER: ${{ secrets.STAGING_DEPLOY_ADAPTER }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+          R2_BUCKET: cocolo-staging-private
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       - name: staging環境のE2Eスモークテスト
         run: pnpm test:e2e:staging
         env:

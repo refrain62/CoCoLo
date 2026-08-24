@@ -32,6 +32,7 @@ import {
   memberMutationResponseSchemaForRole,
   promotionResponseSchema,
 } from '@cocolo/contracts/runtime-response';
+import { uploadSessionResponseSchema } from '@cocolo/contracts/upload';
 import type { LineDeliveryProducer } from '@cocolo/db';
 import type { EventRepository } from '@cocolo/db/events';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
@@ -257,6 +258,12 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
 
   const responseContracts: ResponseContract[] = [
     {
+      method: 'POST',
+      path: /^\/api\/v1\/uploads$/,
+      status: 201,
+      schema: uploadSessionResponseSchema,
+    },
+    {
       method: 'GET',
       path: /^\/api\/v1\/members$/,
       status: 200,
@@ -358,6 +365,7 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     /^\/api\/v1\/board-members(?:\/.*)?$/,
     /^\/api\/v1\/announcements(?:\/.*)?$/,
     /^\/api\/v1\/ride-plans(?:\/.*)?$/,
+    /^\/api\/v1\/uploads(?:\/.*)?$/,
   ])
     for (const method of ['GET', 'POST', 'PATCH', 'DELETE'])
       for (const status of [200, 201, 202])
@@ -499,6 +507,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     app.use('/api/v1/board-members', authenticate);
     app.use('/api/v1/board-members/*', authenticate);
   }
+  if (options.centralFeatures?.attachments) {
+    app.use('/api/v1/uploads', authenticate);
+    app.use('/api/v1/uploads/*', authenticate);
+  }
   if (options.centralFeatures?.bulletinBoard) {
     app.use('/api/v1/announcements', authenticate);
     app.use('/api/v1/announcements/*', authenticate);
@@ -542,6 +554,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.centralFeatures?.boardContact) {
     app.use('/api/v1/board-members', authenticatedRateLimit);
     app.use('/api/v1/board-members/*', authenticatedRateLimit);
+  }
+  if (options.centralFeatures?.attachments) {
+    app.use('/api/v1/uploads', authenticatedRateLimit);
+    app.use('/api/v1/uploads/*', authenticatedRateLimit);
   }
   if (options.centralFeatures?.bulletinBoard) {
     app.use('/api/v1/announcements', authenticatedRateLimit);

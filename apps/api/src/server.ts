@@ -1,5 +1,6 @@
 import { createSupabaseTokenVerifier } from '@cocolo/auth';
 import { createMemberRepositories, createPrismaClient } from '@cocolo/db';
+import { createAttachmentRepositories } from '@cocolo/db/attachment';
 import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import { createBoardContactRepository } from '@cocolo/db/board-contact';
 import { createBulletinBoardRepositories } from '@cocolo/db/bulletin-board';
@@ -7,6 +8,7 @@ import { createEventRepository } from '@cocolo/db/events';
 import { createRideRepository } from '@cocolo/db/ride';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
+import { createR2AttachmentStorageFromEnv } from './features/attachments/r2-real-attachment-storage.js';
 import { createRideService } from './features/ride-operations/ride-service.js';
 import { readRuntimeEnvironment } from './runtime-environment.js';
 import { loadDistributedRateLimitAdapter } from './security/rate-limit-adapter.js';
@@ -23,6 +25,10 @@ const eventRepository = createEventRepository(prisma, {
 const centralFeatures = {
   authTeamSelection: {
     repository: createAuthTeamSelectionRepository(prisma),
+  },
+  attachments: {
+    repository: createAttachmentRepositories(prisma).attachmentRepository,
+    storage: createR2AttachmentStorageFromEnv(process.env),
   },
   boardContact: {
     repository: createBoardContactRepository(prisma),
