@@ -50,21 +50,36 @@ export function verifyMigrationHistory(
     assert.ok(expectedByName.has(name), `${name}: manifestにないDB履歴です`);
 }
 
-async function main() {
+export async function verifyMigrationHistoryAtDatabase(
+  directUrl: string,
+  rootDirectory = path.dirname(path.dirname(fileURLToPath(import.meta.url))),
+): Promise<void> {
   // migration履歴はapp roleから参照せず、明示したowner接続だけを使う。
-  const directUrl = process.env.DIRECT_URL;
-  assert.ok(directUrl, 'migration履歴検証にはDIRECT_URLが必要です');
-  const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
   const manifestContent = await import('node:fs/promises').then(
     ({ readFile }) =>
       readFile(
-        path.join(root, 'packages', 'db', 'prisma', 'migrations.sha256'),
+        path.join(
+          rootDirectory,
+          'packages',
+          'db',
+          'prisma',
+          'migrations.sha256',
+        ),
         'utf8',
       ),
   );
   const expected = parseMigrationManifest(await manifestContent);
+  const rows = await readMigrationHistory(directUrl, rootDirectory);
+  verifyMigrationHistory(expected, rows);
+  console.log(`DB migration履歴 ${expected.length}件を検証しました。`);
+}
+
+export async function readMigrationHistory(
+  directUrl: string,
+  rootDirectory = path.dirname(path.dirname(fileURLToPath(import.meta.url))),
+): Promise<MigrationHistory[]> {
   const require = createRequire(
-    path.join(root, 'packages', 'db', 'package.json'),
+    path.join(rootDirectory, 'packages', 'db', 'package.json'),
   );
   const { PrismaClient } = require('@prisma/client') as {
     PrismaClient: new (options: {
@@ -76,19 +91,23 @@ async function main() {
   };
   const prisma = new PrismaClient({ datasources: { db: { url: directUrl } } });
   try {
-    const rows = await prisma.$queryRawUnsafe(
+    return await prisma.$queryRawUnsafe(
       `SELECT migration_name AS "migrationName",
               checksum,
               finished_at AS "finishedAt",
               rolled_back_at AS "rolledBackAt"
-         FROM "_prisma_migrations"
+        FROM "_prisma_migrations"
         ORDER BY migration_name`,
     );
-    verifyMigrationHistory(expected, rows);
   } finally {
     await prisma.$disconnect();
   }
-  console.log(`DB migration履歴 ${expected.length}件を検証しました。`);
+}
+
+async function main() {
+  const directUrl = process.env.DIRECT_URL;
+  assert.ok(directUrl, 'migration履歴検証にはDIRECT_URLが必要です');
+  await verifyMigrationHistoryAtDatabase(directUrl);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)

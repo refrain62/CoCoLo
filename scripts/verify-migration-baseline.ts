@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const migrationRoot = 'packages/db/prisma/migrations/';
 const migrationPathPattern =
@@ -16,21 +17,30 @@ export function assertNoExistingMigrationChanges(diff: string) {
       `git diffの形式が不正です: ${line}`,
     );
     assert.ok(paths.length > 0, `git diffのパスがありません: ${line}`);
-    for (const migrationPath of paths)
+    for (const migrationPath of paths) {
+      if (migrationPath === `${migrationRoot}migration_lock.toml`) {
+        assert.equal(
+          status,
+          'A',
+          `既存migration lockfileの変更・削除・改名は許可しません: ${line}`,
+        );
+        continue;
+      }
       assert.match(
         migrationPath ?? '',
         migrationPathPattern,
         `migration.sql以外の変更は許可しません: ${migrationPath}`,
       );
-    assert.equal(
-      status,
-      'A',
-      `既存migrationの変更・削除・改名は許可しません: ${line}`,
-    );
+      assert.equal(
+        status,
+        'A',
+        `既存migrationの変更・削除・改名は許可しません: ${line}`,
+      );
+    }
   }
 }
 
-function readMigrationDiff(baseSha: string) {
+function readMigrationDiff(baseSha: string, cwd = process.cwd()) {
   const result = spawnSync(
     'git',
     [
@@ -41,7 +51,7 @@ function readMigrationDiff(baseSha: string) {
       '--',
       migrationRoot,
     ],
-    { encoding: 'utf8' },
+    { cwd, encoding: 'utf8' },
   );
   if (result.error) throw result.error;
   assert.equal(
@@ -52,11 +62,21 @@ function readMigrationDiff(baseSha: string) {
   return result.stdout;
 }
 
+export function verifyMigrationBaseline(
+  baseSha = process.env.BASE_SHA,
+  rootDirectory = path.dirname(path.dirname(fileURLToPath(import.meta.url))),
+  ci = process.env.CI === 'true',
+): void {
+  if (!ci) return;
+  assert.ok(
+    baseSha && /^[0-9a-f]{40}$/.test(baseSha),
+    'migration baseline検証には40桁のBASE_SHAが必要です',
+  );
+  assertNoExistingMigrationChanges(readMigrationDiff(baseSha, rootDirectory));
+}
+
 async function main() {
-  const baseSha = process.env.BASE_SHA;
-  if (!baseSha || !/^[0-9a-f]{40}$/.test(baseSha))
-    throw new Error('migration baseline検証には40桁のBASE_SHAが必要です');
-  assertNoExistingMigrationChanges(readMigrationDiff(baseSha));
+  verifyMigrationBaseline(process.env.BASE_SHA, undefined, true);
   console.log('既存migrationの変更がないことを検証しました。');
 }
 

@@ -29,6 +29,22 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: owner bootstrap済みのtrust rootを検証
         run: pnpm verify:trust-root
+      - name: schema drift成功runを検証
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            schema_drift_run_id="$(gh run list --workflow schema-drift.yml --branch main --limit 20 --json databaseId,headSha,status,conclusion | jq -r --arg sha "$GITHUB_SHA" '.[] | select(.headSha == $sha and .status == "completed" and .conclusion == "success") | .databaseId' | head -n 1)"
+            if [[ -n "$schema_drift_run_id" ]]; then
+              echo "SCHEMA_DRIFT_RUN_ID=$schema_drift_run_id" >> "$GITHUB_ENV"
+              echo "SCHEMA_DRIFT_STATUS=success" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'schema-driftの成功runを取得できませんでした。' >&2
+          exit 1
       - name: staging環境の設定を検証
         run: pnpm verify:environment --expected staging
         env:
@@ -82,6 +98,13 @@ jobs:
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
           subject-path: .release/release.tar.gz
+      - name: リリースの出所証明を検証
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh attestation verify .release/release.tar.gz --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/staging-deploy.yml" --source-digest "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)"
+          echo 'ARTIFACT_ATTESTATION_VERIFIED=true' >> "$GITHUB_ENV"
       - name: staging環境へ配置
         run: pnpm deploy:staging --artifact-sha "${GITHUB_SHA}" --release-dir .release
         env:

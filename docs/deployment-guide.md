@@ -288,6 +288,7 @@ adapterが途中まで配置した可能性がある場合は、providerの実�
 | production bundleの混入検査 | `pnpm verify:production-bundle` |
 
 手動で `deploy:production` を実行する場合も、production Workflowと同じく、staging evidence・artifact SHA・SHA-256・attestation・production環境検証を先に完了させます。これらを省略してadapterだけを直接実行してはいけません。
+実際のCLI入口はさらにrelease内のmigration checksum、`DATABASE_URL`/別adminの`DIRECT_URL`による実DBsecurity、migration履歴を配置前に検査し、配置後にも同じ実DB検査を再実行します。どれか一つでも未設定・不一致ならfail-closedです。GitHub Free期間はWorkflowを無効化しているため、secretを持たないPR/CIからdeployへ到達しません。
 
 ## 8. デプロイ完了記録
 

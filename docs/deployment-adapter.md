@@ -50,8 +50,12 @@ GitHub Environment の保護されたsecretまたは承認済みの実行環境�
 - HTTPSではないURL、空のURL、許可されていないURLが返された。
 - `deployment-record.json` が欠落、壊れている、または必須項目を満たさない。
 - 記録された成果物が、配置対象として承認された成果物と異なる。
+- `release.tar.gz`、artifact SHA-256、同梱migration checksum、実DBのsecurity・migration履歴を配置前に検証できない。
+- productionで同一artifact SHAのstaging証跡（migration / smoke / E2E / artifact checksum）がない。
 
 配置記録を検証できない場合、staging E2E、production promote、利用者への完了通知へ進めません。production は staging で同じ成果物の検証が完了し、GitHub Environment の承認条件を満たした場合だけ昇格させます。
+
+配置adapterの後段は共通入口が実DBのrole・owner・ACL・RLS・policy・functionとmigration履歴を再検査します。adapterが成功を自己申告しても、後段検査を通過しない場合は配置成功にしません。GitHub Free期間はstaging/production Workflow自体を`if: ${{ false }}`で無効化し、secret・environment・checkout・adapterへ到達させません。
 
 ## 5. 証跡と障害対応
 

@@ -10,13 +10,6 @@ export type MigrationChecksum = Readonly<{
 }>;
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const migrationsRoot = path.join(
-  root,
-  'packages',
-  'db',
-  'prisma',
-  'migrations',
-);
 const manifestPath = path.join(
   root,
   'packages',
@@ -24,6 +17,26 @@ const manifestPath = path.join(
   'prisma',
   'migrations.sha256',
 );
+
+export function migrationPaths(rootDirectory = root) {
+  const migrationsDirectory = path.join(
+    rootDirectory,
+    'packages',
+    'db',
+    'prisma',
+    'migrations',
+  );
+  return {
+    migrationsDirectory,
+    manifestPath: path.join(
+      rootDirectory,
+      'packages',
+      'db',
+      'prisma',
+      'migrations.sha256',
+    ),
+  };
+}
 
 function sha256(bytes: Uint8Array) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -96,18 +109,29 @@ export function verifyMigrationManifest(
   );
 }
 
-async function readMigrationChecksums() {
-  const directories = await readdir(migrationsRoot, { withFileTypes: true });
+export async function readMigrationChecksums(rootDirectory = root) {
+  const migrationsDirectory = migrationPaths(rootDirectory).migrationsDirectory;
+  const directories = await readdir(migrationsDirectory, {
+    withFileTypes: true,
+  });
   const migrationDirectories = directories
     .filter((entry) => entry.isDirectory())
     .sort((left, right) => left.name.localeCompare(right.name));
   const entries: MigrationChecksum[] = [];
   for (const directory of migrationDirectories) {
     const relativePath = `${directory.name}/migration.sql`;
-    const bytes = await readFile(path.join(migrationsRoot, relativePath));
+    const bytes = await readFile(path.join(migrationsDirectory, relativePath));
     entries.push({ path: relativePath, sha256: sha256(bytes) });
   }
   return entries;
+}
+
+export async function verifyMigrationChecksum(
+  rootDirectory = root,
+): Promise<void> {
+  const { manifestPath: manifestFile } = migrationPaths(rootDirectory);
+  const actual = await readMigrationChecksums(rootDirectory);
+  verifyMigrationManifest(actual, await readFile(manifestFile, 'utf8'));
 }
 
 async function main() {

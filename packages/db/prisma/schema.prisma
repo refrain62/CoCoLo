@@ -3,9 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  directUrl         = env("DIRECT_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 enum Role {
@@ -147,14 +148,13 @@ enum RideRequestStatus {
 model Tenant {
   id           String             @id @default(uuid(7)) @db.Uuid
   name         String             @db.VarChar(200)
-  createdAt    DateTime           @default(now()) @map("created_at")
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   memberships  TenantMembership[]
   members      Member[]
   guardians    GuardianMember[]
   auditLogs    AuditLog[]
   promotionRuns PromotionRun[]
   events        Event[]
-  attendanceResponses AttendanceResponseRecord[]
   boardContacts BoardContact[]
   attachments   Attachment[]
   purchaseOrders PurchaseOrder[]
@@ -163,10 +163,9 @@ model Tenant {
   orderLines    OrderLine[]
   orderIdempotencyKeys OrderIdempotencyKey[]
   announcements Announcement[]
-  announcementAttachments AnnouncementAttachment[]
-  announcementReads AnnouncementRead[]
   lineConnections LineConnection[]
   lineNotificationQueue LineNotificationQueue[]
+  lineDeliveryOutboxes LineDeliveryOutbox[]
   lineWebhookReceipts LineWebhookReceipt[]
   ridePlans     RidePlan[]
   rideOffers    RideOffer[]
@@ -182,11 +181,12 @@ model TenantMembership {
   userId    String           @map("user_id") @db.VarChar(128)
   role      Role
   status    MembershipStatus @default(active)
-  createdAt DateTime         @default(now()) @map("created_at")
-  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  boardContacts BoardContact[]
 
   @@unique([tenantId, userId])
-  @@index([userId, status])
+  @@index([userId, status], map: "tenant_memberships_user_status_idx")
   @@map("tenant_memberships")
 }
 
@@ -200,16 +200,16 @@ model Member {
   ageGroup      String?          @map("age_group") @db.VarChar(100)
   status        MemberStatus     @default(active)
   note          String?
-  createdAt     DateTime         @default(now()) @map("created_at")
-  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   guardianLinks GuardianMember[]
   attendanceResponses AttendanceResponseRecord[]
   orderEntries  OrderEntry[]
   rideRequests  RideRequest[]
 
   @@unique([tenantId, id])
-  @@index([tenantId, status, category])
-  @@index([tenantId, name])
+  @@index([tenantId, status, category], map: "members_tenant_status_category_idx")
+  @@index([tenantId, name], map: "members_tenant_name_idx")
   @@map("members")
 }
 
@@ -219,12 +219,12 @@ model GuardianMember {
   userId       String   @map("user_id") @db.VarChar(128)
   memberId     String   @map("member_id") @db.Uuid
   relationship String   @db.VarChar(100)
-  consentedAt  DateTime? @map("consented_at")
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  member       Member   @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict)
+  consentedAt  DateTime? @map("consented_at") @db.Timestamptz(6)
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  member       Member    @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, userId, memberId])
-  @@index([tenantId, userId])
+  @@index([tenantId, userId], map: "guardian_members_tenant_user_idx")
   @@map("guardian_members")
 }
 
@@ -236,10 +236,10 @@ model AuditLog {
   resourceType String @map("resource_type") @db.VarChar(100)
   resourceId String?  @map("resource_id") @db.Uuid
   metadata   Json?
-  createdAt  DateTime @default(now()) @map("created_at")
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
-  @@index([tenantId, createdAt])
+  @@index([tenantId, createdAt], map: "audit_logs_tenant_created_idx")
   @@map("audit_logs")
 }
 
@@ -249,18 +249,18 @@ model PromotionRun {
   fiscalYear     Int               @map("fiscal_year")
   status         PromotionRunStatus
   previewCount   Int               @default(0) @map("preview_count")
-  executedAt     DateTime?         @map("executed_at")
+  executedAt     DateTime?         @map("executed_at") @db.Timestamptz(6)
   actorUserId    String            @map("actor_user_id") @db.VarChar(128)
   idempotencyKey String?           @map("idempotency_key") @db.VarChar(128)
-  requestHash    String?           @map("request_hash") @db.Char(64)
+  requestHash    String?            @map("request_hash") @db.Char(64)
   result         Json?
-  createdAt      DateTime          @default(now()) @map("created_at")
-  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, id])
   @@unique([tenantId, fiscalYear])
   @@unique([tenantId, idempotencyKey])
-  @@index([tenantId, status])
+  @@index([tenantId, status], map: "promotion_runs_tenant_status_idx")
   @@map("promotion_runs")
 }
 
@@ -269,26 +269,27 @@ model Event {
   tenantId                   String   @map("tenant_id") @db.Uuid
   title                      String   @db.VarChar(200)
   type                       EventType @map("event_type")
-  startsAt                   DateTime @map("starts_at")
-  endsAt                     DateTime @map("ends_at")
+  startsAt                   DateTime @map("starts_at") @db.Timestamptz(6)
+  endsAt                     DateTime @map("ends_at") @db.Timestamptz(6)
   location                   String?  @db.VarChar(500)
   itemsToBring               String?  @map("items_to_bring") @db.VarChar(2000)
   fee                        Int      @default(0)
   announcementImageAttachmentId String? @map("announcement_image_attachment_id") @db.Uuid
   opponent                   String?  @db.VarChar(200)
-  meetingTime                DateTime? @map("meeting_time")
+  meetingTime                DateTime? @map("meeting_time") @db.Timestamptz(6)
   transportationRequired     Boolean  @default(false) @map("transportation_required")
-  attendanceDeadline         DateTime @map("attendance_deadline")
+  attendanceDeadline         DateTime @map("attendance_deadline") @db.Timestamptz(6)
   createdByUserId            String   @map("created_by_user_id") @db.VarChar(128)
   updatedByUserId            String   @map("updated_by_user_id") @db.VarChar(128)
-  createdAt                  DateTime @default(now()) @map("created_at")
-  updatedAt                  DateTime @default(now()) @map("updated_at")
-  tenant                     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  attachment                 Attachment? @relation("EventAnnouncementAttachment", fields: [tenantId, announcementImageAttachmentId], references: [tenantId, id], onDelete: Restrict)
+  createdAt                  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant                     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  attachment                 Attachment? @relation("EventAnnouncementAttachment", fields: [tenantId, announcementImageAttachmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "events_tenant_attachment_fk")
   attendanceResponses        AttendanceResponseRecord[]
 
   @@unique([tenantId, id])
-  @@index([tenantId, startsAt, id])
+  @@index([tenantId, startsAt, id], map: "events_tenant_start_idx")
+  @@index([tenantId, startsAt, id], map: "events_tenant_starts_idx")
   @@map("events")
 }
 
@@ -300,14 +301,17 @@ model AttendanceResponseRecord {
   memberId         String   @map("member_id") @db.Uuid
   response         AttendanceResponse
   correctionReason String?  @map("correction_reason") @db.VarChar(500)
-  respondedAt      DateTime @default(now()) @map("responded_at")
-  updatedAt        DateTime @default(now()) @map("updated_at")
-  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  event            Event    @relation(fields: [tenantId, eventId], references: [tenantId, id], onDelete: Restrict)
-  member           Member   @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict)
+  respondedAt      DateTime @default(now()) @map("responded_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  event            Event    @relation(fields: [tenantId, eventId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  member           Member   @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
+  @@unique([tenantId, id])
   @@unique([tenantId, eventId, userId, memberId])
-  @@index([tenantId, eventId, memberId])
+  @@index([tenantId, eventId, memberId], map: "attendance_responses_event_idx")
+  @@index([tenantId, eventId, memberId], map: "attendance_responses_event_member_idx")
+  @@index([tenantId, userId, memberId], map: "attendance_responses_user_idx")
+  @@index([tenantId, eventId, memberId, updatedAt(sort: Desc), id(sort: Desc)], map: "attendance_responses_event_member_updated_idx")
   @@map("attendance_responses")
 }
 
@@ -321,13 +325,14 @@ model BoardContact {
   lineContact       String?  @map("line_contact") @db.VarChar(200)
   phone             String?  @db.VarChar(32)
   contactPreference String   @map("contact_preference") @db.VarChar(8)
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @default(now()) @map("updated_at")
-  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  assignee          TenantMembership? @relation(fields: [tenantId, assigneeUserId], references: [tenantId, userId], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, id])
   @@unique([tenantId, fiscalYear, roleName])
-  @@index([tenantId, fiscalYear])
+  @@index([tenantId, fiscalYear], map: "board_contacts_tenant_year_idx")
   @@map("board_contacts")
 }
 
@@ -336,24 +341,25 @@ model Attachment {
   tenantId            String         @map("tenant_id") @db.Uuid
   ownerUserId         String         @map("owner_user_id") @db.VarChar(128)
   objectKey           String         @map("object_key") @db.VarChar(512)
-  mediaType           String         @map("media_type") @db.VarChar(64)
+  mediaType           String         @map("media_type") @db.VarChar(100)
   byteSize            Int            @map("byte_size")
   sha256              String?        @db.Char(64)
   status              AttachmentStatus @default(uploaded)
-  expiresAt           DateTime       @map("expires_at")
-  completeAttempts    Int            @default(0) @map("complete_attempts")
-  cleanupAttempts     Int            @default(0) @map("cleanup_attempts")
-  cleanupCompletedAt  DateTime?      @map("cleanup_completed_at")
-  createdAt           DateTime       @default(now()) @map("created_at")
-  availableAt         DateTime?      @map("available_at")
-  deletedAt           DateTime?      @map("deleted_at")
-  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  expiresAt           DateTime       @map("expires_at") @db.Timestamptz(6)
+  completeAttempts    Int            @default(0) @map("complete_attempts") @db.SmallInt
+  cleanupAttempts     Int            @default(0) @map("cleanup_attempts") @db.SmallInt
+  cleanupCompletedAt  DateTime?      @map("cleanup_completed_at") @db.Timestamptz(6)
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  availableAt         DateTime?      @map("available_at") @db.Timestamptz(6)
+  deletedAt           DateTime?      @map("deleted_at") @db.Timestamptz(6)
+  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   eventReferences     Event[]        @relation("EventAnnouncementAttachment")
   announcementLinks   AnnouncementAttachment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, objectKey])
-  @@index([tenantId, status, expiresAt])
+  @@index([tenantId, status, createdAt], map: "attachments_tenant_status_idx")
+  @@index([tenantId, status, expiresAt], map: "attachments_tenant_status_expiry_idx")
   @@map("attachments")
 }
 
@@ -361,15 +367,15 @@ model PurchaseOrder {
   id             String             @id @default(uuid(7)) @db.Uuid
   tenantId       String             @map("tenant_id") @db.Uuid
   title          String             @db.VarChar(200)
-  deadline       DateTime
+  deadline       DateTime @db.Timestamptz(6)
   status         PurchaseOrderStatus @default(open)
-  createdAt      DateTime           @default(now()) @map("created_at")
-  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   products       OrderProduct[]
   entries        OrderEntry[]
 
   @@unique([tenantId, id])
-  @@index([tenantId, status, deadline])
+  @@index([tenantId, status, deadline], map: "purchase_orders_tenant_status_deadline_idx")
   @@map("purchase_orders")
 }
 
@@ -383,13 +389,13 @@ model OrderProduct {
   options            Json         @default("[]")
   requiresBackNumber Boolean      @default(false) @map("requires_back_number")
   requiresBackName   Boolean      @default(false) @map("requires_back_name")
-  createdAt          DateTime     @default(now()) @map("created_at")
-  tenant             Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  order              PurchaseOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant             Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  order              PurchaseOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   lines              OrderLine[]
 
   @@unique([tenantId, id])
-  @@index([tenantId, orderId, createdAt])
+  @@index([tenantId, orderId, createdAt], map: "order_products_tenant_order_created_idx")
   @@map("order_products")
 }
 
@@ -400,19 +406,19 @@ model OrderEntry {
   ordererUserId        String        @map("orderer_user_id") @db.VarChar(128)
   ordererName          String        @map("orderer_name") @db.VarChar(200)
   memberId             String        @map("member_id") @db.Uuid
-  totalAmount          BigInt        @map("total_amount")
+  totalAmount          BigInt        @default(0) @map("total_amount")
   paymentStatus        PaymentStatus @default(unpaid) @map("payment_status")
-  paymentConfirmedAt   DateTime?     @map("payment_confirmed_at")
+  paymentConfirmedAt   DateTime?     @map("payment_confirmed_at") @db.Timestamptz(6)
   paymentConfirmedBy   String?       @map("payment_confirmed_by") @db.VarChar(128)
-  createdAt            DateTime      @default(now()) @map("created_at")
-  tenant               Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  order                PurchaseOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
-  member               Member        @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict)
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant               Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  order                PurchaseOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  member               Member        @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   lines                OrderLine[]
 
   @@unique([tenantId, id])
-  @@index([tenantId, orderId, paymentStatus, createdAt])
-  @@index([tenantId, ordererUserId])
+  @@index([tenantId, orderId, paymentStatus, createdAt], map: "order_entries_tenant_order_payment_created_idx")
+  @@index([tenantId, ordererUserId], map: "order_entries_tenant_orderer_idx")
   @@map("order_entries")
 }
 
@@ -428,13 +434,13 @@ model OrderLine {
   backNumber       String?     @map("back_number") @db.VarChar(20)
   backName         String?     @map("back_name") @db.VarChar(40)
   amount           BigInt
-  tenant           Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  orderEntry       OrderEntry  @relation(fields: [tenantId, orderEntryId], references: [tenantId, id], onDelete: Restrict)
-  product          OrderProduct @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+  tenant           Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  orderEntry       OrderEntry  @relation(fields: [tenantId, orderEntryId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  product          OrderProduct @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, id])
-  @@index([tenantId, orderEntryId])
-  @@index([tenantId, productId])
+  @@index([tenantId, orderEntryId], map: "order_lines_tenant_entry_idx")
+  @@index([tenantId, productId], map: "order_lines_tenant_product_idx")
   @@map("order_lines")
 }
 
@@ -446,12 +452,11 @@ model OrderIdempotencyKey {
   requestHash    String   @map("request_hash") @db.Char(64)
   resourceType   String   @map("resource_type") @db.VarChar(64)
   resourceId     String   @map("resource_id") @db.Uuid
-  createdAt      DateTime @default(now()) @map("created_at")
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
-  @@unique([tenantId, id])
   @@unique([tenantId, actorUserId, idempotencyKey])
-  @@index([tenantId, resourceType, resourceId])
+  @@index([tenantId, resourceType, resourceId], map: "order_idempotency_keys_tenant_resource_idx")
   @@map("order_idempotency_keys")
 }
 
@@ -460,15 +465,15 @@ model Announcement {
   tenantId    String             @map("tenant_id") @db.Uuid
   authorUserId String            @map("author_user_id") @db.VarChar(128)
   title       String             @db.VarChar(200)
-  body        String             @db.VarChar(20000)
+  body        String             @db.Text
   status      AnnouncementStatus @default(published)
-  publishedAt DateTime           @map("published_at")
-  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  publishedAt DateTime           @default(now()) @map("published_at") @db.Timestamptz(6)
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   attachments AnnouncementAttachment[]
   reads       AnnouncementRead[]
 
   @@unique([tenantId, id])
-  @@index([tenantId, status, publishedAt, id])
+  @@index([tenantId, status, publishedAt(sort: Desc), id(sort: Desc)], map: "announcements_tenant_status_published_idx")
   @@map("announcements")
 }
 
@@ -476,15 +481,15 @@ model AnnouncementAttachment {
   tenantId       String       @map("tenant_id") @db.Uuid
   announcementId String       @map("announcement_id") @db.Uuid
   attachmentId   String       @map("attachment_id") @db.Uuid
-  position       Int
-  mediaType      String       @map("media_type") @db.VarChar(64)
+  position       Int          @db.SmallInt
+  mediaType      String       @map("media_type") @db.VarChar(100)
   byteSize       Int          @map("byte_size")
-  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  announcement   Announcement @relation(fields: [tenantId, announcementId], references: [tenantId, id], onDelete: Restrict)
-  attachment     Attachment   @relation(fields: [tenantId, attachmentId], references: [tenantId, id], onDelete: Restrict)
+  announcement   Announcement @relation(fields: [tenantId, announcementId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  attachment     Attachment   @relation(fields: [tenantId, attachmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "announcement_attachments_tenant_attachment_fk")
 
   @@id([tenantId, announcementId, attachmentId])
   @@unique([tenantId, announcementId, position])
+  @@index([tenantId, announcementId, position], map: "announcement_attachments_tenant_announcement_idx")
   @@map("announcement_attachments")
 }
 
@@ -492,23 +497,27 @@ model AnnouncementRead {
   tenantId       String       @map("tenant_id") @db.Uuid
   announcementId String       @map("announcement_id") @db.Uuid
   userId         String       @map("user_id") @db.VarChar(128)
-  readAt         DateTime     @map("read_at")
-  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  announcement   Announcement @relation(fields: [tenantId, announcementId], references: [tenantId, id], onDelete: Restrict)
+  readAt         DateTime     @default(now()) @map("read_at") @db.Timestamptz(6)
+  announcement   Announcement @relation(fields: [tenantId, announcementId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
 
   @@id([tenantId, announcementId, userId])
-  @@index([tenantId, userId, readAt])
+  @@index([tenantId, announcementId, readAt], map: "announcement_reads_tenant_announcement_idx")
+  @@index([tenantId, userId, readAt], map: "announcement_reads_tenant_user_idx")
+  @@index([tenantId, userId, readAt], map: "announcement_reads_tenant_user_read_idx")
   @@map("announcement_reads")
 }
 
 model LineConnection {
   tenantId    String               @id @map("tenant_id") @db.Uuid
-  groupId     String?              @unique @map("group_id") @db.VarChar(128)
+  groupId     String?              @map("group_id") @db.VarChar(128)
   status      LineConnectionStatus
-  connectedAt DateTime?            @map("connected_at")
-  updatedAt   DateTime             @default(now()) @map("updated_at")
-  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  connectedAt DateTime?            @map("connected_at") @db.Timestamptz(6)
+  updatedAt   DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  notificationQueue LineNotificationQueue[]
+  webhookReceipts LineWebhookReceipt[]
 
+  @@unique([tenantId, groupId])
   @@map("line_connections")
 }
 
@@ -522,18 +531,19 @@ model LineNotificationQueue {
   title             String                 @db.VarChar(200)
   body              String                 @db.VarChar(4000)
   deepLink          String                 @map("deep_link") @db.VarChar(2048)
-  status            LineNotificationStatus
+  status            LineNotificationStatus @default(pending)
   attempts          Int                    @default(0)
-  nextRetryAt      DateTime?              @map("next_retry_at")
+  nextRetryAt      DateTime?              @map("next_retry_at") @db.Timestamptz(6)
   providerMessageId String?                @map("provider_message_id") @db.VarChar(256)
   lastError         String?                @map("last_error") @db.VarChar(500)
-  createdAt         DateTime               @default(now()) @map("created_at")
-  sentAt            DateTime?              @map("sent_at")
-  tenant            Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  sentAt            DateTime?              @map("sent_at") @db.Timestamptz(6)
+  tenant            Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  lineConnection    LineConnection          @relation(fields: [tenantId, groupId], references: [tenantId, groupId], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, id])
-  @@index([status, nextRetryAt, createdAt, id])
-  @@index([tenantId, groupId, status])
+  @@index([status, nextRetryAt, createdAt, id], map: "line_notification_queue_due_idx")
+  @@index([tenantId, groupId, status], map: "line_notification_queue_tenant_group_status_idx")
   @@map("line_notification_queue")
 }
 
@@ -541,30 +551,62 @@ model LineWebhookReceipt {
   tenantId      String   @map("tenant_id") @db.Uuid
   groupId       String   @map("group_id") @db.VarChar(128)
   webhookEventId String  @map("webhook_event_id") @db.VarChar(128)
-  receivedAt    DateTime @default(now()) @map("received_at")
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  receivedAt    DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  lineConnection LineConnection @relation(fields: [tenantId, groupId], references: [tenantId, groupId], onDelete: Restrict, onUpdate: NoAction)
 
   @@id([groupId, webhookEventId])
-  @@index([tenantId, receivedAt])
+  @@index([tenantId, receivedAt], map: "line_webhook_receipts_tenant_received_idx")
   @@map("line_webhook_receipts")
+}
+
+model LineDeliveryOutbox {
+  id                String   @id @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  actorUserId       String   @map("actor_user_id") @db.VarChar(128)
+  sourceType        String   @map("source_type") @db.VarChar(32)
+  sourceId          String   @map("source_id") @db.VarChar(128)
+  destination       String   @db.VarChar(128)
+  title             String   @db.VarChar(200)
+  body              String   @db.VarChar(4000)
+  deepLink          String   @map("deep_link") @db.VarChar(2048)
+  status            String   @default("pending") @db.VarChar(16)
+  attempt           Int      @default(0)
+  attemptToken      String?  @map("attempt_token") @db.Uuid
+  leaseExpiresAt    DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  nextRetryAt       DateTime? @map("next_retry_at") @db.Timestamptz(6)
+  providerMessageId String?  @map("provider_message_id") @db.VarChar(256)
+  lastErrorCode     String?  @map("last_error_code") @db.VarChar(32)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  sentAt            DateTime? @map("sent_at") @db.Timestamptz(6)
+  idempotencyKey    String   @map("idempotency_key") @db.VarChar(128)
+  payloadHash       String   @map("payload_hash") @db.Char(64)
+  providerCheckedAt DateTime? @map("provider_checked_at") @db.Timestamptz(6)
+  providerRetryKey  String   @default(dbgenerated("gen_random_uuid()")) @map("provider_retry_key") @db.Uuid
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, sourceType, sourceId])
+  @@unique([tenantId, idempotencyKey], map: "line_delivery_outbox_idempotency_idx")
+  @@index([status, nextRetryAt, createdAt, id], map: "line_delivery_outbox_due_idx")
+  @@map("line_delivery_outbox")
 }
 
 model RidePlan {
   id                  String         @id @default(uuid(7)) @db.Uuid
   tenantId            String         @map("tenant_id") @db.Uuid
   title               String         @db.VarChar(200)
-  departureAt         DateTime       @map("departure_at")
+  departureAt         DateTime       @map("departure_at") @db.Timestamptz(6)
   pickupMapsUrl       String?        @map("pickup_maps_url") @db.VarChar(2048)
   destinationMapsUrl String?        @map("destination_maps_url") @db.VarChar(2048)
   status              RidePlanStatus @default(draft)
-  createdAt           DateTime       @default(now()) @map("created_at")
-  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   offers              RideOffer[]
   requests            RideRequest[]
   assignments         RideAssignment[]
 
   @@unique([tenantId, id])
-  @@index([tenantId, departureAt, id])
+  @@index([tenantId, departureAt, id], map: "ride_plans_tenant_departure_idx")
   @@map("ride_plans")
 }
 
@@ -575,13 +617,13 @@ model RideOffer {
   driverUserId  String          @map("driver_user_id") @db.VarChar(128)
   capacity      Int
   status        RideOfferStatus @default(open)
-  createdAt     DateTime        @default(now()) @map("created_at")
-  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  plan          RidePlan        @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict)
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  plan          RidePlan        @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   assignments   RideAssignment[]
 
   @@unique([tenantId, id])
-  @@index([tenantId, planId, status, createdAt])
+  @@index([tenantId, planId, status, createdAt], map: "ride_offers_tenant_plan_status_created_idx")
   @@map("ride_offers")
 }
 
@@ -593,15 +635,15 @@ model RideRequest {
   requesterUserId  String            @map("requester_user_id") @db.VarChar(128)
   passengerCount   Int               @map("passenger_count")
   status           RideRequestStatus @default(pending)
-  createdAt        DateTime          @default(now()) @map("created_at")
-  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  plan             RidePlan          @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict)
-  member           Member            @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict)
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  plan             RidePlan          @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  member           Member            @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   assignments      RideAssignment[]
 
   @@unique([tenantId, id])
-  @@index([tenantId, planId, status, createdAt])
-  @@index([tenantId, requesterUserId])
+  @@index([tenantId, planId, status, createdAt], map: "ride_requests_tenant_plan_status_created_idx")
+  @@index([tenantId, requesterUserId], map: "ride_requests_tenant_requester_idx")
   @@map("ride_requests")
 }
 
@@ -612,14 +654,14 @@ model RideAssignment {
   requestId      String      @map("request_id") @db.Uuid
   offerId        String      @map("offer_id") @db.Uuid
   passengerCount Int         @map("passenger_count")
-  createdAt      DateTime    @default(now()) @map("created_at")
-  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  plan           RidePlan    @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict)
-  request        RideRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict)
-  offer          RideOffer   @relation(fields: [tenantId, offerId], references: [tenantId, id], onDelete: Restrict)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  plan           RidePlan    @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  request        RideRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  offer          RideOffer   @relation(fields: [tenantId, offerId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, id])
   @@unique([tenantId, requestId])
-  @@index([tenantId, planId, offerId])
+  @@index([tenantId, planId, offerId], map: "ride_assignments_tenant_plan_offer_idx")
   @@map("ride_assignments")
 }

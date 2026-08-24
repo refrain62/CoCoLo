@@ -180,6 +180,13 @@ productionの解除には、保護された環境、外部承認とOIDCまたは
 7. **CI-007 GitHub設定:** Action allowlist、SHA固定、アクセス制限、デプロイ停止を適用します。
 8. **CI-008 再レビュー:** 通常系と悪性fixtureを実行し、CriticalとHighが0件になるまで修正します。
 
+### PR間の依存順
+
+PR #43は、`schema-drift.yml`でmigration checksum、`BASE_SHA`差分、Shadow DBを独立して検査します。
+PR #42を先に統合する場合は、checksum manifestとmigration検査器を二重に持たず、どちらか一方を正本として接続します。
+PR #41の品質Workflow再編では、既存のschema drift検査を削除せず、集約`gate`の入力へ接続します。
+この順序なら、Workflow本体の大規模な同時編集を避けながら、各PRの検査結果を確認できます。
+
 観測期間は2回の成功runまたは最大7日とします。
 カバレッジの既存負債を除くCriticalとHighの検査は、観測だけで終わらせず最初から失敗条件にします。
 

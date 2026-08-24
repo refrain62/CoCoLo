@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertSchemaDriftWorkflowConnected } from './verify-schema-drift.ts';
 
 // 必須workflowの存在と、Actions参照が40桁SHA固定であることを検査する。
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const directory = path.join(root, '.github', 'workflows');
 const files: string[] = await readdir(directory).catch(() => [] as string[]);
 assert.ok(files.includes('quality.yml'), 'quality.yml が必要です');
+assert.ok(files.includes('schema-drift.yml'), 'schema-drift.yml が必要です');
 assert.ok(
   files.includes('staging-deploy.yml'),
   'staging-deploy.yml が必要です',
@@ -30,4 +32,16 @@ for (const file of files.filter(
     );
   }
 }
+const qualityContent = await readFile(
+  path.join(directory, 'quality.yml'),
+  'utf8',
+);
+assert.match(
+  qualityContent,
+  /pnpm\s+verify:pnpm-config[\s\S]*pnpm\s+lint:workflows/,
+  'quality Workflowからlint:workflowsを実行してください。',
+);
+assertSchemaDriftWorkflowConnected(
+  await readFile(path.join(directory, 'schema-drift.yml'), 'utf8'),
+);
 console.log('GitHub Actions のワークフローを検証しました。');
