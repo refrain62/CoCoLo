@@ -447,6 +447,12 @@ function expectedAclEntries(
       privilege: 'USAGE',
     },
     {
+      objectType: 'schema',
+      objectName: 'public',
+      grantee: 'line_delivery_worker',
+      privilege: 'USAGE',
+    },
+    {
       objectType: 'function',
       objectName: appGuardFunctionName,
       grantee: appRole,
@@ -454,7 +460,9 @@ function expectedAclEntries(
     },
   ];
   for (const objectName of appTableNames)
-    for (const privilege of ['INSERT', 'SELECT', 'UPDATE'])
+    for (const privilege of objectName === 'public.audit_logs'
+      ? ['INSERT', 'SELECT']
+      : ['INSERT', 'SELECT', 'UPDATE'])
       entries.push({
         objectType: 'table',
         objectName,

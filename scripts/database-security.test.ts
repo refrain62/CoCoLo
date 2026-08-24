@@ -114,8 +114,17 @@ const aclEntries: DatabaseAclEntry[] = [
     grantee: 'cocolo_app',
     privilege: 'EXECUTE',
   },
+  {
+    objectType: 'schema',
+    objectName: 'public',
+    grantee: 'line_delivery_worker',
+    privilege: 'USAGE',
+  },
   ...tableNames.flatMap((objectName) =>
-    ['INSERT', 'SELECT', 'UPDATE'].map((privilege) => ({
+    (objectName === 'public.audit_logs'
+      ? ['INSERT', 'SELECT']
+      : ['INSERT', 'SELECT', 'UPDATE']
+    ).map((privilege) => ({
       objectType: 'table' as const,
       objectName,
       grantee: 'cocolo_app',
