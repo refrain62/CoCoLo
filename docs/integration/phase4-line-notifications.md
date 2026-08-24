@@ -1,176 +1,185 @@
-# Phase 4 の LINE 通知を統合する
+# Phase 4 の LINE 通知を使う契約
 
-## 対象範囲
+## この機能でできること
 
-この文書は FS-NOT-001 の LINE 通知機能を、既存の認証、予定、締切、回覧の機能へ統合するための契約を定めます。
+LINE連携は、CoCoLoのチームと、そのチームのBotが参加するLINEグループを紐付ける機能です。
 
-LINE の接続状態、グループ ID の tenant 紐付け、通知キュー、送信失敗、Webhook、LIFF リンクを対象にします。
+CoCoLoの予定、出欠締切、回覧、集金の正本はWebとデータベースに置き、LINEは通知と対象画面への導線に限定します。
 
-今回の feature branch は `apps/api/src/app.ts`、`apps/web/src/main.tsx`、Prisma schema、共有 index を変更しません。
+個人のLINEアカウントをCoCoLoへ紐付ける機能ではなく、現行実装はLINEグループへの配信だけを対象にします。
 
-中央の起動処理への mount と LINE 専用 migration は、次の統合担当がこの文書の順序で行います。
+公式アカウントへの配信、個人LINEへの配信、LINEメッセージへの返信による業務状態の更新は、現行実装の対象外です。
 
-## 実装モジュール
+## 利用者が行う操作
 
-| 層 | 実装 | 責務 |
-| --- | --- | --- |
-| Contract | `packages/contracts/src/line-contract.ts` | group ID、通知元、Webhook の入力形式を検証する |
-| Domain | `packages/domain/src/line-domain.ts` | 状態、再試行間隔、同一環境リンク、LIFF state を定義する |
-| DB repository | `packages/db/src/line-repository.ts` | tenant 条件付き SQL と local 用 in-memory 実装を提供する |
-| API | `apps/api/src/features/line-notifications/` | 認証、権限、署名、キュー、送信アダプターを統合する |
-| Web | `apps/web/src/features/line-notifications/` | 未接続表示、接続操作、通知登録を提供する |
+### 利用開始の手順
 
-API の feature app は `createLineNotificationApp` で生成します。
+1. 運用者が環境ごとのLINE Messaging API channel、Webhook、Botを設定します。
+2. 運用者がBotを通知対象のLINEグループへ参加させます。
+3. 運用者がLINEのWebhookイベントなどから対象グループのgroup IDを取得します。
+4. CoCoLoのownerまたはadminが、LINE通知画面へgroup IDを入力して接続します。
+5. 接続状態が「接続済み」になった後、予定の作成や通知登録を行います。
 
-既存の Hono app へ mount すると、次の endpoint が有効になります。
+group IDの自動検出、QRコードによる接続、LINEアカウントによるOAuth接続は現行実装にありません。
 
-```ts
-const lineApp = createLineNotificationApp({
-  verifyToken,
-  findActiveMembership,
-  service: lineNotificationService,
-});
+group IDの取得方法とBotをグループへ参加させる作業はCoCoLoの画面外で行うため、staging受入時に運用手順を確定します。
 
-app.route('/', lineApp);
-```
+### 権限ごとの操作
 
-この mount は既存 app の認証 middleware と同じ JWT 検証、active membership 解決を渡してから行います。
+| 操作 | owner | admin | staff | guardian |
+| --- | --- | --- | --- | --- |
+| 接続状態の確認 | 可 | 可 | 可 | 可 |
+| group IDの表示 | 可 | 可 | 不可 | 不可 |
+| 接続と切断 | 可 | 可 | 不可 | 不可 |
+| 予定作成時の自動通知 | 可 | 可 | 可 | 不可 |
+| 予定更新時の自動通知 | 可 | 可 | 可 | 不可 |
+| 汎用通知の手動登録 | 可 | 可 | 不可 | 不可 |
+| 失敗通知の手動再送 | 可 | 可 | 不可 | 不可 |
 
-## 認証と tenant 境界
+staffは予定の作成と更新に伴う自動通知を発生させられます。
 
-`tenantId` は接続、通知登録、再試行の HTTP body に含めません。
+staffが汎用通知を手動登録する権限は、現行の中央producerでは付与していません。
 
-API は JWT subject から active membership を解決し、repository へ `tenantId` と `userId` を渡します。
+guardianは接続状態だけを確認でき、接続、通知登録、再送を行えません。
 
-owner と admin だけが LINE グループの接続と解除、通知の手動再試行を行えます。
+### 予定から自動送信される通知
 
-owner、admin、staff は予定、締切、回覧の通知をキューへ登録できます。
+LINEグループが接続済みの状態で予定を作成すると、予定通知と出欠締切通知を同じ業務transactionへ登録します。
 
-guardian は LINE 接続と通知登録を行えません。
+予定通知は保存直後に送信対象となります。
 
-接続済み group ID は一つの tenant にだけ割り当てます。
+出欠締切通知は締切の24時間前を送信予定時刻とし、締切が近い場合は保存直後に送信対象となります。
 
-別 tenant が同じ group ID を接続しようとした場合は競合として拒否します。
+予定を更新した場合は、予定通知を新たに登録せず、出欠締切通知を更新後の締切に合わせて登録します。
 
-Web の status レスポンスは staff と guardian へ group ID を返さず、接続状態だけを返します。
+LINEが未接続の場合、予定の保存は成功しますが、LINEのoutbox行は作成されません。
 
-## 接続状態と通知キュー
+### 汎用通知を手動登録する操作
 
-接続情報がない場合や解除済みの場合は `disconnected` を返します。
+ownerまたはadminは、LINE通知画面から通知元ID、タイトル、本文、CoCoLo内のリンクを入力して汎用通知を登録できます。
 
-未接続時の通知登録はエラーではなく `not_connected` を返し、キューへ行を作りません。
+Web画面は接続中のgroup IDを通知先としてAPIへ渡し、APIはそのgroup IDが現在のチームへ接続されていることを再確認します。
 
-接続済みの通知は `pending` でキューへ入り、配信 worker が claim すると `sending` になります。
+登録APIは送信完了を待たず、`pending`状態の通知IDを返します。
 
-送信成功時は `sent`、送信失敗時は `failed` とし、`attempts`、`lastError`、`nextRetryAt` を保存します。
+LINEが未接続の場合、現行の汎用通知APIは`LINE_NOT_CONNECTED`の409を返し、送信依頼を成功扱いにしません。
 
-再試行間隔は 1 秒から始まる指数バックオフで、最大 1 時間に制限します。
+現行の汎用通知は`api_notification`としてoutboxへ保存されます。
 
-最大 5 回に達した通知は自動 claim の対象外となり、管理者の手動再試行も許可しません。
+回覧掲載時の自動通知と未払い者通知のproducerは、現行developでは汎用通知APIへ接続されていません。
 
-配信 worker は認証済み利用者向けの HTTP endpoint にせず、内部 job から `service.deliverOne` を呼び出します。
+## 現行のAPI経路
 
-この worker は全 tenant の due queue を処理するため、owner や admin のリクエストから起動できる route を公開しません。
+中央APIでは、接続操作とWebhookにfeature routeを使用し、汎用通知登録と再送には現行の`line_delivery_outbox` producerを使用します。
 
-送信失敗の詳細には provider のレスポンス本文や access token を保存しません。
+feature routeが持つ旧来の`/api/v1/line/notifications`は中央Webの通知登録経路ではありません。
 
-## LINE Messaging API
+| 操作 | HTTP | 認証 | 現行の実装 |
+| --- | --- | --- | --- |
+| 接続状態 | `GET /api/v1/line/status` | JWT | owner/adminにはgroup ID、staff/guardianには状態だけを返す |
+| 接続 | `POST /api/v1/line/connect` | JWT | owner/adminだけがgroup IDを登録する |
+| 切断 | `DELETE /api/v1/line/connect` | JWT | owner/adminだけが実行する |
+| 汎用通知登録 | `POST /api/v1/notifications/line` | JWT、`Idempotency-Key` | owner/adminだけがoutboxへ登録する |
+| 失敗通知の再送 | `POST /api/v1/notifications/line/:notificationId/retry` | JWT | owner/adminだけが実行する |
+| Webhook受信 | `POST /api/v1/line/webhook` | LINE署名 | JWTを要求せず、専用受信境界で検証する |
 
-production と staging は `createLineMessagingAdapter` に channel access token を渡します。
+HTTP bodyからtenant IDを受け取らず、認証済みの選択チームとactive membershipから対象tenantを解決します。
 
-local と unit test は `createFakeLineAdapter` を使い、実 LINE へ接続しません。
+汎用通知登録では、`destination`、タイトル、本文、deep link、冪等キーをAPIへ渡します。
 
-実 adapter は `POST https://api.line.me/v2/bot/message/push` へ group ID と text message を送信します。
+APIは通知先を現在接続中のgroup IDと照合し、別のgroupや切断済みgroupへの登録を拒否します。
 
-`LINE_CHANNEL_ACCESS_TOKEN` は API 専用 secret とし、Web、ログ、成果物へ出力しません。
+## データと配信worker
 
-通知本文には個人情報を含めず、予定、締切、回覧の共通公開情報と同一環境のリンクだけを渡します。
+中央の通知producerは`line_delivery_outbox`を使用します。
 
-## Webhook の検証
+予定の自動通知と汎用通知は、業務transaction内でoutboxへ登録するため、予定だけ成功して通知依頼だけ失われる状態を避けます。
 
-Webhook endpoint は `POST /api/v1/line/webhook` です。
+outboxは`pending`、`sending`、`sent`、`failed`、`unknown`の状態を持ちます。
 
-API は受信した raw body と `x-line-signature` を channel secret の HMAC-SHA256 で比較します。
+workerはdue状態の行をclaimし、外部送信をtransactionの外で実行した後、attempt tokenとleaseを検証して結果を確定します。
 
-署名検証に失敗した body は JSON を処理せず、`401` として破棄します。
+送信失敗は上限付きで再試行し、providerの送達結果を確認できない場合は`unknown`へ遷移させます。
 
-署名検証後も `destination` を設定値と比較し、別 channel の payload を受け付けません。
+`unknown`を自動的に`sent`または`failed`へ変更せず、provider側の送達確認と管理者による再照合の運用を完了条件とします。
 
-イベントの `source.groupId` から接続済み tenant を解決し、未接続または未知の group は無視します。
+workerは利用者向けHTTP endpointから起動せず、専用の内部実行経路とDB roleを使用します。
 
-`groupId` と `webhookEventId` の組み合わせを repository へ保存し、同じ組み合わせは二度処理しません。
+通知本文、providerのレスポンス本文、access token、Webhook raw body、個人情報をログや監査metadataへ保存しません。
 
-Webhook の応答に tenant ID、user ID、受信本文を含めません。
+## tenantとgroupの境界
 
-## 予定、締切、回覧との統合境界
+接続済みgroup IDは一つのtenantにだけ紐付けます。
 
-予定、締切、回覧の各機能は LINE の内部 repository を直接参照せず、`buildLineNotificationInput` で通知 DTO を作ります。
+別tenantが同じgroup IDを接続しようとした場合は競合として拒否します。
 
-通知元は `event`、`deadline`、`bulletin` のいずれかです。
+通知登録時には接続時刻をoutboxへ保存し、切断後に別groupへ再接続しても古い通知を新しいgroupへ転送しません。
 
-通知元 ID、タイトル、本文、同一環境のリンクを DTO に設定し、認証済みの実行者として `service.enqueue` を呼び出します。
+送信直前にもtenantとgroupの接続世代を検証し、送信中にgroupが別tenantへ再利用された場合は安全側へ倒して`unknown`へ収束させます。
 
-各機能は通知の送信結果を自分の状態遷移へ直接反映せず、通知キューの ID と状態を参照します。
+## Webhookの受信境界
 
-予定や回覧の保存が失敗した場合は通知を登録せず、通知だけが先に送信される状態を作りません。
+Webhookはraw bodyと`x-line-signature`をchannel secretのHMAC-SHA256で検証します。
 
-同じ通知元の再通知を許可するかどうかは、予定、締切、回覧ごとの業務仕様で決めます。
+署名検証に成功した後、payloadの`destination`を環境固定値と比較します。
 
-## LIFF と deep link
+イベントの`source.groupId`から接続済みtenantを解決し、未知または解除済みのgroupは無視します。
 
-通常のリンクは `PUBLIC_APP_URL` と同じ origin の `/events/:id` または `/bulletins/:id` に限定します。
+`group_id`と`webhook_event_id`の組み合わせをreceiptへ保存し、同じイベントを二度処理しません。
 
-LIFF を使う場合は `buildLineLiffLink` が `https://liff.line.me/:liffId` と許可された `liff.state` を作ります。
+Webhook受信は専用の`line_webhook_receiver` DB roleとSECURITY DEFINER関数を使い、通常の`cocolo_app`からreceiptを直接変更できない境界にします。
 
-API は登録された LIFF ID、LINE の origin、通知元と一致する `events` または `bulletins` の state 形式を検証します。
+Webhookは受信と重複排除の入口であり、受信内容だけで予定、出欠、回覧、集金の状態を更新しません。
 
-LIFF 起動後の Web は `liff.state` を画面遷移先として使う前に、ログイン状態と active membership を確認します。
+## deep linkとLIFF
 
-URL の query へ tenant ID や個人情報を含めません。
+通知リンクは、通知対象と同じ環境のCoCoLo画面へ遷移させます。
 
-## LINE 専用 DB migration の統合契約
+通常のリンクは`PUBLIC_APP_URL`と同じoriginの予定または回覧画面に限定します。
 
-この feature branch は Prisma schema を変更しないため、次の表は設計契約として残します。
+LIFFを使う場合は、登録済みの`LINE_LIFF_ID`と許可されたstateからリンクを生成します。
 
-統合担当は PostgreSQL 17 の migration で表、RLS、権限、tenant 条件、複合制約を追加してから SQL repository を有効化します。
+リンク先ではログイン状態、active membership、選択チーム、対象資源の権限を再確認します。
 
-必要な表は次のとおりです。
+URLのqueryへtenant ID、個人情報、長期tokenを含めません。
 
-| 表 | 必須列と制約 |
-| --- | --- |
-| `line_connections` | `tenant_id`、`group_id`、`status`、`connected_at`、`updated_at`。connected 状態の `group_id` は tenant をまたいで一意 |
-| `line_notification_queue` | `tenant_id`、送信対象 `group_id`、`created_by_user_id`、`source_type`、`source_id`、`title`、`body`、`deep_link`、`status`、`attempts`、`next_retry_at`、provider ID、エラー、時刻 |
-| `line_webhook_receipts` | `tenant_id`、`group_id`、`webhook_event_id`、`received_at`。`group_id + webhook_event_id` を一意 |
+ただし、現行の中央producerはHTTPSまたはlocalのURL形式までしか検証せず、公開origin、通知元資源、通知元tenantの一致をサーバー側で検証していません。
 
-すべての表へ RLS を有効化し、API の transaction-local context と一致する tenant だけを参照・変更できるようにします。
-
-queue の claim、送信結果更新、接続解除と登録の競合は、同じ tenant を直列化する transaction または advisory lock で保護します。
-
-queue 作成時の `group_id` は送信対象を固定するため、接続解除後に別 group へ再接続しても古い通知を新 group へ転送しません。
-
-`line_notification_queue` の本文は個人情報を含めない業務公開情報に限定し、保持期間、削除、バックアップ対象を migration review で決定します。
-
-DB を Supabase PostgreSQL から分離する場合も、LINE の外部 ID、queue 状態、Webhook 重複排除 ID を値として移行し、Auth schema を移行対象にしません。
+この検証を追加するまで、中央producer経由のdeep linkを受入済みとは扱いません。
 
 ## 環境設定
 
 | 変数 | local | staging / production | 管理方法 |
 | --- | --- | --- | --- |
-| `LINE_CHANNEL_SECRET` | fake 値または local channel | 各環境の channel secret | API 専用 secret |
-| `LINE_CHANNEL_ACCESS_TOKEN` | fake adapter 使用時は不要 | 各環境の channel access token | API 専用 secret |
-| `LINE_WEBHOOK_DESTINATION` | fake payload と一致させる | LINE channel の destination | 環境ごとの variable |
-| `LINE_LIFF_ID` | 未設定可 | LIFF を使う場合だけ設定 | API の許可値。Webへ公開する場合も state 検証を省略しない |
+| `LINE_CHANNEL_SECRET` | fake値またはlocal channel | 環境専用のchannel secret | API専用secret |
+| `LINE_CHANNEL_ACCESS_TOKEN` | fake adapter使用時は不要 | 環境専用のchannel access token | API専用secret |
+| `LINE_WEBHOOK_DESTINATION` | fake payloadと一致させる | LINE channelのdestination | 環境ごとのvariable |
+| `LINE_LIFF_ID` | 未設定可 | LIFFを使う場合だけ設定 | 許可値として管理 |
+| `PUBLIC_APP_URL` | local URL | 環境専用のHTTPS URL | 許可originとして管理 |
 
-値が未設定の環境で実 LINE adapter を起動せず、local は fake adapter へ明示的に切り替えます。
+localとunit testはfake adapterを使い、実LINEへ接続しません。
 
-staging と production で channel secret、access token、group ID を共有しません。
+stagingとproductionでchannel secret、access token、group ID、Webhook destination、公開URLを共有しません。
 
-## 統合前の確認
+値が未設定の環境で実LINE adapterを起動せず、未接続を送信成功として表示しません。
 
-- [ ] Central app へ feature app を mount し、既存 JWT と active membership を渡した。
-- [ ] LINE 専用 migration の RLS、connected group の一意制約、Webhook 重複制約を実 PostgreSQL で確認した。
-- [ ] staging の専用 LINE channel と専用 group で、接続、未接続、通知登録、送信、失敗、再試行を確認した。
-- [ ] 不正署名、destination 不一致、未知 group、重複 webhook、別 tenant の通知参照を拒否した。
-- [ ] 通知本文、ログ、監査 metadata、Webhook 応答へ個人情報と秘密情報が混入しないことを確認した。
-- [ ] LIFF を使う場合は、state 改ざん、未ログイン、停止済み所属、別 tenant の画面遷移を確認した。
-- [ ] staging 成功 SHA、migration checksum、adapter 設定、E2E 結果を release 証跡へ保存した。
+## developで完了した範囲
+
+- 中央APIへの接続状態、接続、切断のmount
+- 接続groupとtenantの一意性および接続世代の検証
+- 予定作成と更新からのevent、deadline通知outbox登録
+- 汎用通知登録とowner/adminの再送API
+- workerのclaim、lease、provider retry key、失敗およびunknown遷移
+- Webhookの公開入口、署名、destination、未知group、重複receiptの検証
+- Web画面の接続状態表示、owner/admin向け接続操作、owner/admin向け汎用通知登録
+
+## 残作業と受入条件
+
+- [ ] staging専用channelとテスト用groupを用意し、Bot参加、group ID取得、接続、切断を確認する。
+- [ ] 予定作成、予定更新、出欠締切、provider成功、provider 4xx、timeout、送達不明、管理者再送をstagingで確認する。
+- [ ] 不正署名、destination不一致、未知group、解除済みgroup、重複Webhook、別tenant接続を拒否または無視することを確認する。
+- [ ] `unknown`のprovider照合、保持期間、再送可否、監査記録、担当者を運用手順へ定義する。
+- [ ] 中央producerのdeep linkへ公開origin、通知元資源、通知元tenantのサーバー側検証を追加する。
+- [ ] staffの汎用通知登録を許可するか、owner/admin限定を正式仕様とするかを決定し、機能仕様、API、Web、RLS、テストを一致させる。
+- [ ] 回覧掲載と未払い通知をLINEへ自動登録するproducerの対象、権限、本文、冪等キー、deep linkを定義する。
+- [ ] staging成功SHA、migration checksum、adapter設定、Webhook疎通、E2E結果をrelease証跡へ保存する。

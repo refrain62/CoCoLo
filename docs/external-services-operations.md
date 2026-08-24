@@ -12,7 +12,7 @@
 | Supabase PostgreSQL | Phase 1 で利用中 | アプリケーションデータ、RLS、監査ログ、マイグレーション |
 | 分散レート制限ストア（Redis等） | staging / productionで利用 | 複数API instance間の原子的なレート制限カウンター |
 | Cloudflare R2 | Phase 4 でadapter導入中 | 非公開の添付ファイル保存・配信 |
-| LINE Messaging API | Phase 4 の通知機能で利用 | 接続済みチームへの予定、締切、回覧の通知と Webhook |
+| LINE Messaging API | Phase 4 の通知機能で利用 | 接続済みチームへの予定、締切の自動通知、owner/admin の汎用通知と Webhook |
 | Cloudflare の配置先 | 環境固有の配置アダプターで接続 | Web/API の配置と HTTPS 公開 |
 | GitHub Actions | CI/CD で利用中 | 品質検査、staging 配置、production 昇格、証跡保存 |
 
@@ -199,13 +199,17 @@ LINE の channel secret と channel access token は環境ごとに分離し、A
 
 ブラウザは channel secret、channel access token、Webhook の受信処理を参照しません。
 
-予定、締切、回覧の各機能は通知 DTO と queue 境界だけを利用し、LINE SDK や provider のレスポンス形式へ依存しません。
+予定の作成・更新と出欠締切は、通知 DTO と `line_delivery_outbox` の境界だけを利用し、LINE SDK や provider のレスポンス形式へ依存しません。
+
+回覧と未払い通知の自動 producer は現行 `develop` へ接続していないため、接続完了まで「LINE連携済み」の機能範囲へ含めません。
 
 ### 7.2 グループ紐付けと配信
 
-group ID は `line_connections` で一つの tenant にだけ紐付け、接続解除時は webhook の対象から外します。
+group ID は `line_connections` で一つの tenant にだけ紐付け、接続解除時は Webhook の対象から外します。
 
-queue は作成時の送信対象 group ID を保持し、接続解除後に別 group へ再接続しても古い通知を新 group へ送りません。
+現行の中央通知は `line_delivery_outbox` が作成時の送信対象 group ID と接続世代を保持し、接続解除後に別 group へ再接続しても古い通知を新 group へ送りません。
+
+旧 feature route の `line_notification_queue` と現行の中央 `line_delivery_outbox` は別契約であり、同じ通知を二つのqueueへ登録しません。
 
 未接続のチームは画面へ「未接続」と表示し、通知登録を成功扱いにしません。
 
@@ -227,10 +231,24 @@ Webhook は raw body の HMAC-SHA256 署名、destination、group ID の接続�
 
 ### 7.4 障害と復旧
 
-- LINE API の送信失敗は queue の `failed` として保存し、次回実行時刻と試行回数を表示します。
+- LINE API の送信失敗は outbox の `failed` として保存し、次回実行時刻と試行回数を表示します。
+- providerの送達結果を確認できない場合は `unknown` として保存し、自動的に `sent` または `failed` へ変更しません。
 - channel secret の検証失敗は `401` とし、署名検証を省略した受信経路へ切り替えません。
 - LINE の障害中に group ID の別 tenant への付け替え、公開 URL の配布、無制限再試行を行いません。
-- 復旧後は接続、未接続、送信、失敗、再試行、Webhook 重複、別 tenant 拒否を staging で確認します。
+- 復旧後は接続、未接続、予定自動通知、手動通知、失敗、送達不明、再試行、Webhook 重複、別 tenant 拒否を staging で確認します。
+
+### 7.5 利用開始時の運用手順
+
+1. stagingまたはproduction専用のLINE Messaging API channelを作成します。
+2. channel secret、channel access token、Webhook destination、公開アプリURLを環境ごとに登録します。
+3. Botをテスト対象のLINEグループへ参加させます。
+4. Webhookイベントなどからgroup IDを取得し、CoCoLoのownerまたはadminへ安全な経路で伝えます。
+5. CoCoLoのLINE通知画面でgroup IDを登録し、接続状態を確認します。
+6. 予定作成、締切通知、手動通知、送信失敗、再送、Webhook重複の順にstagingで確認します。
+
+group IDの自動検出、QRコード接続、個人LINEアカウントの紐付けは現行実装にありません。
+
+group ID、channel secret、channel access token、Webhook raw bodyをlocalログ、スクリーンショット、監査metadataへ記録しません。
 
 LINE 機能の API、Web、DB、LIFF の統合手順は [Phase 4 LINE 通知統合手順](integration/phase4-line-notifications.md) を参照します。
 
