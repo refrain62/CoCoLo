@@ -131,6 +131,9 @@ function createFakeRepository(): TestRepository {
   }
   return {
     audit,
+    async listPlans(actor: RideActor) {
+      return plans.filter((plan) => plan.tenantId === actor.tenantId);
+    },
     async createPlan(actor: RideActor, input: RidePlanCreateInput) {
       const plan: RidePlan = {
         id: id(),
@@ -299,6 +302,22 @@ test('未認証の送迎APIは401を返す', async () => {
   });
   const response = await request(app, `/api/v1/ride-plans/${memberId}`);
   assert.equal(response.status, 401);
+});
+
+test('送迎予定一覧は認証済みtenantの予定だけを返す', async () => {
+  const repository = createFakeRepository();
+  const { app } = createTestApp(manager, repository);
+  await request(app, '/api/v1/ride-plans', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: '練習試合',
+      departureAt: '2026-08-23T08:00:00+09:00',
+    }),
+  });
+
+  const response = await request(app, '/api/v1/ride-plans');
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.length, 1);
 });
 
 test('guardianは予定作成を拒否され、Maps以外のURLも保存できない', async () => {

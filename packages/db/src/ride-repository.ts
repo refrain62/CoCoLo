@@ -62,6 +62,7 @@ export class RideRepositoryForbiddenError extends Error {
 }
 
 export type RideRepository = {
+  listPlans: (actor: RideActor) => Promise<RidePlan[]>;
   createPlan: (
     actor: RideActor,
     input: RidePlanCreateInput,
@@ -368,6 +369,20 @@ async function appendAudit(
 // 送迎の書き込みをRLS context・行ロック・監査INSERTと同じtransactionへ閉じ込める。
 export function createRideRepository(client: PrismaClient): RideRepository {
   return {
+    async listPlans(actor) {
+      return runInRideTransaction(client, actor, async (tx) => {
+        const rows = await tx.$queryRaw<PlanRow[]>`
+          SELECT id, tenant_id, title, departure_at, pickup_maps_url,
+                 destination_maps_url, status, created_at
+            FROM ride_plans
+           WHERE tenant_id = ${actor.tenantId}::uuid
+           ORDER BY departure_at ASC, id ASC
+           LIMIT 100
+        `;
+        return rows.map(toPlan);
+      });
+    },
+
     async createPlan(actor, input) {
       const title = input.title.trim();
       const departureAt = new Date(input.departureAt);

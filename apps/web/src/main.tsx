@@ -26,6 +26,8 @@ import {
   createOrdersPaymentsApi,
   OrdersPaymentsPage,
 } from './features/orders-payments/index.js';
+import { createRideOperationsApi } from './features/ride-operations/ride-operations-api.js';
+import { RideOperationsPanel } from './features/ride-operations/ride-operations-panel.js';
 import { createMemberApi } from './member-api.js';
 import { MemberManagementPage } from './member-management-page.js';
 import { UserManualPage } from './user-manual-page.js';
@@ -145,6 +147,14 @@ function AuthenticatedApp() {
       }),
     [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
+  const rideApi = useMemo(
+    () =>
+      createRideOperationsApi({
+        getAccessToken: () => session?.accessToken ?? null,
+        getSelectedTeamId: () => selectedTeamId,
+      }),
+    [selectedTeamId, session?.accessToken],
+  );
   useEffect(() => {
     if (!session || !selectedTeam) return;
     let active = true;
@@ -198,6 +208,16 @@ function AuthenticatedApp() {
       {eventsError ? <p role="alert">{eventsError}</p> : null}
       {role ? (
         <EventsPage api={eventsApi} role={role} memberOptions={eventMembers} />
+      ) : null}
+      {role ? (
+        <RideOperationsPanel
+          api={rideApi}
+          isManager={role === 'owner' || role === 'admin' || role === 'staff'}
+          members={eventMembers.map((member) => ({
+            id: member.id,
+            label: member.name,
+          }))}
+        />
       ) : null}
       {role && role !== 'guardian' ? (
         <AttachmentUploader api={attachmentApi} />
