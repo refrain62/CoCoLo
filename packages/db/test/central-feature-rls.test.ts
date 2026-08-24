@@ -14,6 +14,8 @@ const eventA = '00000000-0000-7000-8000-000000000401';
 const eventB = '00000000-0000-7000-8000-000000000402';
 const attachmentA = '00000000-0000-7000-8000-000000000501';
 const attachmentB = '00000000-0000-7000-8000-000000000502';
+const attachmentUploaded = '00000000-0000-7000-8000-000000000503';
+const attachmentRejected = '00000000-0000-7000-8000-000000000504';
 const boardContactA = '00000000-0000-7000-8000-000000000601';
 const orderA = '00000000-0000-7000-8000-000000000701';
 const productA = '00000000-0000-7000-8000-000000000702';
@@ -172,6 +174,27 @@ async function seedFixture(client: PrismaClient) {
       WHERE id IN ($1::uuid, $2::uuid)`,
       attachmentA,
       attachmentB,
+    );
+    await execute(
+      client,
+      `INSERT INTO attachments
+       (id, tenant_id, owner_user_id, object_key, media_type, byte_size, status,
+        expires_at, complete_attempts, cleanup_attempts, created_at)
+       VALUES
+        ($1::uuid, $3::uuid, 'owner-a', 'tenant-a/00000000-0000-7000-8000-000000000503', 'image/png', 8,
+         'uploaded', '2099-01-01T00:00:00Z', 0, 0, now()),
+        ($2::uuid, $3::uuid, 'owner-a', 'tenant-a/00000000-0000-7000-8000-000000000504', 'image/png', 8,
+         'uploaded', '2099-01-01T00:00:00Z', 0, 0, now())`,
+      attachmentUploaded,
+      attachmentRejected,
+      tenantA,
+    );
+    await execute(
+      client,
+      `UPDATE attachments
+          SET status = 'rejected'::attachment_status
+        WHERE id = $1::uuid`,
+      attachmentRejected,
     );
     await execute(
       client,
@@ -484,9 +507,12 @@ async function cleanupFixture(client: PrismaClient) {
       );
       await execute(
         tx,
-        `DELETE FROM attachments WHERE id IN ($1::uuid, $2::uuid)`,
+        `DELETE FROM attachments
+          WHERE id IN ($1::uuid, $2::uuid, $3::uuid, $4::uuid)`,
         attachmentA,
         attachmentB,
+        attachmentUploaded,
+        attachmentRejected,
       );
       // 監査ログは本番契約で追記専用のため、fixture cleanupだけtriggerを一時停止する。
       await execute(
@@ -635,6 +661,52 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
       execute(
         tx,
         `UPDATE attachments SET status = 'uploaded', deleted_at = NULL WHERE id = $1::uuid`,
+        attachmentA,
+      ),
+    );
+    await rejects(() =>
+      execute(
+        tx,
+        `INSERT INTO announcement_attachments
+           (tenant_id, announcement_id, attachment_id, position, media_type, byte_size)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, 1, 'image/png', 8)`,
+        tenantA,
+        announcementA,
+        attachmentUploaded,
+      ),
+    );
+    await rejects(() =>
+      execute(
+        tx,
+        `INSERT INTO announcement_attachments
+           (tenant_id, announcement_id, attachment_id, position, media_type, byte_size)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, 1, 'image/png', 8)`,
+        tenantA,
+        announcementA,
+        attachmentRejected,
+      ),
+    );
+    await rejects(() =>
+      execute(
+        tx,
+        `UPDATE announcement_attachments
+            SET attachment_id = $1::uuid
+          WHERE tenant_id = $2::uuid
+            AND announcement_id = $3::uuid
+            AND attachment_id = $4::uuid`,
+        attachmentUploaded,
+        tenantA,
+        announcementA,
+        attachmentA,
+      ),
+    );
+    await rejects(() =>
+      execute(
+        tx,
+        `UPDATE attachments
+            SET status = 'deleted'::attachment_status,
+                deleted_at = now()
+          WHERE id = $1::uuid`,
         attachmentA,
       ),
     );
