@@ -165,7 +165,18 @@ export async function verifyDeployPreconditions(
       manifest.migrationChecksumSha256,
     );
   }
-  await verifyDatabaseSecurity({ ...process.env, APP_ENV: environment });
+  await verifyDatabaseSecurity(
+    process.env.DATABASE_URL,
+    process.env.DIRECT_URL,
+    {
+      environment,
+      appRole: process.env.DATABASE_APP_ROLE,
+      adminRole: process.env.DATABASE_ADMIN_ROLE,
+      allowedHosts: process.env.DATABASE_ALLOWED_HOSTS,
+      allowedDatabases: process.env.DATABASE_ALLOWED_DATABASES,
+      allowedTargets: process.env.DATABASE_ALLOWED_TARGETS,
+    },
+  );
   const directUrl = process.env.DIRECT_URL;
   assert.ok(directUrl, 'deploy前検査にはDIRECT_URLが必要です。');
   await verifyMigrationHistoryAtDatabase(directUrl);
@@ -177,7 +188,18 @@ export async function verifyDeployPostconditions(
   environment: DeploymentEnvironment,
 ): Promise<void> {
   assertDeploymentEnvironment(environment);
-  await verifyDatabaseSecurity({ ...process.env, APP_ENV: environment });
+  await verifyDatabaseSecurity(
+    process.env.DATABASE_URL,
+    process.env.DIRECT_URL,
+    {
+      environment,
+      appRole: process.env.DATABASE_APP_ROLE,
+      adminRole: process.env.DATABASE_ADMIN_ROLE,
+      allowedHosts: process.env.DATABASE_ALLOWED_HOSTS,
+      allowedDatabases: process.env.DATABASE_ALLOWED_DATABASES,
+      allowedTargets: process.env.DATABASE_ALLOWED_TARGETS,
+    },
+  );
   const directUrl = process.env.DIRECT_URL;
   assert.ok(directUrl, 'deploy後検査にはDIRECT_URLが必要です。');
   await verifyMigrationHistoryAtDatabase(directUrl);

@@ -15,6 +15,7 @@
 4. CIで全migrationを適用したShadow DBとschema datamodelに構造差分がなく、`DIRECT_URL`の実DBからschema datamodelへの差分もない。手動ALTER等の実DB driftは失敗する。
 5. `SHADOW_DATABASE_URL` が `DATABASE_URL` / `DIRECT_URL` と同じ host・port・database を指さず、専用role・host・database・host/port/databaseペアの許可リストに一致する。`staging` / `production` ではアプリDB・migration DBと別host、TLSを必須とする。
 6. Shadow roleのSCRAM password、DB/object owner、ACL、default privileges、`pg_auth_members`、RLSを実DBから許可集合と両方向で照合する。PUBLIC grant、RLS無効化、危険DDLは失敗する。
+7. `DATABASE_URL`で実際に接続できる`cocolo_app`と、別roleの`DIRECT_URL`を同じDBへ接続し、app role属性、DB/schema/table/sequence/enum/function owner、ACL、default ACL、membership、環境DB名、RLS policyの名前・command・roles・`USING/WITH CHECK`本文を正本と照合する。`USING(true)`、policyの欠落・置換、未許可の`SECURITY DEFINER`、`EXECUTE PUBLIC`、未固定`search_path`は失敗する。
 
 Prisma 6.10のRust engineは`PGPASSFILE`を認証情報として解決しないため、Prisma CLIのSCRAM URLはpasswordを含めた環境変数として注入し、argvには渡さない。`psql`と接続ライブラリは共通の0600 pgpassを使う。Shadow DBはPrisma `migrate deploy`で空DBへ再構築し、passwordfulな`DATABASE_URL`・`DIRECT_URL`環境変数をShadowへ差し替えた`--from-schema-datasource`でmigration適用後の実体とschemaを比較する。`DIRECT_URL`もargvへ渡さず、schema datasourceの環境変数で実DBとschemaを比較する。staging / productionはTLSを有効にした外部認証方式を別途構成する。
 ログに接続URLや認証情報を出力してはいけない。
@@ -43,6 +44,7 @@ PostgreSQLを起動し、`DATABASE_URL`、`DIRECT_URL`、専用DBのpasswordful`
 pnpm test:schema-drift
 pnpm test:database-integrity
 pnpm verify:schema-drift
+pnpm verify:database-security
 ```
 
 実DBを利用できない環境で最後のコマンドが失敗するのは仕様である。接続失敗を無視したり、`--skip`相当のフラグで品質ゲートを通過させたりしてはいけない。

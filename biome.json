@@ -15,6 +15,7 @@
       "!**/coverage",
       "!.worktrees",
       "!**/.worktrees",
+      "!.pnpm-store",
       "!test-results",
       "!**/test-results",
       "!packages/contracts/openapi.yaml"

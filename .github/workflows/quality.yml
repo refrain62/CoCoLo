@@ -50,6 +50,17 @@ jobs:
           DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
           LINE_DELIVERY_WORKER_DATABASE_URL: postgresql://line_delivery_worker:line_delivery_worker@localhost:5432/cocolo_test
+      - name: 実アプリDBのsecurityを検査
+        run: pnpm verify:database-security
+        env:
+          APP_ENV: local
+          DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+          DATABASE_APP_ROLE: cocolo_app
+          DATABASE_ADMIN_ROLE: postgres
+          DATABASE_ALLOWED_HOSTS: localhost
+          DATABASE_ALLOWED_DATABASES: cocolo_test
+          DATABASE_ALLOWED_TARGETS: localhost:5432/cocolo_test
       - name: 契約検証とテスト
         run: pnpm generate:openapi && git diff --exit-code -- packages/contracts/openapi.yaml && pnpm test:unit && pnpm test:integration
         env:

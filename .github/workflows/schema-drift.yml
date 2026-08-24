@@ -137,6 +137,17 @@ jobs:
           SHADOW_DATABASE_URL: postgresql://cocolo_shadow:cocolo_shadow@localhost:5433/cocolo_shadow?sslmode=disable
           SHADOW_DATABASE_ADMIN_URL: postgresql://postgres:postgres@localhost:5433/cocolo_shadow
           SHADOW_DATABASE_ROLE: cocolo_shadow
+      - name: 実アプリDBのsecurityを検査
+        run: pnpm verify:database-security
+        env:
+          APP_ENV: local
+          DATABASE_URL: postgresql://cocolo_app:cocolo_app@localhost:5432/cocolo_test
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cocolo_test
+          DATABASE_APP_ROLE: cocolo_app
+          DATABASE_ADMIN_ROLE: postgres
+          DATABASE_ALLOWED_HOSTS: localhost
+          DATABASE_ALLOWED_DATABASES: cocolo_test
+          DATABASE_ALLOWED_TARGETS: localhost:5432/cocolo_test
       - name: schema drift・checksum・適用履歴を検査
         run: pnpm verify:schema-drift
         env:
