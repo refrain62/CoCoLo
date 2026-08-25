@@ -4,7 +4,7 @@ import {
   canChangeFeatureFlag,
   evaluateEffectiveFeatures,
   type FeatureDefinition,
-} from '../src/feature-contract.ts';
+} from '../dist/feature-contract.js';
 
 const now = new Date('2026-08-25T00:00:00.000Z');
 const definitions: FeatureDefinition[] = [
