@@ -236,7 +236,7 @@ export function RideOperationsPanel({
     setNotice(null);
     try {
       await api.createRequest(activePlanId, {
-        memberId: selectedMemberId,
+        subjectMemberId: selectedMemberId,
         passengerCount: parsedCount,
       });
       setNotice('乗車希望を登録しました。');

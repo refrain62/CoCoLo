@@ -20,6 +20,10 @@
     "./bulletin-board": "./dist/bulletin-board-repository.js",
     "./attachment": "./dist/attachment-repository.js",
     "./events": "./dist/event-repository.js",
+    "./subject-member": {
+      "types": "./dist/subject-member-access.d.ts",
+      "import": "./dist/subject-member-access.js"
+    },
     "./auth-invitation": {
       "types": "./dist/auth-invitation-repository.d.ts",
       "import": "./dist/auth-invitation-repository.js"

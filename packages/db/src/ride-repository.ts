@@ -12,6 +12,7 @@ import {
   validateGoogleMapsUrl,
 } from '@cocolo/domain/ride';
 import type { Prisma, PrismaClient, Role } from '@prisma/client';
+import { findAuthorizedSubjectMember } from './subject-member-access.js';
 
 export type RideRole = 'owner' | 'admin' | 'staff' | 'guardian';
 export type RideActor = {
@@ -483,6 +484,14 @@ export function createRideRepository(client: PrismaClient): RideRepository {
           throw new RideRepositoryConflictError(
             '受付中でない送迎には乗車希望を登録できません。',
           );
+        if (
+          (await findAuthorizedSubjectMember(
+            tx,
+            { ...actor, actorUserId: actor.userId },
+            input.memberId,
+          )) === null
+        )
+          throw new RideRepositoryForbiddenError();
         const rows = await tx.$queryRaw<RequestRow[]>`
           INSERT INTO ride_requests (
             tenant_id, plan_id, member_id, requester_user_id,
@@ -516,6 +525,7 @@ export function createRideRepository(client: PrismaClient): RideRepository {
           resourceId: plan.id,
           metadata: {
             requestId: request.id,
+            subjectMemberId: request.memberId,
             passengerCount: request.passengerCount,
           },
         });

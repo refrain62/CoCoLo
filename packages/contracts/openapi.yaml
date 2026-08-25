@@ -1991,12 +1991,15 @@
       "AttendanceInput": {
         "type": "object",
         "required": [
-          "memberId",
           "response"
         ],
         "additionalProperties": false,
         "properties": {
           "memberId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "subjectMemberId": {
             "type": "string",
             "format": "uuid"
           },
@@ -2013,7 +2016,19 @@
             "minLength": 1,
             "maxLength": 500
           }
-        }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "memberId"
+            ]
+          },
+          {
+            "required": [
+              "subjectMemberId"
+            ]
+          }
+        ]
       },
       "AttendanceResponse": {
         "type": "object",
