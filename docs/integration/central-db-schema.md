@@ -12,13 +12,13 @@
 
 | 機能 | 確認したrepositoryまたは契約 | DB上の主要表 |
 | --- | --- | --- |
-| FS-EVT | `phase2-events-attendance`の`event-repository.ts`と統合メモ | `events`、`attendance_responses` |
-| FS-BRD | `phase3-board-contact`の`board-contact-repository.ts`と統合メモ | `board_contacts` |
-| FS-ORD | `phase3-orders-payments`のcontract、domain、メモリrepository | `purchase_orders`、`order_products`、`order_entries`、`order_lines`、`order_idempotency_keys` |
-| FS-FIL | `phase4-r2-attachments`の`attachment-repository.ts`と統合契約 | `attachments` |
-| FS-ANN | `phase4-bulletin-board`の`bulletin-board-repository.ts`とcontract | `announcements`、`announcement_attachments`、`announcement_reads` |
-| FS-NOT | `phase4-line-notifications`のSQL repositoryと統合契約 | `line_connections`、`line_notification_queue`、`line_webhook_receipts` |
-| FS-RIDE | `phase5-ride-operations`の`ride-repository.ts`と統合契約 | `ride_plans`、`ride_offers`、`ride_requests`、`ride_assignments` |
+| FS-EVT | 機能仕様と中央repository | `events`、`attendance_responses` |
+| FS-BRD | `phase3-board-contact`の中央repository | `board_contacts` |
+| FS-ORD | `phase3-orders-payments`のcontractとrepository | `purchase_orders`、`order_products`、`order_entries`、`order_lines`、`order_idempotency_keys` |
+| FS-FIL | `phase4-r2-attachments`のrepository | `attachments` |
+| FS-ANN | `phase4-bulletin-board`のrepositoryとcontract | `announcements`、`announcement_attachments`、`announcement_reads` |
+| FS-NOT | `phase4-line-notifications`のrepositoryとworker | `line_connections`、`line_delivery_outbox`、`line_webhook_receipts` |
+| FS-RIDE | `phase5-ride-operations`のrepository | `ride_plans`、`ride_offers`、`ride_requests`、`ride_assignments` |
 
 FS-ORDだけは、確認時点で永続SQL repositoryが存在しない。
 

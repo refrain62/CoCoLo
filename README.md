@@ -6,7 +6,7 @@
 
 Phase 1 MVPでは、Supabase AuthのJWT検証、部員一覧・検索・登録、役割別の表示・操作制御、PostgreSQL RLS、監査ログ、OpenAPI契約、Docker上のSupabaseを使うE2E検証を実装しています。
 
-年度繰り上げ（FS-MEM-005）、予定・出欠、役員、共同購買、添付、通知、送迎は、docs/functional-specification.md と docs/ implementation-plan.md の仕様・実装計画に従って順次追加します。
+年度繰り上げ（FS-MEM-005）、予定・出欠、役員、共同購買、添付、通知、送迎は、docs/functional-specification.md と docs/implementation-plan.md の仕様・実装計画に従って順次追加します。
 
 Cloudflare R2はPhase 4で導入予定です。現在の外部サービス構成、将来のDB分離、導入前の停止条件は、外部サービス運用仕様とDB分離仕様・移行計画を参照してください。
 
@@ -161,13 +161,13 @@ tenant IDを利用者入力の認可根拠にせず、JWTのuser IDからactive 
 
 ## CI/CD
 
-Pull RequestではNode.js 24、pnpm固定install、Biome・依存境界・migration検査、PostgreSQL 17のRLS統合テスト、型検査、buildを実行します。mainへのpushではstagingのmigration、immutable release artifact、配置、E2Eを実行し、本番はstagingで成功した同一artifact SHAと証跡を検証してから昇格します。
+Pull RequestではNode.js 24、pnpm固定install、静的検査、契約、unit、型検査、buildを実行します。localではPostgreSQL 17のRLS統合テストを追加し、mainへのpushではstagingのmigration、immutable release artifact、配置、E2Eを実行します。本番はstagingで成功した同一artifact SHAと証跡を検証してから昇格します。
 
-staging / productionの配置手順は docs/deployment-guide.md、配置アダプター契約は docs/deployment-adapter.md を参照してください。
+staging / productionの配置手順と配置アダプター契約は docs/deployment-guide.md を参照してください。
 
 ## 開発ルール
 
-機能仕様の正本は docs/functional-specification.md、実装計画とタスク状態の正本は docs/ implementation-plan.md です。
+機能仕様の正本は docs/functional-specification.md、技術方式の正本は docs/implementation-plan.md、未完了タスクの正本は docs/resume-task-list.md です。
 
 1. /docsで機能仕様IDと実装範囲を確認する。
 2. developから機能単位の専用ブランチを作成する。
@@ -183,12 +183,12 @@ PR本文の共通フォーマット、改行規則、既存PRの見直し手順�
 ## 仕様・設計ドキュメント
 
 - docs/functional-specification.md: 利用者向け機能仕様、権限、状態遷移、受け入れ条件
-- docs/ implementation-plan.md: 技術選定、DB、CI/CD、実装タスク、完了記録
-- docs/resume-task-list.md: 中断時点の残タスク、PR、作業ツリー、再開条件。再開時はこの文書だけを先に読みます
-- docs/resume-task-history.md: 完了タスク、実施内容、検証結果、レビュー履歴。必要な場合だけ該当箇所を参照します
+- docs/implementation-plan.md: 技術境界、DB、実装順、CIの正本
+- docs/resume-task-list.md: 未完了タスク、停止条件、再開手順。再開時はこの文書だけを先に読みます
+- docs/resume-task-history.md: 完了タスクと残るレビュー指摘の要約
+- docs/verification-runbook.md: local、staging、trust root、DB、schema driftの検証順と停止条件
 - docs/external-services-operations.md: Supabase、Cloudflare、GitHub Actionsの設定・権限・監視・障害対応
 - docs/rate-limit-operations.md: 分散レート制限のadapter契約、環境設定、障害対応
 - docs/database-separation-plan.md: DB分離の不変契約、移行、照合、復旧
 - docs/deployment-guide.md: staging / productionの環境設定、配置、昇格、障害対応
-- docs/deployment-adapter.md: 配置アダプターの入力、証跡、失敗条件
-- docs/reviews/: 実装前後の敵対的レビュー記録
+- docs/reviews/: レビューの完了判定と未解決指摘の要約
