@@ -2,7 +2,13 @@ import {
   type ButtonHTMLAttributes,
   forwardRef,
   type HTMLAttributes,
+  type InputHTMLAttributes,
   type ReactNode,
+  type SelectHTMLAttributes,
+  type TableHTMLAttributes,
+  useEffect,
+  useId,
+  useRef,
 } from 'react';
 
 type ClassValue = string | false | null | undefined;
@@ -246,6 +252,146 @@ const uiStyles = `
     background: #d9f2e5;
   }
 
+  .app-shell[data-slot='app-shell'] [data-slot='input'],
+  .app-shell[data-slot='app-shell'] [data-slot='select'] {
+    width: 100%;
+    min-height: 2.75rem;
+    border: 1px solid var(--input);
+    border-radius: calc(var(--radius) - 0.2rem);
+    padding: 0.625rem 0.75rem;
+    color: var(--foreground);
+    background: var(--card);
+    font: inherit;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='input']:hover,
+  .app-shell[data-slot='app-shell'] [data-slot='select']:hover {
+    border-color: var(--ring);
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='input']:focus-visible,
+  .app-shell[data-slot='app-shell'] [data-slot='select']:focus-visible {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 3px rgb(67 169 155 / 0.18);
+    outline: none;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='table-wrapper'] {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='table'] {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='table-head'] {
+    color: var(--muted-foreground);
+    background: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 750;
+    letter-spacing: 0.03em;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='table-head'],
+  .app-shell[data-slot='app-shell'] [data-slot='table-cell'] {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='table-row']:last-child [data-slot='table-cell'] {
+    border-bottom: 0;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='table-row']:hover {
+    background: color-mix(in srgb, var(--accent) 42%, transparent);
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='alert'] {
+    display: grid;
+    gap: 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.875rem 1rem;
+    color: var(--foreground);
+    background: var(--muted);
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='alert'][data-variant='destructive'] {
+    border-color: #f2b8bd;
+    color: #8e2633;
+    background: #fff0f1;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='empty-state'] {
+    display: grid;
+    justify-items: center;
+    gap: 0.5rem;
+    padding: 2.5rem 1.25rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    color: var(--muted-foreground);
+    text-align: center;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='empty-state-title'] {
+    margin: 0;
+    color: var(--foreground);
+    font-weight: 750;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='empty-state-description'] {
+    max-width: 32rem;
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='dialog'] {
+    max-width: min(32rem, calc(100vw - 2rem));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0;
+    color: var(--foreground);
+    background: var(--card);
+    box-shadow: var(--shadow-md);
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='dialog']::backdrop {
+    background: rgb(24 37 43 / 0.42);
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='dialog-content'] {
+    display: grid;
+    gap: 1rem;
+    padding: 1.25rem;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='dialog-header'] {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='dialog-title'] {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='dialog-description'] {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: 0.875rem;
+  }
+
   .app-shell[data-slot='app-shell'] [data-slot='section'] {
     display: grid;
     gap: 1rem;
@@ -435,6 +581,212 @@ export function Badge({
       className={cn(className)}
       {...props}
     />
+  );
+}
+
+export interface InputProps
+  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'className'> {
+  className?: string;
+}
+
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  { className, ...props },
+  ref,
+) {
+  return (
+    <input ref={ref} data-slot="input" className={cn(className)} {...props} />
+  );
+});
+
+export interface SelectProps
+  extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'className'> {
+  className?: string;
+}
+
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(
+  function Select({ className, ...props }, ref) {
+    return (
+      <select
+        ref={ref}
+        data-slot="select"
+        className={cn(className)}
+        {...props}
+      />
+    );
+  },
+);
+
+export function Table({
+  children,
+  className,
+  ...props
+}: TableHTMLAttributes<HTMLTableElement>) {
+  return (
+    <div data-slot="table-wrapper">
+      <table data-slot="table" className={cn(className)} {...props}>
+        {children}
+      </table>
+    </div>
+  );
+}
+
+export function TableHeader({
+  className,
+  ...props
+}: HTMLAttributes<HTMLTableSectionElement>) {
+  return (
+    <thead data-slot="table-header" className={cn(className)} {...props} />
+  );
+}
+
+export function TableBody({
+  className,
+  ...props
+}: HTMLAttributes<HTMLTableSectionElement>) {
+  return <tbody data-slot="table-body" className={cn(className)} {...props} />;
+}
+
+export function TableRow({
+  className,
+  ...props
+}: HTMLAttributes<HTMLTableRowElement>) {
+  return <tr data-slot="table-row" className={cn(className)} {...props} />;
+}
+
+export function TableHead({
+  className,
+  ...props
+}: HTMLAttributes<HTMLTableCellElement>) {
+  return <th data-slot="table-head" className={cn(className)} {...props} />;
+}
+
+export function TableCell({
+  className,
+  ...props
+}: HTMLAttributes<HTMLTableCellElement>) {
+  return <td data-slot="table-cell" className={cn(className)} {...props} />;
+}
+
+export type AlertVariant = 'default' | 'destructive';
+
+export interface AlertProps extends HTMLAttributes<HTMLDivElement> {
+  variant?: AlertVariant;
+}
+
+export function Alert({
+  className,
+  variant = 'default',
+  ...props
+}: AlertProps) {
+  return (
+    <div
+      data-slot="alert"
+      data-variant={variant}
+      className={cn(className)}
+      {...props}
+    />
+  );
+}
+
+export interface EmptyStateProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
+  title: ReactNode;
+  description?: ReactNode;
+  action?: ReactNode;
+}
+
+export function EmptyState({
+  action,
+  children,
+  className,
+  description,
+  title,
+  ...props
+}: EmptyStateProps) {
+  return (
+    <div data-slot="empty-state" className={cn(className)} {...props}>
+      <p data-slot="empty-state-title">{title}</p>
+      {description ? (
+        <p data-slot="empty-state-description">{description}</p>
+      ) : null}
+      {children}
+      {action}
+    </div>
+  );
+}
+
+export interface DialogProps {
+  open: boolean;
+  title: ReactNode;
+  description?: ReactNode;
+  children?: ReactNode;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function Dialog({
+  children,
+  description,
+  onOpenChange,
+  open,
+  title,
+}: DialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const dialog = dialogRef.current;
+    restoreFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    if (!dialog) return;
+    if (typeof dialog.showModal === 'function') {
+      dialog.showModal();
+    } else {
+      dialog.setAttribute('open', '');
+    }
+    return () => {
+      if (dialog.open && typeof dialog.close === 'function') dialog.close();
+      restoreFocusRef.current?.focus();
+      restoreFocusRef.current = null;
+    };
+  }, [open]);
+
+  if (!open) return null;
+  return (
+    <dialog
+      ref={dialogRef}
+      data-slot="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      onCancel={() => onOpenChange?.(false)}
+    >
+      <div data-slot="dialog-content">
+        <div data-slot="dialog-header">
+          <div>
+            <h2 id={titleId} data-slot="dialog-title">
+              {title}
+            </h2>
+            {description ? (
+              <p data-slot="dialog-description">{description}</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            data-slot="button"
+            data-variant="ghost"
+            data-size="icon"
+            aria-label="ダイアログを閉じる"
+            onClick={() => onOpenChange?.(false)}
+          >
+            ×
+          </button>
+        </div>
+        {children}
+      </div>
+    </dialog>
   );
 }
 

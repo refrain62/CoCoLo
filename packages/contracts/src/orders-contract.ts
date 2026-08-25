@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  requireExactlyOneSubjectMemberId,
+  subjectMemberIdFields,
+} from './subject-member.ts';
 
 const uuid = z.string().uuid();
 const dateTime = z.string().datetime({ offset: true });
@@ -45,7 +49,7 @@ export const orderProductPathSchema = z
 
 export const orderEntryCreateSchema = z
   .object({
-    memberId: uuid,
+    ...subjectMemberIdFields,
     ordererName: z.string().trim().min(1).max(200),
     lines: z
       .array(
@@ -67,7 +71,8 @@ export const orderEntryCreateSchema = z
       .min(1)
       .max(100),
   })
-  .strict();
+  .strict()
+  .superRefine(requireExactlyOneSubjectMemberId);
 
 export const orderStatusUpdateSchema = z
   .object({ status: z.enum(['closed', 'completed']) })

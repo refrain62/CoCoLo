@@ -5,6 +5,10 @@ import {
   useMemo,
   useState,
 } from 'react';
+import {
+  readSubjectMemberId,
+  writeSubjectMemberId,
+} from '../../subject-member-selection.js';
 import { EventDetailPage } from './event-detail-page.js';
 import {
   type AttendanceResponse,
@@ -95,6 +99,7 @@ function EventCard({
   memberOptions,
   onChanged,
   onOpenDetail,
+  selectionStorageKey,
 }: {
   event: EventSummary;
   api: EventsApi;
@@ -102,8 +107,11 @@ function EventCard({
   memberOptions: MemberOption[];
   onChanged: () => void;
   onOpenDetail: () => void;
+  selectionStorageKey: string;
 }) {
-  const [memberId, setMemberId] = useState(memberOptions[0]?.id ?? '');
+  const [memberId, setMemberId] = useState(() =>
+    readSubjectMemberId(selectionStorageKey, memberOptions),
+  );
   const [response, setResponse] = useState<AttendanceResponse>('pending');
   const [correctionReason, setCorrectionReason] = useState('');
   const [summary, setSummary] = useState<Awaited<
@@ -139,8 +147,8 @@ function EventCard({
 
   useEffect(() => {
     if (!memberOptions.some((member) => member.id === memberId))
-      setMemberId(memberOptions[0]?.id ?? '');
-  }, [memberId, memberOptions]);
+      setMemberId(readSubjectMemberId(selectionStorageKey, memberOptions));
+  }, [memberId, memberOptions, selectionStorageKey]);
 
   async function answer(eventSubmit: FormEvent<HTMLFormElement>) {
     eventSubmit.preventDefault();
@@ -148,7 +156,7 @@ function EventCard({
     setMessage(null);
     try {
       await api.answer(event.id, {
-        memberId,
+        subjectMemberId: memberId,
         response,
         ...(correctionReason.trim()
           ? { correctionReason: correctionReason.trim() }
@@ -336,7 +344,10 @@ function EventCard({
             <select
               id={`event-${event.id}-member`}
               value={memberId}
-              onChange={(input) => setMemberId(input.target.value)}
+              onChange={(input) => {
+                setMemberId(input.target.value);
+                writeSubjectMemberId(selectionStorageKey, input.target.value);
+              }}
             >
               {memberOptions.map((member) => (
                 <option key={member.id} value={member.id}>
@@ -399,10 +410,12 @@ export function EventsPage({
   api = defaultApi,
   role,
   memberOptions = [],
+  selectionStorageKey = 'cocolo.selectedSubjectMemberId',
 }: {
   api?: EventsApi;
   role: EventRole;
   memberOptions?: MemberOption[];
+  selectionStorageKey?: string;
 }) {
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
   const [events, setEvents] = useState<EventSummary[]>([]);
@@ -464,6 +477,7 @@ export function EventsPage({
         memberOptions={memberOptions}
         fallbackEvent={selectedEvent}
         onBack={() => setSelectedEventId(null)}
+        selectionStorageKey={selectionStorageKey}
       />
     );
   }
@@ -651,6 +665,7 @@ export function EventsPage({
             api={api}
             role={role}
             memberOptions={memberOptions}
+            selectionStorageKey={selectionStorageKey}
             onChanged={() => void loadEvents()}
             onOpenDetail={() => setSelectedEventId(event.id)}
           />

@@ -6,6 +6,10 @@ import {
   useState,
 } from 'react';
 import {
+  readSubjectMemberId,
+  writeSubjectMemberId,
+} from '../../subject-member-selection.js';
+import {
   createOrdersPaymentsApi,
   type OrdersCampaign,
   type OrdersEntry,
@@ -38,10 +42,12 @@ export function OrdersPaymentsPage({
   api = defaultApi,
   role,
   members = [],
+  selectionStorageKey = 'cocolo.selectedSubjectMemberId',
 }: {
   api?: OrdersPaymentsApi;
   role: OrdersRole;
   members?: OrdersMemberChoice[];
+  selectionStorageKey?: string;
 }) {
   const [campaigns, setCampaigns] = useState<OrdersCampaign[]>([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
@@ -178,6 +184,7 @@ export function OrdersPaymentsPage({
               api={api}
               campaign={selectedCampaign}
               members={members}
+              selectionStorageKey={selectionStorageKey}
               onCreated={(entry) =>
                 setEntries((current) => [entry, ...current])
               }
@@ -319,14 +326,18 @@ function EntryForm({
   api,
   campaign,
   members,
+  selectionStorageKey,
   onCreated,
 }: {
   api: OrdersPaymentsApi;
   campaign: OrdersCampaign;
   members: OrdersMemberChoice[];
+  selectionStorageKey: string;
   onCreated: (entry: OrdersEntry) => void;
 }) {
-  const [memberId, setMemberId] = useState(members[0]?.id ?? '');
+  const [memberId, setMemberId] = useState(() =>
+    readSubjectMemberId(selectionStorageKey, members),
+  );
   const [ordererName, setOrdererName] = useState('');
   const [productId, setProductId] = useState(campaign.products[0]?.id ?? '');
   const [selectedOptions, setSelectedOptions] = useState<
@@ -342,6 +353,12 @@ function EntryForm({
     campaign.products.find((candidate) => candidate.id === productId) ??
     campaign.products[0];
 
+  useEffect(() => {
+    const nextMemberId = readSubjectMemberId(selectionStorageKey, members);
+    setMemberId(nextMemberId);
+    if (nextMemberId) writeSubjectMemberId(selectionStorageKey, nextMemberId);
+  }, [members, selectionStorageKey]);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!product || isSaving) return;
@@ -350,7 +367,7 @@ function EntryForm({
     setIsSaving(true);
     try {
       const entry = await api.createEntry(campaign.id, {
-        memberId,
+        subjectMemberId: memberId,
         ordererName,
         lines: [
           {
@@ -379,7 +396,10 @@ function EntryForm({
         id="orders-member"
         required
         value={memberId}
-        onChange={(event) => setMemberId(event.target.value)}
+        onChange={(event) => {
+          setMemberId(event.target.value);
+          writeSubjectMemberId(selectionStorageKey, event.target.value);
+        }}
       >
         {members.map((member) => (
           <option key={member.id} value={member.id}>

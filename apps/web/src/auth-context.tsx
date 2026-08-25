@@ -13,6 +13,8 @@ import {
   type AuthClient,
   type AuthSession,
   createAuthClient,
+  type OAuthProvider,
+  parseOAuthCallback,
 } from './auth-client.js';
 
 type AuthContextValue = {
@@ -23,6 +25,7 @@ type AuthContextValue = {
   requiresReauthentication: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithOAuth: (provider: OAuthProvider) => void;
   refreshSession: () => Promise<AuthSession | null>;
   logout: () => Promise<void>;
   authenticatedFetch: (
@@ -111,6 +114,7 @@ export type AuthSessionManager = {
   getSession: () => AuthSession | null;
   subscribe: (listener: SessionListener) => () => void;
   signIn: (email: string, password: string) => Promise<AuthSession>;
+  adoptSession: (session: AuthSession) => void;
   refresh: (expectedAccessToken?: string) => Promise<AuthSession | null>;
   authenticatedFetch: (
     input: RequestInfo | URL,
@@ -279,6 +283,7 @@ export function createAuthSessionManager({
       return () => listeners.delete(listener);
     },
     signIn,
+    adoptSession: setSession,
     refresh,
     authenticatedFetch,
     logout,
@@ -324,6 +329,22 @@ export function AuthProvider({
     };
   }, [manager]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.location.hash) return;
+    try {
+      const callbackSession = parseOAuthCallback(window.location.hash);
+      if (!callbackSession) return;
+      manager.adoptSession(callbackSession);
+      window.history.replaceState(
+        null,
+        document.title,
+        `${window.location.pathname}${window.location.search}`,
+      );
+    } catch {
+      setError('OAuthログインを完了できませんでした。');
+    }
+  }, [manager]);
+
   const signIn = useCallback(
     async (email: string, password: string) => {
       setIsSigningIn(true);
@@ -338,6 +359,23 @@ export function AuthProvider({
       }
     },
     [manager],
+  );
+
+  const signInWithOAuth = useCallback(
+    (provider: OAuthProvider) => {
+      if (!client.getOAuthAuthorizeUrl) {
+        setError('OAuthログインが設定されていません。');
+        return;
+      }
+      if (typeof window === 'undefined') {
+        setError('OAuthログインを開始できません。');
+        return;
+      }
+      setError(null);
+      const redirectTo = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+      window.location.assign(client.getOAuthAuthorizeUrl(provider, redirectTo));
+    },
+    [client],
   );
 
   const refreshSession = useCallback(async () => {
@@ -376,6 +414,7 @@ export function AuthProvider({
       requiresReauthentication,
       error,
       signIn,
+      signInWithOAuth,
       refreshSession,
       logout,
       authenticatedFetch,
@@ -391,6 +430,7 @@ export function AuthProvider({
       requiresReauthentication,
       session,
       signIn,
+      signInWithOAuth,
     ],
   );
 
@@ -406,7 +446,7 @@ export function useAuth() {
 
 // 入力値をtrimしてAuth clientへ渡し、認証情報そのものは画面へ表示しない。
 export function LoginPage() {
-  const { error, isSigningIn, signIn } = useAuth();
+  const { error, isSigningIn, signIn, signInWithOAuth } = useAuth();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -447,6 +487,15 @@ export function LoginPage() {
             {isSigningIn ? 'ログイン中…' : 'ログイン'}
           </button>
         </form>
+        <fieldset className="auth-provider-actions">
+          <legend>OAuthでログイン</legend>
+          <button type="button" onClick={() => signInWithOAuth('line')}>
+            LINEでログイン
+          </button>
+          <button type="button" onClick={() => signInWithOAuth('google')}>
+            Googleでログイン
+          </button>
+        </fieldset>
         <p className="auth-help">
           <a href="/manual">操作マニュアルを確認</a>
         </p>

@@ -1,5 +1,11 @@
 import { extractBearerToken, type TokenVerifier } from '@cocolo/auth';
 import {
+  invitationAcceptResponseSchema,
+  invitationCreateResponseSchema,
+  invitationListResponseSchema,
+  invitationResponseSchema,
+} from '@cocolo/contracts/auth-invitation';
+import {
   selectedTeamHeaderName,
   teamListResponseSchema,
   teamSelectionResponseSchema,
@@ -16,6 +22,7 @@ import {
   announcementResponseEnvelopeSchema,
   announcementUnreadResponseSchema,
 } from '@cocolo/contracts/bulletin-board-response';
+import { featureContractResponseSchema } from '@cocolo/contracts/feature-contract';
 import {
   lineConnectResponseSchema,
   lineDisconnectResponseSchema,
@@ -87,6 +94,7 @@ import {
   mountCentralFeatureRoutes,
 } from './central-feature-routes.js';
 import { createEventsApp } from './features/events/event-api.js';
+import { createFeatureEntitlementMiddleware } from './features/feature-contract/feature-contract-app.js';
 import { type CorsOptions, createCorsMiddleware } from './security/cors.js';
 import {
   createRateLimitMiddleware,
@@ -210,6 +218,9 @@ export type AppOptions = {
 export type ApiEnv = {
   Variables: {
     requestId: string;
+    authUserId: string;
+    authProviders: Array<'google' | 'line'>;
+    authProviderSubjects: Partial<Record<'google' | 'line', string>>;
     auth: {
       userId: string;
       membership: MembershipContext;
@@ -303,6 +314,42 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.cors) app.use('*', createCorsMiddleware(options.cors));
 
   const responseContracts: ResponseContract[] = [
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/auth\/invitations$/,
+      status: 200,
+      schema: invitationListResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/auth\/invitations$/,
+      status: 201,
+      schema: invitationCreateResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/auth\/invitations\/[^/]+\/revoke$/,
+      status: 200,
+      schema: invitationResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/auth\/invitations\/accept$/,
+      status: 200,
+      schema: invitationAcceptResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/feature-contract$/,
+      status: 200,
+      schema: featureContractResponseSchema,
+    },
+    {
+      method: 'PATCH',
+      path: /^\/api\/v1\/feature-contract\/[^/]+$/,
+      status: 200,
+      schema: featureContractResponseSchema,
+    },
     {
       method: 'GET',
       path: /^\/api\/v1\/orders$/,
@@ -822,10 +869,43 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     await next();
   };
 
+  // 招待受諾はまだtenant membershipがない利用者も通すため、JWTだけを検証する。
+  const authenticateUser: MiddlewareHandler<ApiEnv> = async (c, next) => {
+    const token = extractBearerToken(c.req.header('authorization') ?? null);
+    if (!options.verifyToken)
+      return errorResponse(
+        c,
+        503,
+        'AUTH_NOT_CONFIGURED',
+        '認証が設定されていません。',
+      );
+    if (!token)
+      return errorResponse(c, 401, 'UNAUTHENTICATED', '認証が必要です。');
+    try {
+      const claims = await options.verifyToken(token);
+      c.set('authUserId', claims.userId);
+      c.set('authProviders', claims.authProviders ?? []);
+      c.set('authProviderSubjects', claims.authProviderSubjects ?? {});
+    } catch {
+      return errorResponse(
+        c,
+        401,
+        'UNAUTHENTICATED',
+        '認証情報を確認できません。',
+      );
+    }
+    await next();
+  };
+
   app.use('/api/v1/members/*', authenticate);
   app.use('/api/v1/notifications/line', authenticate);
   app.use('/api/v1/notifications/line/:notificationId/retry', authenticate);
   app.use('/api/v1/auth/context', authenticate);
+  if (options.centralFeatures?.authInvitations) {
+    app.use('/api/v1/auth/invitations', authenticate);
+    app.use('/api/v1/auth/invitations/:invitationId/revoke', authenticate);
+    app.use('/api/v1/auth/invitations/accept', authenticateUser);
+  }
   if (options.eventRepository) {
     app.use('/api/v1/events', authenticate);
     app.use('/api/v1/events/*', authenticate);
@@ -842,6 +922,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     app.use('/api/v1/announcements', authenticate);
     app.use('/api/v1/announcements/*', authenticate);
   }
+  if (options.centralFeatures?.featureContract) {
+    app.use('/api/v1/feature-contract', authenticate);
+    app.use('/api/v1/feature-contract/*', authenticate);
+  }
   if (options.centralFeatures?.line) {
     app.use('/api/v1/line', authenticate);
     app.use('/api/v1/line/*', authenticate);
@@ -853,6 +937,50 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.centralFeatures?.orders) {
     app.use('/api/v1/orders', authenticate);
     app.use('/api/v1/orders/*', authenticate);
+  }
+
+  if (options.centralFeatures?.featureContract) {
+    const featureContractRepository =
+      options.centralFeatures.featureContract.repository;
+    const useFeature = (path: string, featureKey: string) => {
+      app.use(
+        path,
+        createFeatureEntitlementMiddleware(
+          featureContractRepository,
+          featureKey,
+        ),
+      );
+    };
+    useFeature('/api/v1/members', 'members');
+    useFeature('/api/v1/members/*', 'members');
+    if (options.eventRepository) {
+      useFeature('/api/v1/events', 'events-attendance');
+      useFeature('/api/v1/events/*', 'events-attendance');
+    }
+    if (options.centralFeatures.attachments) {
+      useFeature('/api/v1/uploads', 'attachments');
+      useFeature('/api/v1/uploads/*', 'attachments');
+    }
+    if (options.centralFeatures.bulletinBoard) {
+      useFeature('/api/v1/announcements', 'bulletin-board');
+      useFeature('/api/v1/announcements/*', 'bulletin-board');
+    }
+    if (options.centralFeatures.line) {
+      useFeature('/api/v1/line/status', 'line-notifications');
+      useFeature('/api/v1/line/status/*', 'line-notifications');
+      useFeature('/api/v1/line/connect', 'line-notifications');
+      useFeature('/api/v1/line/connect/*', 'line-notifications');
+      useFeature('/api/v1/line/notifications', 'line-notifications');
+      useFeature('/api/v1/line/notifications/*', 'line-notifications');
+    }
+    if (options.centralFeatures.ride) {
+      useFeature('/api/v1/ride-plans', 'ride-operations');
+      useFeature('/api/v1/ride-plans/*', 'ride-operations');
+    }
+    if (options.centralFeatures.orders) {
+      useFeature('/api/v1/orders', 'orders-payments');
+      useFeature('/api/v1/orders/*', 'orders-payments');
+    }
   }
 
   // 認証後のtenant/userだけをキーに使い、production系では起動時に分散adapterを要求する。
@@ -872,6 +1000,19 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       };
     },
   });
+  const invitationAcceptRateLimit = createRateLimitMiddleware({
+    scope: 'authenticated',
+    ...rateLimitPolicies.authenticated,
+    store: rateLimitStore,
+    now: rateLimitOptions.now,
+    namespace: rateLimitNamespace,
+    timeoutMs: rateLimitOptions.timeoutMs,
+    keyResolver: (c) => ({
+      kind: 'user',
+      tenantId: 'invitation-accept',
+      userId: c.get('authUserId'),
+    }),
+  });
   const authenticatedRateLimitForRoutes: MiddlewareHandler<ApiEnv> = async (
     c,
     next,
@@ -886,6 +1027,14 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     authenticatedRateLimit,
   );
   app.use('/api/v1/auth/context', authenticatedRateLimit);
+  if (options.centralFeatures?.authInvitations) {
+    app.use('/api/v1/auth/invitations', authenticatedRateLimit);
+    app.use(
+      '/api/v1/auth/invitations/:invitationId/revoke',
+      authenticatedRateLimit,
+    );
+    app.use('/api/v1/auth/invitations/accept', invitationAcceptRateLimit);
+  }
   if (options.eventRepository) {
     app.use('/api/v1/events', authenticatedRateLimit);
     app.use('/api/v1/events/*', authenticatedRateLimit);
@@ -908,6 +1057,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.centralFeatures?.bulletinBoard) {
     app.use('/api/v1/announcements', authenticatedRateLimit);
     app.use('/api/v1/announcements/*', authenticatedRateLimit);
+  }
+  if (options.centralFeatures?.featureContract) {
+    app.use('/api/v1/feature-contract', authenticatedRateLimit);
+    app.use('/api/v1/feature-contract/*', authenticatedRateLimit);
   }
   if (options.centralFeatures?.line) {
     if (options.centralFeatures.line.webhook) {

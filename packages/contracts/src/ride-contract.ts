@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  requireExactlyOneSubjectMemberId,
+  subjectMemberIdFields,
+} from './subject-member.ts';
 
 const uuid = z.string().uuid();
 const mapsUrl = z
@@ -36,10 +40,11 @@ export const rideOfferCreateSchema = z
 
 export const rideRequestCreateSchema = z
   .object({
-    memberId: uuid,
+    ...subjectMemberIdFields,
     passengerCount: z.number().int().min(1).max(8).default(1),
   })
-  .strict();
+  .strict()
+  .superRefine(requireExactlyOneSubjectMemberId);
 
 export const rideAssignmentSchema = z
   .object({

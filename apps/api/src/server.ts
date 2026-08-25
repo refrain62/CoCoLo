@@ -1,10 +1,12 @@
 import { createSupabaseTokenVerifier } from '@cocolo/auth';
 import { createMemberRepositories, createPrismaClient } from '@cocolo/db';
 import { createAttachmentRepositories } from '@cocolo/db/attachment';
+import { createAuthInvitationRepository } from '@cocolo/db/auth-invitation';
 import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import { createBoardContactRepository } from '@cocolo/db/board-contact';
 import { createBulletinBoardRepositories } from '@cocolo/db/bulletin-board';
 import { createEventRepository } from '@cocolo/db/events';
+import { createFeatureContractRepository } from '@cocolo/db/feature-contract';
 import { createPrismaLineRepository } from '@cocolo/db/line';
 import { createPrismaLineWebhookRepository } from '@cocolo/db/line-webhook';
 import { createPrismaOrdersRepository } from '@cocolo/db/orders';
@@ -68,6 +70,10 @@ const centralFeatures = {
   authTeamSelection: {
     repository: createAuthTeamSelectionRepository(prisma),
   },
+  authInvitations: {
+    repository: createAuthInvitationRepository(prisma),
+    invitationUrlBase: `${runtime.publicAppUrl}/invite`,
+  },
   attachments: {
     repository: createAttachmentRepositories(prisma).attachmentRepository,
     storage: createR2AttachmentStorageFromEnv(process.env),
@@ -77,6 +83,9 @@ const centralFeatures = {
   },
   bulletinBoard: {
     repository: createBulletinBoardRepositories(prisma).bulletinBoardRepository,
+  },
+  featureContract: {
+    repository: createFeatureContractRepository(prisma),
   },
   orders: {
     repository: createPrismaOrdersRepository(prisma),
@@ -93,6 +102,8 @@ const app = createApp({
   verifyToken: createSupabaseTokenVerifier({
     jwksUrl: runtime.supabaseJwksUrl,
     issuer: runtime.supabaseIssuer,
+    authUserUrl: `${runtime.supabaseUrl}/auth/v1/user`,
+    anonKey: runtime.supabaseAnonKey,
   }),
   rateLimit: {
     environment: runtime.appEnv,

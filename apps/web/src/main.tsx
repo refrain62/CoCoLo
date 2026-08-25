@@ -2,13 +2,21 @@ import type { TeamOption } from '@cocolo/contracts/auth-team-selection';
 import { AppShell } from '@cocolo/ui';
 import { StrictMode, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { AdminDashboard } from './admin-dashboard.js';
+import type { AdminRoute } from './admin-routes.js';
+import { AdminShell } from './admin-shell.js';
 import { AuthProvider, LoginPage, useAuth } from './auth-context.js';
 import { type AuthRole, createAuthContextApi } from './auth-context-api.js';
 import { createAttachmentApi } from './features/attachments/attachment-api.js';
 import { AttachmentUploader } from './features/attachments/attachment-uploader.js';
+import { createAuthInvitationApi } from './features/auth-invitations/auth-invitation-api.js';
+import {
+  InvitationAcceptPage,
+  isInvitationPath,
+  readInvitationToken,
+} from './features/auth-invitations/auth-invitation-page.js';
 import {
   createTeamSelectionApi,
-  SelectedTeamHeader,
   TeamSelectionPage,
 } from './features/auth-team-selection/index.js';
 import {
@@ -22,6 +30,11 @@ import { createBulletinBoardApi } from './features/bulletin-board/bulletin-board
 import { BulletinBoardPage } from './features/bulletin-board/bulletin-board-page.js';
 import { createEventsApi } from './features/events/events-api.js';
 import { EventsPage } from './features/events/events-page.js';
+import {
+  createFeatureContractApi,
+  type FeatureContractSnapshot,
+} from './features/feature-contract/feature-contract-api.js';
+import { FeatureContractPanel } from './features/feature-contract/feature-contract-panel.js';
 import { LineNotificationPanel } from './features/line-notifications/line-notification-panel.js';
 import { createLineNotificationApi } from './features/line-notifications/line-notifications-api.js';
 import {
@@ -46,6 +59,9 @@ function AuthenticatedApp() {
     Array<{ id: string; name: string }>
   >([]);
   const [eventsError, setEventsError] = useState<string | null>(null);
+  const [invitationToken, setInvitationToken] = useState<string | null>(() =>
+    readInvitationToken(),
+  );
   const teamSelectionApi = useMemo(
     () =>
       createTeamSelectionApi({
@@ -86,6 +102,14 @@ function AuthenticatedApp() {
     };
   }, [session, teamSelectionApi]);
   const selectedTeamId = selectedTeam?.tenantId ?? null;
+  const authInvitationApi = useMemo(
+    () =>
+      createAuthInvitationApi({
+        fetcher: authenticatedFetch,
+        getSelectedTeamId: () => selectedTeamId,
+      }),
+    [authenticatedFetch, selectedTeamId],
+  );
   const memberApi = useMemo(
     () =>
       createMemberApi({
@@ -98,6 +122,15 @@ function AuthenticatedApp() {
   const authContextApi = useMemo(
     () =>
       createAuthContextApi({
+        getAccessToken: () => session?.accessToken ?? null,
+        getSelectedTeamId: () => selectedTeamId,
+        fetcher: authenticatedFetch,
+      }),
+    [authenticatedFetch, selectedTeamId, session?.accessToken],
+  );
+  const featureContractApi = useMemo(
+    () =>
+      createFeatureContractApi({
         getAccessToken: () => session?.accessToken ?? null,
         getSelectedTeamId: () => selectedTeamId,
         fetcher: authenticatedFetch,
@@ -190,6 +223,33 @@ function AuthenticatedApp() {
       active = false;
     };
   }, [authContextApi, memberApi, selectedTeam, session]);
+  if (isInvitationPath(window.location.pathname))
+    return (
+      <InvitationAcceptPage
+        api={authInvitationApi}
+        onAccepted={(tenantId) => {
+          window.history.replaceState(null, document.title, '/');
+          setInvitationToken(null);
+          setSelectedTeam(null);
+          setTeamError(null);
+          setIsResolvingTeam(true);
+          void teamSelectionApi
+            .list()
+            .then((teams) => {
+              const nextTeam = teams.find((team) => team.tenantId === tenantId);
+              if (nextTeam) {
+                setStoredSelectedTeamId(nextTeam.tenantId);
+                setSelectedTeam(nextTeam);
+              } else {
+                setTeamError('連携したチームを確認できません。');
+              }
+            })
+            .catch(() => setTeamError('利用可能なチームを確認できません。'))
+            .finally(() => setIsResolvingTeam(false));
+        }}
+        token={invitationToken}
+      />
+    );
   if (!session) return <LoginPage />;
   if (isResolvingTeam)
     return (
@@ -220,57 +280,177 @@ function AuthenticatedApp() {
       </AppShell>
     );
 
+  if (!role)
+    return (
+      <AppShell>
+        <section
+          className="app-state-card"
+          role={eventsError ? 'alert' : 'status'}
+        >
+          {eventsError ?? 'チームの権限を確認しています。'}
+        </section>
+      </AppShell>
+    );
+
+  const currentRole = role;
+  const currentTeam = selectedTeam;
+  const subjectMemberStorageKey = `cocolo.selectedSubjectMemberId.${selectedTeamId}`;
+
+  function renderAdminPage(
+    route: AdminRoute,
+    contract: FeatureContractSnapshot,
+    onContractChange: (next: FeatureContractSnapshot) => void,
+  ) {
+    const isFeatureEnabled = (key: string) =>
+      contract.features.some(
+        (feature) => feature.key === key && feature.enabled,
+      );
+    const intro = {
+      members: [
+        'Members',
+        'メンバー',
+        '部員と所属、招待されたメンバーの状態を管理します。',
+      ],
+      events: [
+        'Schedule',
+        '予定・出欠',
+        '開催予定を確認し、対象メンバーの出欠を管理します。',
+      ],
+      orders: [
+        'Purchasing',
+        '購買・集金',
+        'メンバーごとの注文と集金状態を確認します。',
+      ],
+      announcements: [
+        'Bulletin',
+        '回覧・添付',
+        'チームへのお知らせと添付ファイルを管理します。',
+      ],
+      line: ['LINE', 'LINE通知', 'LINEの接続状態と通知操作を管理します。'],
+      ride: ['Transport', '送迎管理', '乗車希望と配車の状況を管理します。'],
+      settings: [
+        'Team settings',
+        'チーム設定',
+        'チーム運営に必要な役員連絡先と設定を管理します。',
+      ],
+    } as const;
+    if (route === 'dashboard')
+      return (
+        <AdminDashboard
+          contract={contract}
+          onNavigate={(path) => {
+            window.history.pushState({}, '', path);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }}
+          role={currentRole}
+          team={currentTeam}
+        />
+      );
+    if (route === 'features')
+      return (
+        <FeatureContractPanel
+          api={featureContractApi}
+          onSnapshotChange={onContractChange}
+          role={currentRole}
+        />
+      );
+
+    const [eyebrow, title, description] = intro[route];
+    return (
+      <div className="admin-page-stack">
+        <header className="admin-route-header">
+          <p className="admin-eyebrow">{eyebrow}</p>
+          <h1>{title}</h1>
+          <p>{description}</p>
+        </header>
+        {route === 'members' ? (
+          <MemberManagementPage api={memberApi} role={currentRole} />
+        ) : null}
+        {route === 'events' ? (
+          <EventsPage
+            api={eventsApi}
+            role={currentRole}
+            memberOptions={eventMembers}
+            selectionStorageKey={subjectMemberStorageKey}
+          />
+        ) : null}
+        {route === 'orders' ? (
+          <OrdersPaymentsPage
+            key={selectedTeamId}
+            api={ordersApi}
+            role={currentRole}
+            members={eventMembers}
+            selectionStorageKey={subjectMemberStorageKey}
+          />
+        ) : null}
+        {route === 'announcements' ? (
+          <>
+            {currentRole !== 'guardian' && isFeatureEnabled('attachments') ? (
+              <AttachmentUploader api={attachmentApi} />
+            ) : null}
+            <BulletinBoardPage
+              api={bulletinBoardApi}
+              attachmentApi={attachmentApi}
+              attachmentsEnabled={isFeatureEnabled('attachments')}
+              role={currentRole}
+            />
+          </>
+        ) : null}
+        {route === 'line' ? (
+          <LineNotificationPanel api={lineNotificationApi} role={currentRole} />
+        ) : null}
+        {route === 'ride' ? (
+          <RideOperationsPanel
+            api={rideApi}
+            isManager={
+              currentRole === 'owner' ||
+              currentRole === 'admin' ||
+              currentRole === 'staff'
+            }
+            members={eventMembers.map((member) => ({
+              id: member.id,
+              label: member.name,
+            }))}
+            selectionStorageKey={subjectMemberStorageKey}
+          />
+        ) : null}
+        {route === 'settings' ? (
+          <BoardContactPage
+            api={boardContactApi}
+            canManage={currentRole === 'owner' || currentRole === 'admin'}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <AppShell>
-      <SelectedTeamHeader
-        isLoggingOut={isLoggingOut}
-        onLogout={() => void logout()}
-        team={selectedTeam}
-      />
-      <nav aria-label="ヘルプ">
-        <a href="/manual">操作マニュアル</a>
-      </nav>
-      <MemberManagementPage api={memberApi} role={role} />
-      {eventsError ? <p role="alert">{eventsError}</p> : null}
-      {role ? (
-        <EventsPage api={eventsApi} role={role} memberOptions={eventMembers} />
-      ) : null}
-      {role ? (
-        <RideOperationsPanel
-          api={rideApi}
-          isManager={role === 'owner' || role === 'admin' || role === 'staff'}
-          members={eventMembers.map((member) => ({
-            id: member.id,
-            label: member.name,
-          }))}
-        />
-      ) : null}
-      {role && role !== 'guardian' ? (
-        <AttachmentUploader api={attachmentApi} />
-      ) : null}
-      <BoardContactPage
-        api={boardContactApi}
-        canManage={role === 'owner' || role === 'admin'}
-      />
-      {role ? (
-        <BulletinBoardPage
-          api={bulletinBoardApi}
-          attachmentApi={attachmentApi}
-          role={role}
-        />
-      ) : null}
-      {role ? (
-        <LineNotificationPanel api={lineNotificationApi} role={role} />
-      ) : null}
-      {role && role !== 'staff' ? (
-        <OrdersPaymentsPage
-          key={selectedTeamId}
-          api={ordersApi}
-          role={role}
-          members={eventMembers}
-        />
-      ) : null}
-    </AppShell>
+    <AdminShell
+      featureContractApi={featureContractApi}
+      isLoggingOut={isLoggingOut}
+      onLogout={() => void logout()}
+      role={currentRole}
+      team={currentTeam}
+    >
+      {(route, contract, onContractChange) =>
+        route === 'members' ? (
+          <div className="admin-page-stack">
+            <header className="admin-route-header">
+              <p className="admin-eyebrow">Members</p>
+              <h1>メンバー</h1>
+              <p>部員と所属、招待されたメンバーの状態を管理します。</p>
+            </header>
+            <MemberManagementPage
+              api={memberApi}
+              invitationApi={authInvitationApi}
+              role={currentRole}
+            />
+          </div>
+        ) : (
+          renderAdminPage(route, contract, onContractChange)
+        )
+      }
+    </AdminShell>
   );
 }
 
