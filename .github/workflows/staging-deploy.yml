@@ -15,16 +15,16 @@ jobs:
       - name: mainからの手動実行だけを許可
         run: test "$GITHUB_REF" = "refs/heads/main"
       - name: リポジトリを取得
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: pnpmを準備
-        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996
         with:
           version: 10.26.0
       - name: Node.js環境を準備
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: 24.12.0
           cache: pnpm
@@ -95,7 +95,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       - name: リリースの出所証明を生成
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: .release/release.tar.gz
       - name: リリースの出所証明を検証
@@ -127,14 +127,14 @@ jobs:
           STAGING_BASE_URL: ${{ vars.PUBLIC_APP_URL }}
           STAGING_DEPLOYMENT_RECORD: .release/deployment-record.json
       - name: リリース成果物を保存
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: release-${{ github.sha }}
           path: .release
           if-no-files-found: error
           retention-days: 3
       - name: staging環境の配置証跡を保存
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: staging-evidence-${{ github.sha }}
           path: .evidence
