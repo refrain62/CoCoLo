@@ -57,7 +57,7 @@ LINE は通知と入口に使用し、予定、回答、割当、既読、集金
 | 集金 | オンライン決済ではなく集金状況を確認する | 現金または振込の確認状態、確認者、取消監査を管理する | FS-ORD-003 |
 | 未払い通知 | 未払い者を抽出して LINE で知らせる | 対象確認、冪等な通知登録、個人情報を抑えた本文を必要とする | FS-ORD-005 |
 | 画像 | 商品とイベントへ画像を添付する | 非公開 R2、短期 URL、プレビュー、拡大表示を使用する | FS-FIL-001、FS-FIL-003 |
-| UI 部品 | UI を作り込みすぎず既存部品を使う | shadcn/uiの設計思想に沿った`@cocolo/ui`の共有プリミティブを使い、公式shadcn/ui、Radix UI、Lucide Reactの依存は現行developへ追加しない | 実装計画 1章、FS-UI-001、UI-001 |
+| UI 部品 | UI を作り込みすぎず既存部品を使う | shadcn/uiのcomponent sourceを`packages/ui`へ取り込み、必要なRadix UI・Lucide Reactだけを依存として追加して共有プリミティブを管理する | 実装計画、FS-UI-003、UI-004〜005 |
 | 開発方式 | AI Agent で開発する | 仕様 ID、TDD、敵対的レビュー、人間承認、最小権限の CI を採用する | 実装計画 8章、AGENTS.md |
 | ORM | Prisma で差分 SQL を管理する | `migrate dev --create-only` と `migrate deploy` を使い、SQL をレビューする | 実装計画 2章、3章 |
 | 秘密情報 | アカウント全体を操作できる PAT を使わない | local を基本とし、本番反映は環境限定 secret と承認付き CI に限定する | 実装計画 6章、8.8節 |
@@ -114,7 +114,7 @@ R2 の公開 URL を DB に保存して配布する方式は採用しません�
 
 LINE通知先は、Botが参加する環境ごとのLINEグループとします。
 
-公式アカウント、個人LINE、QRコード接続、LINE OAuth接続は現行対象外です。
+通知用の公式アカウント、個人LINE、QRコードによるLINEグループ接続、LINE OAuthによるグループ接続は現行対象外です。システムログイン用のLINE OAuthはFS-AUTH-004で別に追加します。
 
 LIFFは必須の入口とせず、同じ環境のWebアプリへ遷移するdeep linkを基本とします。
 
