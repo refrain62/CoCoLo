@@ -99,7 +99,6 @@ function assertForbiddenStatements(file: MigrationSqlFile) {
 
 function assertCreatedTablesAreProtected(file: MigrationSqlFile) {
   const compact = compactSql(file.content);
-  const globalTenantIndependentTables = new Set(['feature_definitions']);
   const createTablePattern =
     /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"?public"?\.)?"?([a-z_][a-z0-9_]*)"?\s*\(/gi;
 

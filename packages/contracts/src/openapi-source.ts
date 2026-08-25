@@ -1044,7 +1044,11 @@ export const openapiDocument = {
                       pattern: '^[a-z][a-z0-9_.-]{0,63}$',
                     },
                     billingType: { type: 'string', enum: ['free', 'paid'] },
-                    displayName: { type: 'string', minLength: 1, maxLength: 200 },
+                    displayName: {
+                      type: 'string',
+                      minLength: 1,
+                      maxLength: 200,
+                    },
                     enabled: { type: 'boolean' },
                     reason: {
                       type: 'string',

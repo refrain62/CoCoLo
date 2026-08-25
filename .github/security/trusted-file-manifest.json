@@ -92,7 +92,7 @@
     "scripts/verify-migration-history.ts": "f249ad54db93a30161504176c215e854ddfc23479403452b447919c25464f912",
     "scripts/verify-migration-integrity.test.ts": "a70d1cb9dd57af47aa86513cc4891a75b93bcf905437f1ca82c5cb40a973470a",
     "scripts/verify-migration-sql.test.ts": "669a1ab4372f300da6e9da28ef9909c56850beeb042e153453fa1a889e82d1f5",
-    "scripts/verify-migration-sql.ts": "a425cb864a4a92426a9b614be419a7207e00c3e96a541dddbeaae44cf5751f34",
+    "scripts/verify-migration-sql.ts": "245f65adb8b311dc7f7a2dac483b34cda09b05d427012fc0f01e1b3c13f6928e",
     "scripts/verify-openapi.ts": "e8e175ef0880c9a879cfbddfebb979c1d6862da9f8d28bbb58fcfd3cb69819f0",
     "scripts/verify-pr-description.test.ts": "937852a2d6a4373d65128097391493e37ea4ab752af94b11adccb7aad6312684",
     "scripts/verify-pr-description.ts": "fcf69c061b6a3856373b264d275a26a3c6665c0889c7d378e02dde6afa530906",
