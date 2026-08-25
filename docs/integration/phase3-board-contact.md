@@ -87,7 +87,9 @@ Webは同じfeatureキーでチーム設定メニューを表示制御する。
 
 中央API、Webルート、DB repository、共有export、`board_contacts` のmigrationは `develop` に統合済みである。
 
-残る受入は、年度引き継ぎの複数行UUID生成、DB直接参照の個人情報境界、staffとguardianのWeb閲覧、OpenAPI同期、実DB/RLSでのrollback確認である。
+年度引き継ぎは行ごとのUUIDv7生成とINSERT影響行数による`copiedCount`を実装済みである。
+
+残る受入は、DB直接参照の個人情報境界、staffとguardianのWeb閲覧、OpenAPI同期、実DB/RLSでの複数行とrollback確認である。
 
 ## 検証
 
