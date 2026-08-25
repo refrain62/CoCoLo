@@ -7,7 +7,11 @@ import { createApp } from '../dist/app.js';
 const USER_ID = 'user-central-a';
 const TENANT_ID = '00000000-0000-7000-8000-000000000001';
 
-function createTestApp({ multipleMemberships = false, featureOverrides = {} } = {}) {
+function createTestApp({
+  multipleMemberships = false,
+  featureOverrides = {},
+  featureContractEnabled = true,
+} = {}) {
   const verifyToken = async (token) => {
     if (token !== USER_ID) throw new Error('invalid token');
     return {
@@ -27,6 +31,7 @@ function createTestApp({ multipleMemberships = false, featureOverrides = {} } = 
   };
   const freeFeatureKeys = new Set([
     'members',
+    'board-contacts',
     'events-attendance',
     'bulletin-board',
     'attachments',
@@ -36,6 +41,7 @@ function createTestApp({ multipleMemberships = false, featureOverrides = {} } = 
     planStatus: null,
     features: [
       ['members', 'メンバー管理'],
+      ['board-contacts', '役員・連絡先'],
       ['orders-payments', '購買・集金'],
       ['events-attendance', '予定・出欠'],
       ['bulletin-board', '回覧・添付'],
@@ -161,24 +167,26 @@ function createTestApp({ multipleMemberships = false, featureOverrides = {} } = 
           listUnread: async () => null,
         },
       },
-      featureContract: {
-        repository: {
-          get: async () => featureSnapshot(),
-          setFreeFlag: async () => ({
-            planKey: null,
-            planStatus: null,
-            features: [
-              {
-                key: 'members',
-                billingType: 'free',
-                displayName: 'メンバー管理',
-                enabled: false,
-                reason: 'flag',
-              },
-            ],
-          }),
-        },
-      },
+      featureContract: featureContractEnabled
+        ? {
+            repository: {
+              get: async () => featureSnapshot(),
+              setFreeFlag: async () => ({
+                planKey: null,
+                planStatus: null,
+                features: [
+                  {
+                    key: 'members',
+                    billingType: 'free',
+                    displayName: 'メンバー管理',
+                    enabled: false,
+                    reason: 'flag',
+                  },
+                ],
+              }),
+            },
+          }
+        : undefined,
       orders: {
         repository: createInMemoryOrdersRepository(),
       },
@@ -312,7 +320,10 @@ test('中央APIへfeature契約routeをmountし、tenantの有効機能を返す
   });
 
   assert.equal(response.status, 200);
-  assert.deepEqual((await response.json()).data.features[1], {
+  const feature = (await response.json()).data.features.find(
+    (item) => item.key === 'orders-payments',
+  );
+  assert.deepEqual(feature, {
     key: 'orders-payments',
     billingType: 'paid',
     displayName: '購買・集金',
@@ -341,6 +352,31 @@ test('契約で無効なfree featureも業務handlerを実行せず403にする'
 
   assert.equal(response.status, 403);
   assert.equal((await response.json()).error.code, 'FEATURE_UNAVAILABLE');
+});
+
+test('契約で無効な役員・連絡先featureも業務handlerを実行せず403にする', async () => {
+  const response = await createTestApp({
+    featureOverrides: { 'board-contacts': false },
+  }).request('/api/v1/board-members', {
+    headers: { authorization: `Bearer ${USER_ID}` },
+  });
+
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'FEATURE_UNAVAILABLE');
+});
+
+test('役員・連絡先はfeature契約未設定時にfail-closedする', async () => {
+  const response = await createTestApp({
+    featureContractEnabled: false,
+  }).request('/api/v1/board-members', {
+    headers: { authorization: `Bearer ${USER_ID}` },
+  });
+
+  assert.equal(response.status, 503);
+  assert.equal(
+    (await response.json()).error.code,
+    'FEATURE_CONTRACT_NOT_CONFIGURED',
+  );
 });
 
 test('feature契約の無料flag変更はowner/adminだけが呼び出せる', async () => {
