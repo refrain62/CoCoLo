@@ -60,6 +60,21 @@ async function count(client: PrismaClient, table: string) {
   return Number(result[0]?.count ?? 0n);
 }
 
+async function countBoardContacts(
+  client: PrismaClient,
+  tenantId: string,
+  role: string,
+) {
+  const result = await rows<{ count: bigint }>(
+    client,
+    `SELECT count(*)::bigint AS count
+       FROM app_board_contact_rows($1::uuid, NULL::integer, $2::boolean)`,
+    tenantId,
+    role === 'owner' || role === 'admin',
+  );
+  return Number(result[0]?.count ?? 0n);
+}
+
 async function withContext<T>(
   client: PrismaClient,
   tenantId: string,
@@ -579,13 +594,29 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
       `SELECT has_table_privilege(current_user, $1, 'SELECT') AS allowed`,
       table,
     );
-    assert.equal(privilege[0]?.allowed, true, `${table}のSELECT grant`);
+    assert.equal(
+      privilege[0]?.allowed,
+      table !== 'board_contacts',
+      `${table}のSELECT grant`,
+    );
+  }
+  for (const functionName of [
+    'app_board_contact_rows(uuid,integer,boolean)',
+    'app_board_contact_manager_row(uuid,uuid)',
+    'app_board_contact_role_exists(uuid,integer,character varying,uuid)',
+  ]) {
+    const privilege = await rows<{ allowed: boolean }>(
+      app,
+      `SELECT has_function_privilege(current_user, $1, 'EXECUTE') AS allowed`,
+      functionName,
+    );
+    assert.equal(privilege[0]?.allowed, true, `${functionName}のEXECUTE grant`);
   }
 
   await withContext(app, tenantA, 'owner-a', 'owner', async (tx) => {
     assert.equal(await count(tx, 'events'), 1);
     assert.equal(await count(tx, 'attendance_responses'), 2);
-    assert.equal(await count(tx, 'board_contacts'), 1);
+    assert.equal(await countBoardContacts(tx, tenantA, 'owner'), 1);
     assert.equal(await count(tx, 'purchase_orders'), 1);
     assert.equal(await count(tx, 'attachments'), 1);
     assert.equal(await count(tx, 'announcements'), 1);
@@ -597,13 +628,22 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
       (
         await rows<{ phone: string; metadata: string }>(
           tx,
-          `SELECT phone, (SELECT metadata::text FROM audit_logs WHERE id = $1::uuid) AS metadata
-             FROM board_contacts WHERE id = $2::uuid`,
+          `SELECT board_contact.phone,
+                  (SELECT metadata::text FROM audit_logs WHERE id = $1::uuid) AS metadata
+             FROM app_board_contact_manager_row($2::uuid, $3::uuid) AS board_contact`,
           auditA,
+          tenantA,
           boardContactA,
         )
       )[0]?.metadata.includes('090-'),
       false,
+    );
+    await rejects(() =>
+      rows(
+        tx,
+        `SELECT phone FROM board_contacts WHERE id = $1::uuid`,
+        boardContactA,
+      ),
     );
   });
 
@@ -635,7 +675,21 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
   });
 
   await withContext(app, tenantA, 'staff-a', 'staff', async (tx) => {
-    assert.equal(await count(tx, 'board_contacts'), 1);
+    assert.equal(await countBoardContacts(tx, tenantA, 'staff'), 1);
+    const publicContacts = await rows<{ phone: string | null }>(
+      tx,
+      `SELECT phone
+         FROM app_board_contact_rows($1::uuid, NULL::integer, false)`,
+      tenantA,
+    );
+    assert.equal(publicContacts[0]?.phone, null);
+    await rejects(() =>
+      rows(
+        tx,
+        `SELECT phone FROM board_contacts WHERE id = $1::uuid`,
+        boardContactA,
+      ),
+    );
     assert.equal(await count(tx, 'events'), 1);
     assert.equal(await count(tx, 'purchase_orders'), 0);
   });
@@ -646,7 +700,7 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
       `DELETE FROM board_contacts WHERE id = $1::uuid`,
       boardContactA,
     );
-    assert.equal(await count(tx, 'board_contacts'), 1);
+    assert.equal(await countBoardContacts(tx, tenantA, 'guardian'), 1);
   });
 
   await withContext(app, tenantA, 'owner-a', 'owner', async (tx) => {

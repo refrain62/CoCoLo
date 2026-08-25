@@ -58,10 +58,26 @@ function createFakeClient() {
           },
         ];
       }
-      if (text.includes('SELECT id') && text.includes('FROM board_contacts'))
-        return [];
-      if (text.includes('INSERT INTO board_contacts')) return [rawContact];
-      if (text.includes('FROM board_contacts')) return [rawContact];
+      if (text.includes('app_board_contact_role_exists'))
+        return [{ conflict: false }];
+      if (
+        text.includes('app_board_contact_rows') ||
+        text.includes('app_board_contact_manager_row')
+      ) {
+        const includePrivate =
+          text.includes('app_board_contact_manager_row') ||
+          normalized.values.includes(true);
+        return [
+          includePrivate
+            ? rawContact
+            : {
+                ...rawContact,
+                assignee_user_id: null,
+                line_contact: null,
+                phone: null,
+              },
+        ];
+      }
       return [];
     },
   };
@@ -73,7 +89,7 @@ function createFakeClient() {
   };
 }
 
-test('repositoryの一覧はstaffにも許可し、連絡先の投影はAPI層へ委譲する', async () => {
+test('repositoryの一覧はstaffにも許可し、DB projectionで連絡先を除外する', async () => {
   const client = createFakeClient();
   const repository = createBoardContactRepository(client);
 
@@ -81,6 +97,21 @@ test('repositoryの一覧はstaffにも許可し、連絡先の投影はAPI層�
     tenantId: TENANT_ID,
     actorUserId: 'staff-a',
     role: 'staff',
+    query: {},
+  });
+
+  assert.equal(result[0]?.lineContact, null);
+  assert.equal(result[0]?.phone, null);
+});
+
+test('repositoryの一覧はmanagerだけに連絡先を返す', async () => {
+  const client = createFakeClient();
+  const repository = createBoardContactRepository(client);
+
+  const result = await repository.list({
+    tenantId: TENANT_ID,
+    actorUserId: 'owner-a',
+    role: 'owner',
     query: {},
   });
 

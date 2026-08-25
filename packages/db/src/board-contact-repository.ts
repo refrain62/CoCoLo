@@ -76,20 +76,6 @@ type RawBoardContact = {
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
-const boardContactColumns = Prisma.sql`
-  id,
-  tenant_id,
-  fiscal_year,
-  role_name,
-  role_type,
-  assignee_user_id,
-  line_contact,
-  phone,
-  contact_preference,
-  created_at,
-  updated_at
-`;
-
 function toRecord(row: RawBoardContact): BoardContactRecord {
   return {
     id: row.id,
@@ -225,11 +211,11 @@ async function findById(
   boardContactId: string,
 ) {
   const rows = await client.$queryRaw<RawBoardContact[]>(Prisma.sql`
-    SELECT ${boardContactColumns}
-    FROM board_contacts
-    WHERE tenant_id = ${tenantId}::uuid
-      AND id = ${boardContactId}::uuid
-    FOR UPDATE
+    SELECT *
+    FROM app_board_contact_manager_row(
+      ${tenantId}::uuid,
+      ${boardContactId}::uuid
+    )
   `);
   return rows[0] ? toRecord(rows[0]) : null;
 }
@@ -243,16 +229,15 @@ async function assertRoleNameAvailable(
     exceptId?: string;
   },
 ) {
-  const rows = await client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    SELECT id
-    FROM board_contacts
-    WHERE tenant_id = ${input.tenantId}::uuid
-      AND fiscal_year = ${input.fiscalYear}
-      AND role_name = ${input.roleName}
-      ${input.exceptId ? Prisma.sql`AND id <> ${input.exceptId}::uuid` : Prisma.empty}
-    FOR UPDATE
+  const rows = await client.$queryRaw<Array<{ conflict: boolean }>>(Prisma.sql`
+    SELECT app_board_contact_role_exists(
+      ${input.tenantId}::uuid,
+      ${input.fiscalYear}::integer,
+      ${input.roleName},
+      ${input.exceptId ?? null}::uuid
+    ) AS conflict
   `);
-  if (rows.length > 0)
+  if (rows[0]?.conflict)
     throw new BoardContactConflictError(
       '同じ年度に同じ役職名を複数登録できません。',
     );
@@ -279,11 +264,12 @@ export function createBoardContactRepository(client: PrismaClient) {
         await setRlsContext(tx, input);
         await assertActiveMembership(tx, input);
         const rows = await tx.$queryRaw<RawBoardContact[]>(Prisma.sql`
-          SELECT ${boardContactColumns}
-          FROM board_contacts
-          WHERE tenant_id = ${input.tenantId}::uuid
-            ${input.query.fiscalYear === undefined ? Prisma.empty : Prisma.sql`AND fiscal_year = ${input.query.fiscalYear}`}
-          ORDER BY fiscal_year DESC, role_name ASC, id ASC
+          SELECT *
+          FROM app_board_contact_rows(
+            ${input.tenantId}::uuid,
+            ${input.query.fiscalYear ?? null}::integer,
+            ${input.role === 'owner' || input.role === 'admin'}
+          )
         `);
         return rows.map(toRecord);
       }),
@@ -309,7 +295,8 @@ export function createBoardContactRepository(client: PrismaClient) {
           input.tenantId,
           input.contact.assigneeUserId,
         );
-        const rows = await tx.$queryRaw<RawBoardContact[]>(Prisma.sql`
+        const boardContactId = uuidv7();
+        await tx.$executeRaw(Prisma.sql`
           INSERT INTO board_contacts (
             id,
             tenant_id,
@@ -321,7 +308,7 @@ export function createBoardContactRepository(client: PrismaClient) {
             phone,
             contact_preference
           ) VALUES (
-            ${uuidv7()}::uuid,
+            ${boardContactId}::uuid,
             ${input.tenantId}::uuid,
             ${input.contact.fiscalYear},
             ${input.contact.roleName},
@@ -331,9 +318,8 @@ export function createBoardContactRepository(client: PrismaClient) {
             ${input.contact.phone ?? null},
             ${input.contact.contactPreference}
           )
-          RETURNING ${boardContactColumns}
         `);
-        const created = rows[0];
+        const created = await findById(tx, input.tenantId, boardContactId);
         if (!created) throw new Error('役員の登録結果を取得できませんでした。');
         await writeAudit(
           tx,
@@ -342,7 +328,7 @@ export function createBoardContactRepository(client: PrismaClient) {
           created.id,
           auditMetadata(input.contact),
         );
-        return toRecord(created);
+        return created;
       }),
 
     update: async (input: {
@@ -400,16 +386,19 @@ export function createBoardContactRepository(client: PrismaClient) {
             Prisma.sql`contact_preference = ${input.patch.contactPreference}`,
           );
         updates.push(Prisma.sql`updated_at = now()`);
-        const rows = await tx.$queryRaw<RawBoardContact[]>(Prisma.sql`
+        await tx.$executeRaw(Prisma.sql`
           UPDATE board_contacts
           SET ${Prisma.join(updates, ', ')}
           WHERE tenant_id = ${input.tenantId}::uuid
             AND id = ${input.boardContactId}::uuid
-          RETURNING ${boardContactColumns}
         `);
-        const updated = rows[0];
+        const updated = await findById(
+          tx,
+          input.tenantId,
+          input.boardContactId,
+        );
         if (!updated) return null;
-        const updatedRecord = toRecord(updated);
+        const updatedRecord = updated;
         await writeAudit(
           tx,
           input,
@@ -438,23 +427,25 @@ export function createBoardContactRepository(client: PrismaClient) {
         await setRlsContext(tx, input);
         await assertActiveMembership(tx, input);
         await lockTenant(tx, input.tenantId);
-        const rows = await tx.$queryRaw<RawBoardContact[]>(Prisma.sql`
+        const current = await findById(
+          tx,
+          input.tenantId,
+          input.boardContactId,
+        );
+        if (!current) return null;
+        await tx.$executeRaw(Prisma.sql`
           DELETE FROM board_contacts
           WHERE tenant_id = ${input.tenantId}::uuid
             AND id = ${input.boardContactId}::uuid
-          RETURNING ${boardContactColumns}
         `);
-        const removed = rows[0];
-        if (!removed) return null;
-        const removedRecord = toRecord(removed);
         await writeAudit(
           tx,
           input,
           'board_contact.remove',
-          removed.id,
-          auditMetadata(removedRecord),
+          current.id,
+          auditMetadata(current),
         );
-        return removedRecord;
+        return current;
       }),
 
     copyYear: async (input: {
@@ -465,6 +456,7 @@ export function createBoardContactRepository(client: PrismaClient) {
       toFiscalYear: number;
     }) =>
       client.$transaction(async (tx) => {
+        assertManagerRole(input.role);
         await setRlsContext(tx, input);
         await assertActiveMembership(tx, input);
         await lockTenant(tx, input.tenantId);
@@ -490,22 +482,30 @@ export function createBoardContactRepository(client: PrismaClient) {
             NULL,
             NULL,
             'line'
-          FROM board_contacts AS source
-          WHERE source.tenant_id = ${input.tenantId}::uuid
-            AND source.fiscal_year = ${input.fromFiscalYear}
-            AND NOT EXISTS (
+          FROM app_board_contact_rows(
+            ${input.tenantId}::uuid,
+            ${input.fromFiscalYear}::integer,
+            true
+          ) AS source
+          WHERE NOT EXISTS (
               SELECT 1
-              FROM board_contacts AS target
+              FROM app_board_contact_rows(
+                ${input.tenantId}::uuid,
+                ${input.toFiscalYear}::integer,
+                true
+              ) AS target
               WHERE target.tenant_id = source.tenant_id
                 AND target.fiscal_year = ${input.toFiscalYear}
                 AND target.role_name = source.role_name
             )
         `;
         const rows = await tx.$queryRaw<RawBoardContact[]>(Prisma.sql`
-          SELECT ${boardContactColumns}
-          FROM board_contacts
-          WHERE tenant_id = ${input.tenantId}::uuid
-            AND fiscal_year = ${input.toFiscalYear}
+          SELECT *
+          FROM app_board_contact_rows(
+            ${input.tenantId}::uuid,
+            ${input.toFiscalYear}::integer,
+            true
+          )
           ORDER BY role_name ASC, id ASC
         `);
         await writeAudit(
