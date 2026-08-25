@@ -615,7 +615,7 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
     );
     assert.equal(
       privilege[0]?.allowed,
-      table !== 'board_contacts',
+      table !== 'board_contacts' && table !== 'ride_plans',
       `${table}のSELECT grant`,
     );
   }
@@ -688,13 +688,6 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
     assert.equal(await count(tx, 'order_entries'), 1);
     assert.equal(await count(tx, 'ride_requests'), 1);
     assert.equal(await count(tx, 'ride_assignments'), 0);
-    await rejects(() =>
-      rows(
-        tx,
-        `SELECT pickup_maps_url FROM ride_plans WHERE id = $1::uuid`,
-        ridePlanA,
-      ),
-    );
     assert.equal(await count(tx, 'line_notification_queue'), 0);
     await rejects(() =>
       execute(

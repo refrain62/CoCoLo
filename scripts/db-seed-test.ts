@@ -674,7 +674,7 @@ ON CONFLICT (id) DO NOTHING;
 `,
     sql`UPDATE ride_requests SET status = 'assigned' WHERE id = '${uuid(1821)}' AND status = 'pending';`,
     sql`UPDATE ride_requests SET status = 'unassigned' WHERE id = '${uuid(1822)}' AND status = 'pending';`,
-    sql`UPDATE ride_offers SET status = 'cancelled' WHERE id = '${uuid(1811)}' AND status = 'open';`,
+    sql`UPDATE ride_offers SET status = 'cancelled' WHERE id = '${uuid(1812)}' AND status = 'open';`,
     sql`UPDATE ride_plans SET status = 'closed' WHERE id = '${uuid(1801)}' AND status = 'open';`,
     sql`UPDATE ride_plans SET status = 'finalized' WHERE id = '${uuid(1801)}' AND status = 'closed';`,
   ];
