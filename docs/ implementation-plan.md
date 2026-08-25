@@ -1073,6 +1073,7 @@ Playwright は `playwright.config.ts` の `webServer` で実APIの `pnpm --filte
 * [ ] **NOT-002 LINE実サービス受入:** staging専用channel、Bot、group、Webhook、専用DB接続を用意し、接続、予定自動通知、手動通知、provider成功、4xx、timeout、送達不明、再送、署名不正、重複、別tenant拒否を同一SHAの成果物で検証します。
 * [ ] **NOT-003 LINE通知契約の仕様一致:** 中央producerのdeep linkを公開origin、通知元資源、通知元tenantへサーバー側で束縛し、staffの汎用通知登録と回覧、未払い通知のproducer方針を決定して、機能仕様、API、Web、DB、テスト、受入記録を一致させます。
 * [x] **TOOL-001 Node.js/pnpm固定検証:** Node.js 24.12.0とpnpm 10.26.0をmise、package.json、全Workflow、実行時検査へ固定し、quality run `32788024029`で全体検証を成功させた。実装PR #160（`f49cf02`）とquality全体検証PR #161（`9c203ce`）をdevelopへ統合済み。
+* [x] **TOOL-002 CR改行検査の結果統一:** Git属性に基づく追跡対象textのHEAD blob/worktree検査、BOM・UTF-8・CR・末尾LF検査、PR base...headの`git diff --check`、JSON証跡を`ci:fast`へ接続した。実装PR #163は`b18e359`としてdevelopへ統合済み。
 * [~] **UI-001 PC・スマートフォン対応の全体UI再設計:** shadcn/uiの設計思想に沿う共通UIプリミティブ、デザイントークン、AppShell、カード、フォーム、状態表示を整備し、既存の認証・tenant・role境界を変えずに全画面の情報設計と操作体験を改善する。専用ブランチは`feature/frontend-chadcn-responsive`とする。
 * [~] **UI-002 UI/UX受入検証:** 390px、430px、768px、1280px以上の画面幅で主要導線を確認し、loading、success、error、empty、disabled、権限不足、未接続状態、キーボード操作、visible focus、コントラスト、reduced-motion、タップ領域、ページ横スクロール禁止を検証する。PR #156・#158で共通UI基盤と操作状態の実装、local自動検証、quality成功まで完了した。認証済み主要画面の実機幅・role別ブラウザ受入とstaging確認が残る。
 * [ ] **UI-003 保存操作のサーバー冪等性とrole別ブラウザ受入:** 予定、注文、LINE接続・通知、部員管理などの保存APIで安定した冪等キー契約を定義し、owner/admin/staff/guardianの表示・API認可、外部サービス障害、再試行、競合をlocal実DBとstagingのPlaywrightで検証する。UIのdisabledだけを冪等性の根拠にせず、Critical / High 0件で`develop`へ統合する。
