@@ -5,6 +5,7 @@ import type {
   RideAssignmentInput,
   RideOfferCreateInput,
   RidePlanCreateInput,
+  RidePlanTransitionInput,
   RideRepository,
   RideRequestCreateInput,
 } from '@cocolo/db/ride';
@@ -102,10 +103,11 @@ function createFakeRepository(): TestRepository {
       (assignment) =>
         assignment.planId === plan.id &&
         (managerRole ||
-          visibleRequests.some(
-            (request) => request.id === assignment.requestId,
-          ) ||
-          visibleOffers.some((offer) => offer.id === assignment.offerId)),
+          (plan.status === 'finalized' &&
+            (visibleRequests.some(
+              (request) => request.id === assignment.requestId,
+            ) ||
+              visibleOffers.some((offer) => offer.id === assignment.offerId)))),
     );
     const historyActions: Record<string, RideHistoryEntry['action']> = {
       'ride.plan.create': 'plan_created',
@@ -113,6 +115,9 @@ function createFakeRepository(): TestRepository {
       'ride.request.create': 'request_registered',
       'ride.match.execute': 'matching_executed',
       'ride.assignment.update': 'assignment_updated',
+      'ride.plan.close': 'plan_closed',
+      'ride.plan.finalize': 'plan_finalized',
+      'ride.plan.reopen': 'plan_reopened',
     };
     const history: RideHistoryEntry[] = audit
       .filter((entry) => entry.resourceId === plan.id)
@@ -274,6 +279,36 @@ function createFakeRepository(): TestRepository {
         offerId: offer.id,
       });
       return assignment;
+    },
+    async transitionPlan(
+      actor: RideActor,
+      planId: string,
+      input: RidePlanTransitionInput,
+    ) {
+      const plan = getPlan(actor, planId);
+      const expected =
+        input.action === 'close'
+          ? 'open'
+          : input.action === 'finalize'
+            ? 'closed'
+            : 'finalized';
+      if (plan.status !== expected) {
+        const error = new Error('送迎予定の現在状態では変更できません。');
+        Object.assign(error, { status: 409 });
+        throw error;
+      }
+      plan.status = input.action === 'finalize' ? 'finalized' : 'closed';
+      append(
+        actor,
+        input.action === 'close'
+          ? 'ride.plan.close'
+          : input.action === 'finalize'
+            ? 'ride.plan.finalize'
+            : 'ride.plan.reopen',
+        plan.id,
+        input.action === 'reopen' ? { reasonCode: input.reasonCode } : {},
+      );
+      return plan;
     },
   };
 }
@@ -438,4 +473,46 @@ test('管理者は定員超過を未割当として確認し、メトリクス�
   });
   assert.equal(repository.audit.length >= 5, true);
   assert.equal(JSON.stringify(repository.audit).includes('member-'), false);
+});
+
+test('管理者は受付終了・公開・再編集を状態順に実行し、再編集理由を監査できる', async () => {
+  const repository = createFakeRepository();
+  const { app } = createTestApp(manager, repository);
+  const planResponse = await request(app, '/api/v1/ride-plans', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: '練習試合',
+      departureAt: '2026-08-23T08:00:00+09:00',
+    }),
+  });
+  const plan = (await planResponse.json()).data;
+  const closed = await request(app, `/api/v1/ride-plans/${plan.id}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'close' }),
+  });
+  assert.equal(closed.status, 200);
+  const finalized = await request(app, `/api/v1/ride-plans/${plan.id}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'finalize' }),
+  });
+  assert.equal(finalized.status, 200);
+  const invalidReopen = await request(
+    app,
+    `/api/v1/ride-plans/${plan.id}/status`,
+    { method: 'POST', body: JSON.stringify({ action: 'reopen' }) },
+  );
+  assert.equal(invalidReopen.status, 400);
+  const reopened = await request(app, `/api/v1/ride-plans/${plan.id}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'reopen', reasonCode: 'member_change' }),
+  });
+  assert.equal(reopened.status, 200);
+  assert.equal(
+    repository.audit.some(
+      (entry) =>
+        entry.action === 'ride.plan.reopen' &&
+        JSON.stringify(entry.metadata).includes('member_change'),
+    ),
+    true,
+  );
 });

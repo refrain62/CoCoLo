@@ -3,6 +3,7 @@ import type {
   RideAssignmentInput,
   RideOfferCreateInput,
   RidePlanCreateInput,
+  RidePlanTransitionInput,
   RideRepository,
   RideRequestCreateInput,
 } from '@cocolo/db/ride';
@@ -86,6 +87,11 @@ export type RideService = {
     planId: string,
     input: RideAssignmentInput,
   ) => Promise<RideAssignmentView>;
+  transitionPlan: (
+    actor: RideActor,
+    planId: string,
+    input: RidePlanTransitionInput,
+  ) => Promise<RidePlanView>;
   getDispatch: (actor: RideActor, planId: string) => Promise<RideDispatchView>;
   getMetrics: (actor: RideActor, planId: string) => Promise<RideMetrics>;
 };
@@ -208,6 +214,10 @@ export function createRideService(repository: RideRepository): RideService {
     async assign(actor, planId, input) {
       assertManager(actor);
       return toAssignmentView(await repository.assign(actor, planId, input));
+    },
+    async transitionPlan(actor, planId, input) {
+      assertManager(actor);
+      return toPlanView(await repository.transitionPlan(actor, planId, input));
     },
     async getDispatch(actor, planId) {
       assertManager(actor);

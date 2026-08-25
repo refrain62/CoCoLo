@@ -3,6 +3,7 @@ import {
   adminNavigation,
   canonicalAdminPath,
   isAdminNavigationVisible,
+  isAdminRouteVisible,
   resolveAdminRoute,
 } from './admin-routes.js';
 
@@ -80,5 +81,11 @@ describe('管理画面ルート', () => {
       boardContacts &&
         isAdminNavigationVisible(boardContacts, 'admin', boardContactFeatures),
     ).toBe(false);
+  });
+
+  it('送迎は管理者と保護者に表示する', () => {
+    const features = [{ key: 'ride-operations', enabled: true }];
+    expect(isAdminRouteVisible('ride', 'owner', features)).toBe(true);
+    expect(isAdminRouteVisible('ride', 'guardian', features)).toBe(true);
   });
 });

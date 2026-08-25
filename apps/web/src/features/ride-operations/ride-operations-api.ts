@@ -2,12 +2,15 @@ import type {
   RideAssignmentInput,
   RideOfferCreateInput,
   RidePlanCreateInput,
+  RidePlanTransitionInput,
   RideRequestCreateInput,
 } from '@cocolo/contracts/ride';
 import {
   getStoredSelectedTeamId,
   selectedTeamHeaderName,
 } from '../auth-team-selection/selected-team-storage.js';
+
+export type { RidePlanTransitionInput } from '@cocolo/contracts/ride';
 
 export type RidePlan = {
   id: string;
@@ -48,6 +51,9 @@ export type RideSnapshot = {
       | 'request_registered'
       | 'matching_executed'
       | 'assignment_updated'
+      | 'plan_closed'
+      | 'plan_finalized'
+      | 'plan_reopened'
       | 'other';
     createdAt: string;
   }>;
@@ -135,6 +141,10 @@ export type RideOperationsApi = {
     planId: string,
     input: RideAssignmentInput,
   ) => Promise<RideDispatch['assignments'][number]>;
+  transitionPlan: (
+    planId: string,
+    input: RidePlanTransitionInput,
+  ) => Promise<RidePlan>;
   getDispatch: (planId: string) => Promise<RideDispatch>;
   getMetrics: (planId: string) => Promise<RideMetrics>;
 };
@@ -229,6 +239,13 @@ export function createRideOperationsApi({
         method: 'POST',
         body: JSON.stringify(input),
       });
+      return response.data;
+    },
+    async transitionPlan(planId, input) {
+      const response = await request<{ data: RidePlan }>(
+        `${planPath(planId)}/status`,
+        { method: 'POST', body: JSON.stringify(input) },
+      );
       return response.data;
     },
     async getDispatch(planId) {

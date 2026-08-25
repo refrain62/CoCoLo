@@ -13,6 +13,7 @@ import {
 } from '@cocolo/domain/ride';
 import type { Prisma, PrismaClient, Role } from '@prisma/client';
 import { findAuthorizedSubjectMember } from './subject-member-access.js';
+import { uuidv7 } from './uuidv7.js';
 
 export type RideRole = 'owner' | 'admin' | 'staff' | 'guardian';
 export type RideActor = {
@@ -34,6 +35,16 @@ export type RideRequestCreateInput = {
   passengerCount: number;
 };
 export type RideAssignmentInput = { requestId: string; offerId: string };
+export type RidePlanTransitionInput =
+  | { action: 'close' | 'finalize' }
+  | {
+      action: 'reopen';
+      reasonCode:
+        | 'schedule_change'
+        | 'member_change'
+        | 'vehicle_change'
+        | 'other';
+    };
 
 export class RideRepositoryNotFoundError extends Error {
   readonly status = 404;
@@ -46,9 +57,11 @@ export class RideRepositoryNotFoundError extends Error {
 
 export class RideRepositoryConflictError extends Error {
   readonly status = 409;
+  readonly code: string;
 
-  constructor(message: string) {
+  constructor(message: string, code = 'RIDE_STATE_CONFLICT') {
     super(message);
+    this.code = code;
     this.name = 'RideRepositoryConflictError';
   }
 }
@@ -91,6 +104,11 @@ export type RideRepository = {
     planId: string,
     input: RideAssignmentInput,
   ) => Promise<RideAssignment>;
+  transitionPlan: (
+    actor: RideActor,
+    planId: string,
+    input: RidePlanTransitionInput,
+  ) => Promise<RidePlan>;
 };
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -198,6 +216,9 @@ function toHistory(row: {
     'ride.request.create': 'request_registered',
     'ride.match.execute': 'matching_executed',
     'ride.assignment.update': 'assignment_updated',
+    'ride.plan.close': 'plan_closed',
+    'ride.plan.finalize': 'plan_finalized',
+    'ride.plan.reopen': 'plan_reopened',
   };
   return {
     id: row.id,
@@ -255,10 +276,10 @@ async function requirePlan(
   const rows = await client.$queryRaw<PlanRow[]>`
     SELECT id, tenant_id, title, departure_at, pickup_maps_url,
            destination_maps_url, status, created_at
-      FROM ride_plans
-     WHERE tenant_id = ${actor.tenantId}::uuid
-       AND id = ${planId}::uuid
-     FOR UPDATE
+      FROM app_ride_plan_row(
+        ${actor.tenantId}::uuid,
+        ${planId}::uuid
+      )
   `;
   const row = rows[0];
   if (!row) throw new RideRepositoryNotFoundError();
@@ -288,7 +309,33 @@ async function readSnapshot(
       FROM ride_offers
      WHERE tenant_id = ${actor.tenantId}::uuid
        AND plan_id = ${plan.id}::uuid
-       AND (${manager} OR driver_user_id = ${actor.userId})
+       AND (
+         ${manager}
+         OR driver_user_id = ${actor.userId}
+         OR (
+           ${plan.status === 'finalized'}
+           AND EXISTS (
+             SELECT 1
+               FROM ride_assignments ra
+               JOIN ride_requests rr
+                 ON rr.tenant_id = ra.tenant_id AND rr.id = ra.request_id
+              WHERE ra.tenant_id = ride_offers.tenant_id
+                AND ra.plan_id = ride_offers.plan_id
+                AND ra.offer_id = ride_offers.id
+                AND (
+                  rr.requester_user_id = ${actor.userId}
+                  OR EXISTS (
+                    SELECT 1
+                      FROM guardian_members gm
+                     WHERE gm.tenant_id = rr.tenant_id
+                       AND gm.member_id = rr.member_id
+                       AND gm.user_id = ${actor.userId}
+                       AND gm.status = 'active'::member_link_status
+                  )
+                )
+           )
+         )
+       )
      ORDER BY created_at ASC, id ASC
   `;
   const requests = await client.$queryRaw<RequestRow[]>`
@@ -315,16 +362,29 @@ async function readSnapshot(
     SELECT a.id, a.plan_id, a.request_id, a.offer_id, a.passenger_count,
            a.created_at
       FROM ride_assignments a
-      JOIN ride_requests r
+      LEFT JOIN ride_requests r
         ON r.tenant_id = a.tenant_id AND r.id = a.request_id
-      JOIN ride_offers o
+      LEFT JOIN ride_offers o
         ON o.tenant_id = a.tenant_id AND o.id = a.offer_id
      WHERE a.tenant_id = ${actor.tenantId}::uuid
        AND a.plan_id = ${plan.id}::uuid
-       AND (
+         AND (
          ${manager}
-         OR r.requester_user_id = ${actor.userId}
-         OR o.driver_user_id = ${actor.userId}
+         OR (
+           ${plan.status === 'finalized'}
+           AND (
+             r.requester_user_id = ${actor.userId}
+             OR o.driver_user_id = ${actor.userId}
+             OR EXISTS (
+               SELECT 1
+                 FROM guardian_members gm
+                WHERE gm.tenant_id = ${actor.tenantId}::uuid
+                  AND gm.user_id = ${actor.userId}
+                  AND gm.member_id = r.member_id
+                  AND gm.status = 'active'::member_link_status
+             )
+           )
+         )
        )
      ORDER BY a.created_at ASC, a.id ASC
   `;
@@ -339,7 +399,14 @@ async function readSnapshot(
     select: { id: true, action: true, createdAt: true },
   });
   return {
-    plan,
+    plan:
+      manager || plan.status === 'finalized'
+        ? plan
+        : {
+            ...plan,
+            pickupMapsUrl: null,
+            destinationMapsUrl: null,
+          },
     offers: offers.map(toOffer),
     requests: requests.map(toRequest),
     assignments: assignments.map(toAssignment),
@@ -376,12 +443,18 @@ export function createRideRepository(client: PrismaClient): RideRepository {
         const rows = await tx.$queryRaw<PlanRow[]>`
           SELECT id, tenant_id, title, departure_at, pickup_maps_url,
                  destination_maps_url, status, created_at
-            FROM ride_plans
-           WHERE tenant_id = ${actor.tenantId}::uuid
-           ORDER BY departure_at ASC, id ASC
-           LIMIT 100
+            FROM app_ride_plan_rows(${actor.tenantId}::uuid)
         `;
-        return rows.map(toPlan);
+        return rows.map((row) => {
+          const plan = toPlan(row);
+          return managerRoles.has(actor.role) || plan.status === 'finalized'
+            ? plan
+            : {
+                ...plan,
+                pickupMapsUrl: null,
+                destinationMapsUrl: null,
+              };
+        });
       });
     },
 
@@ -404,10 +477,10 @@ export function createRideRepository(client: PrismaClient): RideRepository {
         const rows = await tx.$queryRaw<PlanRow[]>`
           WITH created AS (
             INSERT INTO ride_plans (
-              tenant_id, title, departure_at, pickup_maps_url,
+              id, tenant_id, title, departure_at, pickup_maps_url,
               destination_maps_url, status
             ) VALUES (
-              ${actor.tenantId}::uuid, ${title}, ${departureAt},
+              ${uuidv7()}::uuid, ${actor.tenantId}::uuid, ${title}, ${departureAt},
               ${pickupMapsUrl}, ${destinationMapsUrl}, 'draft'
             )
             RETURNING id
@@ -417,13 +490,20 @@ export function createRideRepository(client: PrismaClient): RideRepository {
             FROM created
            WHERE ride_plans.tenant_id = ${actor.tenantId}::uuid
              AND ride_plans.id = created.id
-          RETURNING id, tenant_id, title, departure_at, pickup_maps_url,
-                    destination_maps_url, status, created_at
+          RETURNING id, tenant_id, title, departure_at, status, created_at
         `;
         const row = rows[0];
         if (!row)
           throw new RideRepositoryConflictError('送迎予定を作成できません。');
-        const plan = toPlan(row);
+        const planRows = await tx.$queryRaw<PlanRow[]>`
+          SELECT id, tenant_id, title, departure_at, pickup_maps_url,
+                 destination_maps_url, status, created_at
+            FROM app_ride_plan_row(
+              ${actor.tenantId}::uuid,
+              ${row.id}::uuid
+            )
+        `;
+        const plan = toPlan(planRows[0] ?? row);
         await appendAudit(tx, actor, {
           action: 'ride.plan.create',
           resourceId: plan.id,
@@ -451,9 +531,9 @@ export function createRideRepository(client: PrismaClient): RideRepository {
           );
         const rows = await tx.$queryRaw<OfferRow[]>`
           INSERT INTO ride_offers
-            (tenant_id, plan_id, driver_user_id, capacity, status)
+            (id, tenant_id, plan_id, driver_user_id, capacity, status)
           VALUES
-            (${actor.tenantId}::uuid, ${plan.id}::uuid, ${actor.userId}, ${input.capacity}, 'open')
+            (${uuidv7()}::uuid, ${actor.tenantId}::uuid, ${plan.id}::uuid, ${actor.userId}, ${input.capacity}, 'open')
           RETURNING id, plan_id, driver_user_id, capacity, status, created_at
         `;
         const row = rows[0];
@@ -494,10 +574,10 @@ export function createRideRepository(client: PrismaClient): RideRepository {
           throw new RideRepositoryForbiddenError();
         const rows = await tx.$queryRaw<RequestRow[]>`
           INSERT INTO ride_requests (
-            tenant_id, plan_id, member_id, requester_user_id,
+            id, tenant_id, plan_id, member_id, requester_user_id,
             passenger_count, status
           )
-          SELECT ${actor.tenantId}::uuid, ${plan.id}::uuid, m.id,
+          SELECT ${uuidv7()}::uuid, ${actor.tenantId}::uuid, ${plan.id}::uuid, m.id,
                  ${actor.userId}, ${input.passengerCount}, 'pending'
             FROM members m
            WHERE m.tenant_id = ${actor.tenantId}::uuid
@@ -546,7 +626,7 @@ export function createRideRepository(client: PrismaClient): RideRepository {
       return runInRideTransaction(client, actor, async (tx) => {
         await lockPlan(tx, actor, planId);
         const plan = await requirePlan(tx, actor, planId);
-        if (plan.status !== 'open')
+        if (plan.status !== 'open' && plan.status !== 'closed')
           throw new RideRepositoryConflictError(
             '受付中でない送迎は割り当てできません。',
           );
@@ -565,9 +645,9 @@ export function createRideRepository(client: PrismaClient): RideRepository {
         for (const decision of decisions) {
           const rows = await tx.$queryRaw<AssignmentRow[]>`
             INSERT INTO ride_assignments (
-              tenant_id, plan_id, request_id, offer_id, passenger_count
+              id, tenant_id, plan_id, request_id, offer_id, passenger_count
             ) VALUES (
-              ${actor.tenantId}::uuid, ${plan.id}::uuid,
+              ${uuidv7()}::uuid, ${actor.tenantId}::uuid, ${plan.id}::uuid,
               ${decision.requestId}::uuid, ${decision.offerId}::uuid,
               ${decision.passengerCount}
             )
@@ -610,7 +690,7 @@ export function createRideRepository(client: PrismaClient): RideRepository {
       return runInRideTransaction(client, actor, async (tx) => {
         await lockPlan(tx, actor, planId);
         const plan = await requirePlan(tx, actor, planId);
-        if (plan.status !== 'open')
+        if (plan.status !== 'open' && plan.status !== 'closed')
           throw new RideRepositoryConflictError(
             '受付中でない送迎は割り当てできません。',
           );
@@ -659,22 +739,26 @@ export function createRideRepository(client: PrismaClient): RideRepository {
           assignedSeats: assignedRows[0]?.assigned_seats ?? 0,
           requestedSeats: request.passenger_count,
         });
-        if (previous)
-          await tx.$executeRaw`
-            DELETE FROM ride_assignments
-             WHERE tenant_id = ${actor.tenantId}::uuid
-               AND id = ${previous.id}::uuid
-          `;
-        const assignmentRows = await tx.$queryRaw<AssignmentRow[]>`
-          INSERT INTO ride_assignments (
-            tenant_id, plan_id, request_id, offer_id, passenger_count
-          ) VALUES (
-            ${actor.tenantId}::uuid, ${plan.id}::uuid,
-            ${request.id}::uuid, ${offer.id}::uuid, ${request.passenger_count}
-          )
-          RETURNING id, plan_id, request_id, offer_id,
-                    passenger_count, created_at
-        `;
+        const assignmentRows = previous
+          ? await tx.$queryRaw<AssignmentRow[]>`
+              UPDATE ride_assignments
+                 SET offer_id = ${offer.id}::uuid,
+                     passenger_count = ${request.passenger_count}
+               WHERE tenant_id = ${actor.tenantId}::uuid
+                 AND id = ${previous.id}::uuid
+               RETURNING id, plan_id, request_id, offer_id,
+                         passenger_count, created_at
+            `
+          : await tx.$queryRaw<AssignmentRow[]>`
+              INSERT INTO ride_assignments (
+                id, tenant_id, plan_id, request_id, offer_id, passenger_count
+              ) VALUES (
+                ${uuidv7()}::uuid, ${actor.tenantId}::uuid, ${plan.id}::uuid,
+                ${request.id}::uuid, ${offer.id}::uuid, ${request.passenger_count}
+              )
+              RETURNING id, plan_id, request_id, offer_id,
+                        passenger_count, created_at
+            `;
         const row = assignmentRows[0];
         if (!row)
           throw new RideRepositoryConflictError('割当を保存できません。');
@@ -695,6 +779,122 @@ export function createRideRepository(client: PrismaClient): RideRepository {
           },
         });
         return assignment;
+      });
+    },
+
+    async transitionPlan(actor, planId, input) {
+      if (!managerRoles.has(actor.role))
+        throw new RideRepositoryForbiddenError();
+      return runInRideTransaction(client, actor, async (tx) => {
+        await lockPlan(tx, actor, planId);
+        const plan = await requirePlan(tx, actor, planId);
+        const targetStatus =
+          input.action === 'close'
+            ? 'closed'
+            : input.action === 'finalize'
+              ? 'finalized'
+              : 'closed';
+        const expectedStatus =
+          input.action === 'close'
+            ? 'open'
+            : input.action === 'finalize'
+              ? 'closed'
+              : 'finalized';
+        if (plan.status !== expectedStatus)
+          throw new RideRepositoryConflictError(
+            input.action === 'reopen'
+              ? '公開済みの送迎予定だけ再編集を開始できます。'
+              : '送迎予定の現在状態では、この状態変更を実行できません。',
+          );
+        if (input.action === 'finalize') {
+          const incompleteRows = await tx.$queryRaw<Array<{ count: number }>>`
+            SELECT COUNT(*)::int AS count
+              FROM ride_requests
+             WHERE tenant_id = ${actor.tenantId}::uuid
+               AND plan_id = ${plan.id}::uuid
+               AND status IN ('pending'::ride_request_status, 'unassigned'::ride_request_status)
+          `;
+          if ((incompleteRows[0]?.count ?? 0) > 0)
+            throw new RideRepositoryConflictError(
+              '未割当の乗車希望があるため、送迎を確定できません。',
+              'RIDE_FINALIZE_BLOCKED',
+            );
+          const duplicateMemberRows = await tx.$queryRaw<
+            Array<{ member_id: string }>
+          >`
+            SELECT r.member_id
+              FROM ride_assignments a
+              JOIN ride_requests r
+                ON r.tenant_id = a.tenant_id AND r.id = a.request_id
+             WHERE a.tenant_id = ${actor.tenantId}::uuid
+               AND a.plan_id = ${plan.id}::uuid
+             GROUP BY r.member_id
+            HAVING COUNT(*) > 1
+             LIMIT 1
+          `;
+          if (duplicateMemberRows[0])
+            throw new RideRepositoryConflictError(
+              '同じ部員が重複して割り当てられているため、送迎を確定できません。',
+              'RIDE_FINALIZE_BLOCKED',
+            );
+          const invalidAssignmentRows = await tx.$queryRaw<
+            Array<{ id: string }>
+          >`
+            SELECT o.id
+              FROM ride_offers o
+              JOIN ride_assignments a
+                ON a.tenant_id = o.tenant_id
+               AND a.offer_id = o.id
+               AND a.plan_id = o.plan_id
+             WHERE o.tenant_id = ${actor.tenantId}::uuid
+               AND o.plan_id = ${plan.id}::uuid
+             GROUP BY o.id, o.capacity, o.status
+            HAVING o.status <> 'open'::ride_offer_status
+                OR COALESCE(SUM(a.passenger_count), 0) > o.capacity
+             LIMIT 1
+          `;
+          if (invalidAssignmentRows[0])
+            throw new RideRepositoryConflictError(
+              '割当内容を確認してから、送迎を確定してください。',
+              'RIDE_FINALIZE_BLOCKED',
+            );
+        }
+        if (input.action === 'reopen')
+          await tx.$executeRaw`
+            SELECT set_config('app.ride_reopen_reason', ${input.reasonCode}, true)
+          `;
+        const rows = await tx.$queryRaw<PlanRow[]>`
+          UPDATE ride_plans
+             SET status = ${targetStatus}::ride_plan_status
+           WHERE tenant_id = ${actor.tenantId}::uuid
+             AND id = ${plan.id}::uuid
+           RETURNING id, tenant_id, title, departure_at, status, created_at
+        `;
+        const row = rows[0];
+        if (!row)
+          throw new RideRepositoryConflictError('送迎予定を変更できません。');
+        const planRows = await tx.$queryRaw<PlanRow[]>`
+          SELECT id, tenant_id, title, departure_at, pickup_maps_url,
+                 destination_maps_url, status, created_at
+            FROM app_ride_plan_row(
+              ${actor.tenantId}::uuid,
+              ${plan.id}::uuid
+            )
+        `;
+        const updated = toPlan(planRows[0] ?? row);
+        if (input.action !== 'reopen')
+          await appendAudit(tx, actor, {
+            action:
+              input.action === 'close'
+                ? 'ride.plan.close'
+                : 'ride.plan.finalize',
+            resourceId: updated.id,
+            metadata: {
+              fromStatus: plan.status,
+              toStatus: updated.status,
+            },
+          });
+        return updated;
       });
     },
   };

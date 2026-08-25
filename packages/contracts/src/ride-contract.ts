@@ -55,6 +55,21 @@ export const rideAssignmentSchema = z
 
 export const rideMatchSchema = z.object({}).strict();
 
+export const ridePlanTransitionSchema = z.union([
+  z.object({ action: z.enum(['close', 'finalize']) }).strict(),
+  z
+    .object({
+      action: z.literal('reopen'),
+      reasonCode: z.enum([
+        'schedule_change',
+        'member_change',
+        'vehicle_change',
+        'other',
+      ]),
+    })
+    .strict(),
+]);
+
 export const ridePlanIdSchema = uuid;
 
 export type RidePlanCreateInput = z.infer<typeof ridePlanCreateSchema>;
@@ -62,4 +77,5 @@ export type RideOfferCreateInput = z.infer<typeof rideOfferCreateSchema>;
 export type RideRequestCreateInput = z.infer<typeof rideRequestCreateSchema>;
 export type RideAssignmentInput = z.infer<typeof rideAssignmentSchema>;
 export type RideMatchInput = z.infer<typeof rideMatchSchema>;
+export type RidePlanTransitionInput = z.infer<typeof ridePlanTransitionSchema>;
 export type RidePlanId = z.infer<typeof ridePlanIdSchema>;

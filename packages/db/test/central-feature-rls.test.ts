@@ -415,6 +415,19 @@ async function cleanupFixture(client: PrismaClient) {
       const tx = transaction as unknown as PrismaClient;
       await execute(
         tx,
+        `SELECT set_config('app.tenant_id', $1, true),
+                set_config('app.user_id', 'owner-a', true),
+                set_config('app.role', 'owner', true),
+                set_config('app.ride_reopen_reason', 'other', true)`,
+        tenantA,
+      );
+      await execute(
+        tx,
+        `UPDATE ride_plans SET status = 'closed'::ride_plan_status WHERE id = $1::uuid`,
+        ridePlanA,
+      );
+      await execute(
+        tx,
         `DELETE FROM ride_assignments WHERE id = $1::uuid`,
         rideAssignmentA,
       );
@@ -534,7 +547,13 @@ async function cleanupFixture(client: PrismaClient) {
         tx,
         `ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_append_only_guard`,
       );
-      await execute(tx, `DELETE FROM audit_logs WHERE id = $1::uuid`, auditA);
+      await execute(
+        tx,
+        `DELETE FROM audit_logs
+          WHERE id = $1::uuid OR resource_id = $2::uuid`,
+        auditA,
+        ridePlanA,
+      );
       await execute(
         tx,
         `ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_append_only_guard`,
@@ -659,7 +678,14 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
     assert.equal(await count(tx, 'attachments'), 1);
     assert.equal(await count(tx, 'order_entries'), 1);
     assert.equal(await count(tx, 'ride_requests'), 1);
-    assert.equal(await count(tx, 'ride_assignments'), 1);
+    assert.equal(await count(tx, 'ride_assignments'), 0);
+    await rejects(() =>
+      rows(
+        tx,
+        `SELECT pickup_maps_url FROM ride_plans WHERE id = $1::uuid`,
+        ridePlanA,
+      ),
+    );
     assert.equal(await count(tx, 'line_notification_queue'), 0);
     await rejects(() =>
       execute(
@@ -671,6 +697,39 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
         eventA,
         memberA,
       ),
+    );
+  });
+
+  await withContext(app, tenantA, 'admin-a', 'admin', async (tx) => {
+    await execute(
+      tx,
+      `UPDATE ride_requests SET status = 'assigned'::ride_request_status WHERE id = $1::uuid`,
+      rideRequestA,
+    );
+    await execute(
+      tx,
+      `UPDATE ride_plans SET status = 'closed'::ride_plan_status WHERE id = $1::uuid`,
+      ridePlanA,
+    );
+    await execute(
+      tx,
+      `UPDATE ride_plans SET status = 'finalized'::ride_plan_status WHERE id = $1::uuid`,
+      ridePlanA,
+    );
+  });
+
+  await withContext(app, tenantA, 'guardian-a2', 'guardian', async (tx) => {
+    assert.equal(await count(tx, 'ride_assignments'), 1);
+    assert.equal(await count(tx, 'ride_offers'), 1);
+    assert.equal(
+      (
+        await rows<{ capacity: number }>(
+          tx,
+          `SELECT capacity FROM ride_offers WHERE id = $1::uuid`,
+          rideOfferA,
+        )
+      )[0]?.capacity,
+      4,
     );
   });
 

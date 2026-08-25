@@ -4,10 +4,12 @@ import {
   rideOfferCreateSchema,
   ridePlanCreateSchema,
   ridePlanIdSchema,
+  ridePlanTransitionSchema,
   rideRequestCreateSchema,
 } from '@cocolo/contracts/ride';
 import { getSubjectMemberId } from '@cocolo/contracts/subject-member';
 import type { Context, Hono } from 'hono';
+import { contextRequestId } from '../../security/request-id.js';
 import type { RideService } from './ride-service.js';
 
 export type RideRouteApp = Pick<Hono, 'get' | 'post'>;
@@ -30,7 +32,7 @@ function errorResponse(
         code,
         message,
         details,
-        requestId: context.req.header('x-request-id') ?? null,
+        requestId: contextRequestId(context),
       },
     },
     status,
@@ -50,6 +52,15 @@ async function parseJson(context: Context) {
 }
 
 function handleError(context: Context, error: unknown) {
+  if (error instanceof Error && 'code' in error) {
+    const code = error.code;
+    if (
+      code === 'RIDE_STATE_CONFLICT' ||
+      code === 'RIDE_FINALIZE_BLOCKED' ||
+      code === 'RIDE_CAPACITY_EXCEEDED'
+    )
+      return errorResponse(context, 409, code, error.message);
+  }
   if (error instanceof Error && 'status' in error) {
     const status = error.status;
     if (status === 403)
@@ -131,6 +142,33 @@ export function registerRideRoutes(
     try {
       return context.json({
         data: await dependencies.service.getSnapshot(auth, planId),
+      });
+    } catch (error) {
+      return handleError(context, error);
+    }
+  });
+
+  app.post('/api/v1/ride-plans/:planId/status', async (context) => {
+    const auth = parseAuth(context, dependencies);
+    if (!auth)
+      return errorResponse(context, 401, 'UNAUTHENTICATED', '認証が必要です。');
+    const planId = parsePlanId(context);
+    const parsed = ridePlanTransitionSchema.safeParse(await parseJson(context));
+    if (!planId || !parsed.success)
+      return errorResponse(
+        context,
+        400,
+        'VALIDATION_ERROR',
+        '送迎予定の状態変更内容が不正です。',
+        parsed.success ? {} : parsed.error.flatten(),
+      );
+    try {
+      return context.json({
+        data: await dependencies.service.transitionPlan(
+          auth,
+          planId,
+          parsed.data,
+        ),
       });
     } catch (error) {
       return handleError(context, error);

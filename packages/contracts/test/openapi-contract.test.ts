@@ -60,3 +60,30 @@ test('BRD-001の役員・連絡先5 routeと公開項目をOpenAPIへ公開す�
     'null',
   );
 });
+
+test('RIDE-002の送迎全routeと状態変更契約をOpenAPIへ公開する', () => {
+  const { paths, components } = openapiDocument;
+  assert.ok(paths['/ride-plans']?.get);
+  assert.ok(paths['/ride-plans']?.post);
+  assert.ok(paths['/ride-plans/{planId}']?.get);
+  assert.ok(paths['/ride-plans/{planId}/offers']?.post);
+  assert.ok(paths['/ride-plans/{planId}/requests']?.post);
+  assert.ok(paths['/ride-plans/{planId}/match']?.post);
+  assert.ok(paths['/ride-plans/{planId}/assignments']?.post);
+  assert.ok(paths['/ride-plans/{planId}/dispatch']?.get);
+  assert.ok(paths['/ride-plans/{planId}/metrics']?.get);
+  assert.ok(paths['/ride-plans/{planId}/status']?.post);
+  assert.deepEqual(
+    components.schemas.RidePlanTransitionInput.oneOf[1].properties.reasonCode
+      .enum,
+    ['schedule_change', 'member_change', 'vehicle_change', 'other'],
+  );
+  assert.deepEqual(
+    components.schemas.RideConflictError.properties.error.properties.code.enum,
+    ['RIDE_STATE_CONFLICT', 'RIDE_FINALIZE_BLOCKED', 'RIDE_CAPACITY_EXCEEDED'],
+  );
+  assert.equal(
+    components.schemas.RideAssignmentInput.additionalProperties,
+    false,
+  );
+});
