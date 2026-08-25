@@ -8,6 +8,7 @@ import {
   lineWebhookBodySchema,
   lineWebhookResponseSchema,
 } from '../src/line-contract.ts';
+import { lineDeliveryPublishSchema } from '../src/line-delivery-contract.ts';
 
 test('LINE契約はtenantIdを入力として受け付けない', () => {
   assert.equal(
@@ -82,6 +83,33 @@ test('LINE公開レスポンスはfeature固有の項目だけを許可する', 
   assert.equal(
     lineWebhookResponseSchema.safeParse({
       data: { accepted: 1, duplicates: 0, ignored: 0, tenantId: 'tenant-a' },
+    }).success,
+    false,
+  );
+});
+
+test('中央LINE通知は資源種別とUUIDv7の資源IDを要求する', () => {
+  const base = {
+    sourceType: 'event',
+    sourceId: '00000000-0000-7000-8000-000000000001',
+    destination: 'Cgroup-a',
+    title: '予定のお知らせ',
+    body: '本文',
+  };
+  assert.equal(lineDeliveryPublishSchema.safeParse(base).success, true);
+  assert.equal(
+    lineDeliveryPublishSchema.safeParse({
+      ...base,
+      sourceType: 'event',
+      sourceId: 'event-001',
+    }).success,
+    false,
+  );
+  assert.equal(
+    lineDeliveryPublishSchema.safeParse({
+      ...base,
+      deepLink:
+        'https://evil.example.test/events/00000000-0000-7000-8000-000000000001',
     }).success,
     false,
   );

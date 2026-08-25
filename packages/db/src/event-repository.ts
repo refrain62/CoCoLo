@@ -131,6 +131,9 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 type EventRepositoryOptions = {
   notificationPublicAppUrl?: string;
+  notificationFeatureEnabled?: (
+    input: EventRepositoryInput,
+  ) => Promise<boolean>;
   now?: () => Date;
 };
 
@@ -316,6 +319,11 @@ export function createEventRepository(
     includeCreatedNotification: boolean,
   ) => {
     if (!publicAppUrl) return;
+    if (
+      options.notificationFeatureEnabled &&
+      !(await options.notificationFeatureEnabled(input))
+    )
+      return;
     const connectionRows = await tx.$queryRaw<Array<{ group_id: string }>>`
       SELECT group_id
         FROM line_connections

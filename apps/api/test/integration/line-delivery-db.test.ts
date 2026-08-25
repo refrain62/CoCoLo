@@ -18,6 +18,8 @@ const TENANT_B = '00000000-0000-7000-8000-000000000002';
 const ACTOR = 'owner-a';
 const RACE_ACTOR = 'owner-b';
 const INTEGRATION_GROUP = 'Uintegration';
+const SOURCE_EVENT_A = '00000000-0000-7000-8000-000000000901';
+const SOURCE_EVENT_B = '00000000-0000-7000-8000-000000000902';
 
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URLが必要です');
 assert.ok(
@@ -40,7 +42,35 @@ await owner.$executeRaw`
         connected_at = EXCLUDED.connected_at,
         updated_at = EXCLUDED.updated_at
 `;
-const apiRepositories = createMemberRepositories(app);
+await owner.$executeRaw`
+  INSERT INTO tenant_plans
+    (id, tenant_id, plan_key, status, feature_keys, starts_at)
+  VALUES
+    ('00000000-0000-7000-8000-000000000903'::uuid, ${TENANT_A}::uuid,
+     'integration', 'active'::tenant_plan_status,
+     ARRAY['line-notifications']::text[], '2020-01-01T00:00:00Z')
+  ON CONFLICT (tenant_id) DO UPDATE
+    SET status = EXCLUDED.status,
+        feature_keys = EXCLUDED.feature_keys,
+        starts_at = EXCLUDED.starts_at,
+        ends_at = NULL
+`;
+await owner.$executeRaw`
+  INSERT INTO events
+    (id, tenant_id, title, event_type, starts_at, ends_at, attendance_deadline,
+     created_by_user_id, updated_by_user_id)
+  VALUES
+    (${SOURCE_EVENT_A}::uuid, ${TENANT_A}::uuid, 'LINE統合テスト予定A',
+     'practice'::event_type, '2099-02-01T10:00:00Z', '2099-02-01T12:00:00Z',
+     '2099-02-01T09:00:00Z', ${ACTOR}, ${ACTOR}),
+    (${SOURCE_EVENT_B}::uuid, ${TENANT_B}::uuid, 'LINE統合テスト予定B',
+     'practice'::event_type, '2099-02-01T10:00:00Z', '2099-02-01T12:00:00Z',
+     '2099-02-01T09:00:00Z', ${RACE_ACTOR}, ${RACE_ACTOR})
+  ON CONFLICT (id) DO NOTHING
+`;
+const apiRepositories = createMemberRepositories(app, {
+  notificationPublicAppUrl: 'https://app.example.test',
+});
 const api = createApp({
   verifyToken: async (token) => {
     if (token !== 'integration-owner-token') throw new Error('invalid token');
@@ -88,11 +118,11 @@ async function requestProductionApi(input: {
       'idempotency-key': input.idempotencyKey,
     },
     body: JSON.stringify({
+      sourceType: 'event',
       sourceId: input.sourceId,
       destination: INTEGRATION_GROUP,
       title: input.title ?? '統合テスト通知',
       body: '統合テスト本文',
-      deepLink: 'https://app.example.test/integration',
     }),
   });
 }
@@ -122,11 +152,11 @@ async function deleteAuditLogs(resourceId: string) {
 test('同一tenantで別sourceがIdempotency-Keyを再利用しても500ではなく409になる', async () => {
   const idempotencyKey = `cross-source-${randomUUID()}`;
   const firstId = await publishViaProductionApi({
-    sourceId: `cross-source-a-${randomUUID()}`,
+    sourceId: SOURCE_EVENT_A,
     idempotencyKey,
   });
   const conflict = await requestProductionApi({
-    sourceId: `cross-source-b-${randomUUID()}`,
+    sourceId: SOURCE_EVENT_B,
     idempotencyKey,
   });
   assert.equal(conflict.status, 409);
@@ -144,7 +174,7 @@ test('同一tenantで別sourceがIdempotency-Keyを再利用しても500では�
 });
 
 test('業務transactionのenqueueからworker claim・送信・sent確定まで実DBで完了する', async () => {
-  const sourceId = `integration-${randomUUID()}`;
+  const sourceId = SOURCE_EVENT_A;
   const idempotencyKey = `integration-${randomUUID()}`;
   const notificationId = await publishViaProductionApi({
     sourceId,
@@ -209,17 +239,17 @@ test('業務transactionのenqueueからworker claim・送信・sent確定まで�
 
 test('retry・unknown・lease切れは同じprovider retry keyで重複送信を抑止する', async () => {
   const retryId = await publishViaProductionApi({
-    sourceId: `retry-${randomUUID()}`,
+    sourceId: SOURCE_EVENT_A,
     idempotencyKey: `retry-${randomUUID()}`,
     title: '再試行統合テスト',
   });
   const unknownId = await publishViaProductionApi({
-    sourceId: `unknown-${randomUUID()}`,
+    sourceId: SOURCE_EVENT_A,
     idempotencyKey: `unknown-${randomUUID()}`,
     title: '照合待ち統合テスト',
   });
   const leaseId = await publishViaProductionApi({
-    sourceId: `lease-${randomUUID()}`,
+    sourceId: SOURCE_EVENT_A,
     idempotencyKey: `lease-${randomUUID()}`,
     title: 'lease切れ統合テスト',
   });
@@ -325,7 +355,7 @@ test('retry・unknown・lease切れは同じprovider retry keyで重複送信を
 
 test('unknown確定は古いtokenまたは期限切れleaseでは状態を変更しない', async () => {
   const notificationId = await publishViaProductionApi({
-    sourceId: `unknown-lease-guard-${randomUUID()}`,
+    sourceId: SOURCE_EVENT_A,
     idempotencyKey: `unknown-lease-guard-${randomUUID()}`,
     title: 'unknown lease guard統合テスト',
   });
@@ -398,8 +428,8 @@ test('enqueueはmembership変更とFOR UPDATEで直列化し、停止後の通�
         tenantId: TENANT_B,
         actorUserId: RACE_ACTOR,
         role: 'owner',
-        sourceType: 'integration',
-        sourceId: `membership-race-${randomUUID()}`,
+        sourceType: 'event',
+        sourceId: SOURCE_EVENT_B,
         destination: 'Uintegration',
         title: '競合テスト',
         body: '競合テスト本文',
@@ -439,6 +469,14 @@ test('worker接続は専用role・RLS非bypassでclaim関数だけを利用す�
 });
 
 test.after(async () => {
+  await owner.$executeRaw`
+    DELETE FROM events
+     WHERE id IN (${SOURCE_EVENT_A}::uuid, ${SOURCE_EVENT_B}::uuid)
+  `;
+  await owner.$executeRaw`
+    DELETE FROM tenant_plans
+     WHERE id = '00000000-0000-7000-8000-000000000903'::uuid
+  `;
   await owner.$executeRaw`
     DELETE FROM line_connections
      WHERE tenant_id = ${TENANT_A}::uuid

@@ -28,9 +28,19 @@ import { createStructuredLogger } from './security/structured-logger.js';
 const runtime = readRuntimeEnvironment(process.env);
 const port = Number(process.env.PORT ?? 8787);
 const prisma = createPrismaClient();
-const repositories = createMemberRepositories(prisma);
+const featureContractRepository = createFeatureContractRepository(prisma);
+const repositories = createMemberRepositories(prisma, {
+  notificationPublicAppUrl: runtime.publicAppUrl,
+});
 const eventRepository = createEventRepository(prisma, {
   notificationPublicAppUrl: runtime.publicAppUrl,
+  notificationFeatureEnabled: async (input) => {
+    const snapshot = await featureContractRepository.get(input);
+    return (
+      snapshot.features.find((feature) => feature.key === 'line-notifications')
+        ?.enabled === true
+    );
+  },
 });
 const lineChannelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
 const lineChannelSecret = process.env.LINE_CHANNEL_SECRET?.trim();
@@ -85,7 +95,7 @@ const centralFeatures = {
     repository: createBulletinBoardRepositories(prisma).bulletinBoardRepository,
   },
   featureContract: {
-    repository: createFeatureContractRepository(prisma),
+    repository: featureContractRepository,
   },
   orders: {
     repository: createPrismaOrdersRepository(prisma),

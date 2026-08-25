@@ -29,10 +29,12 @@ export function LineNotificationPanel({
   const [status, setStatus] = useState<LineConnectionStatus | null>(null);
   const [groupId, setGroupId] = useState('');
   const [inputGroupId, setInputGroupId] = useState('');
+  const [sourceType, setSourceType] = useState<
+    'event' | 'deadline' | 'bulletin'
+  >('event');
   const [sourceId, setSourceId] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [deepLink, setDeepLink] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
@@ -118,11 +120,11 @@ export function LineNotificationPanel({
     setIsSaving(true);
     try {
       await api.enqueue({
+        sourceType,
         sourceId: sourceId.trim(),
         destination: groupId,
         title: title.trim(),
         body: body.trim(),
-        deepLink: deepLink.trim(),
       });
       setMessage('LINE通知をキューへ登録しました。');
       setSourceId('');
@@ -173,6 +175,20 @@ export function LineNotificationPanel({
       {canNotify ? (
         <form onSubmit={enqueue}>
           <h3>通知を登録</h3>
+          <label htmlFor="line-source-type">通知元種別</label>
+          <select
+            id="line-source-type"
+            value={sourceType}
+            onChange={(event) =>
+              setSourceType(
+                event.target.value as 'event' | 'deadline' | 'bulletin',
+              )
+            }
+          >
+            <option value="event">予定</option>
+            <option value="deadline">出欠締切</option>
+            <option value="bulletin">回覧</option>
+          </select>
           <label htmlFor="line-source-id">通知元ID</label>
           <input
             id="line-source-id"
@@ -194,13 +210,7 @@ export function LineNotificationPanel({
             value={body}
             onChange={(event) => setBody(event.target.value)}
           />
-          <label htmlFor="line-deep-link">アプリ内リンク</label>
-          <input
-            id="line-deep-link"
-            type="url"
-            value={deepLink}
-            onChange={(event) => setDeepLink(event.target.value)}
-          />
+          <p>アプリ内リンクは通知元の資源からサーバー側で生成します。</p>
           <button type="submit" disabled={isSaving || !groupId}>
             {isSaving ? '登録中…' : '通知を登録する'}
           </button>

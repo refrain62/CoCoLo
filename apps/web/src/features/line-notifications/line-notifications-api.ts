@@ -8,11 +8,11 @@ export type LineStatus = {
 };
 
 export type LineNotificationInput = {
+  sourceType: 'event' | 'deadline' | 'bulletin';
   sourceId: string;
   destination: string;
   title: string;
   body: string;
-  deepLink: string;
 };
 
 export type LineDeliveryResult = {

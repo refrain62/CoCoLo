@@ -50,11 +50,11 @@ describe('LINE通知APIクライアント', () => {
     };
 
     await createLineNotificationApi({ getAccessToken: () => 'token' }).enqueue({
-      sourceId: 'event-001',
+      sourceType: 'event',
+      sourceId: '00000000-0000-7000-8000-000000000001',
       destination: 'Cgroup-001',
       title: '予定',
       body: '本文',
-      deepLink: 'https://staging.example.test/events/event-001',
     });
 
     expect(url).toBe('/api/v1/notifications/line');
@@ -62,11 +62,11 @@ describe('LINE通知APIクライアント', () => {
     expect(headers?.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
     expect(body).toBe(
       JSON.stringify({
-        sourceId: 'event-001',
+        sourceType: 'event',
+        sourceId: '00000000-0000-7000-8000-000000000001',
         destination: 'Cgroup-001',
         title: '予定',
         body: '本文',
-        deepLink: 'https://staging.example.test/events/event-001',
       }),
     );
   });
