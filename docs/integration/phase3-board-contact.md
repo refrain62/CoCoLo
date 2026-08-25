@@ -2,7 +2,7 @@
 
 ## 対象仕様
 
-このブランチは `docs/functional-specification.md` の FS-BRD-001 と FS-BRD-002 を担当する。
+このメモは `docs/functional-specification.md` の FS-BRD-001 と FS-BRD-002 の実装境界を記録する。
 
 FS-BRD-001 は年度ごとの役職枠、役職種別、担当者、連絡先を管理する。
 
@@ -77,19 +77,17 @@ DB 側の RLS は `tenant_id` が `app.tenant_id` と一致する行だけを読
 
 監査ログには連絡先の値を保存せず、値の有無だけを metadata に残す。
 
-このブランチでは Prisma schema、migration、共有 DB export を変更していない。
+役員・連絡先は無料featureキー `board-contacts` で管理する。
 
-統合時に DB schema 担当が migration を追加し、共有 index 担当が `createBoardContactRepository` を export する。
+APIは契約が有効な場合だけ役員・連絡先routeを実行し、契約未設定時も503で停止する。
 
-## 統合手順
+Webは同じfeatureキーでチーム設定メニューを表示制御する。
 
-1. DB schema 担当は上記の `board_contacts` テーブル、制約、RLS、grant を migration に追加する。
-2. API 統合担当は `createBoardContactApp` を中央 API app に mount し、DB repository と membership repository を注入する。
-3. 共有 DB export 担当は `packages/db/src/index.ts` から `createBoardContactRepository` を公開する。
-4. Web 統合担当は `BoardContactPage` を認証済み画面のルートへ追加する。
-5. 統合環境で owner、admin、staff、guardian、別テナントの利用者を使い、連絡先投影と RLS を確認する。
+## 現行の統合状態
 
-中央 `app.ts`、`main.tsx`、Prisma schema、共有 index は統合担当との競合を避けるため、このブランチでは変更していない。
+中央API、Webルート、DB repository、共有export、`board_contacts` のmigrationは `develop` に統合済みである。
+
+残る受入は、年度引き継ぎの複数行UUID生成、DB直接参照の個人情報境界、staffとguardianのWeb閲覧、OpenAPI同期、実DB/RLSでのrollback確認である。
 
 ## 検証
 

@@ -20,9 +20,9 @@
 | `[ ]` | T014-RELEASE | T-014各検査が同じ最新SHAで成功した証跡をまとめる |
 | `[~]` | LINE-DELIVERY-001 | 実DB、LINE provider、unknown照合、Windows改行差分を確認する |
 | `[ ]` | LINE-DELIVERY-002 | unknownの照合、保持期間、再送、監査、担当者を運用仕様に確定する |
-| `[~]` | API-001 / DB-002 | 分散rate limitの本番条件、board contactのPII直接SELECT、UUIDv7移行前検査、RLS残課題を解消する |
+| `[~]` | API-001 / DB-002 | 分散rate limitの本番条件、UUIDv7移行前検査、共通RLS残課題を解消する |
 | `[ ]` | RELEASE-001 | stagingとproductionのsecret、bucket、JWT、artifact、migration境界を分離する |
-| `[ ]` | BRD-001 | 役員名簿の中央migration、RLS、個人情報投影、実DB受入を完了する |
+| `[~]` | BRD-001 | feature契約ゲートはPR #185で統合済み。年度引き継ぎUUID、個人情報境界、staff/guardian Web閲覧、OpenAPI、実DB/RLS受入を完了する |
 | `[~]` | ORD-001 | 注文・集金のrepository、RLS、状態遷移、同時実行、staging E2Eを確認する |
 | `[~]` | FIL-002 | R2実adapter、署名URL期限、実体検証、cleanup、認可downloadをstagingで確認する |
 | `[~]` | ANN-001 | 回覧、既読、添付download、R2認可、未読者の個人情報境界を確認する |
