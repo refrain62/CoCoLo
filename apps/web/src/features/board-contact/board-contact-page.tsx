@@ -35,11 +35,12 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '通信に失敗しました。';
 }
 
-function formatContact(contact: BoardContactSummary) {
+function formatContact(contact: BoardContactSummary, canManage = true) {
   const values: string[] = [];
   if (contact.lineContact) values.push(`LINE: ${contact.lineContact}`);
   if (contact.phone) values.push(`電話: ${contact.phone}`);
-  return values.length > 0 ? values.join(' / ') : '連絡先未設定';
+  if (values.length > 0) return values.join(' / ');
+  return canManage ? '連絡先未設定' : '連絡先は管理者のみ表示';
 }
 
 function validateForm(
@@ -105,7 +106,7 @@ function BoardContactTable({
           <tr key={contact.id}>
             <td>{contact.roleName}</td>
             <td>{roleTypeLabels[contact.roleType]}</td>
-            <td>{formatContact(contact)}</td>
+            <td>{formatContact(contact, canManage)}</td>
             {canManage ? (
               <td>
                 <button type="button" onClick={() => onEdit(contact)}>

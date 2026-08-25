@@ -10,6 +10,7 @@ export type AdminRoute =
   | 'line'
   | 'ride'
   | 'settings'
+  | 'board-contacts'
   | 'features'
   | 'event-detail'
   | 'bulletin-detail';
@@ -97,6 +98,14 @@ export const adminNavigation: readonly AdminNavigationItem[] = [
     description: '役員連絡先と運用設定',
     featureKey: 'board-contacts',
     roles: ['owner', 'admin'],
+  },
+  {
+    route: 'board-contacts',
+    href: '/admin/board-contacts',
+    label: '役員・連絡先',
+    description: '年度の役職と連絡先を確認',
+    featureKey: 'board-contacts',
+    roles: ['staff', 'guardian'],
   },
   {
     route: 'features',

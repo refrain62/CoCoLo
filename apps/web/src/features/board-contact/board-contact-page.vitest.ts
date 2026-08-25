@@ -26,6 +26,20 @@ describe('役員連絡先画面', () => {
         updatedAt: '2026-04-01T00:00:00.000Z',
       }),
     ).toBe('連絡先未設定');
+    expect(
+      formatContact(
+        {
+          id: 'board-3',
+          fiscalYear: 2026,
+          roleName: '会計',
+          roleType: 'admin',
+          contactPreference: 'phone',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+        false,
+      ),
+    ).toBe('連絡先は管理者のみ表示');
   });
 
   it('役職名と電話番号を画面側でも検証する', () => {
