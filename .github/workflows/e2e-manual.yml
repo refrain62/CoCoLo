@@ -23,7 +23,7 @@ jobs:
       target_sha: ${{ steps.target.outputs.sha }}
     steps:
       - name: 解決用のWorkflowを取得
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -56,17 +56,17 @@ jobs:
       contents: read
     steps:
       - name: 検証済みSHAを取得
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           ref: ${{ needs.resolve.outputs.target_sha }}
           fetch-depth: 1
           persist-credentials: false
       - name: pnpmを準備
-        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996
         with:
           version: 10.26.0
       - name: Node.js 24を準備
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: 24.12.0
           cache: pnpm
@@ -111,7 +111,7 @@ jobs:
           E2E_TEST_PASSWORD: owner-password
       - name: 固定レポートだけを保存
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: e2e-fixed-report-manual-${{ github.run_id }}
           path: e2e-report/fixed-report.json
@@ -130,8 +130,7 @@ jobs:
     steps:
       - name: 固定レポートを取得
         if: needs.e2e.result == 'failure'
-        continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: e2e-fixed-report-manual-*
           merge-multiple: true
