@@ -152,6 +152,73 @@ export const openapiDocument = {
         },
       },
     },
+    '/feature-contract': {
+      get: {
+        operationId: 'getFeatureContract',
+        summary: '選択中チームの有効機能契約を取得',
+        responses: {
+          200: {
+            description: '有効機能契約',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/FeatureContractResponse',
+                },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/feature-contract/{featureKey}': {
+      patch: {
+        operationId: 'updateFreeFeatureFlag',
+        summary: 'チームの無償feature flagを変更',
+        parameters: [
+          {
+            name: 'featureKey',
+            in: 'path',
+            required: true,
+            schema: {
+              type: 'string',
+              pattern: '^[a-z][a-z0-9._-]{1,63}$',
+            },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/FeatureFlagUpdate' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'feature flag変更後の有効機能契約',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/FeatureContractResponse',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
     '/events': {
       get: {
         operationId: 'listEvents',
@@ -924,6 +991,68 @@ export const openapiDocument = {
               memberId: { type: 'string', format: 'uuid' },
               role: { type: 'string', const: 'guardian' },
               linkStatus: { type: 'string', const: 'active' },
+            },
+          },
+        },
+      },
+      FeatureFlagUpdate: {
+        type: 'object',
+        required: ['enabled', 'reason'],
+        additionalProperties: false,
+        properties: {
+          enabled: { type: 'boolean' },
+          reason: { type: 'string', minLength: 1, maxLength: 500 },
+        },
+      },
+      FeatureContractResponse: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'object',
+            required: ['planKey', 'planStatus', 'features'],
+            additionalProperties: false,
+            properties: {
+              planKey: { type: ['string', 'null'], maxLength: 100 },
+              planStatus: {
+                type: ['string', 'null'],
+                enum: [
+                  'active',
+                  'trialing',
+                  'past_due',
+                  'canceled',
+                  'expired',
+                  null,
+                ],
+              },
+              features: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: [
+                    'key',
+                    'billingType',
+                    'displayName',
+                    'enabled',
+                    'reason',
+                  ],
+                  additionalProperties: false,
+                  properties: {
+                    key: {
+                      type: 'string',
+                      pattern: '^[a-z][a-z0-9_.-]{0,63}$',
+                    },
+                    billingType: { type: 'string', enum: ['free', 'paid'] },
+                    displayName: { type: 'string', minLength: 1, maxLength: 200 },
+                    enabled: { type: 'boolean' },
+                    reason: {
+                      type: 'string',
+                      enum: ['default', 'flag', 'plan', 'unavailable'],
+                    },
+                  },
+                },
+              },
             },
           },
         },

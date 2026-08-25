@@ -70,6 +70,10 @@
     "./auth-invitation": {
       "types": "./src/auth-invitation.ts",
       "import": "./dist/auth-invitation.js"
+    },
+    "./feature-contract": {
+      "types": "./src/feature-contract.ts",
+      "import": "./dist/feature-contract.js"
     }
   },
   "scripts": {

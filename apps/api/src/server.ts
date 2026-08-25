@@ -6,6 +6,7 @@ import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selectio
 import { createBoardContactRepository } from '@cocolo/db/board-contact';
 import { createBulletinBoardRepositories } from '@cocolo/db/bulletin-board';
 import { createEventRepository } from '@cocolo/db/events';
+import { createFeatureContractRepository } from '@cocolo/db/feature-contract';
 import { createPrismaLineRepository } from '@cocolo/db/line';
 import { createPrismaLineWebhookRepository } from '@cocolo/db/line-webhook';
 import { createPrismaOrdersRepository } from '@cocolo/db/orders';
@@ -82,6 +83,9 @@ const centralFeatures = {
   },
   bulletinBoard: {
     repository: createBulletinBoardRepositories(prisma).bulletinBoardRepository,
+  },
+  featureContract: {
+    repository: createFeatureContractRepository(prisma),
   },
   orders: {
     repository: createPrismaOrdersRepository(prisma),

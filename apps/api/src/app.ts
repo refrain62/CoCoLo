@@ -22,6 +22,7 @@ import {
   announcementResponseEnvelopeSchema,
   announcementUnreadResponseSchema,
 } from '@cocolo/contracts/bulletin-board-response';
+import { featureContractResponseSchema } from '@cocolo/contracts/feature-contract';
 import {
   lineConnectResponseSchema,
   lineDisconnectResponseSchema,
@@ -93,6 +94,7 @@ import {
   mountCentralFeatureRoutes,
 } from './central-feature-routes.js';
 import { createEventsApp } from './features/events/event-api.js';
+import { createFeatureEntitlementMiddleware } from './features/feature-contract/feature-contract-app.js';
 import { type CorsOptions, createCorsMiddleware } from './security/cors.js';
 import {
   createRateLimitMiddleware,
@@ -335,6 +337,18 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       path: /^\/api\/v1\/auth\/invitations\/accept$/,
       status: 200,
       schema: invitationAcceptResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/feature-contract$/,
+      status: 200,
+      schema: featureContractResponseSchema,
+    },
+    {
+      method: 'PATCH',
+      path: /^\/api\/v1\/feature-contract\/[^/]+$/,
+      status: 200,
+      schema: featureContractResponseSchema,
     },
     {
       method: 'GET',
@@ -908,6 +922,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     app.use('/api/v1/announcements', authenticate);
     app.use('/api/v1/announcements/*', authenticate);
   }
+  if (options.centralFeatures?.featureContract) {
+    app.use('/api/v1/feature-contract', authenticate);
+    app.use('/api/v1/feature-contract/*', authenticate);
+  }
   if (options.centralFeatures?.line) {
     app.use('/api/v1/line', authenticate);
     app.use('/api/v1/line/*', authenticate);
@@ -919,6 +937,50 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.centralFeatures?.orders) {
     app.use('/api/v1/orders', authenticate);
     app.use('/api/v1/orders/*', authenticate);
+  }
+
+  if (options.centralFeatures?.featureContract) {
+    const featureContractRepository =
+      options.centralFeatures.featureContract.repository;
+    const useFeature = (path: string, featureKey: string) => {
+      app.use(
+        path,
+        createFeatureEntitlementMiddleware(
+          featureContractRepository,
+          featureKey,
+        ),
+      );
+    };
+    useFeature('/api/v1/members', 'members');
+    useFeature('/api/v1/members/*', 'members');
+    if (options.eventRepository) {
+      useFeature('/api/v1/events', 'events-attendance');
+      useFeature('/api/v1/events/*', 'events-attendance');
+    }
+    if (options.centralFeatures.attachments) {
+      useFeature('/api/v1/uploads', 'attachments');
+      useFeature('/api/v1/uploads/*', 'attachments');
+    }
+    if (options.centralFeatures.bulletinBoard) {
+      useFeature('/api/v1/announcements', 'bulletin-board');
+      useFeature('/api/v1/announcements/*', 'bulletin-board');
+    }
+    if (options.centralFeatures.line) {
+      useFeature('/api/v1/line/status', 'line-notifications');
+      useFeature('/api/v1/line/status/*', 'line-notifications');
+      useFeature('/api/v1/line/connect', 'line-notifications');
+      useFeature('/api/v1/line/connect/*', 'line-notifications');
+      useFeature('/api/v1/line/notifications', 'line-notifications');
+      useFeature('/api/v1/line/notifications/*', 'line-notifications');
+    }
+    if (options.centralFeatures.ride) {
+      useFeature('/api/v1/ride-plans', 'ride-operations');
+      useFeature('/api/v1/ride-plans/*', 'ride-operations');
+    }
+    if (options.centralFeatures.orders) {
+      useFeature('/api/v1/orders', 'orders-payments');
+      useFeature('/api/v1/orders/*', 'orders-payments');
+    }
   }
 
   // 認証後のtenant/userだけをキーに使い、production系では起動時に分散adapterを要求する。
@@ -995,6 +1057,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.centralFeatures?.bulletinBoard) {
     app.use('/api/v1/announcements', authenticatedRateLimit);
     app.use('/api/v1/announcements/*', authenticatedRateLimit);
+  }
+  if (options.centralFeatures?.featureContract) {
+    app.use('/api/v1/feature-contract', authenticatedRateLimit);
+    app.use('/api/v1/feature-contract/*', authenticatedRateLimit);
   }
   if (options.centralFeatures?.line) {
     if (options.centralFeatures.line.webhook) {

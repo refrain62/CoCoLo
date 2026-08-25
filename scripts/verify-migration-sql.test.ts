@@ -39,6 +39,25 @@ test('tenant非依存のOAuth identityはuser context付きRLSで許可する', 
   );
 });
 
+test('tenant非依存の共有定義はactive membership付きRLSで許可する', () => {
+  assert.doesNotThrow(() =>
+    validateMigrationSql([
+      safeMigration,
+      {
+        path: '20260823160000_feature_definitions/migration.sql',
+        content: [
+          'CREATE TABLE feature_definitions (key varchar(64) PRIMARY KEY);',
+          "COMMENT ON TABLE feature_definitions IS 'shared feature definitions';",
+          'ALTER TABLE feature_definitions ENABLE ROW LEVEL SECURITY;',
+          'ALTER TABLE feature_definitions FORCE ROW LEVEL SECURITY;',
+          "CREATE POLICY feature_definitions_read ON feature_definitions FOR SELECT USING (app_has_active_membership(NULLIF(current_setting('app.tenant_id', true), '')::uuid));",
+          'GRANT SELECT ON feature_definitions TO cocolo_app;',
+        ].join('\n'),
+      },
+    ]),
+  );
+});
+
 test('危険なDDL・一括削除・任意roleへの権限付与を拒否する', () => {
   for (const content of [
     'DROP TABLE records;',

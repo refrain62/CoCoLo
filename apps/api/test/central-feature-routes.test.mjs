@@ -7,7 +7,7 @@ import { createApp } from '../dist/app.js';
 const USER_ID = 'user-central-a';
 const TENANT_ID = '00000000-0000-7000-8000-000000000001';
 
-function createTestApp({ multipleMemberships = false } = {}) {
+function createTestApp({ multipleMemberships = false, featureOverrides = {} } = {}) {
   const verifyToken = async (token) => {
     if (token !== USER_ID) throw new Error('invalid token');
     return {
@@ -25,6 +25,34 @@ function createTestApp({ multipleMemberships = false } = {}) {
         ? { tenantId: TENANT_ID, role: 'owner' }
         : null,
   };
+  const freeFeatureKeys = new Set([
+    'members',
+    'events-attendance',
+    'bulletin-board',
+    'attachments',
+  ]);
+  const featureSnapshot = () => ({
+    planKey: null,
+    planStatus: null,
+    features: [
+      ['members', 'メンバー管理'],
+      ['orders-payments', '購買・集金'],
+      ['events-attendance', '予定・出欠'],
+      ['bulletin-board', '回覧・添付'],
+      ['attachments', '添付ファイル'],
+      ['line-notifications', 'LINE通知'],
+      ['ride-operations', '送迎管理'],
+    ].map(([key, displayName]) => {
+      const enabled = featureOverrides[key] ?? true;
+      return {
+        key,
+        billingType: freeFeatureKeys.has(key) ? 'free' : 'paid',
+        displayName,
+        enabled,
+        reason: enabled ? 'default' : 'unavailable',
+      };
+    }),
+  });
   return createApp({
     verifyToken,
     membershipRepository,
@@ -131,6 +159,24 @@ function createTestApp({ multipleMemberships = false } = {}) {
           find: async () => null,
           markRead: async () => null,
           listUnread: async () => null,
+        },
+      },
+      featureContract: {
+        repository: {
+          get: async () => featureSnapshot(),
+          setFreeFlag: async () => ({
+            planKey: null,
+            planStatus: null,
+            features: [
+              {
+                key: 'members',
+                billingType: 'free',
+                displayName: 'メンバー管理',
+                enabled: false,
+                reason: 'flag',
+              },
+            ],
+          }),
         },
       },
       orders: {
@@ -256,6 +302,62 @@ test('中央APIへ回覧板routeをmountし、公開response契約を適用す�
     pageSize: 50,
     hasNext: false,
   });
+});
+
+test('中央APIへfeature契約routeをmountし、tenantの有効機能を返す', async () => {
+  const response = await createTestApp({
+    featureOverrides: { 'orders-payments': false },
+  }).request('/api/v1/feature-contract', {
+    headers: { authorization: `Bearer ${USER_ID}` },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data.features[1], {
+    key: 'orders-payments',
+    billingType: 'paid',
+    displayName: '購買・集金',
+    enabled: false,
+    reason: 'unavailable',
+  });
+});
+
+test('契約で無効なpaid featureは業務handlerを実行せず403にする', async () => {
+  const response = await createTestApp({
+    featureOverrides: { 'orders-payments': false },
+  }).request('/api/v1/orders', {
+    headers: { authorization: `Bearer ${USER_ID}` },
+  });
+
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'FEATURE_UNAVAILABLE');
+});
+
+test('契約で無効なfree featureも業務handlerを実行せず403にする', async () => {
+  const response = await createTestApp({
+    featureOverrides: { 'bulletin-board': false },
+  }).request('/api/v1/announcements', {
+    headers: { authorization: `Bearer ${USER_ID}` },
+  });
+
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'FEATURE_UNAVAILABLE');
+});
+
+test('feature契約の無料flag変更はowner/adminだけが呼び出せる', async () => {
+  const response = await createTestApp().request(
+    '/api/v1/feature-contract/members',
+    {
+      method: 'PATCH',
+      headers: {
+        authorization: `Bearer ${USER_ID}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ enabled: false, reason: 'チーム運用で停止' }),
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.features[0].enabled, false);
 });
 
 test('中央APIへ添付upload routeをmountし、中央認証を利用する', async () => {

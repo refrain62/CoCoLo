@@ -1,4 +1,5 @@
 export * from './auth-invitation.ts';
+export * from './feature-contract.ts';
 export * from './line-delivery-contract.ts';
 export * from './upload-contract.ts';
 
