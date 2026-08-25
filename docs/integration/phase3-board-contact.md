@@ -20,7 +20,7 @@ owner と admin には設定済みの連絡先を返すが、staff と guardian 
 | domain | `packages/domain/src/board-contact-domain.ts` | 個人情報を含む投影と年度引き継ぎの不変条件を定義する |
 | API | `apps/api/src/features/board-contact/` | 認証所属から tenant を解決し、manager 操作を認可する |
 | DB repository | `packages/db/src/board-contact-repository.ts` | Prisma の生成モデルを増やさず raw SQL と transaction を扱う |
-| Web | `apps/web/src/features/board-contact/` | 一覧、登録、編集、削除、年度引き継ぎを提供する |
+| Web | `apps/web/src/features/board-contact/` | staff/guardianの閲覧専用一覧とowner/adminの登録、編集、削除、年度引き継ぎを提供する |
 | 専用テスト | `apps/api/test/board-contact/`、`apps/web/src/features/board-contact/*.vitest.ts` | 契約、投影、認可、tenant 境界、API client を検証する |
 
 ## API 契約
@@ -81,7 +81,7 @@ DB 側の RLS は `tenant_id` が `app.tenant_id` と一致する行だけを読
 
 APIは契約が有効な場合だけ役員・連絡先routeを実行し、契約未設定時も503で停止する。
 
-Webは同じfeatureキーでチーム設定メニューを表示制御する。
+Webは同じfeatureキーでowner/adminのチーム設定とstaff/guardianの閲覧専用メニューを表示制御する。
 
 ## 現行の統合状態
 
@@ -89,12 +89,12 @@ Webは同じfeatureキーでチーム設定メニューを表示制御する。
 
 年度引き継ぎは行ごとのUUIDv7生成とINSERT影響行数による`copiedCount`を実装済みである。
 
-残る受入は、DB直接参照の個人情報境界、staffとguardianのWeb閲覧、OpenAPI同期、実DB/RLSでの複数行とrollback確認である。
+残る受入は、DB直接参照の個人情報境界、OpenAPI同期、実DB/RLSでの複数行とrollback確認である。
 
 ## 検証
 
 専用 API テストは認証、認可、入力境界、tenant の決定、個人情報投影、年度引き継ぎを確認する。
 
-専用 Web テストは token 付与、年度 query、JSON body、ID の URL エンコード、未認証時の通信抑止を確認する。
+専用 Web テストは token 付与、年度 query、JSON body、ID の URL エンコード、未認証時の通信抑止、staff/guardianの閲覧メニュー、feature flag、非公開連絡先表示を確認する。
 
 DB repository の raw SQL は統合側の migration 適用後に DB integration test を追加し、RLS と transaction rollback を確認する。
