@@ -219,6 +219,176 @@ export const openapiDocument = {
         },
       },
     },
+    '/board-members': {
+      get: {
+        operationId: 'listBoardContacts',
+        summary: '年度の役職枠一覧を取得',
+        parameters: [
+          {
+            name: 'fiscalYear',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', minimum: 2000, maximum: 2100 },
+          },
+        ],
+        responses: {
+          200: {
+            description: '役職枠一覧',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/BoardContactListResponse',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+      post: {
+        operationId: 'createBoardContact',
+        summary: '役職枠と連絡先を登録',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/BoardContactCreateInput' },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: '役職枠を登録',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/BoardContactMutationResponse',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/board-members/copy-year': {
+      post: {
+        operationId: 'copyBoardContactYear',
+        summary: '前年度の役職枠を引き継ぐ',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/BoardContactCopyYearInput',
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: '役職枠を引き継ぐ',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/BoardContactCopyYearResponse',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/board-members/{boardMemberId}': {
+      patch: {
+        operationId: 'updateBoardContact',
+        summary: '役職枠と連絡先を更新',
+        parameters: [
+          {
+            name: 'boardMemberId',
+            in: 'path',
+            required: true,
+            schema: {
+              type: 'string',
+              pattern:
+                '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+            },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/BoardContactPatchInput' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: '役職枠を更新',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/BoardContactMutationResponse',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+      delete: {
+        operationId: 'deleteBoardContact',
+        summary: '役職枠を削除',
+        parameters: [
+          {
+            name: 'boardMemberId',
+            in: 'path',
+            required: true,
+            schema: {
+              type: 'string',
+              pattern:
+                '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+            },
+          },
+        ],
+        responses: {
+          204: { description: '役職枠を削除' },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
     '/events': {
       get: {
         operationId: 'listEvents',
@@ -1061,6 +1231,211 @@ export const openapiDocument = {
               },
             },
           },
+        },
+      },
+      BoardContactCreateInput: {
+        type: 'object',
+        required: ['fiscalYear', 'roleName', 'roleType'],
+        additionalProperties: false,
+        properties: {
+          fiscalYear: { type: 'integer', minimum: 2000, maximum: 2100 },
+          roleName: { type: 'string', minLength: 1, maxLength: 100 },
+          roleType: { type: 'string', enum: ['admin', 'staff', 'member'] },
+          assigneeUserId: {
+            type: ['string', 'null'],
+            minLength: 1,
+            maxLength: 128,
+          },
+          lineContact: {
+            type: ['string', 'null'],
+            minLength: 1,
+            maxLength: 200,
+          },
+          phone: {
+            type: ['string', 'null'],
+            minLength: 7,
+            maxLength: 32,
+            pattern: '^[0-9+().\\s-]+$',
+          },
+          contactPreference: {
+            type: 'string',
+            enum: ['line', 'phone', 'both'],
+            default: 'line',
+          },
+        },
+      },
+      BoardContactPatchInput: {
+        type: 'object',
+        minProperties: 1,
+        additionalProperties: false,
+        properties: {
+          fiscalYear: { type: 'integer', minimum: 2000, maximum: 2100 },
+          roleName: { type: 'string', minLength: 1, maxLength: 100 },
+          roleType: { type: 'string', enum: ['admin', 'staff', 'member'] },
+          assigneeUserId: {
+            type: ['string', 'null'],
+            minLength: 1,
+            maxLength: 128,
+          },
+          lineContact: {
+            type: ['string', 'null'],
+            minLength: 1,
+            maxLength: 200,
+          },
+          phone: {
+            type: ['string', 'null'],
+            minLength: 7,
+            maxLength: 32,
+            pattern: '^[0-9+().\\s-]+$',
+          },
+          contactPreference: {
+            type: 'string',
+            enum: ['line', 'phone', 'both'],
+          },
+        },
+      },
+      BoardContactCopyYearInput: {
+        type: 'object',
+        required: ['fromFiscalYear', 'toFiscalYear'],
+        additionalProperties: false,
+        properties: {
+          fromFiscalYear: { type: 'integer', minimum: 2000, maximum: 2100 },
+          toFiscalYear: { type: 'integer', minimum: 2000, maximum: 2100 },
+        },
+      },
+      BoardContactPublicItem: {
+        type: 'object',
+        required: [
+          'id',
+          'fiscalYear',
+          'roleName',
+          'roleType',
+          'contactPreference',
+          'createdAt',
+          'updatedAt',
+        ],
+        additionalProperties: false,
+        properties: {
+          id: {
+            type: 'string',
+            pattern:
+              '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          },
+          fiscalYear: { type: 'integer', minimum: 2000, maximum: 2100 },
+          roleName: { type: 'string', minLength: 1, maxLength: 100 },
+          roleType: { type: 'string', enum: ['admin', 'staff', 'member'] },
+          contactPreference: {
+            type: 'string',
+            enum: ['line', 'phone', 'both'],
+          },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+        description:
+          'staffとguardianへ返す連絡先PIIを含まない役職枠の投影です。',
+      },
+      BoardContactManagerItem: {
+        type: 'object',
+        required: [
+          'id',
+          'fiscalYear',
+          'roleName',
+          'roleType',
+          'contactPreference',
+          'createdAt',
+          'updatedAt',
+        ],
+        additionalProperties: false,
+        properties: {
+          id: {
+            type: 'string',
+            pattern:
+              '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          },
+          fiscalYear: { type: 'integer', minimum: 2000, maximum: 2100 },
+          roleName: { type: 'string', minLength: 1, maxLength: 100 },
+          roleType: { type: 'string', enum: ['admin', 'staff', 'member'] },
+          contactPreference: {
+            type: 'string',
+            enum: ['line', 'phone', 'both'],
+          },
+          assigneeUserId: { type: 'string', minLength: 1, maxLength: 128 },
+          lineContact: { type: 'string', minLength: 1, maxLength: 200 },
+          phone: {
+            type: 'string',
+            minLength: 7,
+            maxLength: 32,
+            pattern: '^[0-9+().\\s-]+$',
+          },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+        description:
+          'ownerとadminへ返す、表示設定に応じた連絡先PIIを含む役職枠の投影です。',
+      },
+      BoardContactPublicListResponse: {
+        type: 'object',
+        required: ['data', 'fiscalYear'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'array',
+            maxItems: 1000,
+            items: { $ref: '#/components/schemas/BoardContactPublicItem' },
+          },
+          fiscalYear: {
+            type: ['integer', 'null'],
+            minimum: 2000,
+            maximum: 2100,
+          },
+        },
+      },
+      BoardContactManagerListResponse: {
+        type: 'object',
+        required: ['data', 'fiscalYear'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'array',
+            maxItems: 1000,
+            items: { $ref: '#/components/schemas/BoardContactManagerItem' },
+          },
+          fiscalYear: {
+            type: ['integer', 'null'],
+            minimum: 2000,
+            maximum: 2100,
+          },
+        },
+      },
+      BoardContactListResponse: {
+        anyOf: [
+          { $ref: '#/components/schemas/BoardContactPublicListResponse' },
+          { $ref: '#/components/schemas/BoardContactManagerListResponse' },
+        ],
+        description:
+          '認証roleに応じてpublicまたはmanager projectionのいずれかを返します。',
+      },
+      BoardContactMutationResponse: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: { $ref: '#/components/schemas/BoardContactManagerItem' },
+        },
+      },
+      BoardContactCopyYearResponse: {
+        type: 'object',
+        required: ['data', 'copiedCount', 'fromFiscalYear', 'toFiscalYear'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'array',
+            maxItems: 1000,
+            items: { $ref: '#/components/schemas/BoardContactManagerItem' },
+          },
+          copiedCount: { type: 'integer', minimum: 0, maximum: 1000 },
+          fromFiscalYear: { type: 'integer', minimum: 2000, maximum: 2100 },
+          toFiscalYear: { type: 'integer', minimum: 2000, maximum: 2100 },
         },
       },
       EventInput: {
