@@ -29,18 +29,23 @@ const runtime = readRuntimeEnvironment(process.env);
 const port = Number(process.env.PORT ?? 8787);
 const prisma = createPrismaClient();
 const featureContractRepository = createFeatureContractRepository(prisma);
+const notificationFeatureEnabled = async (input: {
+  tenantId: string;
+  actorUserId: string;
+  role: 'owner' | 'admin' | 'staff' | 'guardian';
+}) => {
+  const snapshot = await featureContractRepository.get(input);
+  return (
+    snapshot.features.find((feature) => feature.key === 'line-notifications')
+      ?.enabled === true
+  );
+};
 const repositories = createMemberRepositories(prisma, {
   notificationPublicAppUrl: runtime.publicAppUrl,
 });
 const eventRepository = createEventRepository(prisma, {
   notificationPublicAppUrl: runtime.publicAppUrl,
-  notificationFeatureEnabled: async (input) => {
-    const snapshot = await featureContractRepository.get(input);
-    return (
-      snapshot.features.find((feature) => feature.key === 'line-notifications')
-        ?.enabled === true
-    );
-  },
+  notificationFeatureEnabled,
 });
 const lineChannelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
 const lineChannelSecret = process.env.LINE_CHANNEL_SECRET?.trim();
@@ -92,7 +97,10 @@ const centralFeatures = {
     repository: createBoardContactRepository(prisma),
   },
   bulletinBoard: {
-    repository: createBulletinBoardRepositories(prisma).bulletinBoardRepository,
+    repository: createBulletinBoardRepositories(prisma, {
+      notificationPublicAppUrl: runtime.publicAppUrl,
+      notificationFeatureEnabled,
+    }).bulletinBoardRepository,
   },
   featureContract: {
     repository: featureContractRepository,
