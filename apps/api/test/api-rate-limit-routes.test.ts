@@ -36,7 +36,11 @@ class RecordingRateLimitStore extends InMemoryRateLimitStore {
   }
 }
 
-function createTestApp(store: RecordingRateLimitStore) {
+function createTestApp(
+  store: RecordingRateLimitStore,
+  lineEnabled = true,
+  featureContractConfigured = true,
+) {
   let producerCalls = 0;
   let verifyTokenCalls = 0;
   let memberHandlerCalls = 0;
@@ -93,6 +97,41 @@ function createTestApp(store: RecordingRateLimitStore) {
         return { notificationId: '00000000-0000-7000-8000-000000000101' };
       },
     },
+    centralFeatures: featureContractConfigured
+      ? {
+          featureContract: {
+            repository: {
+              get: async () => ({
+                planKey: null,
+                planStatus: null,
+                features: [
+                  {
+                    key: 'members',
+                    billingType: 'free',
+                    displayName: 'メンバー管理',
+                    defaultEnabled: true,
+                    enabled: true,
+                    reason: 'default',
+                  },
+                  {
+                    key: 'line-notifications',
+                    billingType: 'paid',
+                    displayName: 'LINE通知',
+                    defaultEnabled: false,
+                    enabled: lineEnabled,
+                    reason: lineEnabled ? 'plan' : 'unavailable',
+                  },
+                ],
+              }),
+              setFreeFlag: async () => {
+                throw new Error('not used');
+              },
+              syncPlan: async () => undefined,
+              grantPaidFeature: async () => undefined,
+            },
+          },
+        }
+      : undefined,
     rateLimit: { localStore: store },
   });
   return {
@@ -146,11 +185,11 @@ test('認証済みのexact routeにもtenant/user rate limitを適用する', as
       'idempotency-key': 'notification-001',
     },
     body: JSON.stringify({
-      sourceId: 'event-001',
+      sourceType: 'event',
+      sourceId: '00000000-0000-7000-8000-000000000001',
       destination: 'group-001',
       title: '予定のお知らせ',
       body: '練習があります。',
-      deepLink: 'https://staging.example.test/events/event-001',
     }),
   });
 
@@ -171,6 +210,54 @@ test('認証済みのexact routeにもtenant/user rate limitを適用する', as
   assert.doesNotMatch(store.keys[0], new RegExp(`${TENANT_A}|${TOKEN}`));
   assert.equal(getVerifyTokenCalls(), 2);
   assert.equal(getProducerCalls(), 1);
+});
+
+test('feature flag無効時は汎用LINE通知のproducerを呼ばない', async () => {
+  const store = new RecordingRateLimitStore(true);
+  const { app, getProducerCalls } = createTestApp(store, false);
+
+  const response = await app.request('/api/v1/notifications/line', {
+    method: 'POST',
+    headers: {
+      ...authHeaders,
+      'content-type': 'application/json',
+      'idempotency-key': 'notification-disabled-001',
+    },
+    body: JSON.stringify({
+      sourceType: 'event',
+      sourceId: '00000000-0000-7000-8000-000000000001',
+      destination: 'group-001',
+      title: '予定のお知らせ',
+      body: '練習があります。',
+    }),
+  });
+
+  assert.equal(response.status, 403);
+  assert.equal(getProducerCalls(), 0);
+});
+
+test('feature contract未設定時は汎用LINE通知をfail-closedする', async () => {
+  const store = new RecordingRateLimitStore(true);
+  const { app, getProducerCalls } = createTestApp(store, true, false);
+
+  const response = await app.request('/api/v1/notifications/line', {
+    method: 'POST',
+    headers: {
+      ...authHeaders,
+      'content-type': 'application/json',
+      'idempotency-key': 'notification-unconfigured-001',
+    },
+    body: JSON.stringify({
+      sourceType: 'event',
+      sourceId: '00000000-0000-7000-8000-000000000001',
+      destination: 'group-001',
+      title: '予定のお知らせ',
+      body: '練習があります。',
+    }),
+  });
+
+  assert.equal(response.status, 503);
+  assert.equal(getProducerCalls(), 0);
 });
 
 test('rate limit超過時はexact routeの業務handlerを呼ばず429にする', async () => {
@@ -213,11 +300,11 @@ test('rate limit超過時はexact routeの業務handlerを呼ばず429にする'
       'x-request-id': '00000000-0000-4000-8000-000000000022',
     },
     body: JSON.stringify({
-      sourceId: 'event-002',
+      sourceType: 'event',
+      sourceId: '00000000-0000-7000-8000-000000000002',
       destination: 'group-001',
       title: '予定のお知らせ',
       body: '練習があります。',
-      deepLink: 'https://staging.example.test/events/event-002',
     }),
   });
 

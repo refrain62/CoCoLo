@@ -5,6 +5,10 @@ import {
   planPromotion,
 } from '@cocolo/domain';
 import {
+  buildLineDeepLink,
+  type LineNotificationSource,
+} from '@cocolo/domain/line';
+import {
   type MemberCategory,
   type MemberStatus,
   type Prisma,
@@ -95,11 +99,11 @@ export type LineDeliveryProducerInput = {
   tenantId: string;
   actorUserId: string;
   role: MemberRole;
+  sourceType: LineNotificationSource;
   sourceId: string;
   destination: string;
   title: string;
   body: string;
-  deepLink: string;
   idempotencyKey: string;
 };
 
@@ -466,17 +470,71 @@ export function createPrismaClient(databaseUrl?: string): PrismaClient {
 }
 
 // 公開通知APIの業務イベントとoutbox登録を同一transactionへ束ね、片方だけの成功を防ぐ。
+export type LineDeliveryProducerOptions = {
+  notificationPublicAppUrl?: string;
+};
+
+const uuidv7ResourcePattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function assertLineNotificationSource(
+  client: Prisma.TransactionClient,
+  input: Pick<
+    LineDeliveryProducerInput,
+    'tenantId' | 'sourceType' | 'sourceId'
+  >,
+) {
+  if (!uuidv7ResourcePattern.test(input.sourceId))
+    throw new LineDeliveryConflictError(
+      '通知元の資源が存在しないか、通知を登録できません。',
+    );
+
+  const rows =
+    input.sourceType === 'bulletin'
+      ? await client.$queryRaw<Array<{ id: string }>>`
+          SELECT id
+           FROM announcements
+           WHERE tenant_id = ${input.tenantId}::uuid
+             AND id = ${input.sourceId}::uuid
+             AND status = 'published'::announcement_status
+           LIMIT 1
+        `
+      : await client.$queryRaw<Array<{ id: string }>>`
+          SELECT id
+            FROM events
+           WHERE tenant_id = ${input.tenantId}::uuid
+             AND id = ${input.sourceId}::uuid
+           LIMIT 1
+        `;
+  if (!rows[0])
+    throw new LineDeliveryConflictError(
+      '通知元の資源が存在しないか、通知を登録できません。',
+    );
+}
+
 export function createLineDeliveryProducer(
   client: PrismaClient,
+  options: LineDeliveryProducerOptions = {},
 ): LineDeliveryProducer {
   return {
     publish: (input) =>
       client.$transaction(async (tx) => {
+        const publicAppUrl = options.notificationPublicAppUrl?.trim();
+        if (!publicAppUrl)
+          throw new LineDeliveryConflictError(
+            'LINE通知の公開URLが設定されていません。',
+          );
         await setRlsContext(tx, {
           tenantId: input.tenantId,
           userId: input.actorUserId,
           role: input.role,
         });
+        await assertLineNotificationSource(tx, input);
+        const deepLink = buildLineDeepLink(
+          publicAppUrl,
+          input.sourceType,
+          input.sourceId,
+        );
         let notificationId: string;
         try {
           notificationId = await enqueueLineDelivery(tx, {
@@ -484,12 +542,12 @@ export function createLineDeliveryProducer(
             tenantId: input.tenantId,
             actorUserId: input.actorUserId,
             role: input.role,
-            sourceType: 'api_notification',
+            sourceType: input.sourceType,
             sourceId: input.sourceId,
             destination: input.destination,
             title: input.title,
             body: input.body,
-            deepLink: input.deepLink,
+            deepLink,
             idempotencyKey: input.idempotencyKey,
           });
         } catch (error) {
@@ -511,7 +569,7 @@ export function createLineDeliveryProducer(
             resourceType: 'line_delivery',
             resourceId: notificationId,
             metadata: {
-              sourceType: 'api_notification',
+              sourceType: input.sourceType,
               sourceId: input.sourceId,
               idempotencyKey: input.idempotencyKey,
             },
@@ -557,9 +615,12 @@ export function createLineDeliveryProducer(
 }
 
 // RLS context、入力条件、監査ログをrepositoryに閉じ込め、API handlerからDB境界を迂回させない。
-export function createMemberRepositories(client: PrismaClient) {
+export function createMemberRepositories(
+  client: PrismaClient,
+  options: LineDeliveryProducerOptions = {},
+) {
   return {
-    lineDeliveryProducer: createLineDeliveryProducer(client),
+    lineDeliveryProducer: createLineDeliveryProducer(client, options),
     lineDeliveryRepository: {
       // 呼び出し側が開始した業務transactionへenqueueを組み込むための境界。
       enqueueInTransaction: enqueueLineDelivery,

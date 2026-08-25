@@ -1037,18 +1037,25 @@
       "LineDeliveryPublishInput": {
         "type": "object",
         "required": [
+          "sourceType",
           "sourceId",
           "destination",
           "title",
-          "body",
-          "deepLink"
+          "body"
         ],
         "additionalProperties": false,
         "properties": {
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "event",
+              "deadline",
+              "bulletin"
+            ]
+          },
           "sourceId": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 128
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
           },
           "destination": {
             "type": "string",
@@ -1064,12 +1071,6 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 4000
-          },
-          "deepLink": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2048,
-            "pattern": "^https://|^http://localhost(:[0-9]+)?/"
           }
         }
       },

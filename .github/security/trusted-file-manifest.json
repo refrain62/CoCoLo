@@ -49,6 +49,7 @@
     "packages/db/prisma/migrations/20260825110000_auth_invitations_member_links/migration.sql": "5baebb80bbed01339927016ee379e62f9780037065b2084eddadc5d807da4022",
     "packages/db/prisma/migrations/20260825120000_member_link_status_hardening/migration.sql": "4c42dbbe1c782924865589d5ee6b95d0ed5bb5f2b337748eeaa09a76e40cb7b1",
     "packages/db/prisma/migrations/20260825100000_team_feature_contract/migration.sql": "35cba28f9d40148e68df4e84b0848a448722a704f35322e47e691f04deffb1fd",
+    "packages/db/prisma/migrations/20260825130000_line_delivery_feature_gate/migration.sql": "326cb10af9bf1feffb78f5698302e1c332f65ee014f76afad91af1b2a4e847c7",
     "packages/db/prisma/migrations/migration_lock.toml": "63d7115513530f40893f37ab841c316523b7a3113b70ec44ad32ccc79ef9ff90",
     "packages/db/prisma/migrations.sha256": "a82d3eb8334902c964f1ff83d9cb4512d23f9f534cfa171e876383c4ea72d3fc",
     "packages/db/prisma/schema.prisma": "b977debe1384b69b3a84914bf70b5f5d5985fcd4addf52eb9b8fc1724fc5774b",

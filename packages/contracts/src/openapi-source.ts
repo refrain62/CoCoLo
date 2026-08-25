@@ -690,19 +690,21 @@ export const openapiDocument = {
     schemas: {
       LineDeliveryPublishInput: {
         type: 'object',
-        required: ['sourceId', 'destination', 'title', 'body', 'deepLink'],
+        required: ['sourceType', 'sourceId', 'destination', 'title', 'body'],
         additionalProperties: false,
         properties: {
-          sourceId: { type: 'string', minLength: 1, maxLength: 128 },
+          sourceType: {
+            type: 'string',
+            enum: ['event', 'deadline', 'bulletin'],
+          },
+          sourceId: {
+            type: 'string',
+            pattern:
+              '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          },
           destination: { type: 'string', minLength: 1, maxLength: 128 },
           title: { type: 'string', minLength: 1, maxLength: 200 },
           body: { type: 'string', minLength: 1, maxLength: 4000 },
-          deepLink: {
-            type: 'string',
-            minLength: 1,
-            maxLength: 2048,
-            pattern: '^https://|^http://localhost(:[0-9]+)?/',
-          },
         },
       },
       LineDeliveryPublishResponse: {
