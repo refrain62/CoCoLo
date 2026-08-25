@@ -19,7 +19,11 @@
     },
     "./bulletin-board": "./dist/bulletin-board-repository.js",
     "./attachment": "./dist/attachment-repository.js",
-    "./events": "./dist/event-repository.js"
+    "./events": "./dist/event-repository.js",
+    "./feature-contract": {
+      "types": "./dist/feature-contract-repository.d.ts",
+      "import": "./dist/feature-contract-repository.js"
+    }
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",

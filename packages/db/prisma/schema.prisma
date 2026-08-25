@@ -49,6 +49,32 @@ enum PromotionRunStatus {
   @@map("promotion_run_status")
 }
 
+enum FeatureBillingType {
+  free
+  paid
+
+  @@map("feature_billing_type")
+}
+
+enum TenantPlanStatus {
+  active
+  trialing
+  past_due
+  canceled
+  expired
+
+  @@map("tenant_plan_status")
+}
+
+enum FeatureFlagSource {
+  default
+  admin
+  operator
+  billing
+
+  @@map("feature_flag_source")
+}
+
 enum EventType {
   practice
   match
@@ -171,8 +197,59 @@ model Tenant {
   rideOffers    RideOffer[]
   rideRequests  RideRequest[]
   rideAssignments RideAssignment[]
+  plan          TenantPlan?
+  featureFlags  TenantFeatureFlag[]
 
   @@map("tenants")
+}
+
+model FeatureDefinition {
+  key           String             @id @db.VarChar(64)
+  billingType   FeatureBillingType @map("billing_type")
+  displayName   String             @map("display_name") @db.VarChar(200)
+  defaultEnabled Boolean           @default(false) @map("default_enabled")
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
+  flags         TenantFeatureFlag[]
+
+  @@map("feature_definitions")
+}
+
+model TenantPlan {
+  id                     String           @id @default(uuid(7)) @db.Uuid
+  tenantId               String           @unique @map("tenant_id") @db.Uuid
+  planKey                String           @map("plan_key") @db.VarChar(100)
+  status                 TenantPlanStatus
+  featureKeys            String[]         @map("feature_keys")
+  billingProviderSubscriptionId String?   @map("billing_provider_subscription_id") @db.VarChar(256)
+  startsAt               DateTime         @map("starts_at") @db.Timestamptz(6)
+  endsAt                 DateTime?        @map("ends_at") @db.Timestamptz(6)
+  createdAt              DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant                 Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status, startsAt], map: "tenant_plans_tenant_status_starts_idx")
+  @@map("tenant_plans")
+}
+
+model TenantFeatureFlag {
+  tenantId     String             @map("tenant_id") @db.Uuid
+  featureKey   String             @map("feature_key") @db.VarChar(64)
+  enabled      Boolean
+  source       FeatureFlagSource
+  changedByUserId String           @map("changed_by_user_id") @db.VarChar(128)
+  reason       String             @db.VarChar(500)
+  startsAt     DateTime           @map("starts_at") @db.Timestamptz(6)
+  endsAt       DateTime?          @map("ends_at") @db.Timestamptz(6)
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  feature      FeatureDefinition  @relation(fields: [featureKey], references: [key], onDelete: Restrict, onUpdate: NoAction)
+
+  @@id([tenantId, featureKey])
+  @@index([tenantId, startsAt, endsAt], map: "tenant_feature_flags_tenant_period_idx")
+  @@map("tenant_feature_flags")
 }
 
 model TenantMembership {
