@@ -1,6 +1,6 @@
 # 完了タスクと実施履歴
 
-更新日：2026-08-25
+更新日：2026-08-26
 
 この文書は、完了済み作業の結果だけを短く残す履歴です。
 
@@ -19,6 +19,7 @@
 | 購買・送迎 | 注文APIとWeb、CSV・冪等性、送迎API、送迎Web、公開response契約 | `develop`統合済み。実DB・staging受入は継続 |
 | CI・DB | Node.js / pnpm固定、Node 24、local-first quality、migration検査、UUIDv7移行前検査、schema drift検査、PR本文検査 | `develop`統合済み。mainのtrust rootと外部環境は継続 |
 | UI安全性 | 二重送信防止、権限別操作表示、認証レイアウト、主要タップ領域、複数幅ブラウザ受入 | `develop`統合済み。認証済み主要画面のrole別受入は継続 |
+| LP-001 / FS-UI-004 | 未認証ルートの公開LP、課題と機能の訴求、提供状態、ログイン導線、認証済み画面との分離、専用ヒーロー画像 | PR #194を`develop`へ統合。`pnpm test`、`pnpm test:unit`、`pnpm build`、lint、typecheck、390pxから1440pxのブラウザ確認、キーボード操作、コントラスト、品質ゲート成功。敵対的レビューのCriticalとHighは0件。初回バンドル分離はLP-002で継続 |
 | BILLING-001 | 有償・無償feature、チーム単位のplan・flag、effective entitlement、監査境界 | PR #172を`develop`へ統合。CI、`pnpm test`、`pnpm build`、migration・trust検証成功。課金provider接続は外部条件として継続 |
 | BRD-001 / feature契約 | 役員・連絡先の`board-contacts`契約、API fail-closed、Webメニュー制御、無料feature migration | PR #185を`develop`へ統合。`pnpm test` 200件、`pnpm build`、unit、Biome、workspace boundary、migration、trust、品質ゲート成功。個人情報境界、Web閲覧、実DB/RLS受入は継続 |
 | BRD-001 / 年度引き継ぎ | 行ごとのUUIDv7生成、INSERT影響行数による`copiedCount`、APIレスポンスの件数整合 | PR #187を`develop`へ統合。`pnpm test` 200件、`pnpm build`、lint、workspace boundary、品質ゲート成功。実DB/RLSの複数行受入は継続 |
