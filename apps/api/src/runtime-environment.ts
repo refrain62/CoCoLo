@@ -15,6 +15,7 @@ export type RuntimeEnvironment = {
   databaseUrl: string;
   directUrl: string;
   supabaseUrl: string;
+  supabaseAnonKey: string;
   supabaseJwksUrl: string;
   supabaseIssuer: string;
   r2Endpoint: string;
@@ -82,7 +83,7 @@ export function readRuntimeEnvironment(
   const directUrl = required(environment, 'DIRECT_URL');
   const supabaseUrl = required(environment, 'SUPABASE_URL').replace(/\/$/, '');
   const supabaseJwksUrl = required(environment, 'SUPABASE_JWKS_URL');
-  required(environment, 'SUPABASE_ANON_KEY');
+  const supabaseAnonKey = required(environment, 'SUPABASE_ANON_KEY');
   const r2Bucket = required(environment, 'R2_BUCKET');
   const r2Endpoint = required(environment, 'R2_ENDPOINT').replace(/\/$/, '');
   required(environment, 'R2_ACCESS_KEY_ID');
@@ -166,6 +167,7 @@ export function readRuntimeEnvironment(
     databaseUrl,
     directUrl,
     supabaseUrl,
+    supabaseAnonKey,
     supabaseJwksUrl,
     supabaseIssuer,
     r2Endpoint,

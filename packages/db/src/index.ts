@@ -611,7 +611,11 @@ export function createMemberRepositories(client: PrismaClient) {
           if (input.role === 'guardian')
             // membershipだけではなくguardian_membersの担当関係も境界条件にする。
             where.guardianLinks = {
-              some: { tenantId: input.tenantId, userId: input.userId },
+              some: {
+                tenantId: input.tenantId,
+                userId: input.userId,
+                status: 'active',
+              },
             };
           const members = await tx.member.findMany({
             where,

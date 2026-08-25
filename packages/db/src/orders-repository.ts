@@ -1034,6 +1034,7 @@ async function findOrderEntry(
           WHERE gm.tenant_id = oe.tenant_id
             AND gm.user_id = ${input.actorUserId}
             AND gm.member_id = oe.member_id
+            AND gm.status = 'active'::member_link_status
         )
       `
       : Prisma.empty;
@@ -1120,6 +1121,7 @@ async function findOrderEntries(
           WHERE gm.tenant_id = oe.tenant_id
             AND gm.user_id = ${input.actorUserId}
             AND gm.member_id = oe.member_id
+            AND gm.status = 'active'::member_link_status
         )
       `
       : Prisma.empty;

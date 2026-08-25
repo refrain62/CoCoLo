@@ -24,10 +24,11 @@ export async function findAuthorizedSubjectMember(
          ${actor.role} <> 'guardian'
          OR EXISTS (
            SELECT 1
-             FROM guardian_members gm
+            FROM guardian_members gm
             WHERE gm.tenant_id = ${actor.tenantId}::uuid
               AND gm.user_id = ${actor.actorUserId}
               AND gm.member_id = m.id
+              AND gm.status = 'active'::member_link_status
          )
        )
      LIMIT 1

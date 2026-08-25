@@ -16,7 +16,11 @@
     },
     "./bulletin-board": "./dist/bulletin-board-domain.js",
     "./attachment": "./dist/attachment-domain.js",
-    "./event": "./dist/event-domain.js"
+    "./event": "./dist/event-domain.js",
+    "./feature-contract": {
+      "types": "./dist/feature-contract.js",
+      "import": "./dist/feature-contract.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

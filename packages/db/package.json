@@ -23,6 +23,14 @@
     "./subject-member": {
       "types": "./dist/subject-member-access.d.ts",
       "import": "./dist/subject-member-access.js"
+    },
+    "./auth-invitation": {
+      "types": "./dist/auth-invitation-repository.d.ts",
+      "import": "./dist/auth-invitation-repository.js"
+    },
+    "./feature-contract": {
+      "types": "./dist/feature-contract-repository.d.ts",
+      "import": "./dist/feature-contract-repository.js"
     }
   },
   "scripts": {
