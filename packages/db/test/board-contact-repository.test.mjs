@@ -158,7 +158,8 @@ test('年度引き継ぎは同一テナントで実行し、結果の連絡先�
     toFiscalYear: 2027,
   });
 
-  assert.equal(result[0]?.roleName, '会計');
+  assert.equal(result.records[0]?.roleName, '会計');
+  assert.equal(result.copiedCount, 1);
   assert.equal(
     client.calls.some(
       ({ kind, query }) =>
@@ -166,6 +167,24 @@ test('年度引き継ぎは同一テナントで実行し、結果の連絡先�
     ),
     true,
   );
+  const copyAuditCall = client.calls.find(
+    ({ kind, query }) =>
+      kind === 'execute' &&
+      queryValues(query).includes('board_contact.copy_year'),
+  );
+  assert.ok(copyAuditCall);
+  assert.equal(
+    queryValues(copyAuditCall.query).some((value) =>
+      String(value).includes('"copiedCount":1'),
+    ),
+    true,
+  );
+  const copyInsertCall = client.calls.find(
+    ({ kind, query }) =>
+      kind === 'execute' && queryText(query).includes('INSERT INTO board_contacts'),
+  );
+  assert.ok(copyInsertCall);
+  assert.equal(queryText(copyInsertCall.query).includes('app_uuidv7()'), true);
   assert.equal(
     client.calls.some(({ query }) => queryValues(query).includes(TENANT_ID)),
     true,

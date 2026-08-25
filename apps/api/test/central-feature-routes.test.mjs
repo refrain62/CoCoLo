@@ -153,7 +153,7 @@ function createTestApp({
           },
           update: async () => null,
           remove: async () => null,
-          copyYear: async () => [],
+          copyYear: async () => ({ records: [], copiedCount: 0 }),
         },
       },
       bulletinBoard: {

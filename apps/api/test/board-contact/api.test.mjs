@@ -60,17 +60,30 @@ function createTestApp() {
     },
     async copyYear(input) {
       calls.push({ operation: 'copyYear', input });
-      return [
-        {
-          ...contacts[0],
-          id: '00000000-0000-7000-8000-000000000303',
-          fiscalYear: input.toFiscalYear,
-          assigneeUserId: null,
-          lineContact: null,
-          phone: null,
-          contactPreference: 'line',
-        },
-      ];
+      return {
+        records: [
+          {
+            ...contacts[0],
+            id: '00000000-0000-7000-8000-000000000303',
+            fiscalYear: input.toFiscalYear,
+            assigneeUserId: null,
+            lineContact: null,
+            phone: null,
+            contactPreference: 'line',
+          },
+          {
+            ...contacts[0],
+            id: '00000000-0000-7000-8000-000000000304',
+            fiscalYear: input.toFiscalYear,
+            roleName: '監督',
+            assigneeUserId: null,
+            lineContact: null,
+            phone: null,
+            contactPreference: 'line',
+          },
+        ],
+        copiedCount: 1,
+      };
     },
   };
   return {
@@ -121,7 +134,7 @@ test('期限切れtokenと不正なqueryは処理前に拒否する', async () =
       create: async () => contacts[0],
       update: async () => contacts[0],
       remove: async () => contacts[0],
-      copyYear: async () => [],
+      copyYear: async () => ({ records: [], copiedCount: 0 }),
     },
   });
   const expired = await expiredApp.request('/api/v1/board-members', {
@@ -265,6 +278,8 @@ test('ownerの登録と年度引き継ぎはtenantを認証所属から決め、
   });
   const copyPayload = await json(copyResponse);
   assert.equal(copyResponse.status, 201);
+  assert.equal(copyPayload.data.length, 2);
+  assert.equal(copyPayload.copiedCount, 1);
   assert.equal(copyPayload.data[0].phone, undefined);
   assert.equal(copyPayload.data[0].lineContact, undefined);
   assert.equal(calls.at(-1).input.tenantId, TENANT_A);
