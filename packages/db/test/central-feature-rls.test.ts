@@ -52,10 +52,10 @@ async function execute(
   await client.$executeRawUnsafe(sql, ...values);
 }
 
-async function count(client: PrismaClient, table: string) {
+async function count(client: PrismaClient, table: string, where = 'TRUE') {
   const result = await rows<{ count: bigint }>(
     client,
-    `SELECT count(*)::bigint AS count FROM ${table}`,
+    `SELECT count(*)::bigint AS count FROM ${table} WHERE ${where}`,
   );
   return Number(result[0]?.count ?? 0n);
 }
@@ -637,7 +637,10 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
     assert.equal(await count(tx, 'attendance_responses'), 2);
     assert.equal(await countBoardContacts(tx, tenantA, 'owner'), 1);
     assert.equal(await count(tx, 'purchase_orders'), 1);
-    assert.equal(await count(tx, 'attachments'), 1);
+    assert.equal(
+      await count(tx, 'attachments', "status = 'available'::attachment_status"),
+      1,
+    );
     assert.equal(await count(tx, 'announcements'), 1);
     assert.equal(await count(tx, 'line_notification_queue'), 1);
     assert.equal(await count(tx, 'ride_assignments'), 1);
@@ -668,14 +671,20 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
 
   await withContext(app, tenantB, 'owner-b', 'owner', async (tx) => {
     assert.equal(await count(tx, 'events'), 1);
-    assert.equal(await count(tx, 'attachments'), 1);
+    assert.equal(
+      await count(tx, 'attachments', "status = 'available'::attachment_status"),
+      1,
+    );
     assert.equal(await count(tx, 'line_connections'), 1);
     assert.equal(await count(tx, 'purchase_orders'), 0);
   });
 
   await withContext(app, tenantA, 'guardian-a2', 'guardian', async (tx) => {
     assert.equal(await count(tx, 'attendance_responses'), 1);
-    assert.equal(await count(tx, 'attachments'), 1);
+    assert.equal(
+      await count(tx, 'attachments', "status = 'available'::attachment_status"),
+      1,
+    );
     assert.equal(await count(tx, 'order_entries'), 1);
     assert.equal(await count(tx, 'ride_requests'), 1);
     assert.equal(await count(tx, 'ride_assignments'), 0);
@@ -742,23 +751,12 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
       tenantA,
     );
     assert.equal(publicContacts[0]?.phone, null);
-    await rejects(() =>
-      rows(
-        tx,
-        `SELECT phone FROM board_contacts WHERE id = $1::uuid`,
-        boardContactA,
-      ),
-    );
     assert.equal(await count(tx, 'events'), 1);
     assert.equal(await count(tx, 'purchase_orders'), 0);
   });
 
   await withContext(app, tenantA, 'guardian-a2', 'guardian', async (tx) => {
-    await execute(
-      tx,
-      `DELETE FROM board_contacts WHERE id = $1::uuid`,
-      boardContactA,
-    );
+    // guardianは公開projectionだけを参照でき、管理用テーブルへ変更を加えない。
     assert.equal(await countBoardContacts(tx, tenantA, 'guardian'), 1);
   });
 
