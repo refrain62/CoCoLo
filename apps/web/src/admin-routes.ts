@@ -1,4 +1,5 @@
 import type { AuthRole } from './auth-context-api.js';
+import { parseNotificationDeepLink } from './notification-deep-link.js';
 
 export type AdminRoute =
   | 'dashboard'
@@ -9,7 +10,9 @@ export type AdminRoute =
   | 'line'
   | 'ride'
   | 'settings'
-  | 'features';
+  | 'features'
+  | 'event-detail'
+  | 'bulletin-detail';
 
 export type AdminFeature = {
   key: string;
@@ -104,6 +107,9 @@ export const adminNavigation: readonly AdminNavigationItem[] = [
 ];
 
 export function resolveAdminRoute(pathname: string): AdminRoute {
+  const deepLink = parseNotificationDeepLink(pathname);
+  if (deepLink?.kind === 'event') return 'event-detail';
+  if (deepLink?.kind === 'bulletin') return 'bulletin-detail';
   const item = adminNavigation.find((candidate) => candidate.href === pathname);
   return item?.route ?? legacyAdminPaths[pathname] ?? 'dashboard';
 }

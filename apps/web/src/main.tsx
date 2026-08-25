@@ -45,8 +45,37 @@ import { createRideOperationsApi } from './features/ride-operations/ride-operati
 import { RideOperationsPanel } from './features/ride-operations/ride-operations-panel.js';
 import { createMemberApi } from './member-api.js';
 import { MemberManagementPage } from './member-management-page.js';
+import {
+  isNotificationDeepLink,
+  parseNotificationDeepLink,
+} from './notification-deep-link.js';
 import { UserManualPage } from './user-manual-page.js';
 import './styles.css';
+
+function navigateInApp(path: string) {
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
+function DeepLinkState({
+  message,
+  onBack,
+}: {
+  message: string;
+  onBack?: () => void;
+}) {
+  return (
+    <section className="app-state-card" role="alert">
+      <h1>通知のリンクを開けません</h1>
+      <p>{message}</p>
+      {onBack ? (
+        <button type="button" onClick={onBack}>
+          管理画面へ戻る
+        </button>
+      ) : null}
+    </section>
+  );
+}
 
 function AuthenticatedApp() {
   // 認証状態が確定するまでLoginPageを表示し、部員APIへ到達できる画面をsession保有者に限定する。
@@ -87,7 +116,11 @@ function AuthenticatedApp() {
         if (!active) return;
         const storedId = getStoredSelectedTeamId();
         const storedTeam = teams.find((team) => team.tenantId === storedId);
-        const nextTeam = storedTeam ?? (teams.length === 1 ? teams[0] : null);
+        const mustChooseTeam =
+          isNotificationDeepLink(window.location.pathname) && teams.length > 1;
+        const nextTeam = mustChooseTeam
+          ? null
+          : (storedTeam ?? (teams.length === 1 ? teams[0] : null));
         if (nextTeam) setStoredSelectedTeamId(nextTeam.tenantId);
         setSelectedTeam(nextTeam ?? null);
       })
@@ -296,6 +329,13 @@ function AuthenticatedApp() {
   const currentTeam = selectedTeam;
   const subjectMemberStorageKey = `cocolo.selectedSubjectMemberId.${selectedTeamId}`;
 
+  function requestTeamSelection() {
+    clearStoredSelectedTeamId();
+    setSelectedTeam(null);
+    setRole(null);
+    setEventsError(null);
+  }
+
   function renderAdminPage(
     route: AdminRoute,
     contract: FeatureContractSnapshot,
@@ -305,6 +345,9 @@ function AuthenticatedApp() {
       contract.features.some(
         (feature) => feature.key === key && feature.enabled,
       );
+    const notificationTarget = parseNotificationDeepLink(
+      window.location.pathname,
+    );
     const intro = {
       members: [
         'Members',
@@ -354,6 +397,66 @@ function AuthenticatedApp() {
           role={currentRole}
         />
       );
+
+    if (route === 'event-detail') {
+      if (notificationTarget?.kind !== 'event')
+        return (
+          <DeepLinkState
+            message="対象の予定リンクを確認できません。"
+            onBack={() => navigateInApp('/admin/events')}
+          />
+        );
+      if (!isFeatureEnabled('events-attendance'))
+        return (
+          <DeepLinkState
+            message="このチームでは予定機能を利用できません。"
+            onBack={() => navigateInApp('/admin')}
+          />
+        );
+      return (
+        <div className="admin-page-stack">
+          <EventsPage
+            api={eventsApi}
+            role={currentRole}
+            memberOptions={eventMembers}
+            selectionStorageKey={subjectMemberStorageKey}
+            initialEventId={notificationTarget.id}
+            onBack={() => navigateInApp('/admin/events')}
+            onAccessDenied={requestTeamSelection}
+          />
+        </div>
+      );
+    }
+
+    if (route === 'bulletin-detail') {
+      if (notificationTarget?.kind !== 'bulletin')
+        return (
+          <DeepLinkState
+            message="対象の回覧リンクを確認できません。"
+            onBack={() => navigateInApp('/admin/announcements')}
+          />
+        );
+      if (!isFeatureEnabled('bulletin-board'))
+        return (
+          <DeepLinkState
+            message="このチームでは回覧機能を利用できません。"
+            onBack={() => navigateInApp('/admin')}
+          />
+        );
+      return (
+        <div className="admin-page-stack">
+          <BulletinBoardPage
+            api={bulletinBoardApi}
+            attachmentApi={attachmentApi}
+            attachmentsEnabled={isFeatureEnabled('attachments')}
+            role={currentRole}
+            initialAnnouncementId={notificationTarget.id}
+            onBack={() => navigateInApp('/admin/announcements')}
+            onAccessDenied={requestTeamSelection}
+          />
+        </div>
+      );
+    }
 
     const [eyebrow, title, description] = intro[route];
     return (
