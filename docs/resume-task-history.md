@@ -1276,7 +1276,7 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 ### 敵対的レビュー
 
 - Workflowの固定漏れ、実行時バージョン不一致、Windows/Linuxのpnpm実行経路、trust root manifest、供給網設定を確認しました。
-- 変更範囲にCritical / Highの未解消指摘はありません。Node.js 20を実行するActionのruntime警告と、通常install後の実効設定・ignored-buildsの追加証跡はTOOL-003および環境受入の残課題です。
+- 変更範囲にCritical / Highの未解消指摘はありません。通常install後の実効設定・ignored-buildsの追加証跡は、供給網運用の残課題として継続します。
 
 ### GitHub反映
 
@@ -1286,7 +1286,7 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 ### 未完了条件
 
-- TOOL-003のNode.js 20警告整理、通常install経路の実効pnpm設定検証は継続します。
+- 通常install経路の実効pnpm設定とignored-buildsの追加証跡は、供給網運用の残課題として継続します。
 
 ## TOOL-002 CR改行検査の結果統一
 
@@ -1315,7 +1315,35 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 ### 未完了条件
 
-- TOOL-003のNode.js 20警告整理と通常install経路の実効設定検証、UI-002/003、RIDE-002、T-013は継続します。
+- UI-002/003、RIDE-002、T-013は継続します。
+
+## TOOL-003 GitHub ActionsのNode 20警告解消
+
+### 実施した変更
+
+- `actions/checkout`、`pnpm/action-setup`、`actions/setup-node`、`actions/upload-artifact`、`actions/download-artifact`、`actions/attest-build-provenance`をNode 24対応の固定SHAへ更新しました。アプリ実行用Node.js 24.12.0とは別に、Action内部runtimeの警告を解消する変更です。
+- stagingの`.release`と`.evidence`は`include-hidden-files: true`を明示し、E2Eのartifact取得は失敗を`continue-on-error`で握りつぶさないようにしました。
+- 変更したWorkflowのSHAを`.github/security/trusted-file-manifest.json`へ反映しました。
+
+### 検証結果
+
+- `pnpm test`、`pnpm build`、`pnpm lint`、`pnpm lint:workflows`、`pnpm verify:trust-root`、`pnpm verify:line-endings`、`git diff --check`が成功しました。buildはViteの親ディレクトリ読取がサンドボックスで拒否されたため、同じコマンドを権限付きローカル実行で再確認しました。
+- GitHub quality run `32792636106`が成功しました。
+
+### 敵対的レビュー
+
+- Critical 0件、High 1件、Medium 3件でした。Highの隠しディレクトリartifact保存漏れを修正し、artifact取得失敗を握りつぶすMediumも修正しました。修正後の変更範囲にCritical / Highの未解消指摘はありません。
+- Node 24対応Actionのrunner最小バージョンは、GitHub-hosted runnerからself-hosted/ARCへ変更する場合に事前確認します。stagingの`actions: write`はartifact/attestation実行に必要な実権限を確認したうえで、`actions: read`またはjob単位の最小権限へ縮小する候補としてOPS-006に残します。
+
+### GitHub反映
+
+- 実装PR #166は`397a326`として`develop`へsquash mergeしました。
+- 実装コードと台帳・実施記録は分離し、この変更はdocs-only PRで提出します。
+
+### 未完了条件
+
+- stagingのActions権限最小化とself-hosted runner移行時のrunner要件確認はOPS-006で継続します。
+- UI-002/003、RIDE-002、T-013、ORIG-REQ-001は継続します。
 
 ## 履歴の更新規則
 
