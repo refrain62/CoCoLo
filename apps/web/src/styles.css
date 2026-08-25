@@ -343,7 +343,7 @@ a:hover {
 }
 
 .app-content button {
-  min-height: 2.65rem;
+  min-height: 2.75rem;
   padding: 0.6rem 0.95rem;
   border: 1px solid transparent;
   background: var(--brand);
@@ -455,6 +455,7 @@ a:hover {
 
 .auth-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-height: 100dvh;
   place-items: center;
   padding: clamp(1rem, 4vw, 3rem);
@@ -516,6 +517,12 @@ a:hover {
   margin: 1.25rem 0 0;
   text-align: center;
   font-size: 0.85rem;
+}
+
+.auth-help a {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
 }
 
 .team-selection-card {
@@ -665,7 +672,7 @@ a:hover {
 
   .app-nav a {
     flex: 0 0 auto;
-    min-height: 2.35rem;
+    min-height: 2.75rem;
     padding: 0.45rem 0.7rem;
     background: rgb(255 255 255 / 0.08);
     font-size: 0.78rem;
