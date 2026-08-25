@@ -66,6 +66,18 @@
     "./events": {
       "types": "./src/event-contract.ts",
       "import": "./dist/event-contract.js"
+    },
+    "./subject-member": {
+      "types": "./src/subject-member.ts",
+      "import": "./dist/subject-member.js"
+    },
+    "./auth-invitation": {
+      "types": "./src/auth-invitation.ts",
+      "import": "./dist/auth-invitation.js"
+    },
+    "./feature-contract": {
+      "types": "./src/feature-contract.ts",
+      "import": "./dist/feature-contract.js"
     }
   },
   "scripts": {

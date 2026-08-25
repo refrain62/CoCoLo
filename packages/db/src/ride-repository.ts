@@ -12,6 +12,7 @@ import {
   validateGoogleMapsUrl,
 } from '@cocolo/domain/ride';
 import type { Prisma, PrismaClient, Role } from '@prisma/client';
+import { findAuthorizedSubjectMember } from './subject-member-access.js';
 
 export type RideRole = 'owner' | 'admin' | 'staff' | 'guardian';
 export type RideActor = {
@@ -305,6 +306,7 @@ async function readSnapshot(
             WHERE gm.tenant_id = ${actor.tenantId}::uuid
               AND gm.user_id = ${actor.userId}
               AND gm.member_id = ride_requests.member_id
+              AND gm.status = 'active'::member_link_status
          )
        )
      ORDER BY created_at ASC, id ASC
@@ -482,6 +484,14 @@ export function createRideRepository(client: PrismaClient): RideRepository {
           throw new RideRepositoryConflictError(
             '受付中でない送迎には乗車希望を登録できません。',
           );
+        if (
+          (await findAuthorizedSubjectMember(
+            tx,
+            { ...actor, actorUserId: actor.userId },
+            input.memberId,
+          )) === null
+        )
+          throw new RideRepositoryForbiddenError();
         const rows = await tx.$queryRaw<RequestRow[]>`
           INSERT INTO ride_requests (
             tenant_id, plan_id, member_id, requester_user_id,
@@ -499,8 +509,9 @@ export function createRideRepository(client: PrismaClient): RideRepository {
                  SELECT 1
                    FROM guardian_members gm
                   WHERE gm.tenant_id = ${actor.tenantId}::uuid
-                    AND gm.user_id = ${actor.userId}
-                    AND gm.member_id = m.id
+                   AND gm.user_id = ${actor.userId}
+                   AND gm.member_id = m.id
+                   AND gm.status = 'active'::member_link_status
                )
              )
           RETURNING id, plan_id, member_id, requester_user_id,
@@ -514,6 +525,7 @@ export function createRideRepository(client: PrismaClient): RideRepository {
           resourceId: plan.id,
           metadata: {
             requestId: request.id,
+            subjectMemberId: request.memberId,
             passengerCount: request.passengerCount,
           },
         });

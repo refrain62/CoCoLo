@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AuthApiError, createAuthClient } from './auth-client.js';
+import {
+  AuthApiError,
+  createAuthClient,
+  parseOAuthCallback,
+} from './auth-client.js';
 import { createAuthSessionManager } from './auth-context.js';
 
 function response(body: unknown, status = 200) {
@@ -10,6 +14,34 @@ function response(body: unknown, status = 200) {
 }
 
 describe('Supabase Auth client', () => {
+  it('LINE/Google OAuthのauthorize URLはproviderとredirectだけを渡す', () => {
+    const client = createAuthClient({
+      baseUrl: 'https://example.supabase.co',
+      anonKey: 'public-anon-key',
+    });
+
+    expect(
+      client.getOAuthAuthorizeUrl?.(
+        'line',
+        'https://app.example.com/invite?token=opaque-token',
+      ),
+    ).toBe(
+      'https://example.supabase.co/auth/v1/authorize?provider=line&redirect_to=https%3A%2F%2Fapp.example.com%2Finvite%3Ftoken%3Dopaque-token',
+    );
+  });
+
+  it('OAuth callbackのhashからsessionを作り、refresh tokenを保持する', () => {
+    expect(
+      parseOAuthCallback(
+        '#access_token=oauth-access&refresh_token=oauth-refresh&expires_in=3600',
+      ),
+    ).toMatchObject({
+      accessToken: 'oauth-access',
+      refreshToken: 'oauth-refresh',
+    });
+    expect(parseOAuthCallback('#error=access_denied')).toBeNull();
+  });
+
   it('password grantの応答からセッションを作る', async () => {
     let request: { url: string; init: RequestInit } | undefined;
     const client = createAuthClient({

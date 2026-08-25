@@ -234,7 +234,7 @@ test('募集案件を作成し、guardianの注文と登録外選択肢拒否を
     method: 'POST',
     headers: headers('guardian-a'),
     body: JSON.stringify({
-      memberId: MEMBER_A,
+      subjectMemberId: MEMBER_A,
       ordererName: '注文者',
       lines: [
         {

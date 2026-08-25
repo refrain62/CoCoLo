@@ -7,6 +7,7 @@ import {
   useEffect,
   useState,
 } from 'react';
+import type { AuthInvitationApi } from './features/auth-invitations/auth-invitation-api.js';
 import {
   createMemberApi,
   type MemberApi,
@@ -595,11 +596,101 @@ function PromotionPanel({ api }: { api: MemberApi }) {
 }
 
 // 部員一覧・検索・登録の画面状態を管理し、データ取得の認可はMemberApi/APIへ委譲する。
+function InvitationPanel({
+  api,
+  members,
+}: {
+  api: AuthInvitationApi;
+  members: MemberSummary[];
+}) {
+  const activeMembers = members.filter((member) => member.status === 'active');
+  const [memberId, setMemberId] = useState(activeMembers[0]?.id ?? '');
+  const [relationship, setRelationship] = useState('保護者');
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!activeMembers.some((member) => member.id === memberId))
+      setMemberId(activeMembers[0]?.id ?? '');
+  }, [activeMembers, memberId]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!memberId || !relationship.trim() || isSubmitting) return;
+    setError(null);
+    setInviteUrl(null);
+    setIsSubmitting(true);
+    try {
+      const result = await api.create({
+        memberId,
+        role: 'guardian',
+        relationship: relationship.trim(),
+        expiresInHours: 72,
+      });
+      setInviteUrl(result.inviteUrl);
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="member-invitation-heading">
+      <h2 id="member-invitation-heading">保護者を招待</h2>
+      <p>
+        招待URLは発行後72時間で失効します。URLは安全な経路で共有してください。
+      </p>
+      {activeMembers.length === 0 ? (
+        <p role="status">招待できる在籍中の部員がいません。</p>
+      ) : (
+        <form onSubmit={submit}>
+          <label htmlFor="invitation-member">対象部員</label>
+          <select
+            id="invitation-member"
+            required
+            value={memberId}
+            onChange={(event) => setMemberId(event.target.value)}
+          >
+            {activeMembers.map((member) => (
+              <option key={member.id} value={member.id}>
+                {member.name}
+              </option>
+            ))}
+          </select>
+          <label htmlFor="invitation-relationship">続柄</label>
+          <input
+            id="invitation-relationship"
+            maxLength={100}
+            required
+            value={relationship}
+            onChange={(event) => setRelationship(event.target.value)}
+          />
+          <button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? '発行中…' : '招待URLを発行'}
+          </button>
+        </form>
+      )}
+      {error ? <p role="alert">{error}</p> : null}
+      {inviteUrl ? (
+        <div aria-live="polite">
+          <label htmlFor="invitation-url">招待URL</label>
+          <input id="invitation-url" readOnly value={inviteUrl} />
+          <p>このURLを招待する人へ共有してください。</p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function MemberManagementPage({
   api = defaultMemberApi,
+  invitationApi,
   role = null,
 }: {
   api?: MemberApi;
+  invitationApi?: AuthInvitationApi;
   role?: MemberRole | null;
 }) {
   const [filters, setFilters] = useState(emptyFilters);
@@ -608,6 +699,7 @@ export function MemberManagementPage({
   const [listError, setListError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const canManage = canManageMembers(role);
+  const canInvite = role === 'owner' || role === 'admin';
 
   // 初回表示と検索を同じ経路にし、loading/error状態を必ずリクエスト単位で更新する。
   const loadMembers = useCallback(
@@ -720,6 +812,10 @@ export function MemberManagementPage({
           />
         ) : null}
       </section>
+
+      {canInvite && invitationApi ? (
+        <InvitationPanel api={invitationApi} members={members} />
+      ) : null}
 
       {canManage ? (
         <>

@@ -16,6 +16,10 @@ const migrationsRoot = path.join(
   'prisma',
   'migrations',
 );
+const tenantIndependentTables = new Set([
+  'feature_definitions',
+  'auth_identities',
+]);
 
 function compactSql(content: string) {
   return content.replace(/\s+/g, ' ');
@@ -113,7 +117,7 @@ function assertCreatedTablesAreProtected(file: MigrationSqlFile) {
       tableStart,
       nextTable === -1 ? compact.length : nextTable,
     );
-    if (tableName !== 'tenants')
+    if (tableName !== 'tenants' && !tenantIndependentTables.has(tableName))
       assert.match(
         tableBody,
         /\btenant_id\b/i,
@@ -173,6 +177,37 @@ function assertPolicyTenantBoundaries(file: MigrationSqlFile) {
         statement,
         /\bid\b[\s\S]*current_setting\s*\(\s*'app\.tenant_id'/i,
         `${file.path}: tenants policyにtenant境界が必要です。`,
+      );
+      continue;
+    }
+    if (tenantIndependentTables.has(table)) {
+      assert.match(
+        statement,
+        /current_setting\s*\(\s*'app\.(?:user_id|tenant_id|role)'/i,
+        `${file.path}: ${table} policyにrequest context境界が必要です。`,
+      );
+      assert.doesNotMatch(
+        statement,
+        /\b(?:USING|WITH\s+CHECK)\s*\(\s*true\s*\)/i,
+        `${file.path}: ${table} policyの無条件許可は禁止です。`,
+      );
+      continue;
+    }
+    if (
+      table === 'auth_invitations' &&
+      /token_hash\s*=\s*current_setting\s*\(\s*'app\.invitation_token_hash'/i.test(
+        statement,
+      )
+    ) {
+      assert.match(
+        statement,
+        /current_setting\s*\(\s*'app\.invitation_token_hash'/i,
+        `${file.path}: token policyにopaque token context境界が必要です。`,
+      );
+      assert.match(
+        statement,
+        /expires_at\s*>\s*now\(\)/i,
+        `${file.path}: token policyに有効期限境界が必要です。`,
       );
       continue;
     }

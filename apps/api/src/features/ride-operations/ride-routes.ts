@@ -6,6 +6,7 @@ import {
   ridePlanIdSchema,
   rideRequestCreateSchema,
 } from '@cocolo/contracts/ride';
+import { getSubjectMemberId } from '@cocolo/contracts/subject-member';
 import type { Context, Hono } from 'hono';
 import type { RideService } from './ride-service.js';
 
@@ -178,14 +179,21 @@ export function registerRideRoutes(
         'VALIDATION_ERROR',
         '乗車希望の登録内容が不正です。',
       );
+    const subjectMemberId = getSubjectMemberId(parsed.data);
+    if (!subjectMemberId)
+      return errorResponse(
+        context,
+        400,
+        'VALIDATION_ERROR',
+        '対象memberが指定されていません。',
+      );
     try {
       return context.json(
         {
-          data: await dependencies.service.createRequest(
-            auth,
-            planId,
-            parsed.data,
-          ),
+          data: await dependencies.service.createRequest(auth, planId, {
+            ...parsed.data,
+            memberId: subjectMemberId,
+          }),
         },
         201,
       );

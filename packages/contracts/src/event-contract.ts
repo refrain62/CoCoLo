@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  requireExactlyOneSubjectMemberId,
+  subjectMemberIdFields,
+} from './subject-member.ts';
 
 const uuid = z.string().uuid();
 const dateTime = z.string().datetime({ offset: true });
@@ -119,10 +123,11 @@ export const attendanceResponseSchema = z.enum([
 
 export const attendanceUpsertSchema = z
   .object({
-    memberId: uuid,
+    ...subjectMemberIdFields,
     response: attendanceResponseSchema,
     correctionReason: z.string().trim().min(1).max(500).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(requireExactlyOneSubjectMemberId);
 
 export const eventIdSchema = uuid;

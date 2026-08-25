@@ -20,6 +20,7 @@ import {
   validateProduct,
 } from '@cocolo/domain/orders';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { findAuthorizedSubjectMember } from './subject-member-access.js';
 import { uuidv7 } from './uuidv7.js';
 
 export type OrdersActor = {
@@ -478,12 +479,12 @@ export function createInMemoryOrdersRepository(
       entries.set(id, entry);
       addAudit(input, 'orders.entry.create', 'order_entry', id, {
         orderId: campaign.id,
-        memberId: member.id,
+        subjectMemberId: member.id,
         lineCount: entry.lines.length,
         totalAmount: entry.totalAmount,
         personalDataFields: [
           'ordererName',
-          'memberId',
+          'subjectMemberId',
           'memberName',
           'backName',
         ],
@@ -552,7 +553,7 @@ export function createInMemoryOrdersRepository(
         previousStatus,
         nextStatus: entry.paymentStatus,
         totalAmount: entry.totalAmount,
-        personalDataFields: ['memberId', 'ordererName'],
+        personalDataFields: ['subjectMemberId', 'ordererName'],
       });
       return clone(entry);
     },
@@ -1033,6 +1034,7 @@ async function findOrderEntry(
           WHERE gm.tenant_id = oe.tenant_id
             AND gm.user_id = ${input.actorUserId}
             AND gm.member_id = oe.member_id
+            AND gm.status = 'active'::member_link_status
         )
       `
       : Prisma.empty;
@@ -1119,6 +1121,7 @@ async function findOrderEntries(
           WHERE gm.tenant_id = oe.tenant_id
             AND gm.user_id = ${input.actorUserId}
             AND gm.member_id = oe.member_id
+            AND gm.status = 'active'::member_link_status
         )
       `
       : Prisma.empty;
@@ -1164,21 +1167,8 @@ async function requireAssignedActiveMember(
       'CONFLICT',
       '停止または退部した部員は注文できません。',
     );
-  if (input.role === 'guardian') {
-    const assignments = await client.$queryRaw<Array<{ member_id: string }>>`
-      SELECT member_id
-      FROM guardian_members
-      WHERE tenant_id = ${input.tenantId}::uuid
-        AND user_id = ${input.actorUserId}
-        AND member_id = ${memberId}::uuid
-      FOR SHARE
-    `;
-    if (!assignments[0])
-      throw new OrdersRepositoryError(
-        'NOT_FOUND',
-        '対象部員が見つかりません。',
-      );
-  }
+  if ((await findAuthorizedSubjectMember(client, input, memberId)) === null)
+    throw new OrdersRepositoryError('NOT_FOUND', '対象部員が見つかりません。');
   return member;
 }
 
@@ -1579,12 +1569,12 @@ export function createPrismaOrdersRepository(
           entryId,
           {
             orderId: input.orderId,
-            memberId: member.id,
+            subjectMemberId: member.id,
             lineCount: normalizedLines.length,
             totalAmount,
             personalDataFields: [
               'ordererName',
-              'memberId',
+              'subjectMemberId',
               'memberName',
               'backName',
             ],
@@ -1682,7 +1672,7 @@ export function createPrismaOrdersRepository(
             previousStatus: entry.payment_status,
             nextStatus: input.status,
             totalAmount: safeBigIntToNumber(entry.total_amount, '注文合計'),
-            personalDataFields: ['memberId', 'ordererName'],
+            personalDataFields: ['subjectMemberId', 'ordererName'],
           },
         );
         return toOrderEntry(tx, updated);

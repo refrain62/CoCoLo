@@ -362,7 +362,7 @@ test('guardianは担当部員の希望だけ登録でき、snapshotに他人のu
     `/api/v1/ride-plans/${plan.id}/requests`,
     {
       method: 'POST',
-      body: JSON.stringify({ memberId, passengerCount: 1 }),
+      body: JSON.stringify({ subjectMemberId: memberId, passengerCount: 1 }),
     },
   );
   assert.equal(requestResponse.status, 201);

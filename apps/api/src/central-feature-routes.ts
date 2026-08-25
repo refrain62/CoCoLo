@@ -1,19 +1,23 @@
 import type { TokenVerifier } from '@cocolo/auth';
 import type { MemberRole } from '@cocolo/contracts/member';
+import type { AuthInvitationRepository } from '@cocolo/db/auth-invitation';
 import type { AuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import type { BulletinBoardRepository } from '@cocolo/db/bulletin-board';
+import type { FeatureContractRepository } from '@cocolo/db/feature-contract';
 import type { OrdersRepository } from '@cocolo/db/orders';
 import type { AttachmentRepository } from '@cocolo/domain/attachment';
 import type { Context, Hono } from 'hono';
 import type { ApiEnv } from './app.js';
 import { createAttachmentApp } from './features/attachments/attachment-app.js';
 import type { AttachmentStorage } from './features/attachments/attachment-storage.js';
+import { createAuthInvitationApp } from './features/auth-invitations/auth-invitation-app.js';
 import { createAuthTeamSelectionApp } from './features/auth-team-selection/app.js';
 import {
   type BoardContactRepository,
   createBoardContactApp,
 } from './features/board-contact/index.js';
 import { createBulletinBoardApp } from './features/bulletin-board/bulletin-board-app.js';
+import { createFeatureContractApp } from './features/feature-contract/feature-contract-app.js';
 import { createLineNotificationApp } from './features/line-notifications/routes.js';
 import { createOrdersPaymentsApp } from './features/orders-payments/orders-payments-app.js';
 import {
@@ -30,12 +34,17 @@ export type CentralFeatureMembershipRepository = {
 
 export type CentralFeatureRoutes = {
   authTeamSelection?: { repository: AuthTeamSelectionRepository };
+  authInvitations?: {
+    repository: AuthInvitationRepository;
+    invitationUrlBase?: string;
+  };
   attachments?: {
     repository: AttachmentRepository;
     storage: AttachmentStorage;
   };
   boardContact?: { repository: BoardContactRepository };
   bulletinBoard?: { repository: BulletinBoardRepository };
+  featureContract?: { repository: FeatureContractRepository };
   orders?: { repository: OrdersRepository };
   line?: {
     service: import('./features/line-notifications/line-service.js').LineNotificationService;
@@ -73,6 +82,15 @@ export function mountCentralFeatureRoutes(options: CentralFeatureRouteOptions) {
       }),
     );
 
+  if (features?.authInvitations)
+    options.rideApp.route(
+      '/',
+      createAuthInvitationApp({
+        repository: features.authInvitations.repository,
+        invitationUrlBase: features.authInvitations.invitationUrlBase,
+      }),
+    );
+
   if (features?.attachments)
     options.rideApp.route(
       '/',
@@ -99,6 +117,15 @@ export function mountCentralFeatureRoutes(options: CentralFeatureRouteOptions) {
       createBulletinBoardApp({
         ...common,
         bulletinBoardRepository: features.bulletinBoard.repository,
+        useCentralAuth: true,
+      }),
+    );
+
+  if (features?.featureContract)
+    options.rideApp.route(
+      '/',
+      createFeatureContractApp({
+        repository: features.featureContract.repository,
         useCentralAuth: true,
       }),
     );

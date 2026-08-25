@@ -367,7 +367,7 @@ function EntryForm({
     setIsSaving(true);
     try {
       const entry = await api.createEntry(campaign.id, {
-        memberId,
+        subjectMemberId: memberId,
         ordererName,
         lines: [
           {

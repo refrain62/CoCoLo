@@ -9,6 +9,12 @@ import { AuthProvider, LoginPage, useAuth } from './auth-context.js';
 import { type AuthRole, createAuthContextApi } from './auth-context-api.js';
 import { createAttachmentApi } from './features/attachments/attachment-api.js';
 import { AttachmentUploader } from './features/attachments/attachment-uploader.js';
+import { createAuthInvitationApi } from './features/auth-invitations/auth-invitation-api.js';
+import {
+  InvitationAcceptPage,
+  isInvitationPath,
+  readInvitationToken,
+} from './features/auth-invitations/auth-invitation-page.js';
 import {
   createTeamSelectionApi,
   TeamSelectionPage,
@@ -53,6 +59,9 @@ function AuthenticatedApp() {
     Array<{ id: string; name: string }>
   >([]);
   const [eventsError, setEventsError] = useState<string | null>(null);
+  const [invitationToken, setInvitationToken] = useState<string | null>(() =>
+    readInvitationToken(),
+  );
   const teamSelectionApi = useMemo(
     () =>
       createTeamSelectionApi({
@@ -93,6 +102,14 @@ function AuthenticatedApp() {
     };
   }, [session, teamSelectionApi]);
   const selectedTeamId = selectedTeam?.tenantId ?? null;
+  const authInvitationApi = useMemo(
+    () =>
+      createAuthInvitationApi({
+        fetcher: authenticatedFetch,
+        getSelectedTeamId: () => selectedTeamId,
+      }),
+    [authenticatedFetch, selectedTeamId],
+  );
   const memberApi = useMemo(
     () =>
       createMemberApi({
@@ -206,6 +223,33 @@ function AuthenticatedApp() {
       active = false;
     };
   }, [authContextApi, memberApi, selectedTeam, session]);
+  if (isInvitationPath(window.location.pathname))
+    return (
+      <InvitationAcceptPage
+        api={authInvitationApi}
+        onAccepted={(tenantId) => {
+          window.history.replaceState(null, document.title, '/');
+          setInvitationToken(null);
+          setSelectedTeam(null);
+          setTeamError(null);
+          setIsResolvingTeam(true);
+          void teamSelectionApi
+            .list()
+            .then((teams) => {
+              const nextTeam = teams.find((team) => team.tenantId === tenantId);
+              if (nextTeam) {
+                setStoredSelectedTeamId(nextTeam.tenantId);
+                setSelectedTeam(nextTeam);
+              } else {
+                setTeamError('連携したチームを確認できません。');
+              }
+            })
+            .catch(() => setTeamError('利用可能なチームを確認できません。'))
+            .finally(() => setIsResolvingTeam(false));
+        }}
+        token={invitationToken}
+      />
+    );
   if (!session) return <LoginPage />;
   if (isResolvingTeam)
     return (
@@ -389,7 +433,22 @@ function AuthenticatedApp() {
       team={currentTeam}
     >
       {(route, contract, onContractChange) =>
-        renderAdminPage(route, contract, onContractChange)
+        route === 'members' ? (
+          <div className="admin-page-stack">
+            <header className="admin-route-header">
+              <p className="admin-eyebrow">Members</p>
+              <h1>メンバー</h1>
+              <p>部員と所属、招待されたメンバーの状態を管理します。</p>
+            </header>
+            <MemberManagementPage
+              api={memberApi}
+              invitationApi={authInvitationApi}
+              role={currentRole}
+            />
+          </div>
+        ) : (
+          renderAdminPage(route, contract, onContractChange)
+        )
       }
     </AdminShell>
   );

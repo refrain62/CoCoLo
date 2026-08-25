@@ -41,6 +41,7 @@ test('API起動時に許可されたstaging環境を解決する', () => {
       databaseUrl: validStagingEnvironment.DATABASE_URL,
       directUrl: validStagingEnvironment.DIRECT_URL,
       supabaseUrl: validStagingEnvironment.SUPABASE_URL,
+      supabaseAnonKey: validStagingEnvironment.SUPABASE_ANON_KEY,
       supabaseJwksUrl: validStagingEnvironment.SUPABASE_JWKS_URL,
       supabaseIssuer: 'https://staging.example.supabase.co/auth/v1',
       r2Endpoint: validStagingEnvironment.R2_ENDPOINT,

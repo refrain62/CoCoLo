@@ -19,7 +19,7 @@ describe('共同購買API client', () => {
     await createOrdersPaymentsApi({
       getAccessToken: () => 'token',
     }).createEntry('order-1', {
-      memberId: 'member-1',
+      subjectMemberId: 'member-1',
       ordererName: '注文者',
       lines: [
         {
