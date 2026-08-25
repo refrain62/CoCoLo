@@ -77,7 +77,8 @@ export type EventsApi = {
   answer: (
     eventId: string,
     input: {
-      memberId: string;
+      memberId?: string;
+      subjectMemberId?: string;
       response: AttendanceResponse;
       correctionReason?: string;
     },

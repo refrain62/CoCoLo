@@ -6,6 +6,7 @@ import {
   eventListQuerySchema,
   eventUpdateSchema,
 } from '@cocolo/contracts/events';
+import { getSubjectMemberId } from '@cocolo/contracts/subject-member';
 import {
   EventAuthorizationError,
   type EventRepository,
@@ -330,16 +331,27 @@ export function createEventsApp(options: EventApiOptions): Hono<EventApiEnv> {
         parsed.error.flatten(),
       );
     const input = parsed.data as {
-      memberId: string;
+      memberId?: string;
+      subjectMemberId?: string;
       response: AttendanceResponse;
       correctionReason?: string;
     };
+    const subjectMemberId = getSubjectMemberId(input);
+    if (!subjectMemberId)
+      return errorResponse(
+        c,
+        400,
+        'VALIDATION_ERROR',
+        '対象memberが指定されていません。',
+      );
     const attendance = await options.eventRepository.upsertAttendance({
       tenantId: auth.membership.tenantId,
       actorUserId: auth.userId,
       role: auth.membership.role,
       eventId: eventId.data as string,
-      ...input,
+      memberId: subjectMemberId,
+      response: input.response,
+      correctionReason: input.correctionReason,
     });
     return c.json({ data: projectAttendance(attendance) });
   });

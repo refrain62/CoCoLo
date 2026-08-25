@@ -148,7 +148,7 @@ function EventCard({
     setMessage(null);
     try {
       await api.answer(event.id, {
-        memberId,
+        subjectMemberId: memberId,
         response,
         ...(correctionReason.trim()
           ? { correctionReason: correctionReason.trim() }

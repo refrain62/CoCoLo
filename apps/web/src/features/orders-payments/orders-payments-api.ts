@@ -79,7 +79,8 @@ export type OrdersPaymentsApi = {
   createEntry: (
     campaignId: string,
     input: {
-      memberId: string;
+      memberId?: string;
+      subjectMemberId?: string;
       ordererName: string;
       lines: Array<{
         productId: string;

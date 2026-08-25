@@ -109,7 +109,7 @@ export function EventDetailPage({
     setMessage(null);
     try {
       await api.answer(eventId, {
-        memberId,
+        subjectMemberId: memberId,
         response,
         ...(correctionReason.trim()
           ? { correctionReason: correctionReason.trim() }

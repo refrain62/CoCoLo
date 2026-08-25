@@ -9,6 +9,7 @@ import {
   paymentStatusQuerySchema,
   paymentUpdateSchema,
 } from '@cocolo/contracts/orders';
+import { getSubjectMemberId } from '@cocolo/contracts/subject-member';
 import {
   type OrdersRepository,
   OrdersRepositoryError,
@@ -379,6 +380,9 @@ export function createOrdersPaymentsApp(
     const parsed = orderEntryCreateSchema.safeParse(await readJson(c));
     if (!parsed.success) throw new InputError('注文の入力値が不正です。');
     const auth = getOrdersAuth(c);
+    const subjectMemberId = getSubjectMemberId(parsed.data);
+    if (!subjectMemberId)
+      throw new InputError('対象memberが指定されていません。');
     try {
       const entry = await options.ordersRepository.createEntry({
         tenantId: auth.membership.tenantId,
@@ -386,7 +390,7 @@ export function createOrdersPaymentsApp(
         role: auth.membership.role,
         orderId,
         idempotencyKey: idempotencyKey(c),
-        entry: parsed.data,
+        entry: { ...parsed.data, memberId: subjectMemberId },
       });
       return c.json({ data: projectEntry(entry, auth.membership.role) }, 201);
     } catch (error) {

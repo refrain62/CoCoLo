@@ -117,7 +117,10 @@ describe('createEventsApi', () => {
     const api = createEventsApi({ getAccessToken: () => 'token-a' });
 
     await expect(
-      api.answer('event-a', { memberId: 'member-a', response: 'absent' }),
+      api.answer('event-a', {
+        subjectMemberId: 'member-a',
+        response: 'absent',
+      }),
     ).rejects.toEqual(
       new EventsApiError(409, 'ATTENDANCE_DEADLINE_PASSED', '締切後です。'),
     );

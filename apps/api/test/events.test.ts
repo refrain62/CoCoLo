@@ -323,7 +323,10 @@ test('予定詳細と現在の出欠回答は所属tenant内だけを返す', as
   const answer = await app.request(`/${EVENT_A}/attendance`, {
     method: 'PUT',
     headers: { ...auth('guardian-a'), 'content-type': 'application/json' },
-    body: JSON.stringify({ memberId: MEMBER_A, response: 'attending' }),
+    body: JSON.stringify({
+      subjectMemberId: MEMBER_A,
+      response: 'attending',
+    }),
   });
   assert.equal(answer.status, 200);
   const answerPayload = await json(answer);

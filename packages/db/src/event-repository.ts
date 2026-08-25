@@ -9,6 +9,7 @@ import {
 } from '@cocolo/domain/event';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { enqueueEventLineDelivery } from './index.js';
+import { findAuthorizedSubjectMember } from './subject-member-access.js';
 import { uuidv7 } from './uuidv7.js';
 
 export type EventRecord = {
@@ -298,16 +299,7 @@ async function findAssignedMember(
   input: EventRepositoryInput,
   memberId: string,
 ) {
-  if (input.role !== 'guardian') return true;
-  const rows = await client.$queryRaw<Array<{ member_id: string }>>`
-    SELECT member_id
-    FROM guardian_members
-    WHERE tenant_id = ${input.tenantId}::uuid
-      AND user_id = ${input.actorUserId}
-      AND member_id = ${memberId}::uuid
-    LIMIT 1
-  `;
-  return rows.length > 0;
+  return (await findAuthorizedSubjectMember(client, input, memberId)) !== null;
 }
 
 // イベントと回答を同一transactionで更新し、締切判定・担当部員・監査をDB境界内で確定する。
@@ -644,7 +636,7 @@ export function createEventRepository(
           row.id,
           {
             eventId: input.eventId,
-            memberId: input.memberId,
+            subjectMemberId: input.memberId,
             response: input.response,
             correctionReason: deadlinePassed
               ? input.correctionReason?.trim()
@@ -670,8 +662,19 @@ export function createEventRepository(
           FROM attendance_responses
           WHERE tenant_id = ${input.tenantId}::uuid
             AND event_id = ${input.eventId}::uuid
-            AND (${input.role} = 'guardian' AND user_id = ${input.actorUserId}
-                 OR ${input.role} <> 'guardian')
+            AND (
+              ${input.role} <> 'guardian'
+              OR (
+                user_id = ${input.actorUserId}
+                AND EXISTS (
+                  SELECT 1
+                    FROM guardian_members gm
+                   WHERE gm.tenant_id = ${input.tenantId}::uuid
+                     AND gm.user_id = ${input.actorUserId}
+                     AND gm.member_id = attendance_responses.member_id
+                )
+              )
+            )
           ORDER BY member_id, updated_at DESC, id DESC
         `;
         await audit(

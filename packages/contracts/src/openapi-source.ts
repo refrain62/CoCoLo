@@ -820,16 +820,18 @@ export const openapiDocument = {
       },
       AttendanceInput: {
         type: 'object',
-        required: ['memberId', 'response'],
+        required: ['response'],
         additionalProperties: false,
         properties: {
           memberId: { type: 'string', format: 'uuid' },
+          subjectMemberId: { type: 'string', format: 'uuid' },
           response: {
             type: 'string',
             enum: ['attending', 'absent', 'pending'],
           },
           correctionReason: { type: 'string', minLength: 1, maxLength: 500 },
         },
+        oneOf: [{ required: ['memberId'] }, { required: ['subjectMemberId'] }],
       },
       AttendanceResponse: {
         type: 'object',
