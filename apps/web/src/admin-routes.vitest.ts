@@ -23,8 +23,10 @@ describe('管理画面ルート', () => {
   it('roleとfeature契約に応じてメニューを表示する', () => {
     const orders = adminNavigation.find((item) => item.route === 'orders');
     const features = adminNavigation.find((item) => item.route === 'features');
+    const settings = adminNavigation.find((item) => item.route === 'settings');
     const paidFeatures = [{ key: 'orders-payments', enabled: true }];
     const freeFeatures = [{ key: 'orders-payments', enabled: false }];
+    const boardContactFeatures = [{ key: 'board-contacts', enabled: true }];
 
     expect(
       orders && isAdminNavigationVisible(orders, 'guardian', paidFeatures),
@@ -40,6 +42,13 @@ describe('管理画面ルート', () => {
     ).toBe(true);
     expect(
       features && isAdminNavigationVisible(features, 'staff', paidFeatures),
+    ).toBe(false);
+    expect(
+      settings &&
+        isAdminNavigationVisible(settings, 'owner', boardContactFeatures),
+    ).toBe(true);
+    expect(
+      settings && isAdminNavigationVisible(settings, 'owner', freeFeatures),
     ).toBe(false);
   });
 });

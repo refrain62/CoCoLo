@@ -953,6 +953,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     };
     useFeature('/api/v1/members', 'members');
     useFeature('/api/v1/members/*', 'members');
+    if (options.centralFeatures?.boardContact) {
+      useFeature('/api/v1/board-members', 'board-contacts');
+      useFeature('/api/v1/board-members/*', 'board-contacts');
+    }
     if (options.eventRepository) {
       useFeature('/api/v1/events', 'events-attendance');
       useFeature('/api/v1/events/*', 'events-attendance');
@@ -999,6 +1003,20 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       );
     app.use('/api/v1/notifications/line', featureContractUnavailable);
     app.use('/api/v1/notifications/line/*', featureContractUnavailable);
+  }
+  if (
+    options.centralFeatures?.boardContact &&
+    !options.centralFeatures?.featureContract
+  ) {
+    const featureContractUnavailable: MiddlewareHandler<ApiEnv> = async (c) =>
+      errorResponse(
+        c,
+        503,
+        'FEATURE_CONTRACT_NOT_CONFIGURED',
+        '機能契約を確認できないため、役員・連絡先を利用できません。',
+      );
+    app.use('/api/v1/board-members', featureContractUnavailable);
+    app.use('/api/v1/board-members/*', featureContractUnavailable);
   }
 
   // 認証後のtenant/userだけをキーに使い、production系では起動時に分散adapterを要求する。

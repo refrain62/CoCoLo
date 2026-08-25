@@ -95,6 +95,7 @@ export const adminNavigation: readonly AdminNavigationItem[] = [
     href: '/admin/settings',
     label: 'チーム設定',
     description: '役員連絡先と運用設定',
+    featureKey: 'board-contacts',
     roles: ['owner', 'admin'],
   },
   {
