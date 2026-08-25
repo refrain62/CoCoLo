@@ -56,7 +56,9 @@ LINEが未接続の場合、予定の保存は成功しますが、LINEのoutbox
 
 ### 汎用通知を手動登録する操作
 
-ownerまたはadminは、LINE通知画面から通知元ID、タイトル、本文、CoCoLo内のリンクを入力して汎用通知を登録できます。
+ownerまたはadminは、LINE通知画面から通知元種別、通知元ID、タイトル、本文を入力して汎用通知を登録できます。通知元IDは予定、出欠締切、公開済み回覧のUUIDv7に限定します。
+
+CoCoLo内のdeep linkは通知元種別とIDからサーバー側で生成します。クライアントは任意URLを指定できません。
 
 Web画面は接続中のgroup IDを通知先としてAPIへ渡し、APIはそのgroup IDが現在のチームへ接続されていることを再確認します。
 
@@ -64,7 +66,9 @@ Web画面は接続中のgroup IDを通知先としてAPIへ渡し、APIはその
 
 LINEが未接続の場合、現行の汎用通知APIは`LINE_NOT_CONNECTED`の409を返し、送信依頼を成功扱いにしません。
 
-現行の汎用通知は`api_notification`としてoutboxへ保存されます。
+汎用通知は`event`、`deadline`、`bulletin`の通知元種別でoutboxへ保存されます。
+
+`line-notifications` feature flagが無効なチームでは、API登録、予定の自動登録、workerのclaim・送信直前検証をすべて停止します。feature contractを確認できない構成もfail-closedで停止します。
 
 回覧掲載時の自動通知と未払い者通知のproducerは、現行developでは汎用通知APIへ接続されていません。
 
@@ -85,7 +89,7 @@ feature routeが持つ旧来の`/api/v1/line/notifications`は中央Webの通知
 
 HTTP bodyからtenant IDを受け取らず、認証済みの選択チームとactive membershipから対象tenantを解決します。
 
-汎用通知登録では、`destination`、タイトル、本文、deep link、冪等キーをAPIへ渡します。
+汎用通知登録では、`sourceType`、UUIDv7の`sourceId`、`destination`、タイトル、本文、冪等キーをAPIへ渡します。deep linkはAPIへ渡しません。
 
 APIは通知先を現在接続中のgroup IDと照合し、別のgroupや切断済みgroupへの登録を拒否します。
 
@@ -135,7 +139,7 @@ Webhookは受信と重複排除の入口であり、受信内容だけで予定�
 
 通知リンクは、通知対象と同じ環境のCoCoLo画面へ遷移させます。
 
-通常のリンクは`PUBLIC_APP_URL`と同じoriginの予定または回覧画面に限定します。
+通常のリンクは`PUBLIC_APP_URL`を基準に、予定または回覧画面の固定パスへサーバー側で生成します。
 
 LIFFを使う場合は、登録済みの`LINE_LIFF_ID`と許可されたstateからリンクを生成します。
 
@@ -143,9 +147,7 @@ LIFFを使う場合は、登録済みの`LINE_LIFF_ID`と許可されたstateか
 
 URLのqueryへtenant ID、個人情報、長期tokenを含めません。
 
-ただし、現行の中央producerはHTTPSまたはlocalのURL形式までしか検証せず、公開origin、通知元資源、通知元tenantの一致をサーバー側で検証していません。
-
-この検証を追加するまで、中央producer経由のdeep linkを受入済みとは扱いません。
+中央producerは通知元資源の存在、公開済み回覧、通知元tenantの一致、UUIDv7、deep linkの固定パスをサーバー側で検証します。workerも送信前に同じ通知元境界を再検証し、旧形式または不正なoutbox行は送信せず隔離します。
 
 ## 環境設定
 
@@ -172,6 +174,7 @@ stagingとproductionでchannel secret、access token、group ID、Webhook destin
 - workerのclaim、lease、provider retry key、失敗およびunknown遷移
 - Webhookの公開入口、署名、destination、未知group、重複receiptの検証
 - Web画面の接続状態表示、owner/admin向け接続操作、owner/admin向け汎用通知登録
+- 中央producerの通知元resource・tenant・deep link検証、team feature flag、旧outbox隔離
 
 ## 残作業と受入条件
 
@@ -179,7 +182,7 @@ stagingとproductionでchannel secret、access token、group ID、Webhook destin
 - [ ] 予定作成、予定更新、出欠締切、provider成功、provider 4xx、timeout、送達不明、管理者再送をstagingで確認する。
 - [ ] 不正署名、destination不一致、未知group、解除済みgroup、重複Webhook、別tenant接続を拒否または無視することを確認する。
 - [ ] `unknown`のprovider照合、保持期間、再送可否、監査記録、担当者を運用手順へ定義する。
-- [ ] 中央producerのdeep linkへ公開origin、通知元資源、通知元tenantのサーバー側検証を追加する。
+- [ ] 通知deep linkの予定・回覧画面、未ログイン時の再認証後復帰、別tenant選択時の再選択を実装し、FS-NOT-002として受入する。
 - [ ] staffの汎用通知登録を許可するか、owner/admin限定を正式仕様とするかを決定し、機能仕様、API、Web、RLS、テストを一致させる。
 - [ ] 回覧掲載と未払い通知をLINEへ自動登録するproducerの対象、権限、本文、冪等キー、deep linkを定義する。
 - [ ] staging成功SHA、migration checksum、adapter設定、Webhook疎通、E2E結果をrelease証跡へ保存する。

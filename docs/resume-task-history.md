@@ -23,6 +23,7 @@
 | AUTH-003 / MEM-007 | 招待token、LINE・Google OAuthのprovider subject、member link、連携解除境界 | PR #173を`develop`へ統合。opaque token、fragment URL、active link、CI、`pnpm test`、`pnpm build`成功。OAuth provider実接続は外部条件として継続 |
 | API-003 | 出欠、注文、送迎希望でactor userと対象memberを分離し、API・DBで再認可 | PR #174を`develop`へ統合。対象member契約、tenant境界、CI、`pnpm test`、`pnpm build`成功 |
 | UI-004 / UI-005 | 管理画面のルート・メニュー分離、feature契約による表示制御、`packages/ui`共通primitive、デザイントークン、レスポンシブ管理シェル | PR #175を`develop`へ統合。招待URL発行、対象member選択、CI、`pnpm test`、`pnpm build`成功。実ブラウザ幅別受入とstaging E2Eは外部条件として継続 |
+| NOT-001 / FS-NOT-001 | 中央LINE通知のsourceType・UUIDv7 sourceId、同一tenant resource検証、server生成deep link、API・workerのteam feature flag境界、旧outbox隔離 | PR #177を`develop`へ統合。`pnpm test` 198件、`pnpm build`、migration SQL 30件、DB整合性25件、品質ゲート成功。Web遷移先、回覧・未払いproducer、実LINE受入は継続 |
 
 ## 完了判定の共通結果
 
