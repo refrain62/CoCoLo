@@ -55,6 +55,17 @@ const rideSnapshotAssignmentResponseSchema = z
   })
   .strict();
 
+const rideConfirmedAssignmentResponseSchema = z
+  .object({
+    id: uuid,
+    requestId: uuid,
+    offerId: uuid,
+    passengerCount: z.number().int().min(1).max(8),
+    memberName: z.string().min(1).max(128),
+    driverName: z.string().min(1).max(128),
+  })
+  .strict();
+
 const rideHistoryResponseSchema = z
   .object({
     id: z.string().min(1).max(128),
@@ -79,6 +90,9 @@ const rideSnapshotResponseSchema = z
     offers: z.array(rideOfferResponseSchema).max(100),
     requests: z.array(rideRequestResponseSchema).max(100),
     assignments: z.array(rideSnapshotAssignmentResponseSchema).max(100),
+    confirmedAssignments: z
+      .array(rideConfirmedAssignmentResponseSchema)
+      .max(100),
     history: z.array(rideHistoryResponseSchema).max(1000),
   })
   .strict();

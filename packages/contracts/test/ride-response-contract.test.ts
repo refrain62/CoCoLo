@@ -70,6 +70,7 @@ test('送迎snapshot responseは操作者IDを公開しない', () => {
           },
         ],
         assignments: [snapshotAssignment],
+        confirmedAssignments: [],
         history: [],
       },
     }).success,
@@ -90,6 +91,71 @@ test('送迎snapshot responseは操作者IDを公開しない', () => {
         ],
         requests: [],
         assignments: [],
+        confirmedAssignments: [],
+        history: [],
+      },
+    }).success,
+    false,
+  );
+});
+
+test('送迎snapshotの確定公開投影は表示名だけを含み、長さを固定する', () => {
+  const confirmedAssignment = {
+    ...snapshotAssignment,
+    memberName: '山田 花子',
+    driverName: '佐藤 太郎',
+  };
+  assert.equal(
+    rideSnapshotResponseEnvelopeSchema.safeParse({
+      data: {
+        plan: { ...plan, status: 'finalized' },
+        offers: [],
+        requests: [],
+        assignments: [],
+        confirmedAssignments: [confirmedAssignment],
+        history: [],
+      },
+    }).success,
+    true,
+  );
+  assert.equal(
+    rideSnapshotResponseEnvelopeSchema.safeParse({
+      data: {
+        plan: { ...plan, status: 'finalized' },
+        offers: [],
+        requests: [],
+        assignments: [],
+        confirmedAssignments: [
+          { ...confirmedAssignment, driverUserId: 'driver-a' },
+        ],
+        history: [],
+      },
+    }).success,
+    false,
+  );
+  assert.equal(
+    rideSnapshotResponseEnvelopeSchema.safeParse({
+      data: {
+        plan: { ...plan, status: 'finalized' },
+        offers: [],
+        requests: [],
+        assignments: [],
+        confirmedAssignments: [{ ...confirmedAssignment, memberName: '' }],
+        history: [],
+      },
+    }).success,
+    false,
+  );
+  assert.equal(
+    rideSnapshotResponseEnvelopeSchema.safeParse({
+      data: {
+        plan: { ...plan, status: 'finalized' },
+        offers: [],
+        requests: [],
+        assignments: [],
+        confirmedAssignments: [
+          { ...confirmedAssignment, driverName: 'あ'.repeat(129) },
+        ],
         history: [],
       },
     }).success,

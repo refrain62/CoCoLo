@@ -102,4 +102,39 @@ test('RIDE-002の送迎全routeと状態変更契約をOpenAPIへ公開する', 
     'offerId',
     'expectedOfferId',
   ]);
+  const confirmedAssignment = components.schemas.RideConfirmedAssignment;
+  assert.deepEqual(confirmedAssignment.required, [
+    'id',
+    'requestId',
+    'offerId',
+    'passengerCount',
+    'memberName',
+    'driverName',
+  ]);
+  assert.equal(confirmedAssignment.properties.memberName.minLength, 1);
+  assert.equal(confirmedAssignment.properties.memberName.maxLength, 128);
+  assert.equal(confirmedAssignment.properties.driverName.minLength, 1);
+  assert.equal(confirmedAssignment.properties.driverName.maxLength, 128);
+  const snapshot =
+    components.schemas.RideSnapshotResponseEnvelope.properties.data;
+  assert.ok(snapshot.properties.confirmedAssignments);
+  assert.equal(snapshot.properties.confirmedAssignments.maxItems, 100);
+  assert.deepEqual(snapshot.required, [
+    'plan',
+    'offers',
+    'requests',
+    'assignments',
+    'confirmedAssignments',
+    'history',
+  ]);
+  assert.equal(
+    components.schemas.RideDispatchOfferResponse.properties.driverUserId
+      .maxLength,
+    128,
+  );
+  assert.equal(
+    components.schemas.RideDispatchRequestResponse.properties.requesterUserId
+      .maxLength,
+    128,
+  );
 });
