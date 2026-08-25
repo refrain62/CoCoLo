@@ -128,7 +128,7 @@ const expectedTablePrivileges = new Map<string, readonly string[]>([
   ['announcements', ['INSERT', 'SELECT', 'UPDATE']],
   ['announcement_attachments', ['INSERT', 'SELECT', 'UPDATE']],
   ['announcement_reads', ['INSERT', 'SELECT', 'UPDATE']],
-  ['board_contacts', ['DELETE', 'INSERT', 'SELECT', 'UPDATE']],
+  ['board_contacts', ['DELETE', 'INSERT', 'UPDATE']],
   ['purchase_orders', ['INSERT', 'SELECT', 'UPDATE']],
   ['order_products', ['INSERT', 'SELECT', 'UPDATE']],
   ['order_entries', ['INSERT', 'SELECT', 'UPDATE']],
@@ -210,6 +210,18 @@ export function buildExpectedShadowAclEntries(
     grantee: 'line_webhook_receiver',
     privilege: 'EXECUTE',
   });
+  for (const objectName of [
+    'public.app_board_contact_rows(uuid,integer,boolean)',
+    'public.app_board_contact_manager_row(uuid,uuid)',
+    'public.app_board_contact_role_exists(uuid,integer,character varying,uuid)',
+  ]) {
+    entries.push({
+      objectType: 'function',
+      objectName,
+      grantee: 'cocolo_app',
+      privilege: 'EXECUTE',
+    });
+  }
   for (const [tableName, privileges] of expectedTablePrivileges) {
     for (const privilege of privileges)
       entries.push({
@@ -407,7 +419,13 @@ async function inspectShadowDatabase(
            FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
            CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) x
           WHERE n.nspname = 'public'
-            AND p.proname IN ('app_guard_promotion_run_transition', 'app_record_line_webhook_receipt')
+            AND p.proname IN (
+              'app_guard_promotion_run_transition',
+              'app_record_line_webhook_receipt',
+              'app_board_contact_rows',
+              'app_board_contact_manager_row',
+              'app_board_contact_role_exists'
+            )
             AND p.prokind IN ('f', 'p')
             AND x.grantee <> p.proowner`,
     ),
