@@ -94,6 +94,9 @@ export function EventDetailPage({
   const load = useCallback(async () => {
     setIsLoading(true);
     setMessage(null);
+    setEvent(null);
+    setAttendance([]);
+    setResourceUnavailable(false);
     try {
       const [loadedEvent, loadedAttendance] = await Promise.all([
         api.get(eventId),

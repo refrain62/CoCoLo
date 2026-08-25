@@ -416,6 +416,7 @@ function AuthenticatedApp() {
       return (
         <div className="admin-page-stack">
           <EventsPage
+            key={`notification-event-${notificationTarget.id}`}
             api={eventsApi}
             role={currentRole}
             memberOptions={eventMembers}
@@ -446,6 +447,7 @@ function AuthenticatedApp() {
       return (
         <div className="admin-page-stack">
           <BulletinBoardPage
+            key={`notification-bulletin-${notificationTarget.id}`}
             api={bulletinBoardApi}
             attachmentApi={attachmentApi}
             attachmentsEnabled={isFeatureEnabled('attachments')}

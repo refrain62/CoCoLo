@@ -295,6 +295,8 @@ export function BulletinBoardPage({
     async (id: string) => {
       setError(null);
       setUnreadMembers(null);
+      setSelected(null);
+      setResourceUnavailable(false);
       try {
         const announcement = await api.get(id);
         if (!announcement.readAt) {
