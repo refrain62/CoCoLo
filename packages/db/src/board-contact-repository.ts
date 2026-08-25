@@ -19,6 +19,11 @@ export type BoardContactRecord = {
   updatedAt: Date;
 };
 
+export type BoardContactCopyYearResult = {
+  records: BoardContactRecord[];
+  copiedCount: number;
+};
+
 export type BoardContactCreateInput = {
   fiscalYear: number;
   roleName: string;
@@ -463,7 +468,7 @@ export function createBoardContactRepository(client: PrismaClient) {
         await setRlsContext(tx, input);
         await assertActiveMembership(tx, input);
         await lockTenant(tx, input.tenantId);
-        await tx.$executeRaw`
+        const copiedCount = await tx.$executeRaw`
           INSERT INTO board_contacts (
             id,
             tenant_id,
@@ -476,7 +481,7 @@ export function createBoardContactRepository(client: PrismaClient) {
             contact_preference
           )
           SELECT
-            ${uuidv7()}::uuid,
+            app_uuidv7(),
             tenant_id,
             ${input.toFiscalYear},
             role_name,
@@ -511,10 +516,13 @@ export function createBoardContactRepository(client: PrismaClient) {
           JSON.stringify({
             fromFiscalYear: input.fromFiscalYear,
             toFiscalYear: input.toFiscalYear,
-            copiedCount: rows.length,
+            copiedCount,
           }),
         );
-        return rows.map(toRecord);
+        return {
+          records: rows.map(toRecord),
+          copiedCount,
+        };
       }),
   };
 }

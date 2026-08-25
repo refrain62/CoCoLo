@@ -36,6 +36,11 @@ export type BoardContactRecord = {
   updatedAt: Date | string;
 };
 
+export type BoardContactCopyYearResult = {
+  records: BoardContactRecord[];
+  copiedCount: number;
+};
+
 export type BoardContactRepository = {
   list: (input: {
     tenantId: string;
@@ -68,7 +73,7 @@ export type BoardContactRepository = {
     role: 'owner' | 'admin';
     fromFiscalYear: number;
     toFiscalYear: number;
-  }) => Promise<BoardContactRecord[]>;
+  }) => Promise<BoardContactCopyYearResult>;
 };
 
 export type BoardContactAppOptions = {
@@ -315,7 +320,7 @@ export function createBoardContactApp(
         '年度引き継ぎを実行する権限がありません。',
       );
     const input = parseCopyBoardContactYearInput(await readJson(c));
-    const records = await options.boardContactRepository.copyYear({
+    const result = await options.boardContactRepository.copyYear({
       tenantId: auth.membership.tenantId,
       actorUserId: auth.userId,
       role: auth.membership.role,
@@ -323,10 +328,10 @@ export function createBoardContactApp(
     });
     return c.json(
       {
-        data: records.map((record) =>
+        data: result.records.map((record) =>
           projectBoardContact(record, auth.membership.role),
         ),
-        copiedCount: records.length,
+        copiedCount: result.copiedCount,
         fromFiscalYear: input.fromFiscalYear,
         toFiscalYear: input.toFiscalYear,
       },
