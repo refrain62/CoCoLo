@@ -131,6 +131,7 @@ jobs:
         with:
           name: release-${{ github.sha }}
           path: .release
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 3
       - name: staging環境の配置証跡を保存
@@ -138,5 +139,6 @@ jobs:
         with:
           name: staging-evidence-${{ github.sha }}
           path: .evidence
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 3

@@ -125,7 +125,6 @@ jobs:
     steps:
       - name: 固定レポートを取得
         if: needs.e2e.result == 'failure'
-        continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: e2e-fixed-report-daily-*
