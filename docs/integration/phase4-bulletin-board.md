@@ -8,7 +8,7 @@
 
 機能仕様の正本は[`docs/functional-specification.md`](../functional-specification.md)です。
 
-実装計画の正本は[`docs/ implementation-plan.md`](../ implementation-plan.md)です。
+実装計画の正本は[`docs/implementation-plan.md`](../implementation-plan.md)です。
 
 このfeatureは回覧の掲載、本文と添付メタデータの参照、ユーザー単位の既読記録、掲載者だけの未読者一覧を提供します。
 

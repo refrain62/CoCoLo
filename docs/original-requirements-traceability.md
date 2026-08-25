@@ -12,7 +12,7 @@
 
 利用者が明示した目的と選択を「要求」、アシスタントが補った案を「提案」、現行設計で安全性や実装順序を確定した内容を「現行決定」として記録します。
 
-機能と業務ルールの正本は[機能仕様書](functional-specification.md)、技術方式と実装順序の正本は[実装計画書](%20implementation-plan.md)です。
+機能と業務ルールの正本は[機能仕様書](functional-specification.md)、技術方式と実装順序の正本は[実装計画書](implementation-plan.md)です。
 
 この台帳に記載した差分は、現行実装へ反映済みであることを意味しません。
 
@@ -120,7 +120,7 @@ LIFFは必須の入口とせず、同じ環境のWebアプリへ遷移するdeep
 
 接続時のgroup IDは運用者が取得し、ownerまたはadminがCoCoLoへ登録します。
 
-この決定の利用手順、権限、現行実装、未完了の受入条件は [LINE通知の利用契約](integration/phase4-line-notifications.md) と [現行機能の棚卸し](current-feature-inventory.md) に記載します。
+この決定の利用手順、権限、現行実装、未完了の受入条件は [LINE通知の利用契約](integration/phase4-line-notifications.md) と [中断再開タスクリスト](resume-task-list.md) に記載します。
 
 ## 5. 未確定事項
 

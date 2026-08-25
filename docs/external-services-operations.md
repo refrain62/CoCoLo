@@ -263,7 +263,7 @@ LINE 機能の API、Web、DB、LIFF の統合手順は [Phase 4 LINE 通知統�
 
 ### 8.2 配置アダプター
 
-配置先のサービス固有処理は `STAGING_DEPLOY_ADAPTER` または `PRODUCTION_DEPLOY_ADAPTER` で指定した配置アダプターに閉じ込めます。アダプターは [デプロイ配置アダプター契約](deployment-adapter.md) を満たし、検証済み成果物と環境を受け取り、HTTPS の配置 URL と配置時刻を含む記録を作成します。
+配置先のサービス固有処理は `STAGING_DEPLOY_ADAPTER` または `PRODUCTION_DEPLOY_ADAPTER` で指定した配置アダプターに閉じ込めます。アダプターの入力、配置記録、失敗条件は[デプロイ運用手順](deployment-guide.md)の契約に従います。
 
 配置記録が検証できない場合、staging E2E と production 昇格を続行しません。配置アダプターの変更は、サービス固有の認証、ロール、ネットワーク、ロールバック方法をこの文書へ追記してから行います。
 

@@ -6,7 +6,7 @@ Workflow の正本は次のファイルです。
 
 - [staging-deploy.yml](../.github/workflows/staging-deploy.yml): `main` への push を起点に staging へ配置する。
 - [production-promote.yml](../.github/workflows/production-promote.yml): staging で検証済みの artifact SHA を手動で production へ昇格する。
-- [deployment-adapter.md](deployment-adapter.md): provider 固有の配置 adapter と配置記録の契約。
+- 本書の「deploy adapter の準備」節：provider固有の配置adapterと配置記録の契約。
 
 ## 1. デプロイの基本方針
 
@@ -44,7 +44,7 @@ main ── push ──▶ staging deploy
 | Secret | `LINE_DELIVERY_WORKER_DATABASE_URL` | LINE配信worker専用の`line_delivery_worker`接続URL。claim/markだけを実行し、APIへ注入しない。 |
 | Secret | `DIRECT_URL` | migration owner 接続URL。role準備とmigration管理に使う。 |
 | Secret | `SUPABASE_ANON_KEY` | staging Supabase の anon key。ブラウザへ公開され得る値だが、GitHub上ではsecretとして管理する。 |
-| Secret | `STAGING_DEPLOY_ADAPTER` | staging providerへ配置する実行可能なadapter。引数は[adapter契約](deployment-adapter.md)に従う。 |
+| Secret | `STAGING_DEPLOY_ADAPTER` | staging providerへ配置する実行可能なadapter。本書のadapter契約に従う。 |
 | Secret | `STAGING_E2E_TEST_EMAIL` | staging専用E2Eユーザーのメールアドレス。通常ユーザーやproductionユーザーを指定しない。 |
 | Secret | `STAGING_E2E_TEST_PASSWORD` | staging専用E2Eユーザーのパスワード。 |
 | Secret | `R2_ACCESS_KEY_ID` | staging private bucketへ接続するaccess key ID。Web、ログ、artifactへ渡さない。 |
@@ -231,15 +231,10 @@ gh run watch <production-run-id>
 4. evidenceのmigration / smoke / E2Eがsuccessであることを確認する。
 5. release.tar.gzのSHA-256とGitHub attestationを、production secretを読み込む前に検証する。
 6. 検証済みSHAをcheckoutし、artifactを展開する。ここで再ビルドしない。
-7. production環境、DB URL、Supabase URL/JWKS、R2 bucket、公開URL、保持期間、Service Role Keyを検証する。
-8. archive内外のmanifestを照合し、artifactのVite公開設定とproductionの許可値を照合する。不一致なら以降を実行しない。
-9. artifactに同梱されたschema / migrationだけを使って `prisma migrate deploy` を実行する。
-10. production deploy adapterでartifactを配置し、production配置記録を検証する。
 7. production環境、DB URL、Supabase URL/JWKS、R2 bucket、公開URL、保持期間、Service Role Key、分散rate-limit adapter設定を検証する。
 8. archive内外のmanifestを照合し、artifactのVite公開設定とproductionの許可値を照合する。不一致なら以降を実行しない。
 9. artifactに同梱されたschema / migrationだけを使って `prisma migrate deploy` を実行する。
 10. production deploy adapterでartifactを配置し、production配置記録を検証する。
-
 production Workflowには `concurrency: production-migration` が設定されているため、production migrationの同時実行は許可しません。既に別のproduction promoteが実行中の場合は、完了または停止理由を確認してから次を実行します。
 
 ### 5.4 配置後の手動確認

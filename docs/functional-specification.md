@@ -18,8 +18,8 @@
 この文書は、CoCoLo が利用者に提供する機能、業務ルール、権限、状態遷移、受け入れ条件を定義する「何を作るか」の正本です。
 
 * `docs/functional-specification.md`: 機能・業務仕様の正本。改修指示は機能仕様 ID を指定します。
-* `docs/ implementation-plan.md`: 技術方式、実装フェーズ、テスト、環境、CI の計画。
-* `docs/current-feature-inventory.md`: 現行 `develop` の機能状態、役割別操作、残作業、受入条件の棚卸し。
+* `docs/implementation-plan.md`: 技術方式、実装フェーズ、テスト、環境、CI の計画。
+* `docs/resume-task-list.md`: 現行 `develop` の未完了タスクと停止条件。
 
 仕様にない挙動を実装者の判断だけで追加せず、先にこの文書を更新します。仕様変更時は版、変更理由、影響する機能仕様 ID、データ移行の要否を記録します。
 
