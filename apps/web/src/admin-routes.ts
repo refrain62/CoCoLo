@@ -125,6 +125,7 @@ export function resolveAdminRoute(pathname: string): AdminRoute {
 }
 
 export function canonicalAdminPath(pathname: string) {
+  if (pathname === '/' || pathname === '/login') return '/admin';
   const route = legacyAdminPaths[pathname];
   return route
     ? (adminNavigation.find((item) => item.route === route)?.href ?? pathname)

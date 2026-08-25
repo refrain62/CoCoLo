@@ -14,6 +14,7 @@ import {
   isAdminNavigationVisible,
   resolveAdminRoute,
 } from './admin-routes.js';
+import { applyPageMetadata } from './app-route.js';
 import type { AuthRole } from './auth-context-api.js';
 import type {
   FeatureContractApi,
@@ -63,12 +64,10 @@ export function AdminShell({
   const [contractError, setContractError] = useState<string | null>(null);
 
   useEffect(() => {
-    const canonicalPath =
-      window.location.pathname === '/'
-        ? '/admin'
-        : canonicalAdminPath(window.location.pathname);
+    const canonicalPath = canonicalAdminPath(window.location.pathname);
     if (canonicalPath !== window.location.pathname)
       window.history.replaceState({}, '', canonicalPath);
+    applyPageMetadata(canonicalPath);
     setPathname(canonicalPath);
   }, []);
 

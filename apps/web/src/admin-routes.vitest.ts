@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   adminNavigation,
+  canonicalAdminPath,
   isAdminNavigationVisible,
   resolveAdminRoute,
 } from './admin-routes.js';
 
 describe('管理画面ルート', () => {
+  it('公開入口から認証済み利用者を管理画面へ正規化する', () => {
+    expect(canonicalAdminPath('/')).toBe('/admin');
+    expect(canonicalAdminPath('/login')).toBe('/admin');
+  });
+
   it('パスを専用画面へ解決する', () => {
     expect(resolveAdminRoute('/admin')).toBe('dashboard');
     expect(resolveAdminRoute('/admin/members')).toBe('members');

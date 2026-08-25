@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { AdminDashboard } from './admin-dashboard.js';
 import type { AdminRoute } from './admin-routes.js';
 import { AdminShell } from './admin-shell.js';
+import { applyPageMetadata, resolveAppEntry } from './app-route.js';
 import { AuthProvider, LoginPage, useAuth } from './auth-context.js';
 import { type AuthRole, createAuthContextApi } from './auth-context-api.js';
 import { createAttachmentApi } from './features/attachments/attachment-api.js';
@@ -43,6 +44,7 @@ import {
 } from './features/orders-payments/index.js';
 import { createRideOperationsApi } from './features/ride-operations/ride-operations-api.js';
 import { RideOperationsPanel } from './features/ride-operations/ride-operations-panel.js';
+import { LandingPage } from './landing-page.js';
 import { createMemberApi } from './member-api.js';
 import { MemberManagementPage } from './member-management-page.js';
 import {
@@ -568,8 +570,15 @@ function AuthenticatedApp() {
 }
 
 function App() {
+  const entry = resolveAppEntry(window.location.pathname);
+  useEffect(() => {
+    applyPageMetadata(window.location.pathname);
+  }, []);
+  // 公開トップページでは認証処理やチームAPIを開始せず、ログイン以降と境界を分ける。
+  if (entry === 'landing') return <LandingPage />;
+
   // マニュアルは認証情報やチームデータを含まないため、ログイン前にも公開する。
-  if (window.location.pathname === '/manual')
+  if (entry === 'manual')
     return (
       <AppShell>
         <UserManualPage />
