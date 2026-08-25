@@ -64,7 +64,7 @@ export function AdminShell({
 
   useEffect(() => {
     const canonicalPath =
-      window.location.pathname === '/'
+      window.location.pathname === '/' || window.location.pathname === '/login'
         ? '/admin'
         : canonicalAdminPath(window.location.pathname);
     if (canonicalPath !== window.location.pathname)
