@@ -90,6 +90,7 @@ export const adminNavigation: readonly AdminNavigationItem[] = [
     label: '送迎管理',
     description: '乗車希望と配車を管理',
     featureKey: 'ride-operations',
+    roles: ['owner', 'admin', 'staff', 'guardian'],
   },
   {
     route: 'settings',

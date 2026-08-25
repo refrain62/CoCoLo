@@ -678,6 +678,18 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       schema: ridePlanResponseEnvelopeSchema,
     },
     {
+      method: 'PATCH',
+      path: /^\/api\/v1\/ride-plans\/[^/]+$/,
+      status: 200,
+      schema: ridePlanResponseEnvelopeSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/ride-plans\/[^/]+\/status$/,
+      status: 200,
+      schema: ridePlanResponseEnvelopeSchema,
+    },
+    {
       method: 'GET',
       path: /^\/api\/v1\/ride-plans\/[^/]+$/,
       status: 200,
@@ -1017,6 +1029,20 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       );
     app.use('/api/v1/board-members', featureContractUnavailable);
     app.use('/api/v1/board-members/*', featureContractUnavailable);
+  }
+  if (
+    options.centralFeatures?.ride &&
+    !options.centralFeatures?.featureContract
+  ) {
+    const featureContractUnavailable: MiddlewareHandler<ApiEnv> = async (c) =>
+      errorResponse(
+        c,
+        503,
+        'FEATURE_CONTRACT_NOT_CONFIGURED',
+        '機能契約を確認できないため、送迎を利用できません。',
+      );
+    app.use('/api/v1/ride-plans', featureContractUnavailable);
+    app.use('/api/v1/ride-plans/*', featureContractUnavailable);
   }
 
   // 認証後のtenant/userだけをキーに使い、production系では起動時に分散adapterを要求する。

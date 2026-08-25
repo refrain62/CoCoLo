@@ -141,4 +141,26 @@ describe('送迎Web API', () => {
       new RideApiError(409, 'RIDE_CAPACITY_EXCEEDED', '定員超過'),
     );
   });
+
+  it('送迎予定の状態変更をstatus APIへ送る', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ data: { id: 'plan-1', status: 'closed' } }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+    await createRideOperationsApi({
+      getAccessToken: () => 'token',
+      fetcher,
+    }).transitionPlan('plan-1', { action: 'close' });
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/v1/ride-plans/plan-1/status',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ action: 'close' }),
+      }),
+    );
+  });
 });

@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   rideOfferCreateSchema,
   ridePlanCreateSchema,
+  ridePlanTransitionSchema,
   rideRequestCreateSchema,
 } from '../src/ride-contract.ts';
 
@@ -40,5 +41,22 @@ test('送迎入力は定員超過、未知フィールド、非URLを拒否す�
       departureAt: '2026-08-23T08:00:00+09:00',
       pickupMapsUrl: 'javascript:alert(1)',
     }),
+  );
+});
+
+test('送迎予定の状態変更は再編集時だけ理由を必須にする', () => {
+  assert.deepEqual(ridePlanTransitionSchema.parse({ action: 'close' }), {
+    action: 'close',
+  });
+  assert.deepEqual(
+    ridePlanTransitionSchema.parse({
+      action: 'reopen',
+      reasonCode: 'member_change',
+    }),
+    { action: 'reopen', reasonCode: 'member_change' },
+  );
+  assert.throws(() => ridePlanTransitionSchema.parse({ action: 'reopen' }));
+  assert.throws(() =>
+    ridePlanTransitionSchema.parse({ action: 'close', reasonCode: 'other' }),
   );
 });

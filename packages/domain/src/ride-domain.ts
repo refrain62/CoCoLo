@@ -53,6 +53,9 @@ export type RideHistoryEntry = {
     | 'request_registered'
     | 'matching_executed'
     | 'assignment_updated'
+    | 'plan_closed'
+    | 'plan_finalized'
+    | 'plan_reopened'
     | 'other';
   createdAt: string;
 };

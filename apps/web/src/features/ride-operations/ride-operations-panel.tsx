@@ -1,5 +1,25 @@
 import { validateGoogleMapsUrl } from '@cocolo/domain/ride';
-import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Input,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@cocolo/ui';
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   readSubjectMemberId,
   writeSubjectMemberId,
@@ -11,10 +31,15 @@ import {
   type RideMetrics,
   type RideOperationsApi,
   type RidePlan,
+  type RidePlanTransitionInput,
+  type RidePlanUpdateInput,
   type RideSnapshot,
 } from './ride-operations-api.js';
 
 type RideMemberOption = { id: string; label: string };
+type ConfirmableRideAction =
+  | { kind: 'transition'; action: RidePlanTransitionInput['action'] }
+  | { kind: 'match' };
 type RideOperationsPanelProps = {
   planId?: string;
   plans?: RidePlan[];
@@ -39,7 +64,8 @@ function SafeMapsLink({ url, label }: { url: string | null; label: string }) {
   } catch {
     safeUrl = null;
   }
-  if (!safeUrl) return null;
+  if (!url) return <span>{label}: 未設定</span>;
+  if (!safeUrl) return <span>{label}: URLを確認できません</span>;
   return (
     <a href={safeUrl} target="_blank" rel="noreferrer">
       {label}
@@ -63,8 +89,27 @@ function historyLabel(action: RideSnapshot['history'][number]['action']) {
     request_registered: '乗車希望を登録',
     matching_executed: '補助マッチングを実行',
     assignment_updated: '割当を変更',
+    plan_closed: '受付を終了',
+    plan_finalized: '配車表を公開',
+    plan_reopened: '公開後の再編集を開始',
     other: '送迎情報を変更',
   }[action];
+}
+
+function planStatusLabel(status: RidePlan['status']) {
+  return {
+    draft: '下書き',
+    open: '受付中',
+    closed: '締切済み',
+    finalized: '公開済み',
+  }[status];
+}
+
+function toDateTimeLocal(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function Metrics({ metrics }: { metrics: RideMetrics }) {
@@ -120,10 +165,20 @@ export function RideOperationsPanel({
     readSubjectMemberId(selectionStorageKey, members),
   );
   const [passengerCount, setPassengerCount] = useState('1');
+  const [transitionReasonCode, setTransitionReasonCode] = useState('');
+  const [selectedRequestId, setSelectedRequestId] = useState('');
+  const [selectedOfferId, setSelectedOfferId] = useState('');
+  const [planTitle, setPlanTitle] = useState('');
+  const [planDepartureAt, setPlanDepartureAt] = useState('');
+  const [planPickupMapsUrl, setPlanPickupMapsUrl] = useState('');
+  const [planDestinationMapsUrl, setPlanDestinationMapsUrl] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmation, setConfirmation] =
+    useState<ConfirmableRideAction | null>(null);
+  const loadGeneration = useRef(0);
 
   const planOptions = plans ?? loadedPlans;
   const activePlanId = planOptions.length > 0 ? selectedPlanId : (planId ?? '');
@@ -178,25 +233,39 @@ export function RideOperationsPanel({
   const load = useCallback(async () => {
     if (!activePlanId) {
       setIsLoading(false);
-      return;
+      return false;
     }
+    const generation = ++loadGeneration.current;
+    const isCurrent = () => generation === loadGeneration.current;
     setIsLoading(true);
     setError(null);
+    setNotice(null);
+    setSnapshot(null);
+    setMetrics(null);
+    setDispatch(null);
     try {
       const nextSnapshot = await api.getSnapshot(activePlanId);
+      if (!isCurrent()) return false;
       setSnapshot(nextSnapshot);
+      setPlanTitle(nextSnapshot.plan.title);
+      setPlanDepartureAt(toDateTimeLocal(nextSnapshot.plan.departureAt));
+      setPlanPickupMapsUrl(nextSnapshot.plan.pickupMapsUrl ?? '');
+      setPlanDestinationMapsUrl(nextSnapshot.plan.destinationMapsUrl ?? '');
       if (isManager) {
         const [nextMetrics, nextDispatch] = await Promise.all([
           api.getMetrics(activePlanId),
           api.getDispatch(activePlanId),
         ]);
+        if (!isCurrent()) return false;
         setMetrics(nextMetrics);
         setDispatch(nextDispatch);
       }
+      return true;
     } catch (requestError) {
-      setError(errorMessage(requestError));
+      if (isCurrent()) setError(errorMessage(requestError));
+      return false;
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
   }, [activePlanId, api, isManager]);
 
@@ -222,8 +291,7 @@ export function RideOperationsPanel({
     try {
       await api.createOffer(activePlanId, { capacity: parsedCapacity });
       setCapacity('');
-      setNotice('車の登録を受け付けました。');
-      await load();
+      if (await load()) setNotice('車の登録を受け付けました。');
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -251,8 +319,7 @@ export function RideOperationsPanel({
         subjectMemberId: selectedMemberId,
         passengerCount: parsedCount,
       });
-      setNotice('乗車希望を登録しました。');
-      await load();
+      if (await load()) setNotice('乗車希望を登録しました。');
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -267,15 +334,134 @@ export function RideOperationsPanel({
     setNotice(null);
     try {
       const result = await api.autoMatch(activePlanId);
-      setNotice(
-        `割当${result.assignments.length}件、未割当${result.unassignedRequestIds.length}件を反映しました。`,
-      );
-      await load();
+      if (await load())
+        setNotice(
+          `割当${result.assignments.length}件、未割当${result.unassignedRequestIds.length}件を反映しました。`,
+        );
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
       setIsSaving(false);
     }
+  }
+
+  async function transitionPlan(action: RidePlanTransitionInput['action']) {
+    if (!activePlanId || !snapshot) return;
+    if (action === 'reopen' && !transitionReasonCode) {
+      setError('再編集理由を入力してください。');
+      return;
+    }
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const input: RidePlanTransitionInput =
+        action === 'reopen'
+          ? {
+              action,
+              reasonCode: transitionReasonCode as
+                | 'schedule_change'
+                | 'member_change'
+                | 'vehicle_change'
+                | 'other',
+            }
+          : { action };
+      const nextPlan = await api.transitionPlan(activePlanId, input);
+      setTransitionReasonCode('');
+      if (await load()) {
+        setLoadedPlans((current) =>
+          current.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)),
+        );
+        setNotice(
+          action === 'close'
+            ? '受付を終了しました。'
+            : action === 'finalize'
+              ? '配車表を公開しました。'
+              : '再編集を開始しました。',
+        );
+      }
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function submitAssignment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activePlanId || !selectedRequestId || !selectedOfferId) {
+      setError('乗車希望と車を選択してください。');
+      return;
+    }
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.assign(activePlanId, {
+        requestId: selectedRequestId,
+        offerId: selectedOfferId,
+        expectedOfferId:
+          dispatch?.assignments.find(
+            (assignment) => assignment.requestId === selectedRequestId,
+          )?.offerId ?? null,
+      });
+      if (await load()) setNotice('手動割当を反映しました。');
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function submitPlanUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activePlanId || !planTitle.trim() || !planDepartureAt) {
+      setError('送迎予定のタイトルと出発日時を入力してください。');
+      return;
+    }
+    const input: RidePlanUpdateInput = {
+      title: planTitle,
+      departureAt: new Date(planDepartureAt).toISOString(),
+      pickupMapsUrl: planPickupMapsUrl || null,
+      destinationMapsUrl: planDestinationMapsUrl || null,
+    };
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const nextPlan = await api.updatePlan(activePlanId, input);
+      if (await load()) {
+        setLoadedPlans((current) =>
+          current.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)),
+        );
+        setNotice('送迎予定を更新しました。');
+      }
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function requestConfirmation(action: ConfirmableRideAction) {
+    if (
+      action.kind === 'transition' &&
+      action.action === 'reopen' &&
+      !transitionReasonCode
+    ) {
+      setError('再編集理由を入力してください。');
+      return;
+    }
+    setError(null);
+    setConfirmation(action);
+  }
+
+  async function confirmAction() {
+    const action = confirmation;
+    setConfirmation(null);
+    if (!action) return;
+    if (action.kind === 'match') return autoMatch();
+    return transitionPlan(action.action);
   }
 
   if (planOptions.length > 0) {
@@ -284,15 +470,18 @@ export function RideOperationsPanel({
       <section aria-labelledby="ride-plan-selection-heading">
         <h1 id="ride-plan-selection-heading">送迎</h1>
         <label htmlFor="ride-plan-select">送迎予定を選択</label>
-        <select
+        <Select
           id="ride-plan-select"
           value={activePlanId}
           onChange={(event) => {
+            loadGeneration.current += 1;
             setSelectedPlanId(event.target.value);
             setIsLoading(true);
             setSnapshot(null);
             setMetrics(null);
             setDispatch(null);
+            setSelectedRequestId('');
+            setSelectedOfferId('');
             setError(null);
             setNotice(null);
           }}
@@ -303,7 +492,7 @@ export function RideOperationsPanel({
               ）
             </option>
           ))}
-        </select>
+        </Select>
         {activePlanId && isLoading && !snapshot ? (
           <p role="status">送迎情報を読み込み中…</p>
         ) : null}
@@ -325,91 +514,135 @@ export function RideOperationsPanel({
     );
   if (isLoading && !snapshot) return <p role="status">送迎情報を読み込み中…</p>;
   if (!snapshot)
-    return <p role="alert">{error ?? '送迎情報を表示できません。'}</p>;
+    return (
+      <div>
+        <p role="alert">{error ?? '送迎情報を表示できません。'}</p>
+        <Button type="button" disabled={isLoading} onClick={() => void load()}>
+          再試行
+        </Button>
+      </div>
+    );
 
   return renderRideOperations();
 
   function renderRideOperations() {
     if (!snapshot)
-      return <p role="alert">{error ?? '送迎情報を表示できません。'}</p>;
+      return (
+        <div>
+          <p role="alert">{error ?? '送迎情報を表示できません。'}</p>
+          {activePlanId ? (
+            <Button
+              type="button"
+              disabled={isLoading}
+              onClick={() => void load()}
+            >
+              再試行
+            </Button>
+          ) : null}
+        </div>
+      );
     return (
-      <section aria-labelledby="ride-operations-heading">
+      <Card aria-labelledby="ride-operations-heading">
         <h1 id="ride-operations-heading">送迎</h1>
         <p>
           {snapshot.plan.title}（出発{' '}
           {new Date(snapshot.plan.departureAt).toLocaleString('ja-JP')}）
         </p>
-        <p>
-          <SafeMapsLink
-            url={snapshot.plan.pickupMapsUrl}
-            label="集合場所を地図で開く"
-          />{' '}
-          <SafeMapsLink
-            url={snapshot.plan.destinationMapsUrl}
-            label="目的地を地図で開く"
-          />
-        </p>
-
-        <section aria-labelledby="ride-offer-heading">
-          <h2 id="ride-offer-heading">車を出す</h2>
-          <form onSubmit={submitOffer}>
-            <label htmlFor="ride-capacity">乗車可能数</label>
-            <input
-              id="ride-capacity"
-              inputMode="numeric"
-              min="1"
-              max="20"
-              type="number"
-              value={capacity}
-              onChange={(event) => setCapacity(event.target.value)}
+        <Badge
+          variant={
+            snapshot.plan.status === 'finalized' ? 'success' : 'secondary'
+          }
+        >
+          状態：{planStatusLabel(snapshot.plan.status)}
+        </Badge>
+        {isManager || snapshot.plan.status === 'finalized' ? (
+          <p>
+            <SafeMapsLink
+              url={snapshot.plan.pickupMapsUrl}
+              label="集合場所を地図で開く"
+            />{' '}
+            <SafeMapsLink
+              url={snapshot.plan.destinationMapsUrl}
+              label="目的地を地図で開く"
             />
-            <button type="submit" disabled={isSaving}>
-              登録する
-            </button>
-          </form>
-        </section>
+          </p>
+        ) : (
+          <p role="status">集合場所と配車結果は確定公開後に表示します。</p>
+        )}
 
-        <section aria-labelledby="ride-request-heading">
-          <h2 id="ride-request-heading">乗車を希望する</h2>
-          {members.length === 0 ? (
-            <p>担当できる部員がいないため、乗車希望を登録できません。</p>
-          ) : (
-            <form onSubmit={submitRequest}>
-              <label htmlFor="ride-member">部員</label>
-              <select
-                id="ride-member"
-                value={selectedMemberId}
-                onChange={(event) => {
-                  setSelectedMemberId(event.target.value);
-                  writeSubjectMemberId(selectionStorageKey, event.target.value);
-                }}
-              >
-                {members.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.label}
-                  </option>
-                ))}
-              </select>
-              <label htmlFor="ride-passenger-count">人数</label>
-              <input
-                id="ride-passenger-count"
-                inputMode="numeric"
-                min="1"
-                max="8"
-                type="number"
-                value={passengerCount}
-                onChange={(event) => setPassengerCount(event.target.value)}
-              />
-              <button type="submit" disabled={isSaving}>
-                登録する
-              </button>
-            </form>
-          )}
-        </section>
+        {snapshot.plan.status === 'open' ? (
+          <>
+            <section aria-labelledby="ride-offer-heading">
+              <h2 id="ride-offer-heading">車を出す</h2>
+              <form onSubmit={submitOffer}>
+                <label htmlFor="ride-capacity">乗車可能数</label>
+                <Input
+                  id="ride-capacity"
+                  inputMode="numeric"
+                  min="1"
+                  max="20"
+                  type="number"
+                  value={capacity}
+                  onChange={(event) => setCapacity(event.target.value)}
+                />
+                <Button type="submit" disabled={isSaving}>
+                  登録する
+                </Button>
+              </form>
+            </section>
+
+            <section aria-labelledby="ride-request-heading">
+              <h2 id="ride-request-heading">乗車を希望する</h2>
+              {members.length === 0 ? (
+                <p>担当できる部員がいないため、乗車希望を登録できません。</p>
+              ) : (
+                <form onSubmit={submitRequest}>
+                  <label htmlFor="ride-member">部員</label>
+                  <Select
+                    id="ride-member"
+                    value={selectedMemberId}
+                    onChange={(event) => {
+                      setSelectedMemberId(event.target.value);
+                      writeSubjectMemberId(
+                        selectionStorageKey,
+                        event.target.value,
+                      );
+                    }}
+                  >
+                    {members.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <label htmlFor="ride-passenger-count">人数</label>
+                  <Input
+                    id="ride-passenger-count"
+                    inputMode="numeric"
+                    min="1"
+                    max="8"
+                    type="number"
+                    value={passengerCount}
+                    onChange={(event) => setPassengerCount(event.target.value)}
+                  />
+                  <Button type="submit" disabled={isSaving}>
+                    登録する
+                  </Button>
+                </form>
+              )}
+            </section>
+          </>
+        ) : (
+          <p role="status">現在は乗車希望の受付を停止しています。</p>
+        )}
 
         <section aria-labelledby="ride-result-heading">
-          <h2 id="ride-result-heading">割当結果</h2>
-          {snapshot.requests.length === 0 ? (
+          <h2 id="ride-result-heading">
+            {isManager ? '割当結果' : '申込状況'}
+          </h2>
+          {!isManager && snapshot.plan.status !== 'finalized' ? (
+            <p role="status">配車結果は確定公開後に表示します。</p>
+          ) : snapshot.requests.length === 0 ? (
             <p>乗車希望はありません。</p>
           ) : (
             <ul>
@@ -420,6 +653,35 @@ export function RideOperationsPanel({
               ))}
             </ul>
           )}
+          {!isManager &&
+          snapshot.plan.status === 'finalized' &&
+          snapshot.assignments.length > 0 ? (
+            <section aria-labelledby="ride-assignment-heading">
+              <h3 id="ride-assignment-heading">確定した配車</h3>
+              <ul>
+                {snapshot.assignments.map((assignment) =>
+                  (() => {
+                    const request = snapshot.requests.find(
+                      (item) => item.id === assignment.requestId,
+                    );
+                    const member = members.find(
+                      (item) => item.id === request?.memberId,
+                    );
+                    const offer = snapshot.offers.find(
+                      (item) => item.id === assignment.offerId,
+                    );
+                    return (
+                      <li key={assignment.id}>
+                        {member?.label ?? '対象部員'}：
+                        {assignment.passengerCount}人、 車（定員
+                        {offer?.capacity ?? '確認中'}人）
+                      </li>
+                    );
+                  })(),
+                )}
+              </ul>
+            </section>
+          ) : null}
         </section>
 
         <section aria-labelledby="ride-history-heading">
@@ -441,46 +703,228 @@ export function RideOperationsPanel({
         {isManager ? (
           <section aria-labelledby="ride-manager-heading">
             <h2 id="ride-manager-heading">運用管理</h2>
-            <button
-              type="button"
-              disabled={isSaving}
-              onClick={() => void autoMatch()}
-            >
-              補助マッチングを実行
-            </button>
+            {snapshot.plan.status !== 'finalized' ? (
+              <form onSubmit={submitPlanUpdate}>
+                <h3>送迎予定を編集</h3>
+                <label htmlFor="ride-plan-title">タイトル</label>
+                <Input
+                  id="ride-plan-title"
+                  value={planTitle}
+                  maxLength={200}
+                  onChange={(event) => setPlanTitle(event.target.value)}
+                />
+                <label htmlFor="ride-plan-departure">出発日時</label>
+                <Input
+                  id="ride-plan-departure"
+                  type="datetime-local"
+                  value={planDepartureAt}
+                  onChange={(event) => setPlanDepartureAt(event.target.value)}
+                />
+                <label htmlFor="ride-plan-pickup-maps">集合場所Maps URL</label>
+                <Input
+                  id="ride-plan-pickup-maps"
+                  type="url"
+                  value={planPickupMapsUrl}
+                  onChange={(event) => setPlanPickupMapsUrl(event.target.value)}
+                />
+                <label htmlFor="ride-plan-destination-maps">
+                  目的地Maps URL
+                </label>
+                <Input
+                  id="ride-plan-destination-maps"
+                  type="url"
+                  value={planDestinationMapsUrl}
+                  onChange={(event) =>
+                    setPlanDestinationMapsUrl(event.target.value)
+                  }
+                />
+                <Button type="submit" disabled={isSaving}>
+                  予定を保存
+                </Button>
+              </form>
+            ) : null}
+            <section aria-labelledby="ride-lifecycle-heading">
+              <h3 id="ride-lifecycle-heading">公開状態</h3>
+              {snapshot.plan.status === 'open' ? (
+                <Button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() =>
+                    requestConfirmation({ kind: 'transition', action: 'close' })
+                  }
+                >
+                  受付を終了
+                </Button>
+              ) : null}
+              {snapshot.plan.status === 'closed' ? (
+                <Button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() =>
+                    requestConfirmation({
+                      kind: 'transition',
+                      action: 'finalize',
+                    })
+                  }
+                >
+                  配車表を確定して公開
+                </Button>
+              ) : null}
+              {snapshot.plan.status === 'finalized' ? (
+                <>
+                  <label htmlFor="ride-reopen-reason">再編集理由</label>
+                  <Select
+                    id="ride-reopen-reason"
+                    value={transitionReasonCode}
+                    onChange={(event) =>
+                      setTransitionReasonCode(event.target.value)
+                    }
+                  >
+                    <option value="">選択してください</option>
+                    <option value="schedule_change">日程・場所の変更</option>
+                    <option value="member_change">部員・人数の変更</option>
+                    <option value="vehicle_change">車・配車の変更</option>
+                    <option value="other">その他</option>
+                  </Select>
+                  <Button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() =>
+                      requestConfirmation({
+                        kind: 'transition',
+                        action: 'reopen',
+                      })
+                    }
+                  >
+                    公開後の変更を開始
+                  </Button>
+                </>
+              ) : null}
+            </section>
+            {snapshot.plan.status !== 'finalized' ? (
+              <Button
+                type="button"
+                disabled={isSaving}
+                onClick={() => requestConfirmation({ kind: 'match' })}
+              >
+                補助マッチングを実行
+              </Button>
+            ) : null}
             {metrics ? <Metrics metrics={metrics} /> : null}
+            {dispatch &&
+            (snapshot.plan.status === 'open' ||
+              snapshot.plan.status === 'closed') ? (
+              <form onSubmit={submitAssignment}>
+                <h3>手動割当</h3>
+                <label htmlFor="ride-request-select">乗車希望</label>
+                <Select
+                  id="ride-request-select"
+                  value={selectedRequestId}
+                  onChange={(event) => setSelectedRequestId(event.target.value)}
+                >
+                  <option value="">選択してください</option>
+                  {dispatch.requests
+                    .filter(
+                      (request) =>
+                        request.status === 'pending' ||
+                        request.status === 'unassigned' ||
+                        request.status === 'assigned',
+                    )
+                    .map((request) => (
+                      <option key={request.id} value={request.id}>
+                        {request.id}（{request.passengerCount}人）
+                      </option>
+                    ))}
+                </Select>
+                <label htmlFor="ride-offer-select">車</label>
+                <Select
+                  id="ride-offer-select"
+                  value={selectedOfferId}
+                  onChange={(event) => setSelectedOfferId(event.target.value)}
+                >
+                  <option value="">選択してください</option>
+                  {dispatch.offers
+                    .filter((offer) => offer.status === 'open')
+                    .map((offer) => (
+                      <option key={offer.id} value={offer.id}>
+                        {offer.driverUserId}（定員{offer.capacity}人）
+                      </option>
+                    ))}
+                </Select>
+                <Button type="submit" disabled={isSaving}>
+                  割り当てる
+                </Button>
+              </form>
+            ) : null}
             {dispatch ? (
-              <table>
+              <Table>
                 <caption>配車表</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">運転者識別子</th>
-                    <th scope="col">乗車希望識別子</th>
-                    <th scope="col">人数</th>
-                  </tr>
-                </thead>
-                <tbody>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>運転者識別子</TableHead>
+                    <TableHead>乗車希望識別子</TableHead>
+                    <TableHead>人数</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {dispatch.assignments.map((assignment) => {
                     const offer = dispatch.offers.find(
                       (item) => item.id === assignment.offerId,
                     );
                     return (
-                      <tr key={assignment.id}>
-                        <td>{offer?.driverUserId ?? '不明'}</td>
-                        <td>{assignment.requestId}</td>
-                        <td>{assignment.passengerCount}</td>
-                      </tr>
+                      <TableRow key={assignment.id}>
+                        <TableCell>{offer?.driverUserId ?? '不明'}</TableCell>
+                        <TableCell>{assignment.requestId}</TableCell>
+                        <TableCell>{assignment.passengerCount}</TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             ) : null}
           </section>
         ) : null}
 
-        {error ? <p role="alert">{error}</p> : null}
-        {notice ? <p role="status">{notice}</p> : null}
-      </section>
+        {confirmation ? (
+          <Card
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ride-confirmation-heading"
+          >
+            <h3 id="ride-confirmation-heading">操作を確認</h3>
+            <p>
+              {confirmation.kind === 'match'
+                ? '現在の希望と車の情報で補助マッチングを実行します。'
+                : confirmation.action === 'close'
+                  ? '受付を終了し、内容確認の状態へ移します。'
+                  : confirmation.action === 'finalize'
+                    ? '配車表を確定し、担当者へ公開します。'
+                    : '公開後の変更を開始し、再確認の状態へ戻します。'}
+            </p>
+            <Button
+              type="button"
+              disabled={isSaving}
+              onClick={() => void confirmAction()}
+            >
+              実行する
+            </Button>{' '}
+            <Button
+              type="button"
+              disabled={isSaving}
+              onClick={() => setConfirmation(null)}
+            >
+              キャンセル
+            </Button>
+          </Card>
+        ) : null}
+
+        {error ? (
+          <Alert variant="destructive" role="alert">
+            {error}
+          </Alert>
+        ) : null}
+        {notice ? <Alert role="status">{notice}</Alert> : null}
+      </Card>
     );
   }
 }

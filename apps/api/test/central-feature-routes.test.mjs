@@ -194,6 +194,7 @@ function createTestApp({
         service: {
           listPlans: async () => [],
           createPlan: async () => ({}),
+          updatePlan: async () => ({}),
           createOffer: async () => ({}),
           createRequest: async () => ({}),
           getSnapshot: async () => ({
@@ -205,6 +206,15 @@ function createTestApp({
           }),
           autoMatch: async () => ({ assignments: [], unassignedRequestIds: [] }),
           assign: async () => ({}),
+          transitionPlan: async (_actor, _planId, input) => ({
+            id: '00000000-0000-7000-8000-000000000001',
+            title: '練習試合',
+            departureAt: '2026-08-23T00:00:00.000Z',
+            pickupMapsUrl: null,
+            destinationMapsUrl: null,
+            status: input.action === 'finalize' ? 'finalized' : 'closed',
+            createdAt: '2026-08-22T00:00:00.000Z',
+          }),
           getDispatch: async () => ({}),
           getMetrics: async () => ({}),
         },
@@ -474,4 +484,53 @@ test('中央APIへ送迎routeをmountし、公開response契約を適用する',
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { data: [] });
+});
+
+test('送迎の状態変更routeも中央response契約を通る', async () => {
+  const response = await createTestApp().request(
+    '/api/v1/ride-plans/00000000-0000-7000-8000-000000000001/status',
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${USER_ID}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'close' }),
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.status, 'closed');
+});
+
+test('無効な送迎featureは状態変更handlerを実行せず403にする', async () => {
+  const response = await createTestApp({
+    featureOverrides: { 'ride-operations': false },
+  }).request(
+    '/api/v1/ride-plans/00000000-0000-7000-8000-000000000001/status',
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${USER_ID}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'close' }),
+    },
+  );
+
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'FEATURE_UNAVAILABLE');
+});
+
+test('feature契約未設定の送迎はfail-closedする', async () => {
+  const response = await createTestApp({ featureContractEnabled: false }).request(
+    '/api/v1/ride-plans',
+    { headers: { authorization: `Bearer ${USER_ID}` } },
+  );
+
+  assert.equal(response.status, 503);
+  assert.equal(
+    (await response.json()).error.code,
+    'FEATURE_CONTRACT_NOT_CONFIGURED',
+  );
 });

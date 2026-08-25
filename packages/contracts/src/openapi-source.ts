@@ -852,12 +852,901 @@ export const openapiDocument = {
         },
       },
     },
+    '/ride-plans': {
+      get: {
+        operationId: 'listRidePlans',
+        summary: '送迎予定一覧を取得',
+        responses: {
+          200: {
+            description: '送迎予定一覧',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/RidePlanListResponse' },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+      post: {
+        operationId: 'createRidePlan',
+        summary: '送迎予定を受付中で作成',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/RidePlanCreateInput' },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: '送迎予定を作成',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/RidePlanResponseEnvelope',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/ride-plans/{planId}': {
+      get: {
+        operationId: 'getRidePlanSnapshot',
+        summary: '送迎予定と利用者向け結果を取得',
+        parameters: [
+          {
+            name: 'planId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          200: {
+            description: '送迎予定のスナップショット',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/RideSnapshotResponseEnvelope',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+      patch: {
+        operationId: 'updateRidePlan',
+        summary: '送迎予定の内容を再編集',
+        parameters: [
+          {
+            name: 'planId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/RidePlanUpdateInput' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: '更新後の送迎予定',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/RidePlanResponseEnvelope',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          409: { $ref: '#/components/responses/RideConflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/ride-plans/{planId}/offers': {
+      post: {
+        operationId: 'createRideOffer',
+        summary: '乗車提供枠を登録',
+        parameters: [
+          {
+            name: 'planId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/RideOfferCreateInput' },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: '乗車提供枠を登録',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/RideOfferResponseEnvelope',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/ride-plans/{planId}/requests': {
+      post: {
+        operationId: 'createRideRequest',
+        summary: '乗車希望を登録',
+        parameters: [
+          {
+            name: 'planId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/RideRequestCreateInput' },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: '乗車希望を登録',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/RideRequestResponseEnvelope',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/ride-plans/{planId}/match': {
+      post: {
+        operationId: 'matchRideRequests',
+        summary: '乗車希望の補助マッチングを実行',
+        parameters: [
+          {
+            name: 'planId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/RideMatchInput' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'マッチング結果',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/RideMatchResponse' },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/ride-plans/{planId}/assignments': {
+      post: {
+        operationId: 'assignRideRequest',
+        summary: '乗車希望を車へ手動割当',
+        parameters: [
+          {
+            name: 'planId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/RideAssignmentInput' },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: '割当結果',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/RideAssignmentResponseEnvelope',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/ride-plans/{planId}/dispatch': {
+      get: {
+        operationId: 'getRideDispatch',
+        summary: '管理者向け配車表を取得',
+        parameters: [
+          {
+            name: 'planId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          200: {
+            description: '管理者向け配車表',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/RideDispatchResponseEnvelope',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/ride-plans/{planId}/metrics': {
+      get: {
+        operationId: 'getRideMetrics',
+        summary: '送迎の運用メトリクスを取得',
+        parameters: [
+          {
+            name: 'planId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          200: {
+            description: '運用メトリクス',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/RideMetricsResponseEnvelope',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/ride-plans/{planId}/status': {
+      post: {
+        operationId: 'transitionRidePlanStatus',
+        summary: '送迎予定を締切・確定・再編集へ遷移',
+        parameters: [
+          {
+            name: 'planId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/RidePlanTransitionInput' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: '状態変更後の送迎予定',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/RidePlanResponseEnvelope',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          409: { $ref: '#/components/responses/RideConflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {
       bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
     },
     schemas: {
+      RidePlanTransitionInput: {
+        oneOf: [
+          {
+            type: 'object',
+            required: ['action'],
+            additionalProperties: false,
+            properties: {
+              action: { type: 'string', enum: ['close', 'finalize'] },
+            },
+          },
+          {
+            type: 'object',
+            required: ['action', 'reasonCode'],
+            additionalProperties: false,
+            properties: {
+              action: { type: 'string', enum: ['reopen'] },
+              reasonCode: {
+                type: 'string',
+                enum: [
+                  'schedule_change',
+                  'member_change',
+                  'vehicle_change',
+                  'other',
+                ],
+              },
+            },
+          },
+        ],
+      },
+      RidePlanResponseEnvelope: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'object',
+            required: [
+              'id',
+              'title',
+              'departureAt',
+              'pickupMapsUrl',
+              'destinationMapsUrl',
+              'status',
+              'createdAt',
+            ],
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              title: { type: 'string', minLength: 1, maxLength: 200 },
+              departureAt: { type: 'string', format: 'date-time' },
+              pickupMapsUrl: { type: 'string', format: 'uri', nullable: true },
+              destinationMapsUrl: {
+                type: 'string',
+                format: 'uri',
+                nullable: true,
+              },
+              status: {
+                type: 'string',
+                enum: ['draft', 'open', 'closed', 'finalized'],
+              },
+              createdAt: { type: 'string', format: 'date-time' },
+            },
+          },
+        },
+      },
+      RidePlanCreateInput: {
+        type: 'object',
+        required: ['title', 'departureAt'],
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string', minLength: 1, maxLength: 200 },
+          departureAt: { type: 'string', format: 'date-time' },
+          pickupMapsUrl: { type: 'string', format: 'uri', nullable: true },
+          destinationMapsUrl: {
+            type: 'string',
+            format: 'uri',
+            nullable: true,
+          },
+        },
+      },
+      RidePlanUpdateInput: {
+        type: 'object',
+        minProperties: 1,
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string', minLength: 1, maxLength: 200 },
+          departureAt: { type: 'string', format: 'date-time' },
+          pickupMapsUrl: { type: 'string', format: 'uri', nullable: true },
+          destinationMapsUrl: {
+            type: 'string',
+            format: 'uri',
+            nullable: true,
+          },
+        },
+      },
+      RidePlanListResponse: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'array',
+            maxItems: 100,
+            items: { $ref: '#/components/schemas/RidePlanItem' },
+          },
+        },
+      },
+      RidePlanItem: {
+        type: 'object',
+        required: [
+          'id',
+          'title',
+          'departureAt',
+          'pickupMapsUrl',
+          'destinationMapsUrl',
+          'status',
+          'createdAt',
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          title: { type: 'string', minLength: 1, maxLength: 200 },
+          departureAt: { type: 'string', format: 'date-time' },
+          pickupMapsUrl: { type: 'string', format: 'uri', nullable: true },
+          destinationMapsUrl: { type: 'string', format: 'uri', nullable: true },
+          status: {
+            type: 'string',
+            enum: ['draft', 'open', 'closed', 'finalized'],
+          },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      RideOfferCreateInput: {
+        type: 'object',
+        required: ['capacity'],
+        additionalProperties: false,
+        properties: {
+          capacity: { type: 'integer', minimum: 1, maximum: 20 },
+        },
+      },
+      RideOfferResponseEnvelope: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'object',
+            required: ['id', 'capacity', 'status', 'isMine'],
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              capacity: { type: 'integer', minimum: 1, maximum: 20 },
+              status: { type: 'string', enum: ['open', 'cancelled'] },
+              isMine: { type: 'boolean' },
+            },
+          },
+        },
+      },
+      RideOfferResponse: {
+        type: 'object',
+        required: ['id', 'capacity', 'status', 'isMine'],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          capacity: { type: 'integer', minimum: 1, maximum: 20 },
+          status: { type: 'string', enum: ['open', 'cancelled'] },
+          isMine: { type: 'boolean' },
+        },
+      },
+      RideRequestCreateInput: {
+        oneOf: [
+          {
+            type: 'object',
+            required: ['memberId'],
+            additionalProperties: false,
+            properties: {
+              memberId: { type: 'string', format: 'uuid' },
+              passengerCount: {
+                type: 'integer',
+                minimum: 1,
+                maximum: 8,
+                default: 1,
+              },
+            },
+          },
+          {
+            type: 'object',
+            required: ['subjectMemberId'],
+            additionalProperties: false,
+            properties: {
+              subjectMemberId: { type: 'string', format: 'uuid' },
+              passengerCount: {
+                type: 'integer',
+                minimum: 1,
+                maximum: 8,
+                default: 1,
+              },
+            },
+          },
+        ],
+      },
+      RideRequestResponseEnvelope: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'object',
+            required: ['id', 'memberId', 'passengerCount', 'status', 'isMine'],
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              memberId: { type: 'string', format: 'uuid' },
+              passengerCount: { type: 'integer', minimum: 1, maximum: 8 },
+              status: {
+                type: 'string',
+                enum: ['pending', 'assigned', 'unassigned', 'cancelled'],
+              },
+              isMine: { type: 'boolean' },
+            },
+          },
+        },
+      },
+      RideRequestResponse: {
+        type: 'object',
+        required: ['id', 'memberId', 'passengerCount', 'status', 'isMine'],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          memberId: { type: 'string', format: 'uuid' },
+          passengerCount: { type: 'integer', minimum: 1, maximum: 8 },
+          status: {
+            type: 'string',
+            enum: ['pending', 'assigned', 'unassigned', 'cancelled'],
+          },
+          isMine: { type: 'boolean' },
+        },
+      },
+      RideHistoryResponse: {
+        type: 'object',
+        required: ['id', 'action', 'createdAt'],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', minLength: 1, maxLength: 128 },
+          action: {
+            type: 'string',
+            enum: [
+              'plan_created',
+              'offer_registered',
+              'request_registered',
+              'matching_executed',
+              'assignment_updated',
+              'plan_closed',
+              'plan_finalized',
+              'plan_reopened',
+              'other',
+            ],
+          },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      RideDispatchOfferResponse: {
+        type: 'object',
+        required: [
+          'id',
+          'planId',
+          'driverUserId',
+          'capacity',
+          'status',
+          'createdAt',
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          planId: { type: 'string', format: 'uuid' },
+          driverUserId: { type: 'string', minLength: 1, maxLength: 128 },
+          capacity: { type: 'integer', minimum: 1, maximum: 20 },
+          status: { type: 'string', enum: ['open', 'cancelled'] },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      RideDispatchRequestResponse: {
+        type: 'object',
+        required: [
+          'id',
+          'planId',
+          'memberId',
+          'requesterUserId',
+          'passengerCount',
+          'status',
+          'createdAt',
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          planId: { type: 'string', format: 'uuid' },
+          memberId: { type: 'string', format: 'uuid' },
+          requesterUserId: { type: 'string', minLength: 1, maxLength: 128 },
+          passengerCount: { type: 'integer', minimum: 1, maximum: 8 },
+          status: {
+            type: 'string',
+            enum: ['pending', 'assigned', 'unassigned', 'cancelled'],
+          },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      RideMatchInput: {
+        type: 'object',
+        additionalProperties: false,
+      },
+      RideAssignmentInput: {
+        type: 'object',
+        required: ['requestId', 'offerId', 'expectedOfferId'],
+        additionalProperties: false,
+        properties: {
+          requestId: { type: 'string', format: 'uuid' },
+          offerId: { type: 'string', format: 'uuid' },
+          expectedOfferId: { type: 'string', format: 'uuid', nullable: true },
+        },
+      },
+      RideAssignmentResponseEnvelope: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            $ref: '#/components/schemas/RideAssignmentResponse',
+          },
+        },
+      },
+      RideAssignmentResponse: {
+        type: 'object',
+        required: [
+          'id',
+          'planId',
+          'requestId',
+          'offerId',
+          'passengerCount',
+          'createdAt',
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          planId: { type: 'string', format: 'uuid' },
+          requestId: { type: 'string', format: 'uuid' },
+          offerId: { type: 'string', format: 'uuid' },
+          passengerCount: { type: 'integer', minimum: 1, maximum: 8 },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      RideMatchResponse: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'object',
+            required: ['assignments', 'unassignedRequestIds'],
+            additionalProperties: false,
+            properties: {
+              assignments: {
+                type: 'array',
+                maxItems: 100,
+                items: { $ref: '#/components/schemas/RideAssignmentResponse' },
+              },
+              unassignedRequestIds: {
+                type: 'array',
+                maxItems: 100,
+                items: { type: 'string', format: 'uuid' },
+              },
+            },
+          },
+        },
+      },
+      RideSnapshotAssignment: {
+        type: 'object',
+        required: ['id', 'requestId', 'offerId', 'passengerCount'],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          requestId: { type: 'string', format: 'uuid' },
+          offerId: { type: 'string', format: 'uuid' },
+          passengerCount: { type: 'integer', minimum: 1, maximum: 8 },
+        },
+      },
+      RideSnapshotResponseEnvelope: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'object',
+            required: ['plan', 'offers', 'requests', 'assignments', 'history'],
+            additionalProperties: false,
+            properties: {
+              plan: {
+                $ref: '#/components/schemas/RidePlanItem',
+              },
+              offers: {
+                type: 'array',
+                maxItems: 100,
+                items: { $ref: '#/components/schemas/RideOfferResponse' },
+              },
+              requests: {
+                type: 'array',
+                maxItems: 100,
+                items: { $ref: '#/components/schemas/RideRequestResponse' },
+              },
+              assignments: {
+                type: 'array',
+                maxItems: 100,
+                items: { $ref: '#/components/schemas/RideSnapshotAssignment' },
+              },
+              history: {
+                type: 'array',
+                maxItems: 1000,
+                items: { $ref: '#/components/schemas/RideHistoryResponse' },
+              },
+            },
+          },
+        },
+      },
+      RideDispatchResponseEnvelope: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'object',
+            required: ['plan', 'offers', 'requests', 'assignments', 'history'],
+            additionalProperties: false,
+            properties: {
+              plan: { $ref: '#/components/schemas/RidePlanItem' },
+              offers: {
+                type: 'array',
+                maxItems: 100,
+                items: {
+                  $ref: '#/components/schemas/RideDispatchOfferResponse',
+                },
+              },
+              requests: {
+                type: 'array',
+                maxItems: 100,
+                items: {
+                  $ref: '#/components/schemas/RideDispatchRequestResponse',
+                },
+              },
+              assignments: {
+                type: 'array',
+                maxItems: 100,
+                items: { $ref: '#/components/schemas/RideAssignmentResponse' },
+              },
+              history: {
+                type: 'array',
+                maxItems: 1000,
+                items: { $ref: '#/components/schemas/RideHistoryResponse' },
+              },
+            },
+          },
+        },
+      },
+      RideMetricsResponseEnvelope: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'object',
+            required: [
+              'offerCount',
+              'totalCapacity',
+              'requestCount',
+              'requestedSeats',
+              'assignedSeats',
+              'unassignedSeats',
+              'assignmentRate',
+            ],
+            additionalProperties: false,
+            properties: {
+              offerCount: { type: 'integer', minimum: 0, maximum: 100 },
+              totalCapacity: { type: 'integer', minimum: 0, maximum: 2000 },
+              requestCount: { type: 'integer', minimum: 0, maximum: 100 },
+              requestedSeats: { type: 'integer', minimum: 0, maximum: 800 },
+              assignedSeats: { type: 'integer', minimum: 0, maximum: 800 },
+              unassignedSeats: { type: 'integer', minimum: 0, maximum: 800 },
+              assignmentRate: { type: 'number', minimum: 0, maximum: 1 },
+            },
+          },
+        },
+      },
       LineDeliveryPublishInput: {
         type: 'object',
         required: ['sourceType', 'sourceId', 'destination', 'title', 'body'],
@@ -1668,6 +2557,32 @@ export const openapiDocument = {
           },
         },
       },
+      RideConflictError: {
+        type: 'object',
+        required: ['error'],
+        additionalProperties: false,
+        properties: {
+          error: {
+            type: 'object',
+            required: ['code', 'message', 'details', 'requestId'],
+            additionalProperties: false,
+            properties: {
+              code: {
+                type: 'string',
+                enum: [
+                  'RIDE_STATE_CONFLICT',
+                  'RIDE_FINALIZE_BLOCKED',
+                  'RIDE_CAPACITY_EXCEEDED',
+                  'RIDE_RESULT_TOO_LARGE',
+                ],
+              },
+              message: { type: 'string', minLength: 1, maxLength: 512 },
+              details: {},
+              requestId: { type: 'string', format: 'uuid' },
+            },
+          },
+        },
+      },
     },
     responses: {
       BadRequest: {
@@ -1699,6 +2614,14 @@ export const openapiDocument = {
         content: {
           'application/json': {
             schema: { $ref: '#/components/schemas/Error' },
+          },
+        },
+      },
+      RideConflict: {
+        description: '送迎予定の状態または確定条件と競合しました。',
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/RideConflictError' },
           },
         },
       },
