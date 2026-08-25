@@ -1345,6 +1345,33 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 - stagingのActions権限最小化とself-hosted runner移行時のrunner要件確認はOPS-006で継続します。
 - UI-002/003、RIDE-002、T-013、ORIG-REQ-001は継続します。
 
+## UI-002 認証レイアウトと操作導線のブラウザ受入
+
+### 実施した変更
+
+- 認証用content-only AppShellへ2列グリッドが残り、PC幅でログインカードが左寄せになる問題を修正しました。認証用AppShellを1列gridへ戻し、content-onlyの`min-height`を上書きしてカードを水平・垂直中央へ配置しました。
+- フォーム入力、ボタン、サイドバー・モバイルナビ、認証ヘルプ、マニュアルのヘルプ・目次・フッター、イベント導線のタップ領域を44pxへ統一しました。テーブルとモバイルナビの内部横スクロールは維持し、ページ横スクロールは抑止しています。
+
+### 検証結果
+
+- local browserで390px、430px、768px、1280pxを確認し、ログインカードの中央配置、ページ横スクロールなし、主要操作導線44pxを確認しました。マニュアル画面も390pxと1280pxで確認しました。
+- `pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm lint:workflows`、`pnpm verify:trust-root`、`pnpm verify:line-endings`、`git diff --check`が成功しました。Vite buildは親ディレクトリ読取制限があるため権限付きローカル実行で確認しました。
+- GitHub quality run `32794515272`が成功しました。
+
+### 敵対的レビュー
+
+- 最終レビューはCritical 0件、High 0件、Medium 0件でした。content-only AppShell、PCサイドバー、モバイルナビ、横スクロール、visible focus、tenant/auth/PII影響を確認しました。
+- CSSのみの変更で、API、DB、認証、role認可、個人情報、外部サービスの実行時契約へ影響がないことを確認しました。
+
+### GitHub反映
+
+- 実装PR #168は`1086e90`として`develop`へsquash mergeしました。
+- 実装コードと台帳・実施記録は分離し、この変更はdocs-only PRで提出します。
+
+### 未完了条件
+
+- 認証済み主要画面のowner/admin/staff/guardian別ブラウザ受入、staging外部サービス接続、保存APIの安定した冪等性はUI-002/UI-003として継続します。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。
