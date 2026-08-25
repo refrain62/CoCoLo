@@ -7,6 +7,7 @@ import type {
   UnreadMember,
 } from '@cocolo/domain/bulletin-board';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { enqueueLineDelivery } from './index.js';
 import { uuidv7 } from './uuidv7.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -43,6 +44,11 @@ export type BulletinBoardAttachmentLookup = (
     attachmentIds: string[];
   },
 ) => Promise<BulletinAttachmentMetadata[]>;
+
+export type BulletinBoardNotificationOptions = {
+  notificationPublicAppUrl?: string;
+  notificationFeatureEnabled?: (input: RepositoryActor) => Promise<boolean>;
+};
 
 export type BulletinBoardRepository = {
   publish: (
@@ -261,11 +267,43 @@ export function createBulletinBoardRepositories(
     attachmentLookup?: BulletinBoardAttachmentLookup;
     now?: () => Date;
     createId?: () => string;
+    notificationPublicAppUrl?: string;
+    notificationFeatureEnabled?: BulletinBoardNotificationOptions['notificationFeatureEnabled'];
   } = {},
 ): { bulletinBoardRepository: BulletinBoardRepository } {
   const lookup = options.attachmentLookup ?? defaultAttachmentLookup;
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? uuidv7;
+  const publicAppUrl = options.notificationPublicAppUrl?.replace(/\/$/u, '');
+  const enqueuePublishedNotification = async (
+    tx: Prisma.TransactionClient,
+    input: BulletinBoardPublishInput,
+    announcementId: string,
+  ) => {
+    if (!publicAppUrl || !options.notificationFeatureEnabled) return;
+    if (!(await options.notificationFeatureEnabled(input))) return;
+    const connectionRows = await tx.$queryRaw<Array<{ group_id: string }>>`
+      SELECT group_id
+        FROM line_connections
+       WHERE tenant_id = ${input.tenantId}::uuid
+         AND status = 'connected'::line_connection_status
+    `;
+    const destination = connectionRows[0]?.group_id;
+    if (!destination) return;
+    await enqueueLineDelivery(tx, {
+      id: createId(),
+      tenantId: input.tenantId,
+      actorUserId: input.actorUserId,
+      role: input.role,
+      sourceType: 'bulletin',
+      sourceId: announcementId,
+      destination,
+      title: '回覧のお知らせ',
+      body: '新しい回覧を確認してください。',
+      deepLink: `${publicAppUrl}/bulletins/${announcementId}`,
+      idempotencyKey: `bulletin:${announcementId}`,
+    });
+  };
 
   const bulletinBoardRepository: BulletinBoardRepository = {
     publish: (input) =>
@@ -327,6 +365,7 @@ export function createBulletinBoardRepositories(
           resourceId: id,
           metadata: { attachmentCount: attachments.length },
         });
+        await enqueuePublishedNotification(tx, input, id);
         return toAnnouncementRecord(row, attachments);
       }),
 
