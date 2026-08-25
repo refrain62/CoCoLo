@@ -357,7 +357,7 @@ function EntryForm({
     const nextMemberId = readSubjectMemberId(selectionStorageKey, members);
     setMemberId(nextMemberId);
     if (nextMemberId) writeSubjectMemberId(selectionStorageKey, nextMemberId);
-  }, [members]);
+  }, [members, selectionStorageKey]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
