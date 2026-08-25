@@ -67,6 +67,10 @@
       "types": "./src/event-contract.ts",
       "import": "./dist/event-contract.js"
     },
+    "./auth-invitation": {
+      "types": "./src/auth-invitation.ts",
+      "import": "./dist/auth-invitation.js"
+    },
     "./feature-contract": {
       "types": "./src/feature-contract.ts",
       "import": "./dist/feature-contract.js"

@@ -17,8 +17,26 @@ const safeMigration: MigrationSqlFile = {
   ].join('\n'),
 };
 
+const sharedMigration: MigrationSqlFile = {
+  path: '20260823160001_shared/migration.sql',
+  content: [
+    'CREATE TABLE auth_identities (id uuid PRIMARY KEY, user_id varchar(128) NOT NULL);',
+    "COMMENT ON TABLE auth_identities IS 'OAuth identity';",
+    'ALTER TABLE auth_identities ENABLE ROW LEVEL SECURITY;',
+    'ALTER TABLE auth_identities FORCE ROW LEVEL SECURITY;',
+    "CREATE POLICY auth_identities_select ON auth_identities FOR SELECT USING (user_id = current_setting('app.user_id', true));",
+    'GRANT SELECT ON auth_identities TO cocolo_app;',
+  ].join('\n'),
+};
+
 test('新規tableのCOMMENT・RLS・policy・tenant権限を同一migrationで要求する', () => {
   assert.doesNotThrow(() => validateMigrationSql([safeMigration]));
+});
+
+test('tenant非依存のOAuth identityはuser context付きRLSで許可する', () => {
+  assert.doesNotThrow(() =>
+    validateMigrationSql([safeMigration, sharedMigration]),
+  );
 });
 
 test('tenant非依存の共有定義はactive membership付きRLSで許可する', () => {

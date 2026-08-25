@@ -4,6 +4,8 @@ export type AuthSession = {
   expiresAt: number | null;
 };
 
+export type OAuthProvider = 'google' | 'line';
+
 type AuthResponse = {
   access_token?: string;
   refresh_token?: string;
@@ -23,6 +25,10 @@ export class AuthApiError extends Error {
 
 export type AuthClient = {
   signInWithPassword: (email: string, password: string) => Promise<AuthSession>;
+  getOAuthAuthorizeUrl?: (
+    provider: OAuthProvider,
+    redirectTo: string,
+  ) => string;
   refreshSession: (refreshToken: string) => Promise<AuthSession>;
   signOut: (accessToken: string) => Promise<void>;
 };
@@ -73,6 +79,22 @@ function parseSession(body: AuthResponse, fallbackRefreshToken: string | null) {
   } satisfies AuthSession;
 }
 
+// OAuth implicit callbackのhashからtokenを一度だけ取り出し、URLからは呼び出し側が除去する。
+export function parseOAuthCallback(hash: string): AuthSession | null {
+  const value = hash.startsWith('#') ? hash.slice(1) : hash;
+  const params = new URLSearchParams(value);
+  const accessToken = params.get('access_token');
+  if (!accessToken) return null;
+  return parseSession(
+    {
+      access_token: accessToken,
+      refresh_token: params.get('refresh_token') ?? undefined,
+      expires_in: Number(params.get('expires_in') ?? NaN),
+    },
+    null,
+  );
+}
+
 // localでは相対URLをVite proxyへ送り、staging/productionではSupabase Authへ接続する。
 // anon keyは公開値だが、access token以外のserver-only secretはこのclientへ渡さない。
 export function createAuthClient({
@@ -83,6 +105,7 @@ export function createAuthClient({
   const endpoint = `${baseUrl.replace(/\/$/, '')}/auth/v1/token?grant_type=password`;
   const refreshEndpoint = `${baseUrl.replace(/\/$/, '')}/auth/v1/token?grant_type=refresh_token`;
   const logoutEndpoint = `${baseUrl.replace(/\/$/, '')}/auth/v1/logout`;
+  const authorizeEndpoint = `${baseUrl.replace(/\/$/, '')}/auth/v1/authorize`;
 
   async function requestAuth(
     operation: AuthOperation,
@@ -120,6 +143,12 @@ export function createAuthClient({
       });
       const body = (await response.json()) as AuthResponse;
       return parseSession(body, null);
+    },
+
+    getOAuthAuthorizeUrl(provider, redirectTo) {
+      const endpoint = baseUrl ? authorizeEndpoint : '/auth/v1/authorize';
+      const params = new URLSearchParams({ provider, redirect_to: redirectTo });
+      return `${endpoint}?${params.toString()}`;
     },
 
     async refreshSession(refreshToken) {

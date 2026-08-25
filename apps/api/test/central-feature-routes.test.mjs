@@ -15,6 +15,8 @@ function createTestApp({ multipleMemberships = false, featureOverrides = {} } = 
       issuer: 'https://example.supabase.co/auth/v1',
       audience: 'authenticated',
       expiresAt: Math.floor(Date.now() / 1000) + 300,
+      authProviders: ['line'],
+      authProviderSubjects: { line: 'line-subject-a' },
     };
   };
   const membershipRepository = {
@@ -77,6 +79,47 @@ function createTestApp({ multipleMemberships = false, featureOverrides = {} } = 
                 }
               : null,
         },
+      },
+      authInvitations: {
+        repository: {
+          list: async () => [
+            {
+              id: '00000000-0000-7000-8000-000000000010',
+              memberId: '00000000-0000-7000-8000-000000000011',
+              role: 'guardian',
+              relationship: '保護者',
+              status: 'pending',
+              expiresAt: new Date('2026-08-28T00:00:00.000Z'),
+              acceptedAt: null,
+            },
+          ],
+          create: async () => ({
+            id: '00000000-0000-7000-8000-000000000010',
+            memberId: '00000000-0000-7000-8000-000000000011',
+            role: 'guardian',
+            relationship: '保護者',
+            status: 'pending',
+            expiresAt: new Date('2026-08-28T00:00:00.000Z'),
+            acceptedAt: null,
+            token: 'a'.repeat(64),
+          }),
+          revoke: async () => ({
+            id: '00000000-0000-7000-8000-000000000010',
+            memberId: '00000000-0000-7000-8000-000000000011',
+            role: 'guardian',
+            relationship: '保護者',
+            status: 'revoked',
+            expiresAt: new Date('2026-08-28T00:00:00.000Z'),
+            acceptedAt: null,
+          }),
+          accept: async () => ({
+            tenantId: TENANT_ID,
+            memberId: '00000000-0000-7000-8000-000000000011',
+            role: 'guardian',
+            linkStatus: 'active',
+          }),
+        },
+        invitationUrlBase: 'https://app.example.test/invite',
       },
       attachments: {
         repository: {
@@ -173,6 +216,69 @@ test('中央APIへチーム選択routeをmountする', async () => {
     tenantName: 'テストチーム',
     role: 'owner',
   });
+});
+
+test('ownerは対象memberへのopaque招待を発行・一覧できる', async () => {
+  const app = createTestApp();
+  const headers = { authorization: `Bearer ${USER_ID}` };
+  const list = await app.request('/api/v1/auth/invitations', { headers });
+  assert.equal(list.status, 200);
+  assert.equal((await list.json()).data[0].status, 'pending');
+
+  const created = await app.request('/api/v1/auth/invitations', {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      memberId: '00000000-0000-7000-8000-000000000011',
+      role: 'guardian',
+      relationship: '保護者',
+    }),
+  });
+  assert.equal(created.status, 201);
+  const createdBody = await created.json();
+  assert.equal('token' in createdBody.data, false);
+  assert.match(
+    createdBody.data.inviteUrl,
+    /^https:\/\/app\.example\.test\/invite\/[^#]+#token=[A-Za-z0-9_-]+$/,
+  );
+});
+
+test('membershipがないOAuth利用者もopaque招待を受諾できる', async () => {
+  const response = await createTestApp().request(
+    '/api/v1/auth/invitations/accept',
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${USER_ID}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ token: 'a'.repeat(64), provider: 'line' }),
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, {
+    tenantId: TENANT_ID,
+    memberId: '00000000-0000-7000-8000-000000000011',
+    role: 'guardian',
+    linkStatus: 'active',
+  });
+});
+
+test('招待受諾はJWTで確認できないproviderを本文から選べない', async () => {
+  const response = await createTestApp().request(
+    '/api/v1/auth/invitations/accept',
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${USER_ID}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ token: 'a'.repeat(64), provider: 'google' }),
+    },
+  );
+
+  assert.equal(response.status, 403);
 });
 
 test('中央APIへ役員連絡先routeをmountする', async () => {

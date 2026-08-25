@@ -34,6 +34,124 @@ export const openapiDocument = {
         },
       },
     },
+    '/auth/invitations': {
+      get: {
+        operationId: 'listAuthInvitations',
+        summary: 'チームの招待一覧を取得',
+        responses: {
+          200: {
+            description: '招待一覧',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/InvitationListResponse' },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+      post: {
+        operationId: 'createAuthInvitation',
+        summary: '対象memberへの招待を発行',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/InvitationCreateInput' },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: '招待を発行',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/InvitationCreateResponse',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/auth/invitations/accept': {
+      post: {
+        operationId: 'acceptAuthInvitation',
+        summary: 'OAuth認証済み利用者が招待を受諾',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/InvitationAcceptInput' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: '招待を受諾',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/InvitationAcceptResponse',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          404: { $ref: '#/components/responses/NotFound' },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
+    '/auth/invitations/{invitationId}/revoke': {
+      post: {
+        operationId: 'revokeAuthInvitation',
+        summary: '招待を取り消す',
+        parameters: [
+          {
+            name: 'invitationId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          200: {
+            description: '招待を取り消す',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/InvitationResponse' },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          409: { $ref: '#/components/responses/Conflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
+    },
     '/feature-contract': {
       get: {
         operationId: 'getFeatureContract',
@@ -763,6 +881,120 @@ export const openapiDocument = {
           },
         },
       },
+      InvitationCreateInput: {
+        type: 'object',
+        required: ['memberId', 'role', 'relationship'],
+        additionalProperties: false,
+        properties: {
+          memberId: { type: 'string', format: 'uuid' },
+          role: { type: 'string', const: 'guardian' },
+          relationship: { type: 'string', minLength: 1, maxLength: 100 },
+          expiresInHours: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 168,
+            default: 72,
+          },
+        },
+      },
+      InvitationAcceptInput: {
+        type: 'object',
+        required: ['token', 'provider'],
+        additionalProperties: false,
+        properties: {
+          token: { type: 'string', minLength: 32, maxLength: 256 },
+          provider: { type: 'string', enum: ['google', 'line'] },
+        },
+      },
+      InvitationItem: {
+        type: 'object',
+        required: [
+          'id',
+          'memberId',
+          'role',
+          'relationship',
+          'status',
+          'expiresAt',
+          'acceptedAt',
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          memberId: { type: 'string', format: 'uuid' },
+          role: { type: 'string', const: 'guardian' },
+          relationship: { type: 'string', minLength: 1, maxLength: 100 },
+          status: {
+            type: 'string',
+            enum: ['pending', 'accepted', 'expired', 'revoked'],
+          },
+          expiresAt: { type: 'string', format: 'date-time' },
+          acceptedAt: { type: ['string', 'null'], format: 'date-time' },
+        },
+      },
+      InvitationListResponse: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/InvitationItem' },
+          },
+        },
+      },
+      InvitationResponse: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: { $ref: '#/components/schemas/InvitationItem' },
+        },
+      },
+      InvitationCreateResponse: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'object',
+            required: [
+              'id',
+              'memberId',
+              'role',
+              'relationship',
+              'token',
+              'expiresAt',
+            ],
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              memberId: { type: 'string', format: 'uuid' },
+              role: { type: 'string', const: 'guardian' },
+              relationship: { type: 'string', minLength: 1, maxLength: 100 },
+              token: { type: 'string', minLength: 32, maxLength: 256 },
+              expiresAt: { type: 'string', format: 'date-time' },
+            },
+          },
+        },
+      },
+      InvitationAcceptResponse: {
+        type: 'object',
+        required: ['data'],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: 'object',
+            required: ['tenantId', 'memberId', 'role', 'linkStatus'],
+            additionalProperties: false,
+            properties: {
+              tenantId: { type: 'string', format: 'uuid' },
+              memberId: { type: 'string', format: 'uuid' },
+              role: { type: 'string', const: 'guardian' },
+              linkStatus: { type: 'string', const: 'active' },
+            },
+          },
+        },
+      },
       FeatureFlagUpdate: {
         type: 'object',
         required: ['enabled', 'reason'],
@@ -809,7 +1041,7 @@ export const openapiDocument = {
                   properties: {
                     key: {
                       type: 'string',
-                      pattern: '^[a-z][a-z0-9._-]{1,63}$',
+                      pattern: '^[a-z][a-z0-9_.-]{0,63}$',
                     },
                     billingType: { type: 'string', enum: ['free', 'paid'] },
                     displayName: {
