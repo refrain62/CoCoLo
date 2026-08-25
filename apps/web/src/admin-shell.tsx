@@ -10,6 +10,7 @@ import {
 import {
   type AdminRoute,
   adminNavigation,
+  canonicalAdminPath,
   isAdminNavigationVisible,
   resolveAdminRoute,
 } from './admin-routes.js';
@@ -62,10 +63,13 @@ export function AdminShell({
   const [contractError, setContractError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (window.location.pathname === '/') {
-      window.history.replaceState({}, '', '/admin');
-      setPathname('/admin');
-    }
+    const canonicalPath =
+      window.location.pathname === '/'
+        ? '/admin'
+        : canonicalAdminPath(window.location.pathname);
+    if (canonicalPath !== window.location.pathname)
+      window.history.replaceState({}, '', canonicalPath);
+    setPathname(canonicalPath);
   }, []);
 
   useEffect(() => {
@@ -115,9 +119,10 @@ export function AdminShell({
   const activeRoute = activeItem?.route ?? 'dashboard';
 
   function navigate(path: string) {
-    if (path === window.location.pathname) return;
-    window.history.pushState({}, '', path);
-    setPathname(path);
+    const canonicalPath = canonicalAdminPath(path);
+    if (canonicalPath === window.location.pathname) return;
+    window.history.pushState({}, '', canonicalPath);
+    setPathname(canonicalPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 

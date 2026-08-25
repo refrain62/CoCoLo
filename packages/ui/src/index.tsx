@@ -6,6 +6,9 @@ import {
   type ReactNode,
   type SelectHTMLAttributes,
   type TableHTMLAttributes,
+  useEffect,
+  useId,
+  useRef,
 } from 'react';
 
 type ClassValue = string | false | null | undefined;
@@ -371,6 +374,13 @@ const uiStyles = `
     padding: 1.25rem;
   }
 
+  .app-shell[data-slot='app-shell'] [data-slot='dialog-header'] {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
   .app-shell[data-slot='app-shell'] [data-slot='dialog-title'] {
     margin: 0;
     font-size: 1.1rem;
@@ -720,22 +730,59 @@ export function Dialog({
   open,
   title,
 }: DialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const dialog = dialogRef.current;
+    restoreFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    if (!dialog) return;
+    if (typeof dialog.showModal === 'function') {
+      dialog.showModal();
+    } else {
+      dialog.setAttribute('open', '');
+    }
+    return () => {
+      if (dialog.open && typeof dialog.close === 'function') dialog.close();
+      restoreFocusRef.current?.focus();
+      restoreFocusRef.current = null;
+    };
+  }, [open]);
+
   if (!open) return null;
   return (
     <dialog
-      open
+      ref={dialogRef}
       data-slot="dialog"
-      aria-labelledby="cocolo-dialog-title"
+      aria-modal="true"
+      aria-labelledby={titleId}
       onCancel={() => onOpenChange?.(false)}
     >
       <div data-slot="dialog-content">
-        <div>
-          <h2 id="cocolo-dialog-title" data-slot="dialog-title">
-            {title}
-          </h2>
-          {description ? (
-            <p data-slot="dialog-description">{description}</p>
-          ) : null}
+        <div data-slot="dialog-header">
+          <div>
+            <h2 id={titleId} data-slot="dialog-title">
+              {title}
+            </h2>
+            {description ? (
+              <p data-slot="dialog-description">{description}</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            data-slot="button"
+            data-variant="ghost"
+            data-size="icon"
+            aria-label="ダイアログを閉じる"
+            onClick={() => onOpenChange?.(false)}
+          >
+            ×
+          </button>
         </div>
         {children}
       </div>

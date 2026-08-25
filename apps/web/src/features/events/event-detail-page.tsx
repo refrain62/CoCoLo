@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  readSubjectMemberId,
+  writeSubjectMemberId,
+} from '../../subject-member-selection.js';
+import {
   type AttendanceResponse,
   type EventRole,
   type EventSummary,
@@ -47,6 +51,7 @@ export function EventDetailPage({
   memberOptions,
   fallbackEvent,
   onBack,
+  selectionStorageKey,
 }: {
   api: EventsApi;
   eventId: string;
@@ -54,6 +59,7 @@ export function EventDetailPage({
   memberOptions: MemberOption[];
   fallbackEvent?: EventSummary;
   onBack: () => void;
+  selectionStorageKey: string;
 }) {
   const [event, setEvent] = useState<EventSummary | null>(
     fallbackEvent ?? null,
@@ -61,7 +67,9 @@ export function EventDetailPage({
   const [attendance, setAttendance] = useState<
     Awaited<ReturnType<EventsApi['currentAttendance']>>
   >([]);
-  const [memberId, setMemberId] = useState(memberOptions[0]?.id ?? '');
+  const [memberId, setMemberId] = useState(() =>
+    readSubjectMemberId(selectionStorageKey, memberOptions),
+  );
   const [response, setResponse] = useState<AttendanceResponse>('pending');
   const [correctionReason, setCorrectionReason] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -96,8 +104,8 @@ export function EventDetailPage({
 
   useEffect(() => {
     if (!memberOptions.some((member) => member.id === memberId))
-      setMemberId(memberOptions[0]?.id ?? '');
-  }, [memberId, memberOptions]);
+      setMemberId(readSubjectMemberId(selectionStorageKey, memberOptions));
+  }, [memberId, memberOptions, selectionStorageKey]);
 
   useEffect(() => {
     setResponse(selectedAttendance?.response ?? 'pending');
@@ -199,7 +207,10 @@ export function EventDetailPage({
             <select
               id="event-detail-member"
               value={memberId}
-              onChange={(input) => setMemberId(input.target.value)}
+              onChange={(input) => {
+                setMemberId(input.target.value);
+                writeSubjectMemberId(selectionStorageKey, input.target.value);
+              }}
             >
               {memberOptions.map((member) => (
                 <option key={member.id} value={member.id}>

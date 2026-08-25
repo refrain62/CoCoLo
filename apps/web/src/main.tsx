@@ -250,12 +250,17 @@ function AuthenticatedApp() {
 
   const currentRole = role;
   const currentTeam = selectedTeam;
+  const subjectMemberStorageKey = `cocolo.selectedSubjectMemberId.${selectedTeamId}`;
 
   function renderAdminPage(
     route: AdminRoute,
     contract: FeatureContractSnapshot,
     onContractChange: (next: FeatureContractSnapshot) => void,
   ) {
+    const isFeatureEnabled = (key: string) =>
+      contract.features.some(
+        (feature) => feature.key === key && feature.enabled,
+      );
     const intro = {
       members: [
         'Members',
@@ -322,6 +327,7 @@ function AuthenticatedApp() {
             api={eventsApi}
             role={currentRole}
             memberOptions={eventMembers}
+            selectionStorageKey={subjectMemberStorageKey}
           />
         ) : null}
         {route === 'orders' ? (
@@ -330,16 +336,18 @@ function AuthenticatedApp() {
             api={ordersApi}
             role={currentRole}
             members={eventMembers}
+            selectionStorageKey={subjectMemberStorageKey}
           />
         ) : null}
         {route === 'announcements' ? (
           <>
-            {currentRole !== 'guardian' ? (
+            {currentRole !== 'guardian' && isFeatureEnabled('attachments') ? (
               <AttachmentUploader api={attachmentApi} />
             ) : null}
             <BulletinBoardPage
               api={bulletinBoardApi}
               attachmentApi={attachmentApi}
+              attachmentsEnabled={isFeatureEnabled('attachments')}
               role={currentRole}
             />
           </>
@@ -359,6 +367,7 @@ function AuthenticatedApp() {
               id: member.id,
               label: member.name,
             }))}
+            selectionStorageKey={subjectMemberStorageKey}
           />
         ) : null}
         {route === 'settings' ? (

@@ -67,10 +67,12 @@ function AnnouncementList({
 function AnnouncementDetail({
   announcement,
   attachmentApi,
+  attachmentsEnabled,
   onListUnread,
 }: {
   announcement: Announcement;
   attachmentApi: AttachmentApi;
+  attachmentsEnabled: boolean;
   onListUnread: () => void;
 }) {
   return (
@@ -85,7 +87,7 @@ function AnnouncementDetail({
       <div>
         <p className="preserve-linebreaks">{announcement.body}</p>
       </div>
-      {announcement.attachments.length > 0 ? (
+      {attachmentsEnabled && announcement.attachments.length > 0 ? (
         <section aria-labelledby="bulletin-attachments-heading">
           <h4 id="bulletin-attachments-heading">添付メタデータ</h4>
           <ul>
@@ -157,9 +159,11 @@ function AttachmentDownloadButton({
 
 function PublishForm({
   api,
+  attachmentsEnabled,
   onPublished,
 }: {
   api: BulletinBoardApi;
+  attachmentsEnabled: boolean;
   onPublished: (announcement: Announcement) => void;
 }) {
   const [title, setTitle] = useState('');
@@ -219,16 +223,18 @@ function PublishForm({
             onChange={(event) => setBody(event.target.value)}
           />
         </div>
-        <div>
-          <label htmlFor="bulletin-attachment-ids">
-            添付ID（複数は空白またはカンマ区切り）
-          </label>
-          <input
-            id="bulletin-attachment-ids"
-            value={attachmentIds}
-            onChange={(event) => setAttachmentIds(event.target.value)}
-          />
-        </div>
+        {attachmentsEnabled ? (
+          <div>
+            <label htmlFor="bulletin-attachment-ids">
+              添付ID（複数は空白またはカンマ区切り）
+            </label>
+            <input
+              id="bulletin-attachment-ids"
+              value={attachmentIds}
+              onChange={(event) => setAttachmentIds(event.target.value)}
+            />
+          </div>
+        ) : null}
         {error ? <p role="alert">{error}</p> : null}
         <button type="submit" disabled={isSaving}>
           {isSaving ? '掲載中…' : '掲載する'}
@@ -241,10 +247,12 @@ function PublishForm({
 export function BulletinBoardPage({
   api = defaultApi,
   attachmentApi,
+  attachmentsEnabled = true,
   role,
 }: {
   api?: BulletinBoardApi;
   attachmentApi: AttachmentApi;
+  attachmentsEnabled?: boolean;
   role?: BulletinBoardRole;
 }) {
   const [announcements, setAnnouncements] = useState<AnnouncementSummary[]>([]);
@@ -325,7 +333,13 @@ export function BulletinBoardPage({
   return (
     <div>
       <h1>回覧板</h1>
-      {canPublish ? <PublishForm api={api} onPublished={onPublished} /> : null}
+      {canPublish ? (
+        <PublishForm
+          api={api}
+          attachmentsEnabled={attachmentsEnabled}
+          onPublished={onPublished}
+        />
+      ) : null}
       {error ? <p role="alert">{error}</p> : null}
       {isLoading ? <p role="status">読み込み中…</p> : null}
       <section aria-labelledby="bulletin-list-heading">
@@ -340,6 +354,7 @@ export function BulletinBoardPage({
         <AnnouncementDetail
           announcement={selected}
           attachmentApi={attachmentApi}
+          attachmentsEnabled={attachmentsEnabled}
           onListUnread={() => void listUnread()}
         />
       ) : null}

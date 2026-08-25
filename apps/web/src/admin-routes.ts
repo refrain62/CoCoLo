@@ -25,6 +25,17 @@ export type AdminNavigationItem = {
   roles?: AuthRole[];
 };
 
+const legacyAdminPaths: Readonly<Record<string, AdminRoute>> = {
+  '/members': 'members',
+  '/events': 'events',
+  '/orders': 'orders',
+  '/announcements': 'announcements',
+  '/line': 'line',
+  '/ride': 'ride',
+  '/settings': 'settings',
+  '/features': 'features',
+};
+
 export const adminNavigation: readonly AdminNavigationItem[] = [
   {
     route: 'dashboard',
@@ -94,7 +105,23 @@ export const adminNavigation: readonly AdminNavigationItem[] = [
 
 export function resolveAdminRoute(pathname: string): AdminRoute {
   const item = adminNavigation.find((candidate) => candidate.href === pathname);
-  return item?.route ?? 'dashboard';
+  return item?.route ?? legacyAdminPaths[pathname] ?? 'dashboard';
+}
+
+export function canonicalAdminPath(pathname: string) {
+  const route = legacyAdminPaths[pathname];
+  return route
+    ? (adminNavigation.find((item) => item.route === route)?.href ?? pathname)
+    : pathname;
+}
+
+export function isAdminRouteVisible(
+  route: AdminRoute,
+  role: AuthRole,
+  features: readonly AdminFeature[],
+) {
+  const item = adminNavigation.find((candidate) => candidate.route === route);
+  return item ? isAdminNavigationVisible(item, role, features) : false;
 }
 
 export function isAdminNavigationVisible(

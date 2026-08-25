@@ -10,6 +10,7 @@ import {
   EmptyState,
   Section,
 } from '@cocolo/ui';
+import { isAdminRouteVisible } from './admin-routes.js';
 import type { AuthRole } from './auth-context-api.js';
 import type { FeatureContractSnapshot } from './features/feature-contract/feature-contract-api.js';
 
@@ -48,6 +49,8 @@ export function AdminDashboard({
   const paidCount = contract.features.filter(
     (feature) => feature.billingType === 'paid' && feature.enabled,
   ).length;
+  const canNavigate = (route: Parameters<typeof isAdminRouteVisible>[0]) =>
+    isAdminRouteVisible(route, role, contract.features);
 
   return (
     <div className="admin-page-stack">
@@ -121,39 +124,45 @@ export function AdminDashboard({
         description="迷わず次の操作へ進めるよう、主要な画面をまとめています。"
       >
         <div className="admin-action-grid">
-          <button type="button" onClick={() => onNavigate('/admin/events')}>
-            <span className="admin-action-icon" aria-hidden="true">
-              ◷
-            </span>
-            <span>
-              <strong>予定と出欠を確認</strong>
-              <small>開催予定と未回答を確認</small>
-            </span>
-            <span aria-hidden="true">→</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate('/admin/announcements')}
-          >
-            <span className="admin-action-icon" aria-hidden="true">
-              ▤
-            </span>
-            <span>
-              <strong>回覧を掲載</strong>
-              <small>チームにお知らせを共有</small>
-            </span>
-            <span aria-hidden="true">→</span>
-          </button>
-          <button type="button" onClick={() => onNavigate('/admin/features')}>
-            <span className="admin-action-icon" aria-hidden="true">
-              ✦
-            </span>
-            <span>
-              <strong>機能契約を確認</strong>
-              <small>有効な機能とプランを確認</small>
-            </span>
-            <span aria-hidden="true">→</span>
-          </button>
+          {canNavigate('events') ? (
+            <button type="button" onClick={() => onNavigate('/admin/events')}>
+              <span className="admin-action-icon" aria-hidden="true">
+                ◷
+              </span>
+              <span>
+                <strong>予定と出欠を確認</strong>
+                <small>開催予定と未回答を確認</small>
+              </span>
+              <span aria-hidden="true">→</span>
+            </button>
+          ) : null}
+          {role !== 'guardian' && canNavigate('announcements') ? (
+            <button
+              type="button"
+              onClick={() => onNavigate('/admin/announcements')}
+            >
+              <span className="admin-action-icon" aria-hidden="true">
+                ▤
+              </span>
+              <span>
+                <strong>回覧を掲載</strong>
+                <small>チームにお知らせを共有</small>
+              </span>
+              <span aria-hidden="true">→</span>
+            </button>
+          ) : null}
+          {canNavigate('features') ? (
+            <button type="button" onClick={() => onNavigate('/admin/features')}>
+              <span className="admin-action-icon" aria-hidden="true">
+                ✦
+              </span>
+              <span>
+                <strong>機能契約を確認</strong>
+                <small>有効な機能とプランを確認</small>
+              </span>
+              <span aria-hidden="true">→</span>
+            </button>
+          ) : null}
         </div>
       </Section>
 
