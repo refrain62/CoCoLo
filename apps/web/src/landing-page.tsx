@@ -156,7 +156,7 @@ export function LandingPage() {
         </div>
       </header>
 
-      <main id="landing-main">
+      <main id="landing-main" tabIndex={-1}>
         <section className="landing-hero" aria-labelledby="landing-hero-title">
           <div className="landing-container landing-hero-grid">
             <div className="landing-hero-copy">
@@ -203,7 +203,7 @@ export function LandingPage() {
               <div className="landing-hero-image-wrap">
                 <img
                   src="/assets/cocolo-hero-organized-communication.webp"
-                  alt="散らばった連絡が、予定・出欠・回覧・送迎・集金の情報へ整理されていくイメージ"
+                  alt=""
                   width="1400"
                   height="933"
                   fetchPriority="high"
@@ -284,7 +284,7 @@ export function LandingPage() {
               </article>
             </div>
             <p className="landing-handoff-note">
-              LINEメッセージへの返信だけで業務状態を確定せず、CoCoLoの画面を最新情報の確認先にします。
+              LINEへの返信だけでは出欠などは確定しません。最新の回答状況はCoCoLoで確認できます。
             </p>
           </div>
         </section>
@@ -310,7 +310,9 @@ export function LandingPage() {
                   <span className="landing-feature-icon">
                     <FeatureIcon name={feature.icon} />
                   </span>
-                  <span className="landing-feature-status">{feature.status}</span>
+                  <span className="landing-feature-status">
+                    {feature.status}
+                  </span>
                   <h3>{feature.title}</h3>
                   <p>{feature.description}</p>
                 </article>
@@ -395,12 +397,12 @@ export function LandingPage() {
                 連絡を探す時間を、チームを支える時間へ。
               </h2>
               <p>
-                散らばりがちな情報を整理して、保護者も運営者も同じ最新情報を確認できる場所を。
+                散らばりがちな情報を整理して、保護者も運営者も、それぞれに必要な最新情報を確認できる場所を。
               </p>
             </div>
             <div className="landing-actions">
               <a className="landing-button landing-button-light" href="/login">
-              利用中の方はログイン <span aria-hidden="true">→</span>
+                利用中の方はログイン <span aria-hidden="true">→</span>
               </a>
               <a
                 className="landing-button landing-button-outline-light"

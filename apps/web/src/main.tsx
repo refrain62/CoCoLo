@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { AdminDashboard } from './admin-dashboard.js';
 import type { AdminRoute } from './admin-routes.js';
 import { AdminShell } from './admin-shell.js';
+import { applyPageMetadata, resolveAppEntry } from './app-route.js';
 import { AuthProvider, LoginPage, useAuth } from './auth-context.js';
 import { type AuthRole, createAuthContextApi } from './auth-context-api.js';
 import { createAttachmentApi } from './features/attachments/attachment-api.js';
@@ -569,11 +570,15 @@ function AuthenticatedApp() {
 }
 
 function App() {
+  const entry = resolveAppEntry(window.location.pathname);
+  useEffect(() => {
+    applyPageMetadata(window.location.pathname);
+  }, []);
   // 公開トップページでは認証処理やチームAPIを開始せず、ログイン以降と境界を分ける。
-  if (window.location.pathname === '/') return <LandingPage />;
+  if (entry === 'landing') return <LandingPage />;
 
   // マニュアルは認証情報やチームデータを含まないため、ログイン前にも公開する。
-  if (window.location.pathname === '/manual')
+  if (entry === 'manual')
     return (
       <AppShell>
         <UserManualPage />
