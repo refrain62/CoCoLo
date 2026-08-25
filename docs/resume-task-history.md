@@ -18,6 +18,7 @@
 | 添付・回覧 | R2 adapter配線、添付response契約、回覧添付のavailable DB guard、短期URL download | `develop`統合済み。実R2と回覧受入は継続 |
 | 購買・送迎 | 注文APIとWeb、CSV・冪等性、送迎API、送迎Web、公開response契約 | `develop`統合済み。実DB・staging受入は継続 |
 | CI・DB | Node.js / pnpm固定、Node 24、local-first quality、migration検査、UUIDv7移行前検査、schema drift検査、PR本文検査 | `develop`統合済み。mainのtrust rootと外部環境は継続 |
+| LOCAL-FIXTURE-001 | 500チーム・5,000部員、部員ごとの父母想定10,000保護者リンク、状態境界、ページャー閾値を含むローカルfixture拡充 | PR #197を`develop`へ統合。敵対的レビューと品質ゲート成功。実負荷試験・staging外部サービス受入は継続 |
 | UI安全性 | 二重送信防止、権限別操作表示、認証レイアウト、主要タップ領域、複数幅ブラウザ受入 | `develop`統合済み。認証済み主要画面のrole別受入は継続 |
 | LP-001 / FS-UI-004 | 未認証ルートの公開LP、課題と機能の訴求、提供状態、ログイン導線、認証済み画面との分離、専用ヒーロー画像 | PR #194を`develop`へ統合。`pnpm test`、`pnpm test:unit`、`pnpm build`、lint、typecheck、390pxから1440pxのブラウザ確認、キーボード操作、コントラスト、品質ゲート成功。敵対的レビューのCriticalとHighは0件。初回バンドル分離はLP-002で継続 |
 | BILLING-001 | 有償・無償feature、チーム単位のplan・flag、effective entitlement、監査境界 | PR #172を`develop`へ統合。CI、`pnpm test`、`pnpm build`、migration・trust検証成功。課金provider接続は外部条件として継続 |
@@ -48,6 +49,17 @@ CriticalとHighが残る実装を完了扱いにしていません。
 | DB | 既存UUIDv4の移行、添付の`available`状態、各機能のRLS受入 |
 | 外部受入 | Supabase、R2、LINE、Redis相当、Google Mapsの実接続と障害表示 |
 | 機能受入 | 役員、購買、回覧、通知、送迎のstaging E2Eとrole別ブラウザ受入 |
+
+## LOCAL-FIXTURE-001 実施記録
+
+- 対象: ローカル開発用DB seed。production、staging、公開APIのデータは変更していない。
+- 規模: 500チームをtenantとして生成し、1チーム10部員の5,000部員、部員ごとに父・母を想定した10,000保護者リンクを投入する。500イベント、500回覧、500 LINE接続・outboxも生成する。
+- 閾値: tenant Cにactive部員を101件、published回覧を101件追加し、既存データと合わせてpageSize 50/100および101件目を確認できる。active、suspended、retired、student、adult、招待・停止・退部済みも固定fixtureで保持する。
+- 網羅範囲: tenant・role・membership、招待、member link、添付、予定・出欠、役員連絡先、購買・冪等性、回覧・既読、LINE配送、送迎の状態遷移を同一seedで再現する。
+- 安全性: seed実行中だけfixture対象テーブルのRLSを停止し、`finally`でENABLE/FORCEへ復元する。tenant IDと生成IDは固定UUIDv7形式、氏名・電話・LINE識別子などはsynthetic値のみを使用する。
+- 敵対的レビュー: tenant越境、RLS・projection、個人情報、入力値、状態遷移、ページ境界、再投入、規模を確認し、Critical / Highは0件。RLSテスト側はexpanded fixtureと共存するようavailable添付とprojection権限を明示した。
+- 検証: `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm typecheck`、Biome、fresh local stackのmigration・seed・central RLS test、PR品質ゲートを成功。`pnpm test:integration`のWindows固有Prisma DLL rename EPERMはseed後に発生したため、同じfresh stackでPrisma再生成を省いた手動相当検証を完了した。
+- 統合: 実装PR #197を2026-08-26に`develop`へマージ（merge commit `f700ade11893f79294b778b98b7ed63062717350`）。
 
 詳細な重大度と次の行動は[レビュー状況](reviews/README.md)と[中断再開タスクリスト](resume-task-list.md)に集約しています。
 
