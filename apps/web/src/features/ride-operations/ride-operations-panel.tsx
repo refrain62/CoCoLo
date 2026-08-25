@@ -1,6 +1,10 @@
 import { validateGoogleMapsUrl } from '@cocolo/domain/ride';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import {
+  readSubjectMemberId,
+  writeSubjectMemberId,
+} from '../../subject-member-selection.js';
+import {
   createRideOperationsApi,
   RideApiError,
   type RideDispatch,
@@ -17,6 +21,7 @@ type RideOperationsPanelProps = {
   members: RideMemberOption[];
   isManager: boolean;
   api?: RideOperationsApi;
+  selectionStorageKey?: string;
 };
 
 const defaultApi = createRideOperationsApi();
@@ -100,6 +105,7 @@ export function RideOperationsPanel({
   members,
   isManager,
   api = defaultApi,
+  selectionStorageKey = 'cocolo.selectedSubjectMemberId',
 }: RideOperationsPanelProps) {
   const [loadedPlans, setLoadedPlans] = useState<RidePlan[]>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState(plans === undefined);
@@ -110,8 +116,8 @@ export function RideOperationsPanel({
   const [metrics, setMetrics] = useState<RideMetrics | null>(null);
   const [dispatch, setDispatch] = useState<RideDispatch | null>(null);
   const [capacity, setCapacity] = useState('');
-  const [selectedMemberId, setSelectedMemberId] = useState(
-    members[0]?.id ?? '',
+  const [selectedMemberId, setSelectedMemberId] = useState(() =>
+    readSubjectMemberId(selectionStorageKey, members),
   );
   const [passengerCount, setPassengerCount] = useState('1');
   const [isLoading, setIsLoading] = useState(true);
@@ -121,6 +127,12 @@ export function RideOperationsPanel({
 
   const planOptions = plans ?? loadedPlans;
   const activePlanId = planOptions.length > 0 ? selectedPlanId : (planId ?? '');
+
+  useEffect(() => {
+    const nextMemberId = readSubjectMemberId(selectionStorageKey, members);
+    setSelectedMemberId(nextMemberId);
+    if (nextMemberId) writeSubjectMemberId(selectionStorageKey, nextMemberId);
+  }, [members, selectionStorageKey]);
 
   useEffect(() => {
     if (plans !== undefined) {
@@ -367,7 +379,10 @@ export function RideOperationsPanel({
               <select
                 id="ride-member"
                 value={selectedMemberId}
-                onChange={(event) => setSelectedMemberId(event.target.value)}
+                onChange={(event) => {
+                  setSelectedMemberId(event.target.value);
+                  writeSubjectMemberId(selectionStorageKey, event.target.value);
+                }}
               >
                 {members.map((member) => (
                   <option key={member.id} value={member.id}>
