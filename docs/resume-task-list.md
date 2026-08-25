@@ -1,6 +1,6 @@
 # 中断再開タスクリスト
 
-更新日：2026-08-25
+更新日：2026-08-26
 
 基準：`origin/develop`
 
@@ -32,6 +32,7 @@
 | `[!]` | OPS-001〜007 | Auth、PostgreSQL、R2、LINE、rate limit、GitHub保護、production昇格の外部条件を満たす |
 | `[ ]` | ORIG-REQ-001 | 当初要求の未実装分を機能単位に分解し、仕様・コード・実DB・staging受入まで完了する |
 | `[~]` | UI-001〜003 | role別主要画面、保存APIの冪等性、未接続・失敗・権限不足の表示を受入する |
+| `[ ]` | LP-002 | 公開LPの初回バンドルから認証済み管理機能を分離し、低速端末でLCPとINPを計測する |
 
 各IDの詳細な仕様は[機能仕様書](functional-specification.md)と[統合契約](integration/)を参照します。
 
