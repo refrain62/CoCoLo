@@ -74,11 +74,16 @@ test('RIDE-002の送迎全routeと状態変更契約をOpenAPIへ公開する', 
   assert.ok(paths['/ride-plans/{planId}/dispatch']?.get);
   assert.ok(paths['/ride-plans/{planId}/metrics']?.get);
   assert.ok(paths['/ride-plans/{planId}/status']?.post);
-  assert.deepEqual(
-    components.schemas.RidePlanTransitionInput.oneOf[1].properties.reasonCode
-      .enum,
-    ['schedule_change', 'member_change', 'vehicle_change', 'other'],
-  );
+  const transition = components.schemas.RidePlanTransitionInput.oneOf[1];
+  assert.ok(transition);
+  const reasonCode = transition.properties.reasonCode;
+  assert.ok(reasonCode);
+  assert.deepEqual(reasonCode.enum, [
+    'schedule_change',
+    'member_change',
+    'vehicle_change',
+    'other',
+  ]);
   assert.deepEqual(
     components.schemas.RideConflictError.properties.error.properties.code.enum,
     [
