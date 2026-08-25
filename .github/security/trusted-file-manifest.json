@@ -59,6 +59,7 @@
     "packages/db/prisma/migrations/20260826100000_member_self_invitations/migration.sql": "efda46003331d4ebc7a20ec34cf819593dd42d73b52ca190901e214602a9560c",
     "packages/db/prisma/migrations/20260826110000_feature_contract_operator_grants/migration.sql": "7bb7ce8dd97acb9ebb215c15e340d1152c0c736be5f47ac39e23bdd95ba97dc3",
     "packages/db/prisma/schema.prisma": "11c3fc89ee53b2dd715907bceab71e21a2d7231bd419fb360ded30c71f9e5801",
+    "packages/db/prisma/migrations/20260826100000_ride_guardian_projection/migration.sql": "0a73b2b143a13e1c0efb3150525443213ffc17a1731293f0a752668cbb670d3a",
     "pnpm-lock.yaml": "a28a3a63eee8f0a5969ba1fdb7bc09029e6196fccecc818c172588189223c973",
     "scripts/ci.ts": "a5cbe62aae5d4b7d112ffb9794e97a532c5aa90688f342670d05cf4551dd4b3c",
     "scripts/create-staging-evidence.ts": "99b2e9151b0bd2d6d81300544565f34ba8ef870f94cf17a61d66ece0cf478f6b",

@@ -44,11 +44,21 @@ export type RideSnapshotAssignmentView = {
   passengerCount: number;
 };
 
+export type RideConfirmedAssignmentView = {
+  id: string;
+  requestId: string;
+  offerId: string;
+  passengerCount: number;
+  memberName: string;
+  driverName: string;
+};
+
 export type RideSnapshotView = {
   plan: RidePlanView;
   offers: RideOfferView[];
   requests: RideRequestView[];
   assignments: RideSnapshotAssignmentView[];
+  confirmedAssignments: RideConfirmedAssignmentView[];
   history: RideSnapshot['history'];
 };
 
@@ -194,6 +204,9 @@ function toSnapshotView(
     offers: snapshot.offers.map((offer) => toOfferView(actor, offer)),
     requests: snapshot.requests.map((request) => toRequestView(actor, request)),
     assignments: snapshot.assignments.map(toSnapshotAssignmentView),
+    confirmedAssignments: (snapshot.confirmedAssignments ?? []).map(
+      (assignment) => ({ ...assignment }),
+    ),
     history: snapshot.history,
   };
 }
