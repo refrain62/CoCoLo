@@ -1395,6 +1395,7 @@ export const openapiDocument = {
         additionalProperties: false,
         properties: {
           capacity: { type: 'integer', minimum: 1, maximum: 20 },
+          driverDisplayName: { type: 'string', minLength: 1, maxLength: 200 },
         },
       },
       RideOfferResponseEnvelope: {
