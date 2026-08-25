@@ -33,10 +33,11 @@ group IDの取得方法とBotをグループへ参加させる作業はCoCoLoの
 | 接続と切断 | 可 | 可 | 不可 | 不可 |
 | 予定作成時の自動通知 | 可 | 可 | 可 | 不可 |
 | 予定更新時の自動通知 | 可 | 可 | 可 | 不可 |
+| 回覧掲載時の自動通知 | 可 | 可 | 可 | 不可 |
 | 汎用通知の手動登録 | 可 | 可 | 不可 | 不可 |
 | 失敗通知の手動再送 | 可 | 可 | 不可 | 不可 |
 
-staffは予定の作成と更新に伴う自動通知を発生させられます。
+staffは予定の作成・更新と回覧掲載に伴う自動通知を発生させられます。
 
 staffが汎用通知を手動登録する権限は、現行の中央producerでは付与していません。
 
@@ -54,6 +55,8 @@ LINEグループが接続済みの状態で予定を作成すると、予定通�
 
 LINEが未接続の場合、予定の保存は成功しますが、LINEのoutbox行は作成されません。
 
+owner、admin、staffが回覧を掲載すると、`line-notifications`が有効で接続済みグループがある場合に、回覧掲載と同じ業務transactionへ固定文面の通知を登録します。通知のdeep linkはサーバーが公開済み回覧のIDから生成し、冪等キーは`bulletin:{announcementId}`です。feature flagが無効またはLINE未接続の場合、回覧の掲載は成功しますが通知outbox行は作成しません。
+
 ### 汎用通知を手動登録する操作
 
 ownerまたはadminは、LINE通知画面から通知元種別、通知元ID、タイトル、本文を入力して汎用通知を登録できます。通知元IDは予定、出欠締切、公開済み回覧のUUIDv7に限定します。
@@ -68,9 +71,9 @@ LINEが未接続の場合、現行の汎用通知APIは`LINE_NOT_CONNECTED`の40
 
 汎用通知は`event`、`deadline`、`bulletin`の通知元種別でoutboxへ保存されます。
 
-`line-notifications` feature flagが無効なチームでは、API登録、予定の自動登録、workerのclaim・送信直前検証をすべて停止します。feature contractを確認できない構成もfail-closedで停止します。
+`line-notifications` feature flagが無効なチームでは、API登録、予定・回覧の自動登録、workerのclaim・送信直前検証をすべて停止します。feature contractを確認できない構成もfail-closedで停止します。
 
-回覧掲載時の自動通知と未払い者通知のproducerは、現行developでは汎用通知APIへ接続されていません。
+回覧掲載時の自動通知producerはPR #183で汎用通知outboxへ接続済みです。未払い者通知のproducerは、個別メンバーの通知先と対象者限定deep linkの仕様確定後に別タスクで実装します。
 
 ## 現行のAPI経路
 
@@ -97,7 +100,7 @@ APIは通知先を現在接続中のgroup IDと照合し、別のgroupや切断�
 
 中央の通知producerは`line_delivery_outbox`を使用します。
 
-予定の自動通知と汎用通知は、業務transaction内でoutboxへ登録するため、予定だけ成功して通知依頼だけ失われる状態を避けます。
+予定・回覧の自動通知と汎用通知は、業務transaction内でoutboxへ登録するため、業務更新だけ成功して通知依頼だけ失われる状態を避けます。
 
 outboxは`pending`、`sending`、`sent`、`failed`、`unknown`の状態を持ちます。
 
@@ -170,6 +173,7 @@ stagingとproductionでchannel secret、access token、group ID、Webhook destin
 - 中央APIへの接続状態、接続、切断のmount
 - 接続groupとtenantの一意性および接続世代の検証
 - 予定作成と更新からのevent、deadline通知outbox登録
+- 回覧掲載からのbulletin通知outbox登録（owner/admin/staff、PR #183）
 - 汎用通知登録とowner/adminの再送API
 - workerのclaim、lease、provider retry key、失敗およびunknown遷移
 - Webhookの公開入口、署名、destination、未知group、重複receiptの検証
@@ -186,5 +190,6 @@ stagingとproductionでchannel secret、access token、group ID、Webhook destin
 - [x] 通知deep linkの予定・回覧画面、未ログイン時のOAuth復帰、複数チーム時の選択、403/404時の安全な再選択画面を実装する（PR #179）。
 - [ ] stagingでLIFF不可端末、通常ブラウザ、セッション期限切れ、対象外チーム、削除済み資源の表示を受入する。
 - [ ] staffの汎用通知登録を許可するか、owner/admin限定を正式仕様とするかを決定し、機能仕様、API、Web、RLS、テストを一致させる。
-- [ ] 回覧掲載と未払い通知をLINEへ自動登録するproducerの対象、権限、本文、冪等キー、deep linkを定義する。
+- [x] 回覧掲載時の通知producerの対象、権限、固定本文、冪等キー、deep linkを実装する（PR #183）。
+- [ ] 未払い通知producerの対象、個別メンバー通知先、対象者限定deep link、権限、冪等キーを定義・実装する。
 - [ ] staging成功SHA、migration checksum、adapter設定、Webhook疎通、E2E結果をrelease証跡へ保存する。
