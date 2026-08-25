@@ -376,6 +376,11 @@ function AuthenticatedApp() {
         'チーム設定',
         'チーム運営に必要な役員連絡先と設定を管理します。',
       ],
+      'board-contacts': [
+        'Board contacts',
+        '役員・連絡先',
+        '年度の役職と、権限に応じて公開された連絡先を確認します。',
+      ],
     } as const;
     if (route === 'dashboard')
       return (
@@ -524,6 +529,9 @@ function AuthenticatedApp() {
             api={boardContactApi}
             canManage={currentRole === 'owner' || currentRole === 'admin'}
           />
+        ) : null}
+        {route === 'board-contacts' ? (
+          <BoardContactPage api={boardContactApi} canManage={false} />
         ) : null}
       </div>
     );

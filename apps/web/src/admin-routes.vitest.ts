@@ -9,6 +9,7 @@ describe('管理画面ルート', () => {
   it('パスを専用画面へ解決する', () => {
     expect(resolveAdminRoute('/admin')).toBe('dashboard');
     expect(resolveAdminRoute('/admin/members')).toBe('members');
+    expect(resolveAdminRoute('/admin/board-contacts')).toBe('board-contacts');
     expect(resolveAdminRoute('/admin/features')).toBe('features');
     expect(
       resolveAdminRoute('/events/0190f3b5-7c00-7000-8000-000000000001'),
@@ -24,6 +25,9 @@ describe('管理画面ルート', () => {
     const orders = adminNavigation.find((item) => item.route === 'orders');
     const features = adminNavigation.find((item) => item.route === 'features');
     const settings = adminNavigation.find((item) => item.route === 'settings');
+    const boardContacts = adminNavigation.find(
+      (item) => item.route === 'board-contacts',
+    );
     const paidFeatures = [{ key: 'orders-payments', enabled: true }];
     const freeFeatures = [{ key: 'orders-payments', enabled: false }];
     const boardContactFeatures = [{ key: 'board-contacts', enabled: true }];
@@ -49,6 +53,26 @@ describe('管理画面ルート', () => {
     ).toBe(true);
     expect(
       settings && isAdminNavigationVisible(settings, 'owner', freeFeatures),
+    ).toBe(false);
+    expect(
+      boardContacts &&
+        isAdminNavigationVisible(boardContacts, 'staff', boardContactFeatures),
+    ).toBe(true);
+    expect(
+      boardContacts &&
+        isAdminNavigationVisible(
+          boardContacts,
+          'guardian',
+          boardContactFeatures,
+        ),
+    ).toBe(true);
+    expect(
+      boardContacts &&
+        isAdminNavigationVisible(boardContacts, 'staff', freeFeatures),
+    ).toBe(false);
+    expect(
+      boardContacts &&
+        isAdminNavigationVisible(boardContacts, 'admin', boardContactFeatures),
     ).toBe(false);
   });
 });
