@@ -175,6 +175,7 @@ stagingとproductionでchannel secret、access token、group ID、Webhook destin
 - Webhookの公開入口、署名、destination、未知group、重複receiptの検証
 - Web画面の接続状態表示、owner/admin向け接続操作、owner/admin向け汎用通知登録
 - 中央producerの通知元resource・tenant・deep link検証、team feature flag、旧outbox隔離
+- Webの予定・回覧deep link、OAuth復帰、複数チーム時の選択、403/404時の安全な再選択画面
 
 ## 残作業と受入条件
 
@@ -182,7 +183,8 @@ stagingとproductionでchannel secret、access token、group ID、Webhook destin
 - [ ] 予定作成、予定更新、出欠締切、provider成功、provider 4xx、timeout、送達不明、管理者再送をstagingで確認する。
 - [ ] 不正署名、destination不一致、未知group、解除済みgroup、重複Webhook、別tenant接続を拒否または無視することを確認する。
 - [ ] `unknown`のprovider照合、保持期間、再送可否、監査記録、担当者を運用手順へ定義する。
-- [ ] 通知deep linkの予定・回覧画面、未ログイン時の再認証後復帰、別tenant選択時の再選択を実装し、FS-NOT-002として受入する。
+- [x] 通知deep linkの予定・回覧画面、未ログイン時のOAuth復帰、複数チーム時の選択、403/404時の安全な再選択画面を実装する（PR #179）。
+- [ ] stagingでLIFF不可端末、通常ブラウザ、セッション期限切れ、対象外チーム、削除済み資源の表示を受入する。
 - [ ] staffの汎用通知登録を許可するか、owner/admin限定を正式仕様とするかを決定し、機能仕様、API、Web、RLS、テストを一致させる。
 - [ ] 回覧掲載と未払い通知をLINEへ自動登録するproducerの対象、権限、本文、冪等キー、deep linkを定義する。
 - [ ] staging成功SHA、migration checksum、adapter設定、Webhook疎通、E2E結果をrelease証跡へ保存する。

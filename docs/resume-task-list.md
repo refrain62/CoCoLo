@@ -27,7 +27,7 @@
 | `[~]` | FIL-002 | R2実adapter、署名URL期限、実体検証、cleanup、認可downloadをstagingで確認する |
 | `[~]` | ANN-001 | 回覧、既読、添付download、R2認可、未読者の個人情報境界を確認する |
 | `[~]` | NOT-001 | 中央producerの通知元境界はPR #177で統合済み。回覧・未払いproducer、staff権限仕様、実LINE受入を確定する |
-| `[ ]` | NOT-002 / NOT-003 | staging専用LINE groupで接続、Webhook、送信、unknown、再送を受入し、仕様差分を解消する |
+| `[~]` | NOT-002 / NOT-003 | FS-NOT-002のWeb deep link・OAuth復帰・複数チーム選択はPR #179で実装済み。staging専用LINE groupの接続、Webhook、送信、unknown、再送、実ブラウザ受入を残す |
 | `[ ]` | RIDE-002 | Google Mapsのkey、origin、費用、障害時表示、未設定時の扱いを確定する |
 | `[!]` | OPS-001〜007 | Auth、PostgreSQL、R2、LINE、rate limit、GitHub保護、production昇格の外部条件を満たす |
 | `[ ]` | ORIG-REQ-001 | 当初要求の未実装分を機能単位に分解し、仕様・コード・実DB・staging受入まで完了する |
