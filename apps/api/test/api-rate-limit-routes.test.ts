@@ -106,21 +106,28 @@ function createTestApp(
                 planStatus: null,
                 features: [
                   {
-                    key: 'members',
-                    billingType: 'free',
-                    displayName: 'メンバー管理',
-                    enabled: true,
-                    reason: 'default',
+                key: 'members',
+                billingType: 'free',
+                displayName: 'メンバー管理',
+                defaultEnabled: true,
+                enabled: true,
+                reason: 'default',
                   },
                   {
-                    key: 'line-notifications',
-                    billingType: 'paid',
-                    displayName: 'LINE通知',
-                    enabled: lineEnabled,
+                key: 'line-notifications',
+                billingType: 'paid',
+                displayName: 'LINE通知',
+                defaultEnabled: false,
+                enabled: lineEnabled,
                     reason: lineEnabled ? 'plan' : 'unavailable',
                   },
                 ],
               }),
+              setFreeFlag: async () => {
+                throw new Error('not used');
+              },
+              syncPlan: async () => undefined,
+              grantPaidFeature: async () => undefined,
             },
           },
         }
