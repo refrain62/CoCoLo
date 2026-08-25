@@ -1,6 +1,7 @@
 import { createSupabaseTokenVerifier } from '@cocolo/auth';
 import { createMemberRepositories, createPrismaClient } from '@cocolo/db';
 import { createAttachmentRepositories } from '@cocolo/db/attachment';
+import { createAuthInvitationRepository } from '@cocolo/db/auth-invitation';
 import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import { createBoardContactRepository } from '@cocolo/db/board-contact';
 import { createBulletinBoardRepositories } from '@cocolo/db/bulletin-board';
@@ -67,6 +68,9 @@ const lineFeature =
 const centralFeatures = {
   authTeamSelection: {
     repository: createAuthTeamSelectionRepository(prisma),
+  },
+  authInvitations: {
+    repository: createAuthInvitationRepository(prisma),
   },
   attachments: {
     repository: createAttachmentRepositories(prisma).attachmentRepository,

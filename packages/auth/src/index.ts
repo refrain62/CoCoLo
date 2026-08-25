@@ -5,7 +5,10 @@ export type AuthClaims = {
   issuer: string;
   audience: string;
   expiresAt: number;
+  authProviders?: AuthProvider[];
 };
+
+export type AuthProvider = 'google' | 'line';
 
 export type TokenVerifier = (token: string) => Promise<AuthClaims>;
 
@@ -14,6 +17,20 @@ export type SupabaseVerifierOptions = {
   issuer: string;
   audience?: string;
 };
+
+function readAuthProviders(payload: Record<string, unknown>) {
+  const metadata = payload.app_metadata;
+  if (!metadata || typeof metadata !== 'object') return [];
+  const values = [
+    (metadata as { provider?: unknown }).provider,
+    ...(Array.isArray((metadata as { providers?: unknown }).providers)
+      ? (metadata as { providers: unknown[] }).providers
+      : []),
+  ];
+  return [...new Set(values)].filter(
+    (value): value is AuthProvider => value === 'google' || value === 'line',
+  );
+}
 
 // Supabase JWKSで署名・issuer・audience・有効期限を検証し、APIが信頼できる最小claimsだけを受け取る。
 export function createSupabaseTokenVerifier({
@@ -38,6 +55,7 @@ export function createSupabaseTokenVerifier({
       issuer,
       audience,
       expiresAt: payload.exp,
+      authProviders: readAuthProviders(payload),
     };
   };
 }

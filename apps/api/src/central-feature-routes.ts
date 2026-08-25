@@ -1,5 +1,6 @@
 import type { TokenVerifier } from '@cocolo/auth';
 import type { MemberRole } from '@cocolo/contracts/member';
+import type { AuthInvitationRepository } from '@cocolo/db/auth-invitation';
 import type { AuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import type { BulletinBoardRepository } from '@cocolo/db/bulletin-board';
 import type { OrdersRepository } from '@cocolo/db/orders';
@@ -8,6 +9,7 @@ import type { Context, Hono } from 'hono';
 import type { ApiEnv } from './app.js';
 import { createAttachmentApp } from './features/attachments/attachment-app.js';
 import type { AttachmentStorage } from './features/attachments/attachment-storage.js';
+import { createAuthInvitationApp } from './features/auth-invitations/auth-invitation-app.js';
 import { createAuthTeamSelectionApp } from './features/auth-team-selection/app.js';
 import {
   type BoardContactRepository,
@@ -30,6 +32,7 @@ export type CentralFeatureMembershipRepository = {
 
 export type CentralFeatureRoutes = {
   authTeamSelection?: { repository: AuthTeamSelectionRepository };
+  authInvitations?: { repository: AuthInvitationRepository };
   attachments?: {
     repository: AttachmentRepository;
     storage: AttachmentStorage;
@@ -70,6 +73,14 @@ export function mountCentralFeatureRoutes(options: CentralFeatureRouteOptions) {
       createAuthTeamSelectionApp({
         verifyToken: options.verifyToken,
         repository: features.authTeamSelection.repository,
+      }),
+    );
+
+  if (features?.authInvitations)
+    options.rideApp.route(
+      '/',
+      createAuthInvitationApp({
+        repository: features.authInvitations.repository,
       }),
     );
 

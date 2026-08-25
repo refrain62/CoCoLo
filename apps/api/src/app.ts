@@ -1,5 +1,11 @@
 import { extractBearerToken, type TokenVerifier } from '@cocolo/auth';
 import {
+  invitationAcceptResponseSchema,
+  invitationCreateResponseSchema,
+  invitationListResponseSchema,
+  invitationResponseSchema,
+} from '@cocolo/contracts/auth-invitation';
+import {
   selectedTeamHeaderName,
   teamListResponseSchema,
   teamSelectionResponseSchema,
@@ -210,6 +216,8 @@ export type AppOptions = {
 export type ApiEnv = {
   Variables: {
     requestId: string;
+    authUserId: string;
+    authProviders: Array<'google' | 'line'>;
     auth: {
       userId: string;
       membership: MembershipContext;
@@ -303,6 +311,30 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   if (options.cors) app.use('*', createCorsMiddleware(options.cors));
 
   const responseContracts: ResponseContract[] = [
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/auth\/invitations$/,
+      status: 200,
+      schema: invitationListResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/auth\/invitations$/,
+      status: 201,
+      schema: invitationCreateResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/auth\/invitations\/[^/]+\/revoke$/,
+      status: 200,
+      schema: invitationResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/auth\/invitations\/accept$/,
+      status: 200,
+      schema: invitationAcceptResponseSchema,
+    },
     {
       method: 'GET',
       path: /^\/api\/v1\/orders$/,
@@ -822,10 +854,42 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     await next();
   };
 
+  // 招待受諾はまだtenant membershipがない利用者も通すため、JWTだけを検証する。
+  const authenticateUser: MiddlewareHandler<ApiEnv> = async (c, next) => {
+    const token = extractBearerToken(c.req.header('authorization') ?? null);
+    if (!options.verifyToken)
+      return errorResponse(
+        c,
+        503,
+        'AUTH_NOT_CONFIGURED',
+        '認証が設定されていません。',
+      );
+    if (!token)
+      return errorResponse(c, 401, 'UNAUTHENTICATED', '認証が必要です。');
+    try {
+      const claims = await options.verifyToken(token);
+      c.set('authUserId', claims.userId);
+      c.set('authProviders', claims.authProviders ?? []);
+    } catch {
+      return errorResponse(
+        c,
+        401,
+        'UNAUTHENTICATED',
+        '認証情報を確認できません。',
+      );
+    }
+    await next();
+  };
+
   app.use('/api/v1/members/*', authenticate);
   app.use('/api/v1/notifications/line', authenticate);
   app.use('/api/v1/notifications/line/:notificationId/retry', authenticate);
   app.use('/api/v1/auth/context', authenticate);
+  if (options.centralFeatures?.authInvitations) {
+    app.use('/api/v1/auth/invitations', authenticate);
+    app.use('/api/v1/auth/invitations/:invitationId/revoke', authenticate);
+    app.use('/api/v1/auth/invitations/accept', authenticateUser);
+  }
   if (options.eventRepository) {
     app.use('/api/v1/events', authenticate);
     app.use('/api/v1/events/*', authenticate);
@@ -872,6 +936,19 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       };
     },
   });
+  const invitationAcceptRateLimit = createRateLimitMiddleware({
+    scope: 'authenticated',
+    ...rateLimitPolicies.authenticated,
+    store: rateLimitStore,
+    now: rateLimitOptions.now,
+    namespace: rateLimitNamespace,
+    timeoutMs: rateLimitOptions.timeoutMs,
+    keyResolver: (c) => ({
+      kind: 'user',
+      tenantId: 'invitation-accept',
+      userId: c.get('authUserId'),
+    }),
+  });
   const authenticatedRateLimitForRoutes: MiddlewareHandler<ApiEnv> = async (
     c,
     next,
@@ -886,6 +963,14 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     authenticatedRateLimit,
   );
   app.use('/api/v1/auth/context', authenticatedRateLimit);
+  if (options.centralFeatures?.authInvitations) {
+    app.use('/api/v1/auth/invitations', authenticatedRateLimit);
+    app.use(
+      '/api/v1/auth/invitations/:invitationId/revoke',
+      authenticatedRateLimit,
+    );
+    app.use('/api/v1/auth/invitations/accept', invitationAcceptRateLimit);
+  }
   if (options.eventRepository) {
     app.use('/api/v1/events', authenticatedRateLimit);
     app.use('/api/v1/events/*', authenticatedRateLimit);

@@ -19,7 +19,11 @@
     },
     "./bulletin-board": "./dist/bulletin-board-repository.js",
     "./attachment": "./dist/attachment-repository.js",
-    "./events": "./dist/event-repository.js"
+    "./events": "./dist/event-repository.js",
+    "./auth-invitation": {
+      "types": "./dist/auth-invitation-repository.d.ts",
+      "import": "./dist/auth-invitation-repository.js"
+    }
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",

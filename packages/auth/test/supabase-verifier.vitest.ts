@@ -19,7 +19,9 @@ describe('Supabase JWT verifier', () => {
       new Response(JSON.stringify({ keys: [{ ...jwk, kid, alg: 'RS256' }] }), {
         headers: { 'content-type': 'application/json' },
       });
-    const token = await new SignJWT({})
+    const token = await new SignJWT({
+      app_metadata: { provider: 'google', providers: ['google'] },
+    })
       .setProtectedHeader({ alg: 'RS256', kid })
       .setIssuer(issuer)
       .setAudience('authenticated')
@@ -34,6 +36,7 @@ describe('Supabase JWT verifier', () => {
 
     expect(claims.userId).toBe('user-a');
     expect(claims.audience).toBe('authenticated');
+    expect(claims.authProviders).toEqual(['google']);
   });
 
   it('期限切れJWTを拒否する', async () => {
