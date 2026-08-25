@@ -411,11 +411,17 @@ export function EventsPage({
   role,
   memberOptions = [],
   selectionStorageKey = 'cocolo.selectedSubjectMemberId',
+  initialEventId,
+  onBack,
+  onAccessDenied,
 }: {
   api?: EventsApi;
   role: EventRole;
   memberOptions?: MemberOption[];
   selectionStorageKey?: string;
+  initialEventId?: string;
+  onBack?: () => void;
+  onAccessDenied?: () => void;
 }) {
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
   const [events, setEvents] = useState<EventSummary[]>([]);
@@ -435,7 +441,9 @@ export function EventsPage({
   const [meetingTime, setMeetingTime] = useState('');
   const [transportationRequired, setTransportationRequired] = useState(false);
   const [type, setType] = useState<'practice' | 'match' | 'event'>('practice');
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(
+    initialEventId ?? null,
+  );
   const [isCreating, setIsCreating] = useState(false);
 
   const range = useMemo(
@@ -458,6 +466,10 @@ export function EventsPage({
     void loadEvents();
   }, [loadEvents]);
 
+  useEffect(() => {
+    setSelectedEventId(initialEventId ?? null);
+  }, [initialEventId]);
+
   const displayedEvents = useMemo(() => {
     if (viewMode === 'month') return events;
     return events.filter(
@@ -476,8 +488,12 @@ export function EventsPage({
         role={role}
         memberOptions={memberOptions}
         fallbackEvent={selectedEvent}
-        onBack={() => setSelectedEventId(null)}
+        onBack={() => {
+          if (onBack) onBack();
+          else setSelectedEventId(null);
+        }}
         selectionStorageKey={selectionStorageKey}
+        onAccessDenied={onAccessDenied}
       />
     );
   }

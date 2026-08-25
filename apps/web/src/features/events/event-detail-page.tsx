@@ -43,6 +43,13 @@ function errorMessage(error: unknown) {
     : '予定詳細の読み込みに失敗しました。';
 }
 
+function isResourceUnavailable(error: unknown) {
+  return (
+    error instanceof EventsApiError &&
+    (error.status === 403 || error.status === 404)
+  );
+}
+
 // 予定の詳細と、現在保存されている出欠状態を同じ認可済みAPIから表示する。
 export function EventDetailPage({
   api,
@@ -52,6 +59,7 @@ export function EventDetailPage({
   fallbackEvent,
   onBack,
   selectionStorageKey,
+  onAccessDenied,
 }: {
   api: EventsApi;
   eventId: string;
@@ -60,6 +68,7 @@ export function EventDetailPage({
   fallbackEvent?: EventSummary;
   onBack: () => void;
   selectionStorageKey: string;
+  onAccessDenied?: () => void;
 }) {
   const [event, setEvent] = useState<EventSummary | null>(
     fallbackEvent ?? null,
@@ -75,6 +84,7 @@ export function EventDetailPage({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [resourceUnavailable, setResourceUnavailable] = useState(false);
 
   const selectedAttendance = useMemo(
     () => attendance.find((item) => item.memberId === memberId),
@@ -91,8 +101,10 @@ export function EventDetailPage({
       ]);
       setEvent(loadedEvent);
       setAttendance(loadedAttendance);
+      setResourceUnavailable(false);
     } catch (error) {
       setMessage(errorMessage(error));
+      setResourceUnavailable(isResourceUnavailable(error));
     } finally {
       setIsLoading(false);
     }
@@ -133,6 +145,19 @@ export function EventDetailPage({
   }
 
   if (isLoading && !event) return <p role="status">予定詳細を読み込み中…</p>;
+  if (!event && resourceUnavailable)
+    return (
+      <section role="alert">
+        <p>
+          この予定は表示できません。削除済み、期限切れ、または現在のチームで権限がない可能性があります。
+        </p>
+        {onAccessDenied ? (
+          <button type="button" onClick={onAccessDenied}>
+            チームを選び直す
+          </button>
+        ) : null}
+      </section>
+    );
   if (!event) return <p role="alert">{message ?? '予定が見つかりません。'}</p>;
 
   return (

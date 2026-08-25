@@ -10,6 +10,13 @@ describe('管理画面ルート', () => {
     expect(resolveAdminRoute('/admin')).toBe('dashboard');
     expect(resolveAdminRoute('/admin/members')).toBe('members');
     expect(resolveAdminRoute('/admin/features')).toBe('features');
+    expect(
+      resolveAdminRoute('/events/0190f3b5-7c00-7000-8000-000000000001'),
+    ).toBe('event-detail');
+    expect(
+      resolveAdminRoute('/bulletins/0190f3b5-7c00-7000-8000-000000000002'),
+    ).toBe('bulletin-detail');
+    expect(resolveAdminRoute('/events/not-a-uuid')).toBe('dashboard');
     expect(resolveAdminRoute('/unknown')).toBe('dashboard');
   });
 

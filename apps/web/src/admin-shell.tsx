@@ -117,6 +117,10 @@ export function AdminShell({
     (item) => item.route === requestedRoute,
   );
   const activeRoute = activeItem?.route ?? 'dashboard';
+  const contentRoute =
+    requestedRoute === 'event-detail' || requestedRoute === 'bulletin-detail'
+      ? requestedRoute
+      : activeRoute;
 
   function navigate(path: string) {
     const canonicalPath = canonicalAdminPath(path);
@@ -197,7 +201,7 @@ export function AdminShell({
         </section>
       ) : null}
       {contract ? (
-        children(activeRoute, contract, setContract)
+        children(contentRoute, contract, setContract)
       ) : contractError ? (
         <section className="admin-loading-state" role="status">
           利用可能な機能を確認できないため、業務画面を表示していません。

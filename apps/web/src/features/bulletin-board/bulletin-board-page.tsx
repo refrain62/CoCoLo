@@ -19,6 +19,13 @@ function getErrorMessage(error: unknown) {
   return '通信に失敗しました。';
 }
 
+function isResourceUnavailable(error: unknown) {
+  return (
+    error instanceof BulletinBoardApiError &&
+    (error.status === 403 || error.status === 404)
+  );
+}
+
 function formatBytes(byteSize: number) {
   if (byteSize < 1024) return `${byteSize} B`;
   return `${Math.ceil(byteSize / 1024)} KiB`;
@@ -249,17 +256,24 @@ export function BulletinBoardPage({
   attachmentApi,
   attachmentsEnabled = true,
   role,
+  initialAnnouncementId,
+  onBack,
+  onAccessDenied,
 }: {
   api?: BulletinBoardApi;
   attachmentApi: AttachmentApi;
   attachmentsEnabled?: boolean;
   role?: BulletinBoardRole;
+  initialAnnouncementId?: string;
+  onBack?: () => void;
+  onAccessDenied?: () => void;
 }) {
   const [announcements, setAnnouncements] = useState<AnnouncementSummary[]>([]);
   const [selected, setSelected] = useState<Announcement | null>(null);
   const [unreadMembers, setUnreadMembers] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [resourceUnavailable, setResourceUnavailable] = useState(false);
 
   const loadAnnouncements = useCallback(async () => {
     setIsLoading(true);
@@ -277,28 +291,37 @@ export function BulletinBoardPage({
     void loadAnnouncements();
   }, [loadAnnouncements]);
 
-  async function openAnnouncement(id: string) {
-    setError(null);
-    setUnreadMembers(null);
-    try {
-      const announcement = await api.get(id);
-      if (!announcement.readAt) {
-        const read = await api.markRead(id);
-        announcement.readAt = read.readAt;
-        announcement.isRead = true;
+  const openAnnouncement = useCallback(
+    async (id: string) => {
+      setError(null);
+      setUnreadMembers(null);
+      try {
+        const announcement = await api.get(id);
+        if (!announcement.readAt) {
+          const read = await api.markRead(id);
+          announcement.readAt = read.readAt;
+          announcement.isRead = true;
+        }
+        setResourceUnavailable(false);
+        setSelected(announcement);
+        setAnnouncements((current) =>
+          current.map((item) =>
+            item.id === id
+              ? { ...item, readAt: announcement.readAt, isRead: true }
+              : item,
+          ),
+        );
+      } catch (requestError) {
+        setError(getErrorMessage(requestError));
+        setResourceUnavailable(isResourceUnavailable(requestError));
       }
-      setSelected(announcement);
-      setAnnouncements((current) =>
-        current.map((item) =>
-          item.id === id
-            ? { ...item, readAt: announcement.readAt, isRead: true }
-            : item,
-        ),
-      );
-    } catch (requestError) {
-      setError(getErrorMessage(requestError));
-    }
-  }
+    },
+    [api],
+  );
+
+  useEffect(() => {
+    if (initialAnnouncementId) void openAnnouncement(initialAnnouncementId);
+  }, [initialAnnouncementId, openAnnouncement]);
 
   async function listUnread() {
     if (!selected) return;
@@ -329,27 +352,52 @@ export function BulletinBoardPage({
   }
 
   const canPublish = role ? publisherRoles.has(role) : false;
+  const isDeepLink = Boolean(initialAnnouncementId);
 
   return (
     <div>
-      <h1>回覧板</h1>
-      {canPublish ? (
+      {onBack ? (
+        <button type="button" onClick={onBack}>
+          回覧一覧へ戻る
+        </button>
+      ) : null}
+      {!isDeepLink ? <h1>回覧板</h1> : null}
+      {!isDeepLink && canPublish ? (
         <PublishForm
           api={api}
           attachmentsEnabled={attachmentsEnabled}
           onPublished={onPublished}
         />
       ) : null}
-      {error ? <p role="alert">{error}</p> : null}
+      {error && !(isDeepLink && resourceUnavailable) ? (
+        <p role="alert">{error}</p>
+      ) : null}
+      {isDeepLink && resourceUnavailable ? (
+        <section role="alert">
+          <p>
+            この回覧は表示できません。削除済み、期限切れ、または現在のチームで権限がない可能性があります。
+          </p>
+          {onAccessDenied ? (
+            <button type="button" onClick={onAccessDenied}>
+              チームを選び直す
+            </button>
+          ) : null}
+        </section>
+      ) : null}
       {isLoading ? <p role="status">読み込み中…</p> : null}
-      <section aria-labelledby="bulletin-list-heading">
-        <h2 id="bulletin-list-heading">回覧一覧</h2>
-        <AnnouncementList
-          announcements={announcements}
-          selectedId={selected?.id ?? null}
-          onSelect={(id) => void openAnnouncement(id)}
-        />
-      </section>
+      {!isDeepLink ? (
+        <section aria-labelledby="bulletin-list-heading">
+          <h2 id="bulletin-list-heading">回覧一覧</h2>
+          <AnnouncementList
+            announcements={announcements}
+            selectedId={selected?.id ?? null}
+            onSelect={(id) => void openAnnouncement(id)}
+          />
+        </section>
+      ) : null}
+      {isDeepLink && !selected && isLoading ? (
+        <p role="status">回覧を読み込み中…</p>
+      ) : null}
       {selected ? (
         <AnnouncementDetail
           announcement={selected}
