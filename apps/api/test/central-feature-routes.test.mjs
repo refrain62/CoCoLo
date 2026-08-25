@@ -194,6 +194,7 @@ function createTestApp({
         service: {
           listPlans: async () => [],
           createPlan: async () => ({}),
+          updatePlan: async () => ({}),
           createOffer: async () => ({}),
           createRequest: async () => ({}),
           getSnapshot: async () => ({

@@ -678,6 +678,12 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       schema: ridePlanResponseEnvelopeSchema,
     },
     {
+      method: 'PATCH',
+      path: /^\/api\/v1\/ride-plans\/[^/]+$/,
+      status: 200,
+      schema: ridePlanResponseEnvelopeSchema,
+    },
+    {
       method: 'POST',
       path: /^\/api\/v1\/ride-plans\/[^/]+\/status$/,
       status: 200,

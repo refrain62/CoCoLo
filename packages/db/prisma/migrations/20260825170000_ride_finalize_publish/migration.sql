@@ -315,6 +315,19 @@ BEGIN
     FROM ride_plans
    WHERE tenant_id = CASE WHEN TG_OP = 'DELETE' THEN OLD.tenant_id ELSE NEW.tenant_id END
      AND id = plan_id;
+  IF TG_TABLE_NAME = 'ride_offers'
+     AND TG_OP = 'INSERT'
+     AND plan_status IS DISTINCT FROM 'open' THEN
+    RAISE EXCEPTION '受付中の送迎予定にだけ車を登録できます';
+  END IF;
+  IF TG_TABLE_NAME = 'ride_requests' AND TG_OP = 'INSERT' THEN
+    IF plan_status IS DISTINCT FROM 'open' THEN
+      RAISE EXCEPTION '受付中の送迎予定にだけ乗車希望を登録できます';
+    END IF;
+    IF NOT app_is_live_member(NEW.tenant_id, NEW.member_id) THEN
+      RAISE EXCEPTION '停止または退部した部員は乗車希望を登録できません';
+    END IF;
+  END IF;
   IF plan_status = 'finalized' THEN
     RAISE EXCEPTION '公開済みの送迎は再編集を開始してから変更してください';
   END IF;
@@ -396,8 +409,9 @@ STABLE
 SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
-  SELECT EXISTS (
-    SELECT 1
+  SELECT app_has_active_membership(target_tenant_id)
+    AND EXISTS (
+      SELECT 1
       FROM ride_plans rp
       JOIN ride_assignments ra
         ON ra.tenant_id = rp.tenant_id AND ra.plan_id = rp.id
@@ -430,5 +444,49 @@ CREATE POLICY ride_offers_read ON ride_offers FOR SELECT
       app_is_event_manager()
       OR driver_user_id = current_setting('app.user_id', true)
       OR app_can_view_ride_offer(tenant_id, plan_id, id)
+    )
+  );
+
+-- repositoryを経由しないSQLでも、受付状態と部員状態を同じ境界で検証する。
+DROP POLICY ride_offers_insert ON ride_offers;
+CREATE POLICY ride_offers_insert ON ride_offers
+  FOR INSERT WITH CHECK (
+    app_has_active_membership(tenant_id)
+    AND driver_user_id = current_setting('app.user_id', true)
+    AND EXISTS (
+      SELECT 1
+        FROM ride_plans rp
+       WHERE rp.tenant_id = ride_offers.tenant_id
+         AND rp.id = ride_offers.plan_id
+         AND rp.status = 'open'::ride_plan_status
+    )
+  );
+
+DROP POLICY ride_requests_insert ON ride_requests;
+CREATE POLICY ride_requests_insert ON ride_requests
+  FOR INSERT WITH CHECK (
+    app_has_active_membership(tenant_id)
+    AND requester_user_id = current_setting('app.user_id', true)
+    AND app_is_live_member(tenant_id, member_id)
+    AND EXISTS (
+      SELECT 1
+        FROM ride_plans rp
+       WHERE rp.tenant_id = ride_requests.tenant_id
+         AND rp.id = ride_requests.plan_id
+         AND rp.status = 'open'::ride_plan_status
+    )
+    AND (
+      app_is_event_manager()
+      OR (
+        current_setting('app.role', true) = 'guardian'
+        AND EXISTS (
+          SELECT 1
+            FROM guardian_members gm
+           WHERE gm.tenant_id = ride_requests.tenant_id
+             AND gm.member_id = ride_requests.member_id
+             AND gm.user_id = current_setting('app.user_id', true)
+             AND gm.status = 'active'::member_link_status
+        )
+      )
     )
   );

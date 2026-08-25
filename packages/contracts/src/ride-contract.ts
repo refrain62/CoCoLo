@@ -32,6 +32,18 @@ export const ridePlanCreateSchema = z
   })
   .strict();
 
+export const ridePlanUpdateSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    departureAt: z.string().datetime({ offset: true }).optional(),
+    pickupMapsUrl: mapsUrl.nullable().optional(),
+    destinationMapsUrl: mapsUrl.nullable().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: '変更項目を1つ以上指定してください。',
+  });
+
 export const rideOfferCreateSchema = z
   .object({
     capacity: z.number().int().min(1).max(20),
@@ -50,6 +62,7 @@ export const rideAssignmentSchema = z
   .object({
     requestId: uuid,
     offerId: uuid,
+    expectedOfferId: uuid.nullable(),
   })
   .strict();
 
@@ -73,6 +86,7 @@ export const ridePlanTransitionSchema = z.union([
 export const ridePlanIdSchema = uuid;
 
 export type RidePlanCreateInput = z.infer<typeof ridePlanCreateSchema>;
+export type RidePlanUpdateInput = z.infer<typeof ridePlanUpdateSchema>;
 export type RideOfferCreateInput = z.infer<typeof rideOfferCreateSchema>;
 export type RideRequestCreateInput = z.infer<typeof rideRequestCreateSchema>;
 export type RideAssignmentInput = z.infer<typeof rideAssignmentSchema>;

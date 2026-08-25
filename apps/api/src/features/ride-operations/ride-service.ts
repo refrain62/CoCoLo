@@ -4,6 +4,7 @@ import type {
   RideOfferCreateInput,
   RidePlanCreateInput,
   RidePlanTransitionInput,
+  RidePlanUpdateInput,
   RideRepository,
   RideRequestCreateInput,
 } from '@cocolo/db/ride';
@@ -56,6 +57,7 @@ export type RideDispatchView = {
   offers: RideSnapshot['offers'];
   requests: RideSnapshot['requests'];
   assignments: RideSnapshot['assignments'];
+  history: RideSnapshot['history'];
 };
 
 export type RideService = {
@@ -63,6 +65,11 @@ export type RideService = {
   createPlan: (
     actor: RideActor,
     input: RidePlanCreateInput,
+  ) => Promise<RidePlanView>;
+  updatePlan: (
+    actor: RideActor,
+    planId: string,
+    input: RidePlanUpdateInput,
   ) => Promise<RidePlanView>;
   createOffer: (
     actor: RideActor,
@@ -113,6 +120,21 @@ function validatePlanInput(input: RidePlanCreateInput) {
     title: input.title.trim(),
     pickupMapsUrl: validateGoogleMapsUrl(input.pickupMapsUrl),
     destinationMapsUrl: validateGoogleMapsUrl(input.destinationMapsUrl),
+  };
+}
+
+function validatePlanUpdateInput(input: RidePlanUpdateInput) {
+  return {
+    ...input,
+    ...(input.title === undefined ? {} : { title: input.title.trim() }),
+    ...(input.pickupMapsUrl === undefined
+      ? {}
+      : { pickupMapsUrl: validateGoogleMapsUrl(input.pickupMapsUrl) }),
+    ...(input.destinationMapsUrl === undefined
+      ? {}
+      : {
+          destinationMapsUrl: validateGoogleMapsUrl(input.destinationMapsUrl),
+        }),
   };
 }
 
@@ -186,6 +208,16 @@ export function createRideService(repository: RideRepository): RideService {
       assertManager(actor);
       return toPlanView(
         await repository.createPlan(actor, validatePlanInput(input)),
+      );
+    },
+    async updatePlan(actor, planId, input) {
+      assertManager(actor);
+      return toPlanView(
+        await repository.updatePlan(
+          actor,
+          planId,
+          validatePlanUpdateInput(input),
+        ),
       );
     },
     async createOffer(actor, planId, input) {

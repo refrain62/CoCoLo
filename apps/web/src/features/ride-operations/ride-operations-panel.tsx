@@ -32,10 +32,14 @@ import {
   type RideOperationsApi,
   type RidePlan,
   type RidePlanTransitionInput,
+  type RidePlanUpdateInput,
   type RideSnapshot,
 } from './ride-operations-api.js';
 
 type RideMemberOption = { id: string; label: string };
+type ConfirmableRideAction =
+  | { kind: 'transition'; action: RidePlanTransitionInput['action'] }
+  | { kind: 'match' };
 type RideOperationsPanelProps = {
   planId?: string;
   plans?: RidePlan[];
@@ -101,6 +105,13 @@ function planStatusLabel(status: RidePlan['status']) {
   }[status];
 }
 
+function toDateTimeLocal(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function Metrics({ metrics }: { metrics: RideMetrics }) {
   return (
     <dl>
@@ -157,10 +168,16 @@ export function RideOperationsPanel({
   const [transitionReasonCode, setTransitionReasonCode] = useState('');
   const [selectedRequestId, setSelectedRequestId] = useState('');
   const [selectedOfferId, setSelectedOfferId] = useState('');
+  const [planTitle, setPlanTitle] = useState('');
+  const [planDepartureAt, setPlanDepartureAt] = useState('');
+  const [planPickupMapsUrl, setPlanPickupMapsUrl] = useState('');
+  const [planDestinationMapsUrl, setPlanDestinationMapsUrl] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmation, setConfirmation] =
+    useState<ConfirmableRideAction | null>(null);
   const loadGeneration = useRef(0);
 
   const planOptions = plans ?? loadedPlans;
@@ -216,27 +233,37 @@ export function RideOperationsPanel({
   const load = useCallback(async () => {
     if (!activePlanId) {
       setIsLoading(false);
-      return;
+      return false;
     }
     const generation = ++loadGeneration.current;
     const isCurrent = () => generation === loadGeneration.current;
     setIsLoading(true);
     setError(null);
+    setNotice(null);
+    setSnapshot(null);
+    setMetrics(null);
+    setDispatch(null);
     try {
       const nextSnapshot = await api.getSnapshot(activePlanId);
-      if (!isCurrent()) return;
+      if (!isCurrent()) return false;
       setSnapshot(nextSnapshot);
+      setPlanTitle(nextSnapshot.plan.title);
+      setPlanDepartureAt(toDateTimeLocal(nextSnapshot.plan.departureAt));
+      setPlanPickupMapsUrl(nextSnapshot.plan.pickupMapsUrl ?? '');
+      setPlanDestinationMapsUrl(nextSnapshot.plan.destinationMapsUrl ?? '');
       if (isManager) {
         const [nextMetrics, nextDispatch] = await Promise.all([
           api.getMetrics(activePlanId),
           api.getDispatch(activePlanId),
         ]);
-        if (!isCurrent()) return;
+        if (!isCurrent()) return false;
         setMetrics(nextMetrics);
         setDispatch(nextDispatch);
       }
+      return true;
     } catch (requestError) {
       if (isCurrent()) setError(errorMessage(requestError));
+      return false;
     } finally {
       if (isCurrent()) setIsLoading(false);
     }
@@ -264,8 +291,7 @@ export function RideOperationsPanel({
     try {
       await api.createOffer(activePlanId, { capacity: parsedCapacity });
       setCapacity('');
-      setNotice('車の登録を受け付けました。');
-      await load();
+      if (await load()) setNotice('車の登録を受け付けました。');
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -293,8 +319,7 @@ export function RideOperationsPanel({
         subjectMemberId: selectedMemberId,
         passengerCount: parsedCount,
       });
-      setNotice('乗車希望を登録しました。');
-      await load();
+      if (await load()) setNotice('乗車希望を登録しました。');
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -309,10 +334,10 @@ export function RideOperationsPanel({
     setNotice(null);
     try {
       const result = await api.autoMatch(activePlanId);
-      setNotice(
-        `割当${result.assignments.length}件、未割当${result.unassignedRequestIds.length}件を反映しました。`,
-      );
-      await load();
+      if (await load())
+        setNotice(
+          `割当${result.assignments.length}件、未割当${result.unassignedRequestIds.length}件を反映しました。`,
+        );
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -342,21 +367,19 @@ export function RideOperationsPanel({
             }
           : { action };
       const nextPlan = await api.transitionPlan(activePlanId, input);
-      setSnapshot((current) =>
-        current ? { ...current, plan: nextPlan } : current,
-      );
-      setLoadedPlans((current) =>
-        current.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)),
-      );
       setTransitionReasonCode('');
-      setNotice(
-        action === 'close'
-          ? '受付を終了しました。'
-          : action === 'finalize'
-            ? '配車表を公開しました。'
-            : '再編集を開始しました。',
-      );
-      await load();
+      if (await load()) {
+        setLoadedPlans((current) =>
+          current.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)),
+        );
+        setNotice(
+          action === 'close'
+            ? '受付を終了しました。'
+            : action === 'finalize'
+              ? '配車表を公開しました。'
+              : '再編集を開始しました。',
+        );
+      }
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -377,14 +400,68 @@ export function RideOperationsPanel({
       await api.assign(activePlanId, {
         requestId: selectedRequestId,
         offerId: selectedOfferId,
+        expectedOfferId:
+          dispatch?.assignments.find(
+            (assignment) => assignment.requestId === selectedRequestId,
+          )?.offerId ?? null,
       });
-      setNotice('手動割当を反映しました。');
-      await load();
+      if (await load()) setNotice('手動割当を反映しました。');
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
       setIsSaving(false);
     }
+  }
+
+  async function submitPlanUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activePlanId || !planTitle.trim() || !planDepartureAt) {
+      setError('送迎予定のタイトルと出発日時を入力してください。');
+      return;
+    }
+    const input: RidePlanUpdateInput = {
+      title: planTitle,
+      departureAt: new Date(planDepartureAt).toISOString(),
+      pickupMapsUrl: planPickupMapsUrl || null,
+      destinationMapsUrl: planDestinationMapsUrl || null,
+    };
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const nextPlan = await api.updatePlan(activePlanId, input);
+      if (await load()) {
+        setLoadedPlans((current) =>
+          current.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)),
+        );
+        setNotice('送迎予定を更新しました。');
+      }
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function requestConfirmation(action: ConfirmableRideAction) {
+    if (
+      action.kind === 'transition' &&
+      action.action === 'reopen' &&
+      !transitionReasonCode
+    ) {
+      setError('再編集理由を入力してください。');
+      return;
+    }
+    setError(null);
+    setConfirmation(action);
+  }
+
+  async function confirmAction() {
+    const action = confirmation;
+    setConfirmation(null);
+    if (!action) return;
+    if (action.kind === 'match') return autoMatch();
+    return transitionPlan(action.action);
   }
 
   if (planOptions.length > 0) {
@@ -437,13 +514,33 @@ export function RideOperationsPanel({
     );
   if (isLoading && !snapshot) return <p role="status">送迎情報を読み込み中…</p>;
   if (!snapshot)
-    return <p role="alert">{error ?? '送迎情報を表示できません。'}</p>;
+    return (
+      <div>
+        <p role="alert">{error ?? '送迎情報を表示できません。'}</p>
+        <Button type="button" disabled={isLoading} onClick={() => void load()}>
+          再試行
+        </Button>
+      </div>
+    );
 
   return renderRideOperations();
 
   function renderRideOperations() {
     if (!snapshot)
-      return <p role="alert">{error ?? '送迎情報を表示できません。'}</p>;
+      return (
+        <div>
+          <p role="alert">{error ?? '送迎情報を表示できません。'}</p>
+          {activePlanId ? (
+            <Button
+              type="button"
+              disabled={isLoading}
+              onClick={() => void load()}
+            >
+              再試行
+            </Button>
+          ) : null}
+        </div>
+      );
     return (
       <Card aria-labelledby="ride-operations-heading">
         <h1 id="ride-operations-heading">送迎</h1>
@@ -606,13 +703,55 @@ export function RideOperationsPanel({
         {isManager ? (
           <section aria-labelledby="ride-manager-heading">
             <h2 id="ride-manager-heading">運用管理</h2>
+            {snapshot.plan.status !== 'finalized' ? (
+              <form onSubmit={submitPlanUpdate}>
+                <h3>送迎予定を編集</h3>
+                <label htmlFor="ride-plan-title">タイトル</label>
+                <Input
+                  id="ride-plan-title"
+                  value={planTitle}
+                  maxLength={200}
+                  onChange={(event) => setPlanTitle(event.target.value)}
+                />
+                <label htmlFor="ride-plan-departure">出発日時</label>
+                <Input
+                  id="ride-plan-departure"
+                  type="datetime-local"
+                  value={planDepartureAt}
+                  onChange={(event) => setPlanDepartureAt(event.target.value)}
+                />
+                <label htmlFor="ride-plan-pickup-maps">集合場所Maps URL</label>
+                <Input
+                  id="ride-plan-pickup-maps"
+                  type="url"
+                  value={planPickupMapsUrl}
+                  onChange={(event) => setPlanPickupMapsUrl(event.target.value)}
+                />
+                <label htmlFor="ride-plan-destination-maps">
+                  目的地Maps URL
+                </label>
+                <Input
+                  id="ride-plan-destination-maps"
+                  type="url"
+                  value={planDestinationMapsUrl}
+                  onChange={(event) =>
+                    setPlanDestinationMapsUrl(event.target.value)
+                  }
+                />
+                <Button type="submit" disabled={isSaving}>
+                  予定を保存
+                </Button>
+              </form>
+            ) : null}
             <section aria-labelledby="ride-lifecycle-heading">
               <h3 id="ride-lifecycle-heading">公開状態</h3>
               {snapshot.plan.status === 'open' ? (
                 <Button
                   type="button"
                   disabled={isSaving}
-                  onClick={() => void transitionPlan('close')}
+                  onClick={() =>
+                    requestConfirmation({ kind: 'transition', action: 'close' })
+                  }
                 >
                   受付を終了
                 </Button>
@@ -621,7 +760,12 @@ export function RideOperationsPanel({
                 <Button
                   type="button"
                   disabled={isSaving}
-                  onClick={() => void transitionPlan('finalize')}
+                  onClick={() =>
+                    requestConfirmation({
+                      kind: 'transition',
+                      action: 'finalize',
+                    })
+                  }
                 >
                   配車表を確定して公開
                 </Button>
@@ -645,7 +789,12 @@ export function RideOperationsPanel({
                   <Button
                     type="button"
                     disabled={isSaving}
-                    onClick={() => void transitionPlan('reopen')}
+                    onClick={() =>
+                      requestConfirmation({
+                        kind: 'transition',
+                        action: 'reopen',
+                      })
+                    }
                   >
                     公開後の変更を開始
                   </Button>
@@ -656,7 +805,7 @@ export function RideOperationsPanel({
               <Button
                 type="button"
                 disabled={isSaving}
-                onClick={() => void autoMatch()}
+                onClick={() => requestConfirmation({ kind: 'match' })}
               >
                 補助マッチングを実行
               </Button>
@@ -734,6 +883,39 @@ export function RideOperationsPanel({
               </Table>
             ) : null}
           </section>
+        ) : null}
+
+        {confirmation ? (
+          <Card
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ride-confirmation-heading"
+          >
+            <h3 id="ride-confirmation-heading">操作を確認</h3>
+            <p>
+              {confirmation.kind === 'match'
+                ? '現在の希望と車の情報で補助マッチングを実行します。'
+                : confirmation.action === 'close'
+                  ? '受付を終了し、内容確認の状態へ移します。'
+                  : confirmation.action === 'finalize'
+                    ? '配車表を確定し、担当者へ公開します。'
+                    : '公開後の変更を開始し、再確認の状態へ戻します。'}
+            </p>
+            <Button
+              type="button"
+              disabled={isSaving}
+              onClick={() => void confirmAction()}
+            >
+              実行する
+            </Button>{' '}
+            <Button
+              type="button"
+              disabled={isSaving}
+              onClick={() => setConfirmation(null)}
+            >
+              キャンセル
+            </Button>
+          </Card>
         ) : null}
 
         {error ? (

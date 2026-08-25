@@ -6,6 +6,7 @@ import type {
   RideOfferCreateInput,
   RidePlanCreateInput,
   RidePlanTransitionInput,
+  RidePlanUpdateInput,
   RideRepository,
   RideRequestCreateInput,
 } from '@cocolo/db/ride';
@@ -154,6 +155,31 @@ function createFakeRepository(): TestRepository {
       append(actor, 'ride.plan.create', plan.id, { status: plan.status });
       return plan;
     },
+    async updatePlan(
+      actor: RideActor,
+      planId: string,
+      input: RidePlanUpdateInput,
+    ) {
+      const plan = getPlan(actor, planId);
+      if (plan.status === 'finalized') {
+        const error = new Error('公開済みの送迎は再編集を開始してください。');
+        Object.assign(error, { status: 409 });
+        throw error;
+      }
+      if (input.title !== undefined) plan.title = input.title;
+      if (input.departureAt !== undefined)
+        plan.departureAt = new Date(input.departureAt).toISOString();
+      if (input.pickupMapsUrl !== undefined)
+        plan.pickupMapsUrl = validateGoogleMapsUrl(input.pickupMapsUrl);
+      if (input.destinationMapsUrl !== undefined)
+        plan.destinationMapsUrl = validateGoogleMapsUrl(
+          input.destinationMapsUrl,
+        );
+      append(actor, 'ride.plan.update', plan.id, {
+        changedFields: Object.keys(input),
+      });
+      return plan;
+    },
     async createOffer(
       actor: RideActor,
       planId: string,
@@ -252,6 +278,18 @@ function createFakeRepository(): TestRepository {
       const offer = offers.find((item) => item.id === input.offerId);
       if (!request || !offer)
         throw new Error('テストデータの割当対象が見つかりません。');
+      const previousIndex = assignments.findIndex(
+        (item) => item.requestId === request.id,
+      );
+      const previous =
+        previousIndex === -1 ? undefined : assignments[previousIndex];
+      if ((previous?.offerId ?? null) !== input.expectedOfferId) {
+        const error = new Error(
+          '表示中の割当が更新済みのため、画面を再読み込みしてください。',
+        );
+        Object.assign(error, { status: 409, code: 'RIDE_STATE_CONFLICT' });
+        throw error;
+      }
       const assignedSeats = assignments
         .filter(
           (item) =>
@@ -264,7 +302,7 @@ function createFakeRepository(): TestRepository {
         assignedSeats,
         requestedSeats: request.passengerCount,
       });
-      const assignment: RideAssignment = {
+      const assignment: RideAssignment = previous ?? {
         id: id(),
         planId: plan.id,
         requestId: request.id,
@@ -272,7 +310,9 @@ function createFakeRepository(): TestRepository {
         passengerCount: request.passengerCount,
         createdAt: now(),
       };
-      assignments.push(assignment);
+      assignment.offerId = offer.id;
+      assignment.passengerCount = request.passengerCount;
+      if (!previous) assignments.push(assignment);
       request.status = 'assigned';
       append(actor, 'ride.assignment.update', plan.id, {
         requestId: request.id,
@@ -486,6 +526,12 @@ test('管理者は受付終了・公開・再編集を状態順に実行し、�
     }),
   });
   const plan = (await planResponse.json()).data;
+  const updated = await request(app, `/api/v1/ride-plans/${plan.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title: '更新後の練習試合' }),
+  });
+  assert.equal(updated.status, 200);
+  assert.equal((await updated.json()).data.title, '更新後の練習試合');
   const closed = await request(app, `/api/v1/ride-plans/${plan.id}/status`, {
     method: 'POST',
     body: JSON.stringify({ action: 'close' }),
@@ -496,6 +542,11 @@ test('管理者は受付終了・公開・再編集を状態順に実行し、�
     body: JSON.stringify({ action: 'finalize' }),
   });
   assert.equal(finalized.status, 200);
+  const finalizedUpdate = await request(app, `/api/v1/ride-plans/${plan.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title: '公開後の変更' }),
+  });
+  assert.equal(finalizedUpdate.status, 409);
   const invalidReopen = await request(
     app,
     `/api/v1/ride-plans/${plan.id}/status`,
@@ -507,6 +558,11 @@ test('管理者は受付終了・公開・再編集を状態順に実行し、�
     body: JSON.stringify({ action: 'reopen', reasonCode: 'member_change' }),
   });
   assert.equal(reopened.status, 200);
+  const reopenedUpdate = await request(app, `/api/v1/ride-plans/${plan.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title: '再編集後の練習試合' }),
+  });
+  assert.equal(reopenedUpdate.status, 200);
   assert.equal(
     repository.audit.some(
       (entry) =>
@@ -514,5 +570,85 @@ test('管理者は受付終了・公開・再編集を状態順に実行し、�
         JSON.stringify(entry.metadata).includes('member_change'),
     ),
     true,
+  );
+});
+
+test('手動割当は古い画面の割当先で後勝ち上書きできない', async () => {
+  const repository = createFakeRepository();
+  const { app } = createTestApp(manager, repository);
+  const planResponse = await request(app, '/api/v1/ride-plans', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: '練習試合',
+      departureAt: '2026-08-23T08:00:00+09:00',
+    }),
+  });
+  const plan = (await planResponse.json()).data;
+  const firstOffer = await request(
+    app,
+    `/api/v1/ride-plans/${plan.id}/offers`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ capacity: 2 }),
+    },
+  );
+  const secondOffer = await request(
+    app,
+    `/api/v1/ride-plans/${plan.id}/offers`,
+    { method: 'POST', body: JSON.stringify({ capacity: 2 }) },
+  );
+  const rideRequest = await request(
+    app,
+    `/api/v1/ride-plans/${plan.id}/requests`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ memberId, passengerCount: 1 }),
+    },
+  );
+  const firstOfferId = (await firstOffer.json()).data.id;
+  const secondOfferId = (await secondOffer.json()).data.id;
+  const requestId = (await rideRequest.json()).data.id;
+  const firstAssignment = await request(
+    app,
+    `/api/v1/ride-plans/${plan.id}/assignments`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        requestId,
+        offerId: firstOfferId,
+        expectedOfferId: null,
+      }),
+    },
+  );
+  assert.equal(firstAssignment.status, 201);
+  const currentAssignment = await request(
+    app,
+    `/api/v1/ride-plans/${plan.id}/assignments`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        requestId,
+        offerId: secondOfferId,
+        expectedOfferId: firstOfferId,
+      }),
+    },
+  );
+  assert.equal(currentAssignment.status, 201);
+  const staleAssignment = await request(
+    app,
+    `/api/v1/ride-plans/${plan.id}/assignments`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        requestId,
+        offerId: firstOfferId,
+        expectedOfferId: firstOfferId,
+      }),
+    },
+  );
+  assert.equal(staleAssignment.status, 409);
+  assert.equal(
+    (await staleAssignment.json()).error.code,
+    'RIDE_STATE_CONFLICT',
   );
 });

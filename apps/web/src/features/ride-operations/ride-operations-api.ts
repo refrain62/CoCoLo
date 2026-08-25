@@ -3,6 +3,7 @@ import type {
   RideOfferCreateInput,
   RidePlanCreateInput,
   RidePlanTransitionInput,
+  RidePlanUpdateInput,
   RideRequestCreateInput,
 } from '@cocolo/contracts/ride';
 import {
@@ -10,7 +11,10 @@ import {
   selectedTeamHeaderName,
 } from '../auth-team-selection/selected-team-storage.js';
 
-export type { RidePlanTransitionInput } from '@cocolo/contracts/ride';
+export type {
+  RidePlanTransitionInput,
+  RidePlanUpdateInput,
+} from '@cocolo/contracts/ride';
 
 export type RidePlan = {
   id: string;
@@ -124,6 +128,7 @@ export class RideApiError extends Error {
 export type RideOperationsApi = {
   listPlans: () => Promise<RidePlan[]>;
   createPlan: (input: RidePlanCreateInput) => Promise<RidePlan>;
+  updatePlan: (planId: string, input: RidePlanUpdateInput) => Promise<RidePlan>;
   getSnapshot: (planId: string) => Promise<RideSnapshot>;
   createOffer: (
     planId: string,
@@ -199,6 +204,13 @@ export function createRideOperationsApi({
     async createPlan(input) {
       const response = await request<{ data: RidePlan }>('', {
         method: 'POST',
+        body: JSON.stringify(input),
+      });
+      return response.data;
+    },
+    async updatePlan(planId, input) {
+      const response = await request<{ data: RidePlan }>(planPath(planId), {
+        method: 'PATCH',
         body: JSON.stringify(input),
       });
       return response.data;

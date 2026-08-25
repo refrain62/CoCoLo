@@ -66,6 +66,7 @@ test('RIDE-002の送迎全routeと状態変更契約をOpenAPIへ公開する', 
   assert.ok(paths['/ride-plans']?.get);
   assert.ok(paths['/ride-plans']?.post);
   assert.ok(paths['/ride-plans/{planId}']?.get);
+  assert.ok(paths['/ride-plans/{planId}']?.patch);
   assert.ok(paths['/ride-plans/{planId}/offers']?.post);
   assert.ok(paths['/ride-plans/{planId}/requests']?.post);
   assert.ok(paths['/ride-plans/{planId}/match']?.post);
@@ -80,10 +81,20 @@ test('RIDE-002の送迎全routeと状態変更契約をOpenAPIへ公開する', 
   );
   assert.deepEqual(
     components.schemas.RideConflictError.properties.error.properties.code.enum,
-    ['RIDE_STATE_CONFLICT', 'RIDE_FINALIZE_BLOCKED', 'RIDE_CAPACITY_EXCEEDED'],
+    [
+      'RIDE_STATE_CONFLICT',
+      'RIDE_FINALIZE_BLOCKED',
+      'RIDE_CAPACITY_EXCEEDED',
+      'RIDE_RESULT_TOO_LARGE',
+    ],
   );
   assert.equal(
     components.schemas.RideAssignmentInput.additionalProperties,
     false,
   );
+  assert.deepEqual(components.schemas.RideAssignmentInput.required, [
+    'requestId',
+    'offerId',
+    'expectedOfferId',
+  ]);
 });

@@ -936,6 +936,46 @@ export const openapiDocument = {
           503: { $ref: '#/components/responses/ServiceUnavailable' },
         },
       },
+      patch: {
+        operationId: 'updateRidePlan',
+        summary: '送迎予定の内容を再編集',
+        parameters: [
+          {
+            name: 'planId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/RidePlanUpdateInput' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: '更新後の送迎予定',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/RidePlanResponseEnvelope',
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { $ref: '#/components/responses/NotFound' },
+          409: { $ref: '#/components/responses/RideConflict' },
+          429: { $ref: '#/components/responses/TooManyRequests' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+          503: { $ref: '#/components/responses/ServiceUnavailable' },
+        },
+      },
     },
     '/ride-plans/{planId}/offers': {
       post: {
@@ -1297,6 +1337,21 @@ export const openapiDocument = {
           },
         },
       },
+      RidePlanUpdateInput: {
+        type: 'object',
+        minProperties: 1,
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string', minLength: 1, maxLength: 200 },
+          departureAt: { type: 'string', format: 'date-time' },
+          pickupMapsUrl: { type: 'string', format: 'uri', nullable: true },
+          destinationMapsUrl: {
+            type: 'string',
+            format: 'uri',
+            nullable: true,
+          },
+        },
+      },
       RidePlanListResponse: {
         type: 'object',
         required: ['data'],
@@ -1514,11 +1569,12 @@ export const openapiDocument = {
       },
       RideAssignmentInput: {
         type: 'object',
-        required: ['requestId', 'offerId'],
+        required: ['requestId', 'offerId', 'expectedOfferId'],
         additionalProperties: false,
         properties: {
           requestId: { type: 'string', format: 'uuid' },
           offerId: { type: 'string', format: 'uuid' },
+          expectedOfferId: { type: 'string', format: 'uuid', nullable: true },
         },
       },
       RideAssignmentResponseEnvelope: {
@@ -2517,6 +2573,7 @@ export const openapiDocument = {
                   'RIDE_STATE_CONFLICT',
                   'RIDE_FINALIZE_BLOCKED',
                   'RIDE_CAPACITY_EXCEEDED',
+                  'RIDE_RESULT_TOO_LARGE',
                 ],
               },
               message: { type: 'string', minLength: 1, maxLength: 512 },

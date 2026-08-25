@@ -29,12 +29,23 @@ export type RidePlanCreateInput = {
   destinationMapsUrl?: string | null;
 };
 
+export type RidePlanUpdateInput = {
+  title?: string;
+  departureAt?: string;
+  pickupMapsUrl?: string | null;
+  destinationMapsUrl?: string | null;
+};
+
 export type RideOfferCreateInput = { capacity: number };
 export type RideRequestCreateInput = {
   memberId: string;
   passengerCount: number;
 };
-export type RideAssignmentInput = { requestId: string; offerId: string };
+export type RideAssignmentInput = {
+  requestId: string;
+  offerId: string;
+  expectedOfferId: string | null;
+};
 export type RidePlanTransitionInput =
   | { action: 'close' | 'finalize' }
   | {
@@ -75,11 +86,27 @@ export class RideRepositoryForbiddenError extends Error {
   }
 }
 
+const MAX_RIDE_COLLECTION_ITEMS = 100;
+const MAX_RIDE_HISTORY_ITEMS = 1000;
+
+function assertRideCollectionSize(size: number, max: number, label: string) {
+  if (size > max)
+    throw new RideRepositoryConflictError(
+      `${label}が多すぎるため、一覧を表示できません。`,
+      'RIDE_RESULT_TOO_LARGE',
+    );
+}
+
 export type RideRepository = {
   listPlans: (actor: RideActor) => Promise<RidePlan[]>;
   createPlan: (
     actor: RideActor,
     input: RidePlanCreateInput,
+  ) => Promise<RidePlan>;
+  updatePlan: (
+    actor: RideActor,
+    planId: string,
+    input: RidePlanUpdateInput,
   ) => Promise<RidePlan>;
   createOffer: (
     actor: RideActor,
@@ -337,6 +364,7 @@ async function readSnapshot(
          )
        )
      ORDER BY created_at ASC, id ASC
+     LIMIT ${MAX_RIDE_COLLECTION_ITEMS + 1}
   `;
   const requests = await client.$queryRaw<RequestRow[]>`
     SELECT id, plan_id, member_id, requester_user_id, passenger_count,
@@ -357,6 +385,7 @@ async function readSnapshot(
          )
        )
      ORDER BY created_at ASC, id ASC
+     LIMIT ${MAX_RIDE_COLLECTION_ITEMS + 1}
   `;
   const assignments = await client.$queryRaw<AssignmentRow[]>`
     SELECT a.id, a.plan_id, a.request_id, a.offer_id, a.passenger_count,
@@ -387,7 +416,19 @@ async function readSnapshot(
          )
        )
      ORDER BY a.created_at ASC, a.id ASC
+     LIMIT ${MAX_RIDE_COLLECTION_ITEMS + 1}
   `;
+  assertRideCollectionSize(offers.length, MAX_RIDE_COLLECTION_ITEMS, '車');
+  assertRideCollectionSize(
+    requests.length,
+    MAX_RIDE_COLLECTION_ITEMS,
+    '乗車希望',
+  );
+  assertRideCollectionSize(
+    assignments.length,
+    MAX_RIDE_COLLECTION_ITEMS,
+    '割当',
+  );
   const history = await client.auditLog.findMany({
     where: {
       tenantId: actor.tenantId,
@@ -396,8 +437,10 @@ async function readSnapshot(
       action: { startsWith: 'ride.' },
     },
     orderBy: { createdAt: 'asc' },
+    take: MAX_RIDE_HISTORY_ITEMS + 1,
     select: { id: true, action: true, createdAt: true },
   });
+  assertRideCollectionSize(history.length, MAX_RIDE_HISTORY_ITEMS, '変更履歴');
   return {
     plan:
       manager || plan.status === 'finalized'
@@ -510,6 +553,77 @@ export function createRideRepository(client: PrismaClient): RideRepository {
           metadata: { status: plan.status },
         });
         return plan;
+      });
+    },
+
+    async updatePlan(actor, planId, input) {
+      if (!managerRoles.has(actor.role))
+        throw new RideRepositoryForbiddenError();
+      const title = input.title?.trim();
+      if (input.title !== undefined && (!title || title.length > 200))
+        throw new RideRepositoryConflictError('送迎予定のタイトルが不正です。');
+      const departureAt =
+        input.departureAt === undefined ? null : new Date(input.departureAt);
+      if (departureAt && Number.isNaN(departureAt.getTime()))
+        throw new RideRepositoryConflictError('出発日時が不正です。');
+      const pickupMapsUrl =
+        input.pickupMapsUrl === undefined
+          ? null
+          : validateGoogleMapsUrl(input.pickupMapsUrl);
+      const destinationMapsUrl =
+        input.destinationMapsUrl === undefined
+          ? null
+          : validateGoogleMapsUrl(input.destinationMapsUrl);
+      const hasTitle = input.title !== undefined;
+      const hasDepartureAt = input.departureAt !== undefined;
+      const hasPickupMapsUrl = input.pickupMapsUrl !== undefined;
+      const hasDestinationMapsUrl = input.destinationMapsUrl !== undefined;
+      return runInRideTransaction(client, actor, async (tx) => {
+        await lockPlan(tx, actor, planId);
+        const plan = await requirePlan(tx, actor, planId);
+        if (plan.status === 'finalized')
+          throw new RideRepositoryConflictError(
+            '公開済みの送迎は再編集を開始してから変更してください。',
+          );
+        const rows = await tx.$queryRaw<PlanRow[]>`
+          UPDATE ride_plans
+             SET title = CASE WHEN ${hasTitle} THEN ${title ?? ''} ELSE title END,
+                 departure_at = CASE WHEN ${hasDepartureAt}
+                   THEN ${departureAt ?? new Date(0)} ELSE departure_at END,
+                 pickup_maps_url = CASE WHEN ${hasPickupMapsUrl}
+                   THEN ${pickupMapsUrl} ELSE pickup_maps_url END,
+                 destination_maps_url = CASE WHEN ${hasDestinationMapsUrl}
+                   THEN ${destinationMapsUrl} ELSE destination_maps_url END
+           WHERE tenant_id = ${actor.tenantId}::uuid
+             AND id = ${plan.id}::uuid
+           RETURNING id, tenant_id, title, departure_at, status, created_at
+        `;
+        const row = rows[0];
+        if (!row)
+          throw new RideRepositoryConflictError('送迎予定を変更できません。');
+        const planRows = await tx.$queryRaw<PlanRow[]>`
+          SELECT id, tenant_id, title, departure_at, pickup_maps_url,
+                 destination_maps_url, status, created_at
+            FROM app_ride_plan_row(
+              ${actor.tenantId}::uuid,
+              ${plan.id}::uuid
+            )
+        `;
+        const updated = toPlan(planRows[0] ?? row);
+        await appendAudit(tx, actor, {
+          action: 'ride.plan.update',
+          resourceId: updated.id,
+          metadata: {
+            changedFields: [
+              ...(hasTitle ? ['title'] : []),
+              ...(hasDepartureAt ? ['departureAt'] : []),
+              ...(hasPickupMapsUrl ? ['pickupMapsUrl'] : []),
+              ...(hasDestinationMapsUrl ? ['destinationMapsUrl'] : []),
+            ],
+            status: updated.status,
+          },
+        });
+        return updated;
       });
     },
 
@@ -724,6 +838,11 @@ export function createRideRepository(client: PrismaClient): RideRepository {
            FOR UPDATE
         `;
         const previous = previousRows[0];
+        if ((previous?.offer_id ?? null) !== input.expectedOfferId)
+          throw new RideRepositoryConflictError(
+            '表示中の割当が更新済みのため、画面を再読み込みしてください。',
+            'RIDE_STATE_CONFLICT',
+          );
         if (previous?.offer_id === offer.id) return toAssignment(previous);
         const assignedRows = await tx.$queryRaw<
           Array<{ assigned_seats: number | null }>
