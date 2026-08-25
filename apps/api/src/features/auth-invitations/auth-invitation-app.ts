@@ -65,6 +65,7 @@ function projectInvitation(invitation: {
 
 export function createAuthInvitationApp(options: {
   repository?: AuthInvitationRepository;
+  invitationUrlBase?: string;
 }): Hono<ApiEnv> {
   const app = new Hono<ApiEnv>();
   app.onError((error, c) => {
@@ -133,7 +134,11 @@ export function createAuthInvitationApp(options: {
       {
         data: {
           ...projectInvitation(invitation),
-          token: invitation.token,
+          // tokenはURL fragmentだけへ渡し、HTTP requestやRefererへ送らない。
+          inviteUrl: `${(options.invitationUrlBase ?? '/invite').replace(
+            /\/$/,
+            '',
+          )}/${invitation.id}#token=${encodeURIComponent(invitation.token)}`,
         },
       },
       201,
@@ -189,7 +194,8 @@ export function createAuthInvitationApp(options: {
         '入力値が不正です。',
         parsed.error.flatten(),
       );
-    if (!c.get('authProviders').includes(parsed.data.provider))
+    const providerSubject = c.get('authProviderSubjects')[parsed.data.provider];
+    if (!providerSubject)
       return errorResponse(
         c,
         403,
@@ -199,6 +205,7 @@ export function createAuthInvitationApp(options: {
     const result = await options.repository.accept({
       userId,
       provider: parsed.data.provider,
+      providerSubject,
       token: parsed.data.token,
     });
     return c.json({ data: result });

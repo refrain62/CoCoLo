@@ -305,6 +305,7 @@ async function readSnapshot(
             WHERE gm.tenant_id = ${actor.tenantId}::uuid
               AND gm.user_id = ${actor.userId}
               AND gm.member_id = ride_requests.member_id
+              AND gm.status = 'active'::member_link_status
          )
        )
      ORDER BY created_at ASC, id ASC
@@ -499,8 +500,9 @@ export function createRideRepository(client: PrismaClient): RideRepository {
                  SELECT 1
                    FROM guardian_members gm
                   WHERE gm.tenant_id = ${actor.tenantId}::uuid
-                    AND gm.user_id = ${actor.userId}
-                    AND gm.member_id = m.id
+                   AND gm.user_id = ${actor.userId}
+                   AND gm.member_id = m.id
+                   AND gm.status = 'active'::member_link_status
                )
              )
           RETURNING id, plan_id, member_id, requester_user_id,

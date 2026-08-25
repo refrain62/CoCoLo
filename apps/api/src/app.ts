@@ -218,6 +218,7 @@ export type ApiEnv = {
     requestId: string;
     authUserId: string;
     authProviders: Array<'google' | 'line'>;
+    authProviderSubjects: Partial<Record<'google' | 'line', string>>;
     auth: {
       userId: string;
       membership: MembershipContext;
@@ -870,6 +871,7 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       const claims = await options.verifyToken(token);
       c.set('authUserId', claims.userId);
       c.set('authProviders', claims.authProviders ?? []);
+      c.set('authProviderSubjects', claims.authProviderSubjects ?? {});
     } catch {
       return errorResponse(
         c,

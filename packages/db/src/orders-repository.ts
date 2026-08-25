@@ -1033,6 +1033,7 @@ async function findOrderEntry(
           WHERE gm.tenant_id = oe.tenant_id
             AND gm.user_id = ${input.actorUserId}
             AND gm.member_id = oe.member_id
+            AND gm.status = 'active'::member_link_status
         )
       `
       : Prisma.empty;
@@ -1119,6 +1120,7 @@ async function findOrderEntries(
           WHERE gm.tenant_id = oe.tenant_id
             AND gm.user_id = ${input.actorUserId}
             AND gm.member_id = oe.member_id
+            AND gm.status = 'active'::member_link_status
         )
       `
       : Prisma.empty;
@@ -1171,6 +1173,7 @@ async function requireAssignedActiveMember(
       WHERE tenant_id = ${input.tenantId}::uuid
         AND user_id = ${input.actorUserId}
         AND member_id = ${memberId}::uuid
+        AND status = 'active'::member_link_status
       FOR SHARE
     `;
     if (!assignments[0])

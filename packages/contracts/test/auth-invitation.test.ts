@@ -41,16 +41,30 @@ test('招待受諾はproviderとopaque tokenだけを入力にする', () => {
   );
 });
 
-test('招待作成responseだけがraw tokenを返す', () => {
+test('招待作成responseはraw tokenを返さずfragment付きURLだけを返す', () => {
   const parsed = invitationCreateResponseSchema.safeParse({
     data: {
       id: '00000000-0000-7000-8000-000000000001',
       memberId: '00000000-0000-7000-8000-000000000002',
       role: 'guardian',
       relationship: '保護者',
-      token: 'a'.repeat(64),
+      inviteUrl:
+        'https://app.example.test/invite/00000000-0000-7000-8000-000000000001#token=opaque-token',
       expiresAt: '2026-08-25T00:00:00.000Z',
     },
   });
   assert.equal(parsed.success, true);
+  assert.equal(
+    invitationCreateResponseSchema.safeParse({
+      data: {
+        id: '00000000-0000-7000-8000-000000000001',
+        memberId: '00000000-0000-7000-8000-000000000002',
+        role: 'guardian',
+        relationship: '保護者',
+        token: 'a'.repeat(64),
+        expiresAt: '2026-08-25T00:00:00.000Z',
+      },
+    }).success,
+    false,
+  );
 });

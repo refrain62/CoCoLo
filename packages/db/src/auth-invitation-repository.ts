@@ -59,6 +59,7 @@ export type AuthInvitationRepository = {
   accept: (input: {
     userId: string;
     provider: AuthProvider;
+    providerSubject: string;
     token: string;
   }) => Promise<{
     tenantId: string;
@@ -336,12 +337,25 @@ export function createAuthInvitationRepository(
           invitationAccepting: true,
           invitationTokenHash: tokenHash,
         });
-        // providerはAPIで検証済みのSupabase app_metadata.providers、subjectは検証済みJWTのsubを保存する。
+        const conflictingIdentity = await tx.authIdentity.findFirst({
+          where: {
+            provider: input.provider,
+            providerSubject: input.providerSubject,
+            NOT: { userId: input.userId },
+          },
+          select: { id: true },
+        });
+        if (conflictingIdentity)
+          throw new AuthInvitationError(
+            'INVITATION_CONFLICT',
+            'OAuth identityは別の利用者へ連携済みです。',
+            409,
+          );
         const identity = await tx.authIdentity.findFirst({
           where: { userId: input.userId, provider: input.provider },
           select: { id: true, providerSubject: true },
         });
-        if (identity && identity.providerSubject !== input.userId)
+        if (identity && identity.providerSubject !== input.providerSubject)
           throw new AuthInvitationError(
             'INVITATION_CONFLICT',
             'OAuth identityの変更には管理者確認が必要です。',
@@ -357,7 +371,7 @@ export function createAuthInvitationRepository(
             data: {
               userId: input.userId,
               provider: input.provider,
-              providerSubject: input.userId,
+              providerSubject: input.providerSubject,
             },
           });
 

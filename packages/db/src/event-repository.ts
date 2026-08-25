@@ -305,6 +305,7 @@ async function findAssignedMember(
     WHERE tenant_id = ${input.tenantId}::uuid
       AND user_id = ${input.actorUserId}
       AND member_id = ${memberId}::uuid
+      AND status = 'active'::member_link_status
     LIMIT 1
   `;
   return rows.length > 0;

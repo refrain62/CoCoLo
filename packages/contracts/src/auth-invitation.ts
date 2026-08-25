@@ -58,7 +58,7 @@ export const invitationCreateResponseSchema = z
       memberId: z.string().uuid(),
       role: invitationRoleSchema,
       relationship: z.string().trim().min(1).max(100),
-      token: z.string().trim().min(32).max(256),
+      inviteUrl: z.string().trim().min(1).max(2048),
       expiresAt: z.string().datetime({ offset: true }),
     }),
   })

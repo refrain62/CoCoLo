@@ -16,6 +16,7 @@ function createTestApp({ multipleMemberships = false } = {}) {
       audience: 'authenticated',
       expiresAt: Math.floor(Date.now() / 1000) + 300,
       authProviders: ['line'],
+      authProviderSubjects: { line: 'line-subject-a' },
     };
   };
   const membershipRepository = {
@@ -90,6 +91,7 @@ function createTestApp({ multipleMemberships = false } = {}) {
             linkStatus: 'active',
           }),
         },
+        invitationUrlBase: 'https://app.example.test/invite',
       },
       attachments: {
         repository: {
@@ -187,7 +189,12 @@ test('ownerは対象memberへのopaque招待を発行・一覧できる', async 
     }),
   });
   assert.equal(created.status, 201);
-  assert.equal((await created.json()).data.token.length, 64);
+  const createdBody = await created.json();
+  assert.equal('token' in createdBody.data, false);
+  assert.match(
+    createdBody.data.inviteUrl,
+    /^https:\/\/app\.example\.test\/invite\/[^#]+#token=[A-Za-z0-9_-]+$/,
+  );
 });
 
 test('membershipがないOAuth利用者もopaque招待を受諾できる', async () => {

@@ -71,6 +71,7 @@ const centralFeatures = {
   },
   authInvitations: {
     repository: createAuthInvitationRepository(prisma),
+    invitationUrlBase: `${runtime.publicAppUrl}/invite`,
   },
   attachments: {
     repository: createAttachmentRepositories(prisma).attachmentRepository,
@@ -97,6 +98,8 @@ const app = createApp({
   verifyToken: createSupabaseTokenVerifier({
     jwksUrl: runtime.supabaseJwksUrl,
     issuer: runtime.supabaseIssuer,
+    authUserUrl: `${runtime.supabaseUrl}/auth/v1/user`,
+    anonKey: runtime.supabaseAnonKey,
   }),
   rateLimit: {
     environment: runtime.appEnv,

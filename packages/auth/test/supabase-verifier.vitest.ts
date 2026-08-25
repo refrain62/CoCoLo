@@ -39,6 +39,49 @@ describe('Supabase JWT verifier', () => {
     expect(claims.authProviders).toEqual(['google']);
   });
 
+  it('Supabase Authのidentity_dataからprovider subjectを取得する', async () => {
+    const { privateKey, publicKey } = await generateKeyPair('RS256');
+    const jwk = await exportJWK(publicKey);
+    const kid = 'identity-key';
+    globalThis.fetch = async (input) => {
+      if (String(input).endsWith('/user'))
+        return new Response(
+          JSON.stringify({
+            identities: [
+              {
+                provider: 'line',
+                identity_data: { sub: 'line-subject-a' },
+              },
+            ],
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        );
+      return new Response(
+        JSON.stringify({ keys: [{ ...jwk, kid, alg: 'RS256' }] }),
+        {
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+    };
+    const token = await new SignJWT({})
+      .setProtectedHeader({ alg: 'RS256', kid })
+      .setIssuer(issuer)
+      .setAudience('authenticated')
+      .setSubject('user-a')
+      .setExpirationTime('5m')
+      .sign(privateKey);
+
+    const claims = await createSupabaseTokenVerifier({
+      jwksUrl,
+      issuer,
+      authUserUrl: `${issuer}/user`,
+      anonKey: 'public-anon-key',
+    })(token);
+
+    expect(claims.authProviderSubjects).toEqual({ line: 'line-subject-a' });
+    expect(claims.authProviders).toEqual(['line']);
+  });
+
   it('期限切れJWTを拒否する', async () => {
     const { privateKey, publicKey } = await generateKeyPair('RS256');
     const jwk = await exportJWK(publicKey);

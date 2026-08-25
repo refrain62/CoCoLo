@@ -32,7 +32,10 @@ export type CentralFeatureMembershipRepository = {
 
 export type CentralFeatureRoutes = {
   authTeamSelection?: { repository: AuthTeamSelectionRepository };
-  authInvitations?: { repository: AuthInvitationRepository };
+  authInvitations?: {
+    repository: AuthInvitationRepository;
+    invitationUrlBase?: string;
+  };
   attachments?: {
     repository: AttachmentRepository;
     storage: AttachmentStorage;
@@ -81,6 +84,7 @@ export function mountCentralFeatureRoutes(options: CentralFeatureRouteOptions) {
       '/',
       createAuthInvitationApp({
         repository: features.authInvitations.repository,
+        invitationUrlBase: features.authInvitations.invitationUrlBase,
       }),
     );
 
