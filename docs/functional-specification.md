@@ -16,6 +16,7 @@
 | 0.6 | 2026-08-25 | 回覧掲載時のLINE自動通知producerとstaff掲載時のDB権限境界を反映 | 実装前レビュー待ち |
 | 0.7 | 2026-08-25 | 役員・連絡先をチーム単位の無料feature契約へ接続 | 実装前レビュー待ち |
 | 0.8 | 2026-08-25 | staff/guardianの役職枠閲覧と連絡先非公開を明記 | 実装前レビュー待ち |
+| 0.9 | 2026-08-25 | 連絡先PIIのDB直接参照を禁止し、role-aware projectionを正本化 | 実装統合済み。OpenAPIと実DB受入は継続 |
 
 ## 1. この文書の役割
 
@@ -322,6 +323,8 @@ owner または admin は年度、役職名、担当者、役職種別を管理�
 ### FS-BRD-002 連絡先表示
 
 電話番号の表示設定は `line`、`phone`、`both` から選択します。`line` は電話番号を表示せず、`phone` は電話番号を表示し、`both` は両方を表示します。owner と admin には設定に応じた連絡先を表示し、staff と guardian には役職名・役職種別だけを表示して連絡先値を表示しません。
+
+DBもこの境界を適用し、`cocolo_app`の直接SELECTを許可しません。連絡先値はmanager専用projectionからだけ取得し、staffとguardianのprojectionではNULLにします。
 
 ## 8. 共同購買・集金（Phase 3）
 

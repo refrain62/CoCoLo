@@ -22,7 +22,7 @@
 | `[ ]` | LINE-DELIVERY-002 | unknownの照合、保持期間、再送、監査、担当者を運用仕様に確定する |
 | `[~]` | API-001 / DB-002 | 分散rate limitの本番条件、UUIDv7移行前検査、共通RLS残課題を解消する |
 | `[ ]` | RELEASE-001 | stagingとproductionのsecret、bucket、JWT、artifact、migration境界を分離する |
-| `[~]` | BRD-001 | feature契約ゲートはPR #185、年度引き継ぎUUIDとcopiedCountはPR #187、staff/guardianの閲覧専用WebはPR #189で統合済み。個人情報境界、OpenAPI、実DB/RLS受入を完了する |
+| `[~]` | BRD-001 | feature契約ゲートはPR #185、年度引き継ぎUUIDとcopiedCountはPR #187、staff/guardianの閲覧専用WebはPR #189、DB PII境界はPR #191で統合済み。OpenAPI、staging実DB/RLS受入を完了する |
 | `[~]` | ORD-001 | 注文・集金のrepository、RLS、状態遷移、同時実行、staging E2Eを確認する |
 | `[~]` | FIL-002 | R2実adapter、署名URL期限、実体検証、cleanup、認可downloadをstagingで確認する |
 | `[~]` | ANN-001 | 回覧、既読、添付download、R2認可、未読者の個人情報境界を確認する |
