@@ -18,8 +18,6 @@
 | `[ ]` | BILLING-001 | feature定義、チームplan、tenant flag、effective entitlement、監査、課金provider差し替え境界を実装する |
 | `[ ]` | AUTH-003 / MEM-007 | 招待token、LINE・Google OAuth、provider subject、member link、連携解除を実装する |
 | `[ ]` | API-003 | 出欠、注文、送迎希望でactor userと対象memberを分離し、対象選択をAPIで再認可する |
-| `[ ]` | UI-004 | `/admin`のダッシュボード、メンバー、予定・出欠、購買・集金、回覧・添付、LINE、設定をルートとメニューへ分離する |
-| `[ ]` | UI-005 | shadcn/ui component source、`packages/ui`、デザイントークン、状態表示、レスポンシブ・アクセシビリティ受入を整備する |
 | `[ ]` | T014-E2E | PostgreSQL付きperiodic E2Eの定期・手動実行、固定レポート、失敗Issue同期を実行する |
 | `[ ]` | T014-RATE | 実Redis相当、原子的consume、TTL、複数API instance、障害時503をstagingで確認する |
 | `[ ]` | T014-RELEASE | T-014各検査が同じ最新SHAで成功した証跡をまとめる |

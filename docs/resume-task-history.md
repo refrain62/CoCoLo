@@ -19,6 +19,7 @@
 | 購買・送迎 | 注文APIとWeb、CSV・冪等性、送迎API、送迎Web、公開response契約 | `develop`統合済み。実DB・staging受入は継続 |
 | CI・DB | Node.js / pnpm固定、Node 24、local-first quality、migration検査、UUIDv7移行前検査、schema drift検査、PR本文検査 | `develop`統合済み。mainのtrust rootと外部環境は継続 |
 | UI安全性 | 二重送信防止、権限別操作表示、認証レイアウト、主要タップ領域、複数幅ブラウザ受入 | `develop`統合済み。認証済み主要画面のrole別受入は継続 |
+| UI-004 / UI-005 | 管理画面のルート・メニュー分離、機能契約による表示制御、`packages/ui`の共通primitive、デザイントークン、状態表示、レスポンシブ管理シェル | 実装・敵対的レビュー・Draft PR提出済み。`pnpm test`、`pnpm build`、`pnpm lint`、`git diff --check`成功。実ブラウザ幅別受入とstaging E2Eは外部条件として継続 |
 
 ## 完了判定の共通結果
 
