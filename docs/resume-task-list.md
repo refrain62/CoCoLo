@@ -20,13 +20,13 @@
 
 ## 1. 停止時点の基準
 
-実装再開の基準となる`develop`は`1086e90`（PR #168反映後）です。直前の実装基準は`61ae68a`（PR #167反映後）です。管理者再試行APIとworkerのロック順序修正、LINE Webhook受信境界、LINE公開レスポンス契約、役員連絡先、注文API、回覧板、認証チーム選択、添付、送迎の公開レスポンス契約、回覧添付のavailable状態DBガード、UUIDv7移行前検査、回覧板添付の短期URLダウンロード、LINE Web通知の現行producer接続、送迎WebのauthenticatedFetch接続、予定編集の全項目更新、PC・スマートフォン向けUI基盤、ログインレイアウト、操作導線のタップ領域、保存操作の二重送信防止、権限別操作表示、Node.jsとpnpmのtoolchain固定検証、qualityでの全体検証、CR改行・BOM・UTF-8・末尾LF検査、GitHub ActionsのNode 24移行まで反映済みです。完了済み実装の詳細は[完了タスクと実施履歴](resume-task-history.md)へ移しています。
+実装再開の基準となる`develop`は`96bbb6b`（PR #169反映後）です。直前の実装基準は`1086e90`（PR #168反映後）です。管理者再試行APIとworkerのロック順序修正、LINE Webhook受信境界、LINE公開レスポンス契約、役員連絡先、注文API、回覧板、認証チーム選択、添付、送迎の公開レスポンス契約、回覧添付のavailable状態DBガード、UUIDv7移行前検査、回覧板添付の短期URLダウンロード、LINE Web通知の現行producer接続、送迎WebのauthenticatedFetch接続、予定編集の全項目更新、PC・スマートフォン向けUI基盤、ログインレイアウト、操作導線のタップ領域、保存操作の二重送信防止、権限別操作表示、Node.jsとpnpmのtoolchain固定検証、qualityでの全体検証、CR改行、BOM、UTF-8、末尾LF検査、GitHub ActionsのNode 24移行、UI-002ブラウザ受入記録まで反映済みです。完了済み実装の詳細は[完了タスクと実施履歴](resume-task-history.md)へ移しています。
 
 `develop`へ反映済みの機能と停止時点までの実施履歴は、[完了タスクと実施履歴](resume-task-history.md)に移しています。
 
 Draft PRに実装が存在しても、`develop`へ統合されていない機能は現行環境では未実装として扱います。
 
-再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、#77、#80、#82、#85、#89、#91、#93、#112、#113、#114、#115、#116、#143、#145、#147、#149、#151、#152、#156、#158、#160、#161、#163、#166、#168、docs-only PR #55、#56、#57、#58、#61、#63、#66、#81、#83、#86、#87、#88、#90、#92、#144、#146、#148、#153、#157、#162、#164、#167は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
+再開処理では、`develop`への直接コミット、force push、未コミット差分の破棄を行っていません。前回停止後にレビューとCIを通過したPR #54、#44、#38、#59、#60、#62、#65、#67、#77、#80、#82、#85、#89、#91、#93、#112、#113、#114、#115、#116、#143、#145、#147、#149、#151、#152、#156、#158、#160、#161、#163、#166、#168、#169、docs-only PR #55、#56、#57、#58、#61、#63、#66、#81、#83、#86、#87、#88、#90、#92、#144、#146、#148、#153、#154、#155、#157、#159、#162、#164、#167は、専用ブランチからスカッシュマージ済みです。詳細は履歴文書と検証手順書を参照します。
 
 ### 1.1 再開時のGitHub同期結果
 
@@ -48,6 +48,8 @@ GitHubの最新状態は、次のルールで扱います。
 - `[!]`：外部操作、所有者承認、環境資格情報など、コード以外の停止条件がある項目
 
 完了した項目は、完了確認後にこの台帳から削除し、履歴文書へ移します。
+
+機能ごとの利用者、管理者操作、現行実装、未統合範囲、残作業の先行整理は、[現行機能の棚卸し](current-feature-inventory.md)を参照します。
 
 ## 2. 最初に行う復元作業
 
@@ -158,11 +160,11 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
 
 ## 4. LINE配信の残タスク
 
-- `[~]` **LINE-DELIVERY-001：修正済みschedulerを統合後の環境で検証する。**
+- `[~]` **LINE-DELIVERY-001：修正済みschedulerを実DBとproviderの条件で検証する。**
   - 対象：PR #44
   - ブランチ：`feature/line-delivery-scheduler`
   - 最新commit：`f1c27c2`
-  - 状態：実装、quality CI、独立再レビューは完了しています。`develop`への統合、LINE providerのstaging接続、unknown照合運用、Windowsのlint改行差分の再確認が残っています。
+  - 状態：実装、`develop`への統合、quality CI、独立再レビューは完了しています。LINE providerのstaging接続、unknown照合運用、Windowsのlint改行差分の再確認が残っています。
   - 完了済みの実施内容：[LINE-DELIVERY-001の履歴](resume-task-history.md#line-delivery-001)
 
 - `[ ]` **LINE-DELIVERY-002：unknown照合運用を別機能として設計する。**
@@ -172,16 +174,11 @@ T-014は、PR信頼ゲート、DB整合性、schema drift、scanner、trusted ro
 
 ## 5. 認証と共通基盤の未統合タスク
 
-- `[ ]` **AUTH-001：複数チーム所属時の明示的チーム選択を統合する。**
-  - 対象：PR #31、`feature/auth-team-selection`
-  - API、Web、RLS、再読み込み時の選択状態、複数所属の実DB検証を中央mountへ接続します。
-  - 所属一覧を認証情報の一部として扱い、利用者入力のtenant IDだけで認可しないことを確認します。
-
 - `[~]` **API-001：共通API hardeningを中央APIへ接続する。**
   - 対象：PR #29、`feature/api-hardening`
   - CORS allowlistはPR #59、認証後のtenantとuser単位rate limitはPR #60で`develop`へ接続済みです。
   - 構造化ログとruntime response schema検証はPR #62で`apps/api/src/app.ts`へ接続済みです。
-  - 中央APIの複数tenant所属時の明示的チーム選択はPR #89、Web側の選択状態と主要API header接続はPR #91、既存AuthSessionManagerのWeb接続はPR #96で完了しました。PR #114でLINEの接続状態・接続・解除を中央mountへ接続し、PR #117で通知登録を現行outboxへ接続、PR #120で接続世代検証をfail-closed化しました。再試行APIとWebhookはNOT-001へ残しています。
+  - 中央APIの複数tenant所属時の明示的チーム選択はPR #89、Web側の選択状態と主要API header接続はPR #91、既存AuthSessionManagerのWeb接続はPR #96で完了しました。LINEの接続、通知、再試行、WebhookはNOT-001へ集約して管理します。
   - staging、productionでは分散rate limit adapterを必須にし、in-memory fallbackを許可しません。
 
 - `[~]` **API-002：WebとAPIの中央mountを統合する。**
@@ -238,18 +235,24 @@ EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume
   - PR #147で回覧板詳細から認証済みattachment APIの短期URLを使う添付ダウンロードを接続しました。
   - 添付の非公開配信とR2の認可を結合して確認します。
 
-- `[~]` **NOT-001：LINE通知契約とWebhookを統合する。**
-  - 対象：PR #28、PR #36
-  - PR #114で接続状態・接続・解除を中央APIへmountし、PR #117で通知登録を現行`line_delivery_outbox`へ接続しました。接続済みの現在グループ以外は拒否し、接続世代をoutboxへ保存します。PR #120でcontext欠落、旧世代のNULL、同一冪等キーの再送をfail-closed化しました。
-  - PR #127で、旧`line_notification_queue`と現行`line_delivery_outbox`を混在させずにWebhookを公開入口へ接続しました。専用のDB actor、別接続設定、署名検証、destination検証、receiptの重複排除、未知groupの無視、Webhook専用rate limitを実装済みです。管理者再試行APIはPR #123、workerのロック順序はPR #125で現行outboxへ接続済みです。
-  - PR #149でLINE Web画面の通知登録を現行`/api/v1/notifications/line` producerへ接続し、接続groupのdestination、冪等キー、owner/admin境界を適用しました。
-  - LINE channel、groupIdとtenantの紐付け、未接続状態、署名検証、Webhook重複排除、未知group拒否、再試行、LIFF、deep linkを統合します。
-  - `POST /api/v1/notifications/line`、Webhook route、outbox、workerを同一の認可と監査契約で確認します。
+- `[~]` **NOT-001：LINE通知契約を現行developの実装と一致させる。**
+  - PR #114、#117、#120、#123、#125、#127、#129、#149で、接続状態、接続、切断、現行`line_delivery_outbox`への通知登録、接続世代検証、管理者再送、Webhook受信境界、公開response契約、Web画面を`develop`へ統合済みです。
+  - 予定の作成と更新は、接続済みgroupがある場合に予定通知と出欠締切通知を業務transaction内へ登録します。汎用通知APIとWeb画面の手動登録はowner/adminだけに許可しています。
+  - 旧`line_notification_queue`と現行`line_delivery_outbox`を混在させず、`POST /api/v1/notifications/line`、Webhook、outbox、workerを現行の認可、監査、接続世代契約へ統一しています。
+  - 残りは、中央producerのdeep linkを公開origin、通知元資源、通知元tenantへ束縛する検証、staffの汎用通知権限の決定、回覧と未払い通知のproducer接続です。詳細は[LINE通知の利用契約](integration/phase4-line-notifications.md)を参照します。
 
 - `[ ]` **NOT-002：LINEグループ連携を実サービスで受け入れる。**
-  - staging専用LINE channelとテスト用groupを用意します。
-  - groupIdの登録、Webhook署名、予定作成から通知送信までの流れ、通知内deep link、未接続、provider 4xx、provider timeout、再送を確認します。
-  - 本番group、個人LINE、アクセストークン、Webhook raw bodyをlocalログへ持ち込みません。
+  - staging専用LINE channel、Bot、テスト用group、Webhook destination、専用DB接続を用意します。
+  - Bot参加、group ID取得、接続、切断、予定作成、予定更新、出欠締切、汎用通知、provider成功、4xx、timeout、送達不明、管理者再送を確認します。
+  - 不正署名、destination不一致、未知group、解除済みgroup、重複Webhook、別tenant接続を拒否または無視することを確認します。
+  - `unknown`のprovider照合、保持期間、再送可否、監査記録、担当者を運用手順へ記録します。
+  - 本番group、個人LINE、channel secret、channel access token、Webhook raw bodyをlocalログへ持ち込みません。
+
+- `[ ]` **NOT-003：LINE通知の仕様差分を解消する。**
+  - 現行中央producerはHTTPSまたはlocalのURL形式までしか検証せず、公開origin、通知元資源、通知元tenantの一致をサーバー側で検証していません。
+  - staffの汎用通知登録を許可するか、owner/admin限定を正式仕様とするかを決定します。
+  - 回覧掲載と未払い通知を自動登録するproducerの対象、権限、本文、冪等キー、deep linkを定義します。
+  - 機能仕様、API、Web、DB、テスト、受入記録を同じ契約へ更新し、CriticalとHighを0件にします。
 
 ## 9. Phase 5の未統合タスク
 
@@ -272,7 +275,9 @@ EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume
   - public bucket、公開URL保存、長期署名URLを許可しません。
 
 - `[!]` **OPS-004：LINE Messaging APIとLIFFの本番条件を確定する。**
-  - channel secret、access token、Webhook URL、group受信条件、LIFF URL、deep link、retry key保持期間、障害連絡先を確定します。
+  - stagingとproductionでchannel、Bot、group、channel secret、access token、Webhook URL、Webhook destination、公開アプリURLを分離します。
+  - group IDの取得、Botの参加、接続解除、group再利用時の扱い、LIFF URL、deep link、provider retry key保持期間、unknown照合、障害連絡先を確定します。
+  - LINEの接続、予定自動通知、汎用通知、失敗、送達不明、再送、Webhookをstaging専用groupで確認してから本番条件を確定します。
   - 未接続状態を成功として表示しません。
 
 - `[!]` **OPS-005：分散rate limitの実providerを配置する。**
@@ -312,7 +317,7 @@ EVT-001はPR #65として完了し、実施記録と再発防止記録を[resume
 
 - `[ ]` **UI-003：保存操作のサーバー冪等性とrole別ブラウザ受入を完了する。**
   - 予定、注文、LINE接続・通知、部員管理などの保存APIで、再試行・通信タイムアウト・ブラウザ再送時も同一業務操作を一意に扱える安定した冪等キー契約を定義します。
-  - owner/admin/staff/guardianごとに、許可・閲覧専用・禁止操作の表示とAPI応答をlocal実DBおよびstagingの専用ユーザーで確認します。
+  - owner/admin/staff/guardianごとに、許可・閲覧専用・禁止操作の表示とAPI応答をlocal実DBおよびstagingの専用ユーザーで確認します。LINEは、staffの予定操作による自動通知と、owner/adminだけが行う汎用通知登録および再送を区別します。
   - 外部サービス未接続、タイムアウト、失敗、再試行、権限不足を利用者が判断でき、誤操作を再送しないことをPlaywrightで記録します。
 
 ### UI/UX実装ルール

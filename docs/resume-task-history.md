@@ -1372,6 +1372,31 @@ Docker Engine未接続のため、PostgreSQL付きlocal E2Eの実行証跡はあ
 
 - 認証済み主要画面のowner/admin/staff/guardian別ブラウザ受入、staging外部サービス接続、保存APIの安定した冪等性はUI-002/UI-003として継続します。
 
+## 2026-08-25 計画とdevelopの差異を再照合
+
+### 確認した基準
+
+- `develop`の基準をPR #162反映後の`d2deb05`へ更新しました。
+- PR #114、#117、#120、#123、#125、#127、#129、#149で、LINE接続、現行`line_delivery_outbox`、接続世代、再送、Webhook、公開response、Web画面が統合済みであることを確認しました。
+- PR #160、#161、#162で、Node.jsとpnpmの固定、qualityの全体検証、toolchain検証の完了記録が反映済みであることを確認しました。
+
+### 文書へ反映した差分
+
+- `docs/functional-specification.md`へLINEグループ連携の利用開始、個人LINEとの違い、予定自動通知、汎用通知、現行role境界、Webhookの責務を追加しました。
+- `docs/integration/phase4-line-notifications.md`を、現行developのAPI経路、outbox、worker、Webhook、deep link、環境設定、staging受入条件に合わせて更新しました。
+- `docs/external-services-operations.md`へ、現行outboxと旧feature queueの区別、group ID取得を含む利用開始手順、送達不明の運用を追加しました。
+- `docs/ implementation-plan.md`のUI部品とLINEの説明を現行実装へ合わせ、T-013、NOT-001、NOT-002、NOT-003を実装、実サービス受入、仕様差分の別タスクへ分離しました。
+- `docs/resume-task-list.md`の基準SHA、統合済みPR、LINE配信、LINE通知、UI受入、LINE外部設定の残条件を更新しました。
+- `docs/current-feature-inventory.md`を追加し、認証、部員、予定、役員、購買、添付、回覧、LINE、送迎、UIの利用者、管理者操作、現行状態、残作業、完了条件を実装着手前に確認できるようにしました。
+- `docs/original-requirements-traceability.md`のLINE通知先、LIFF、UI部品の現行決定を更新し、未確定事項から解消しました。
+
+### 現時点の未完了条件
+
+- staging専用のLINE channel、Bot、group、Webhook、専用DB接続を使う実サービス受入は未完了です。
+- `unknown`のprovider照合、保持期間、再送可否、監査、担当者の運用は未確定です。
+- 中央producerのdeep linkはHTTPSまたはlocal形式までしか検証せず、公開origin、通知元資源、通知元tenantの一致検証が未完了です。
+- staffの汎用通知登録、回覧の自動通知、未払い通知のproducerは仕様と実装の決定が未完了です。
+
 ## 履歴の更新規則
 
 履歴には、完了したタスクの根拠と、未完了タスクで既に実施した作業だけを記録します。

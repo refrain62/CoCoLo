@@ -6,6 +6,8 @@
 
 利用者向けの機能と業務仕様は `docs/functional-specification.md` に分離しています。
 
+現行 `develop` の機能状態と、機能ごとの残作業および受入条件は `docs/current-feature-inventory.md` に整理しています。
+
 企画初期の要求、会話中の提案、現行決定の対応は `docs/original-requirements-traceability.md` に記録します。
 
 機能改修は機能仕様書の ID を先に変更し、その後に本書の実装タスク、テスト、マイグレーションを更新します。
@@ -24,7 +26,7 @@
 * **ターゲット:** 部活、スポーツ少年団、保護者会、クラブチーム（小・中・高・大・一般）
 * **基本技術スタック:**
   * フロントエンド: Vite + React (TypeScript) + Tailwind CSS
-  * UIコンポーネント: Shadcn UI (Radix UI / Lucide React)
+  * UIコンポーネント: shadcn/uiの設計思想に沿った`@cocolo/ui`の共有プリミティブ。現行developでは公式shadcn/ui、Radix UI、Lucide Reactの依存パッケージは導入していない
   * バックエンド: Hono（Phase 0〜3 は Node.js 24 に固定。Cloudflare Workers 版は Prisma 接続方式を検証した後に別フェーズで対応）
   * データベース: Supabase (PostgreSQL)
   * ORM・マイグレーション: Prisma ORM (`prisma migrate`)
@@ -80,10 +82,9 @@ GitHub Freeのpublic repositoryを前提に、PRの自動Workflowは短時間の
   - クラブからの連絡事項、PDF資料（部費・総会資料など）の添付
   - 既読・未読トラッキング（誰が確認したか一覧で表示）
 - LINE連携（通知エンジン）
-  - LINE Messaging API + LIFF を活用し、Webアプリで予定を作成・更新した際に指定のLINEグループや公式アカウントへ通知を発信
-  - LINE内でWebアプリを直接開く（LIFF）ことで、ログインの手間を軽減。
-  - LINEへの更新通知（Webhook）
-  - 通知内のリンク（Deep Link）からワンタップでWebアプリの該当ページへ遷移し、ログイン保持された状態で回答完了
+  - LINE Messaging APIを使い、Botが参加する指定LINEグループへ予定、出欠締切、手動通知を配信する。公式アカウントと個人LINEへの配信は現行対象外
+  - 通知内のdeep linkから同じ環境のWebアプリを開き、ログインとactive membershipを再確認して対象ページへ遷移する。LIFFは任意とする
+  - LINE Webhookは署名、destination、接続済みgroup、重複receiptを検証する受信入口とし、Webhook本文だけで業務状態を確定しない
 
 ## 1.2. システム構成・ディレクトリ構造
 ```
@@ -392,7 +393,7 @@ model Event {
 商品登録時、JSON 文字列として ["130", "140", "150", "S", "M", "L"] を保存。
 Tシャツやパーカーは「S, M, L, XL」、ジュニア用は「130, 140, 150」、団扇やバッグは「サイズなし（フリー）」など、商品に応じたバリエーション（サイズ選択肢）を管理者が柔軟に定義できる
 
-* 入力補助プリセットボタン（「キッズサイズ一括」「大人サイズ一括」）を Shadcn UI で提供。
+* 入力補助プリセットボタン（「キッズサイズ一括」「大人サイズ一括」）を shadcn/uiの設計思想に沿う共通UIプリミティブで提供。
 
 プリント指定 (背番号・背ネーム):
 
@@ -722,7 +723,7 @@ onlyBuiltDependencies:
 * **Phase 4（添付・通知）:** R2 アップロード、商品画像、予定画像、回覧板、既読管理、LINE 通知、deep link、リマインドを実装します。外部サービス未接続でも画面と通知キューの状態を確認できる開発用アダプターを用意します。
 * **Phase 5（送迎・運用強化）:** 乗車可能数と乗車希望のマッチング、配車表の下書き、受付、締切、確定、Google Maps リンク、監査ログ、運用メトリクスを追加します。
 
-Google Maps、LINE Messaging API / LIFF、リアルタイム通知は外部認証情報が必要なため、Phase 1〜3 の必須経路から分離します。未接続状態を「成功」として扱わず、未設定・送信失敗を画面で識別できるようにします。
+Google Maps、LINE Messaging API、必要な場合のLIFF、リアルタイム通知は外部認証情報が必要なため、Phase 1〜3 の必須経路から分離します。未接続状態を「成功」として扱わず、未設定・送信失敗を画面で識別できるようにします。
 
 ### 8.2 認証・マルチテナント・権限
 
@@ -881,7 +882,7 @@ API の公開パスは `/api/v1` に統一し、Hono のルートごとに認証
 
 ### 8.11 未解決事項の扱い
 
-LINE の通知先（グループか公式アカウントか）、Google Maps の契約・API キー、Supabase の本番プロジェクトは外部条件です。R2 は private bucket + 短期署名 URL を確定仕様とし、チームの正式な権限運用は認可マトリクスを初期値として導入前に責任者が承認します。未確定の外部条件は環境変数・アダプター・設定画面に分離します。
+LINE の通知先はBotが参加する環境ごとのグループとし、公式アカウントや個人LINEへの配信は現行対象外です。Google Maps の契約・API キー、Supabase の本番プロジェクトは外部条件です。R2 は private bucket + 短期署名 URL を確定仕様とし、チームの正式な権限運用は認可マトリクスを初期値として導入前に責任者が承認します。未確定の外部条件は環境変数・アダプター・設定画面に分離します。
 
 ### 8.12 敵対的レビュー指摘への決定事項
 
@@ -1067,7 +1068,10 @@ Playwright は `playwright.config.ts` の `webServer` で実APIの `pnpm --filte
 * [x] **T-010 実装後敵対的レビュー:** T-005〜T-009の成果物に対して越境、PII、認可、入力、環境混同、test-only Auth混入、テスト不足をレビューした。レビューコミット: `db7b464`。High 4件をT-011の修正対象として記録した。レビュー: `docs/reviews/t010-implementation-adversarial-review-2026-08-22.md`。
 * [x] **T-011 指摘修正とリリース判定:** T010-H-001〜T010-H-004を修正し、Critical / Highをゼロ化した。修正コミット: `05a101a`、`85c08f6`、`8c9eb58`、`e8e1967`、`a0a6854`、`5f5ff98`。Node 24のlocal lint/typecheck/test/unit/build/bundle/workflow検査、配置契約4件、GitHub quality run `32555164603`（実PostgreSQL統合テストを含む）が成功。再レビュー: `docs/reviews/t011-remediation-release-review-2026-08-22.md`。
 * [x] **T-012 Phase 1完了機能:** 年度繰り上げを別の Red → Green → Refactor 縦切りとして実装し、`PromotionRun` のスキーマ・冪等性・プレビュー・監査ログを検証する。実装、敵対的レビュー、PR CIの実PostgreSQL検証が完了。実装・修正コミット: `143a328`〜`7cc5b17`。品質ゲート: `32557510191`。レビュー: `docs/reviews/t012-promotion-adversarial-review-2026-08-22.md`。
-* [ ] **T-013 CI強化:** `docs/ci-hardening-plan.md` に従い、PR品質ゲート、カバレッジ、migrationとRLS、供給網検査、日次、週次、手動E2E、GitHub設定、デプロイ停止を実装する。実装後の敵対的レビューでCriticalとHighを0件にする。
+* [~] **T-013 CI強化:** PR品質ゲート、migrationとRLS、供給網検査、手動E2E、schema drift、配置停止のWorkflowとlocal-first検証入口は`develop`へ統合済みです。残りはmain側のowner-only trust root bootstrap、GitHubのbranch protectionとrequired checks、実staging・productionの配置証跡、定期E2Eの実行証跡、通常install経路のpnpm設定検証、Windowsの改行検査、Node.js 20を実行するActionの警告整理です。CriticalとHighを0件にしたうえで、外部設定と実行証跡を別タスクで完了させます。
+* [~] **NOT-001 LINE通知の中央統合:** LINE接続、接続groupとtenantの世代検証、予定作成と更新からの`line_delivery_outbox`登録、worker、管理者再送、Webhook受信境界、Web通知画面を`develop`へ統合済みです。残りは中央producerのdeep link検証、staffの汎用通知権限、回覧と未払い通知のproducer、実PostgreSQLと実LINEを使う受入です。詳細は`docs/integration/phase4-line-notifications.md`を参照します。
+* [ ] **NOT-002 LINE実サービス受入:** staging専用channel、Bot、group、Webhook、専用DB接続を用意し、接続、予定自動通知、手動通知、provider成功、4xx、timeout、送達不明、再送、署名不正、重複、別tenant拒否を同一SHAの成果物で検証します。
+* [ ] **NOT-003 LINE通知契約の仕様一致:** 中央producerのdeep linkを公開origin、通知元資源、通知元tenantへサーバー側で束縛し、staffの汎用通知登録と回覧、未払い通知のproducer方針を決定して、機能仕様、API、Web、DB、テスト、受入記録を一致させます。
 * [x] **TOOL-001 Node.js/pnpm固定検証:** Node.js 24.12.0とpnpm 10.26.0をmise、package.json、全Workflow、実行時検査へ固定し、quality run `32788024029`で全体検証を成功させた。実装PR #160（`f49cf02`）とquality全体検証PR #161（`9c203ce`）をdevelopへ統合済み。
 * [x] **TOOL-002 CR改行検査の結果統一:** Git属性に基づく追跡対象textのHEAD blob/worktree検査、BOM・UTF-8・CR・末尾LF検査、PR base...headの`git diff --check`、JSON証跡を`ci:fast`へ接続した。実装PR #163は`b18e359`としてdevelopへ統合済み。
 * [x] **TOOL-003 GitHub ActionsのNode 20警告解消:** `checkout`、`setup-node`、`pnpm/action-setup`、artifact、attestation系ActionをNode 24対応の固定SHAへ更新し、隠し成果物の保存とE2E成果物取得失敗の可視化を追加した。実装PR #166は`397a326`としてdevelopへ統合済み。quality run `32792636106`、workflow検査、trust root、改行検査、root test、build、lintが成功した。
