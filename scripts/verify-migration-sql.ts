@@ -95,6 +95,7 @@ function assertForbiddenStatements(file: MigrationSqlFile) {
 
 function assertCreatedTablesAreProtected(file: MigrationSqlFile) {
   const compact = compactSql(file.content);
+  const globalTenantIndependentTables = new Set(['feature_definitions']);
   const createTablePattern =
     /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"?public"?\.)?"?([a-z_][a-z0-9_]*)"?\s*\(/gi;
 
@@ -113,7 +114,10 @@ function assertCreatedTablesAreProtected(file: MigrationSqlFile) {
       tableStart,
       nextTable === -1 ? compact.length : nextTable,
     );
-    if (tableName !== 'tenants')
+    if (
+      tableName !== 'tenants' &&
+      !globalTenantIndependentTables.has(tableName)
+    )
       assert.match(
         tableBody,
         /\btenant_id\b/i,
@@ -173,6 +177,14 @@ function assertPolicyTenantBoundaries(file: MigrationSqlFile) {
         statement,
         /\bid\b[\s\S]*current_setting\s*\(\s*'app\.tenant_id'/i,
         `${file.path}: tenants policyにtenant境界が必要です。`,
+      );
+      continue;
+    }
+    if (table === 'feature_definitions') {
+      assert.match(
+        statement,
+        /current_setting\s*\(\s*'app\.tenant_id'|app_has_active_membership/i,
+        `${file.path}: ${table} policyにtenant context境界が必要です。`,
       );
       continue;
     }

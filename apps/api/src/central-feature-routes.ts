@@ -2,6 +2,7 @@ import type { TokenVerifier } from '@cocolo/auth';
 import type { MemberRole } from '@cocolo/contracts/member';
 import type { AuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
 import type { BulletinBoardRepository } from '@cocolo/db/bulletin-board';
+import type { FeatureContractRepository } from '@cocolo/db/feature-contract';
 import type { OrdersRepository } from '@cocolo/db/orders';
 import type { AttachmentRepository } from '@cocolo/domain/attachment';
 import type { Context, Hono } from 'hono';
@@ -14,6 +15,7 @@ import {
   createBoardContactApp,
 } from './features/board-contact/index.js';
 import { createBulletinBoardApp } from './features/bulletin-board/bulletin-board-app.js';
+import { createFeatureContractApp } from './features/feature-contract/feature-contract-app.js';
 import { createLineNotificationApp } from './features/line-notifications/routes.js';
 import { createOrdersPaymentsApp } from './features/orders-payments/orders-payments-app.js';
 import {
@@ -36,6 +38,7 @@ export type CentralFeatureRoutes = {
   };
   boardContact?: { repository: BoardContactRepository };
   bulletinBoard?: { repository: BulletinBoardRepository };
+  featureContract?: { repository: FeatureContractRepository };
   orders?: { repository: OrdersRepository };
   line?: {
     service: import('./features/line-notifications/line-service.js').LineNotificationService;
@@ -99,6 +102,15 @@ export function mountCentralFeatureRoutes(options: CentralFeatureRouteOptions) {
       createBulletinBoardApp({
         ...common,
         bulletinBoardRepository: features.bulletinBoard.repository,
+        useCentralAuth: true,
+      }),
+    );
+
+  if (features?.featureContract)
+    options.rideApp.route(
+      '/',
+      createFeatureContractApp({
+        repository: features.featureContract.repository,
         useCentralAuth: true,
       }),
     );
