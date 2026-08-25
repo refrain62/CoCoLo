@@ -71,6 +71,8 @@ repository は各 transaction の開始時に `app.tenant_id`、`app.user_id`、
 
 DB 側の RLS は `tenant_id` が `app.tenant_id` と一致する行だけを読み書き可能にし、書き込みは `app.role` が `owner` または `admin` の場合に限る。
 
+`cocolo_app`には `board_contacts` の直接SELECTを付与しない。repositoryはtenant・active membership・manager roleをDB関数内で再検証するprojectionを使い、staffとguardianには連絡先PIIをNULLで返す。管理操作の取得、役職重複確認、年度引き継ぎも専用関数を経由し、DMLの`RETURNING`で直接SELECT権限を迂回しない。
+
 担当者の所属確認と役職枠の変更は同じ transaction で実行する。
 
 年度引き継ぎと役職名の重複確認はテナント単位の transaction advisory lock で直列化する。
@@ -85,11 +87,11 @@ Webは同じfeatureキーでowner/adminのチーム設定とstaff/guardianの閲
 
 ## 現行の統合状態
 
-中央API、Webルート、DB repository、共有export、`board_contacts` のmigrationは `develop` に統合済みである。
+中央API、Webルート、DB repository、共有export、`board_contacts` のmigrationは `develop` に統合済みである。DB PII境界はPR #191で統合した。
 
 年度引き継ぎは行ごとのUUIDv7生成とINSERT影響行数による`copiedCount`を実装済みである。
 
-残る受入は、DB直接参照の個人情報境界、OpenAPI同期、実DB/RLSでの複数行とrollback確認である。
+残る受入は、OpenAPI同期、staging実DB/RLSでの複数行とrollback確認である。
 
 ## 検証
 
@@ -98,3 +100,5 @@ Webは同じfeatureキーでowner/adminのチーム設定とstaff/guardianの閲
 専用 Web テストは token 付与、年度 query、JSON body、ID の URL エンコード、未認証時の通信抑止、staff/guardianの閲覧メニュー、feature flag、非公開連絡先表示を確認する。
 
 DB repository の raw SQL は統合側の migration 適用後に DB integration test を追加し、RLS と transaction rollback を確認する。
+
+PR #191ではfresh local DBでmanagerのprojectionだけがPIIを取得でき、staff/guardianはNULL、直接SELECTは全roleで拒否、別tenantは0件になることを確認した。WindowsのPrisma engine DLL rename EPERMにより公式integration runnerは完走していないため、staging/Linux受入を残す。
