@@ -88,6 +88,14 @@ enum FeatureBillingType {
   @@map("feature_billing_type")
 }
 
+enum SystemAnnouncementStatus {
+  draft
+  published
+  archived
+
+  @@map("system_announcement_status")
+}
+
 enum TenantPlanStatus {
   active
   trialing
@@ -259,12 +267,40 @@ model FeatureDefinition {
   billingType   FeatureBillingType @map("billing_type")
   displayName   String             @map("display_name") @db.VarChar(200)
   defaultEnabled Boolean           @default(false) @map("default_enabled")
+  systemEnabled Boolean           @default(true) @map("system_enabled")
   createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
   flags         TenantFeatureFlag[]
   grantApprovals FeatureGrantApproval[]
 
   @@map("feature_definitions")
+}
+
+model SystemAnnouncement {
+  id              String                  @id @default(uuid(7)) @db.Uuid
+  title           String                  @db.VarChar(200)
+  body            String
+  status          SystemAnnouncementStatus @default(draft)
+  publishedAt     DateTime?               @map("published_at") @db.Timestamptz(6)
+  createdByUserId String                  @map("created_by_user_id") @db.VarChar(128)
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, publishedAt, createdAt], map: "system_announcements_status_published_created_idx")
+  @@map("system_announcements")
+}
+
+model SystemAuditLog {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  actorUserId  String   @map("actor_user_id") @db.VarChar(128)
+  action       String   @db.VarChar(100)
+  resourceType String   @map("resource_type") @db.VarChar(100)
+  resourceId   String?  @map("resource_id") @db.Uuid
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt], map: "system_audit_logs_created_idx")
+  @@map("system_audit_logs")
 }
 
 model TenantPlan {

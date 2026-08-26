@@ -17,6 +17,17 @@ import {
 } from '@prisma/client';
 import { uuidv7 } from './uuidv7.js';
 
+export type {
+  SystemAdminRepository,
+  SystemAnnouncementRecord,
+  SystemAnnouncementStatus,
+  SystemFeatureRecord,
+} from './system-admin-repository.js';
+export {
+  createSystemAdminRepository,
+  SystemAdminRepositoryError,
+} from './system-admin-repository.js';
+
 export type MemberRole = 'owner' | 'admin' | 'staff' | 'guardian';
 export type PromotionMode = 'preview' | 'execute';
 export type PromotionRecord = {
