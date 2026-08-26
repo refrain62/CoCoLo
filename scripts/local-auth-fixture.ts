@@ -4,13 +4,37 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertTestDatabaseTarget } from './test-database-guard.ts';
 
-const email = process.env.E2E_TEST_EMAIL ?? 'owner-a@example.test';
-const password = process.env.E2E_TEST_PASSWORD ?? 'owner-password';
-assert.match(
-  email,
-  /^[^@\s]+@example\.test$/i,
-  'local Auth fixtureのメールアドレスはexample.testに限定します。',
-);
+type FixtureUser = {
+  email: string;
+  password: string;
+  appMetadata: Record<string, unknown>;
+};
+
+const fixtureUsers = {
+  ownerA: {
+    email: process.env.E2E_TEST_EMAIL ?? 'owner-a@example.test',
+    password: process.env.E2E_TEST_PASSWORD ?? 'owner-password',
+    appMetadata: {},
+  },
+  ownerC: {
+    email: process.env.LOCAL_TEAM_C_EMAIL ?? 'owner-c@example.test',
+    password: process.env.LOCAL_TEAM_C_PASSWORD ?? 'owner-c-password',
+    appMetadata: {},
+  },
+  systemAdmin: {
+    email: process.env.LOCAL_SYSTEM_ADMIN_EMAIL ?? 'system-admin@example.test',
+    password:
+      process.env.LOCAL_SYSTEM_ADMIN_PASSWORD ?? 'system-admin-password',
+    appMetadata: { system_admin: true },
+  },
+} satisfies Record<string, FixtureUser>;
+
+for (const user of Object.values(fixtureUsers))
+  assert.match(
+    user.email,
+    /^[^@\s]+@example\.test$/i,
+    'local Auth fixtureのメールアドレスはexample.testに限定します。',
+  );
 const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, '');
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const adminDatabaseUrl = process.env.SUPABASE_ADMIN_DATABASE_URL;
@@ -53,34 +77,45 @@ async function adminRequest<T>(pathName: string, init: RequestInit = {}) {
   return (await response.json()) as T;
 }
 
-type AuthUser = { id: string; email?: string };
+type AuthUser = {
+  id: string;
+  email?: string;
+  app_metadata?: Record<string, unknown>;
+};
 type UserList = { users?: AuthUser[] };
 
-async function ensureUser(): Promise<string> {
+async function ensureUser(user: FixtureUser): Promise<string> {
   const list = await adminRequest<UserList>(
     '/auth/v1/admin/users?page=1&per_page=1000',
   );
   const existing = list.users?.find(
-    (user) => user.email?.toLowerCase() === email.toLowerCase(),
+    (candidate) => candidate.email?.toLowerCase() === user.email.toLowerCase(),
   );
+  const appMetadata = {
+    ...(existing?.app_metadata ?? {}),
+    ...user.appMetadata,
+  };
+  const body = JSON.stringify({
+    password: user.password,
+    email_confirm: true,
+    user_metadata: { cocolo_fixture: true },
+    app_metadata: appMetadata,
+  });
   if (existing) {
     await adminRequest(`/auth/v1/admin/users/${existing.id}`, {
       method: 'PUT',
-      body: JSON.stringify({
-        password,
-        email_confirm: true,
-        user_metadata: { cocolo_fixture: true },
-      }),
+      body,
     });
     return existing.id;
   }
   const created = await adminRequest<AuthUser>('/auth/v1/admin/users', {
     method: 'POST',
     body: JSON.stringify({
-      email,
-      password,
+      email: user.email,
+      password: user.password,
       email_confirm: true,
       user_metadata: { cocolo_fixture: true },
+      app_metadata: appMetadata,
     }),
   });
   assert.match(
@@ -91,12 +126,15 @@ async function ensureUser(): Promise<string> {
   return created.id;
 }
 
-const userId = await ensureUser();
+const ownerAUserId = await ensureUser(fixtureUsers.ownerA);
+const ownerCUserId = await ensureUser(fixtureUsers.ownerC);
+await ensureUser(fixtureUsers.systemAdmin);
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 // Auth管理APIはservice roleで呼ぶが、DB fixtureはmigration roleでschema ownerとして投入する。
 const childEnv = {
   ...process.env,
-  TEST_AUTH_USER_ID: userId,
+  TEST_AUTH_USER_ID: ownerAUserId,
+  TEST_AUTH_TEAM_C_USER_ID: ownerCUserId,
   TEST_DATABASE_RESET_ALLOWED: 'true',
 };
 const command = process.execPath;
