@@ -81,13 +81,19 @@ import {
   systemContextResponseSchema,
 } from '@cocolo/contracts/runtime-response';
 import {
+  systemAnnouncementListResponseSchema,
+  systemAnnouncementResponseSchema,
+  systemFeatureListResponseSchema,
+  systemFeatureResponseSchema,
+} from '@cocolo/contracts/system-admin';
+import {
   uploadCleanupResponseSchema,
   uploadCompleteResponseSchema,
   uploadDownloadResponseSchema,
   uploadExpiredCleanupResponseSchema,
   uploadSessionResponseSchema,
 } from '@cocolo/contracts/upload';
-import type { LineDeliveryProducer } from '@cocolo/db';
+import type { LineDeliveryProducer, SystemAdminRepository } from '@cocolo/db';
 import type { EventRepository } from '@cocolo/db/events';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
 import {
@@ -96,6 +102,7 @@ import {
 } from './central-feature-routes.js';
 import { createEventsApp } from './features/events/event-api.js';
 import { createFeatureEntitlementMiddleware } from './features/feature-contract/feature-contract-app.js';
+import { createSystemAdminApp } from './features/system-admin/system-admin-app.js';
 import { type CorsOptions, createCorsMiddleware } from './security/cors.js';
 import {
   createRateLimitMiddleware,
@@ -196,6 +203,7 @@ export type AppOptions = {
   memberRepository?: MemberRepository;
   promotionRepository?: PromotionRepository;
   eventRepository?: EventRepository;
+  systemAdminRepository?: SystemAdminRepository;
   lineDeliveryProducer?: LineDeliveryProducer;
   cors?: CorsOptions;
   observability?: {
@@ -353,6 +361,36 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       path: /^\/api\/v1\/feature-contract\/[^/]+$/,
       status: 200,
       schema: featureContractResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/system\/announcements$/,
+      status: 200,
+      schema: systemAnnouncementListResponseSchema,
+    },
+    {
+      method: 'POST',
+      path: /^\/api\/v1\/system\/announcements$/,
+      status: 201,
+      schema: systemAnnouncementResponseSchema,
+    },
+    {
+      method: 'PATCH',
+      path: /^\/api\/v1\/system\/announcements\/[^/]+$/,
+      status: 200,
+      schema: systemAnnouncementResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/system\/features$/,
+      status: 200,
+      schema: systemFeatureListResponseSchema,
+    },
+    {
+      method: 'PATCH',
+      path: /^\/api\/v1\/system\/features\/[^/]+$/,
+      status: 200,
+      schema: systemFeatureResponseSchema,
     },
     {
       method: 'GET',
@@ -967,6 +1005,10 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   app.use('/api/v1/notifications/line/:notificationId/retry', authenticate);
   app.use('/api/v1/auth/context', authenticate);
   app.use('/api/v1/system/context', authenticateSystemAdmin);
+  app.use('/api/v1/system/announcements', authenticateSystemAdmin);
+  app.use('/api/v1/system/announcements/*', authenticateSystemAdmin);
+  app.use('/api/v1/system/features', authenticateSystemAdmin);
+  app.use('/api/v1/system/features/*', authenticateSystemAdmin);
   if (options.centralFeatures?.authInvitations) {
     app.use('/api/v1/auth/invitations', authenticate);
     app.use('/api/v1/auth/invitations/:invitationId/revoke', authenticate);
@@ -1126,6 +1168,23 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       }),
     }),
   );
+  const systemAdminRateLimit = createRateLimitMiddleware({
+    scope: 'authenticated',
+    ...rateLimitPolicies.authenticated,
+    store: rateLimitStore,
+    now: rateLimitOptions.now,
+    namespace: rateLimitNamespace,
+    timeoutMs: rateLimitOptions.timeoutMs,
+    keyResolver: (c) => ({
+      kind: 'user',
+      tenantId: 'system-admin',
+      userId: c.get('systemAuth').userId,
+    }),
+  });
+  app.use('/api/v1/system/announcements', systemAdminRateLimit);
+  app.use('/api/v1/system/announcements/*', systemAdminRateLimit);
+  app.use('/api/v1/system/features', systemAdminRateLimit);
+  app.use('/api/v1/system/features/*', systemAdminRateLimit);
   if (options.centralFeatures?.authInvitations) {
     app.use('/api/v1/auth/invitations', authenticatedRateLimit);
     app.use(
@@ -1206,6 +1265,11 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     c.get('systemAuth');
     return c.json({ data: { systemAdmin: true } });
   });
+
+  app.route(
+    '/',
+    createSystemAdminApp({ repository: options.systemAdminRepository }),
+  );
 
   // tenantIdはリクエストから受け取らず、authenticateが設定した所属をrepositoryへ渡す。
   app.get('/api/v1/members', async (c) => {

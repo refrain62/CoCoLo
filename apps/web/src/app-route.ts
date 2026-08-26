@@ -1,5 +1,7 @@
 export type AppEntry = 'landing' | 'manual' | 'authenticated';
 
+import { isLegacyTeamPath } from './admin-routes.js';
+
 export type PageMetadata = {
   title: string;
   description: string;
@@ -29,7 +31,10 @@ export function resolvePageMetadata(pathname: string): PageMetadata {
       title: 'CoCoLoへログイン',
       description: 'CoCoLoを利用中の方のログインページです。',
     };
-  if (pathname === '/admin' || pathname.startsWith('/admin/'))
+  if (
+    pathname === '/admin' ||
+    (pathname.startsWith('/admin/') && !isLegacyTeamPath(pathname))
+  )
     return {
       title: 'CoCoLo | システム管理',
       description: 'CoCoLo全体のお知らせと有償機能を管理する画面です。',

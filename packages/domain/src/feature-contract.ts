@@ -12,6 +12,8 @@ export type FeatureDefinition = {
   billingType: FeatureBillingType;
   displayName: string;
   defaultEnabled: boolean;
+  /** 未設定の既存定義は提供中として扱い、移行途中のsnapshotを壊さない。 */
+  systemEnabled?: boolean;
 };
 
 export type TenantPlan = {
@@ -71,6 +73,8 @@ export function evaluateEffectiveFeatures(input: {
   );
 
   return input.definitions.map((definition) => {
+    if (definition.systemEnabled === false)
+      return { ...definition, enabled: false, reason: 'unavailable' };
     const flag = flags.get(definition.key);
     if (flag) {
       if (definition.billingType === 'paid') {
