@@ -18,7 +18,7 @@ Phase 1の基盤、認証、部員、年度更新、Phase 2の予定・出欠、
 | 認証、チーム選択、部員、予定・出欠、UI | Critical / High 0件。外部接続とrole別受入は継続 |
 | 役員、購買、添付、回覧、LINE、送迎 | 指摘を実装または残タスクへ移管。実DB・外部サービス受入は継続 |
 | 外部サービス、DB分離、配置、toolchain、PR本文 | 契約を運用文書へ統合。未設定時はfail-closed |
-| UI-018〜024 | 認証済みroot、feature flag導線、モバイル表、設定画面分離、共通UI、役員連絡先のrole別導線 | 最新feature branchのCritical / High 0件、実装PRとdocs-only PRの分離、`develop`統合 |
+| UI-018〜024 | Critical / High 0件。認証済みroot、feature flag導線、モバイル表、設定画面分離、共通UI、役員連絡先のrole別導線を実装し、実装PR #204とdocs-only PR #205を`develop`へ統合 |
 
 ## 残る指摘
 
