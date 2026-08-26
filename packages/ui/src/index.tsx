@@ -20,28 +20,29 @@ export function cn(...values: ClassValue[]) {
 
 const uiStyles = `
   .app-shell[data-slot='app-shell'] {
-    --background: #f4f7f8;
-    --foreground: #18252b;
-    --card: #ffffff;
-    --card-foreground: #18252b;
-    --popover: #ffffff;
-    --popover-foreground: #18252b;
-    --primary: #176b62;
-    --primary-foreground: #f4fffc;
-    --secondary: #e7f0ef;
-    --secondary-foreground: #164e49;
-    --muted: #edf2f3;
-    --muted-foreground: #607178;
-    --accent: #dff3ed;
-    --accent-foreground: #15584e;
-    --destructive: #c2414e;
-    --destructive-foreground: #fff8f8;
-    --border: #d9e3e5;
-    --input: #d4e0e2;
-    --ring: #43a99b;
-    --radius: 0.85rem;
-    --shadow-sm: 0 1px 2px rgb(24 37 43 / 0.05);
-    --shadow-md: 0 10px 30px rgb(24 37 43 / 0.08);
+    --background: var(--cocolo-surface-muted, #f3f7f1);
+    --foreground: var(--cocolo-ink, #1d332c);
+    --card: var(--cocolo-surface, #fffdf8);
+    --card-foreground: var(--cocolo-ink, #1d332c);
+    --popover: var(--cocolo-surface, #fffdf8);
+    --popover-foreground: var(--cocolo-ink, #1d332c);
+    --primary: var(--cocolo-brand, #287c62);
+    --primary-foreground: var(--cocolo-surface, #fffdf8);
+    --secondary: var(--cocolo-brand-soft, #dcefe3);
+    --secondary-foreground: var(--cocolo-brand-strong, #145742);
+    --muted: var(--cocolo-sand, #f7f3ea);
+    --muted-foreground: var(--cocolo-muted, #667b73);
+    --accent: var(--cocolo-coral-soft, #fbe2d8);
+    --accent-foreground: var(--cocolo-coral-ink, #b2523e);
+    --destructive: var(--cocolo-danger, #b54842);
+    --destructive-foreground: var(--cocolo-surface-raised, #ffffff);
+    --border: var(--cocolo-line, #dbe5dc);
+    --input: var(--cocolo-border-strong, #c4d4c8);
+    --ring: var(--cocolo-focus, #f4af4d);
+    --radius: var(--cocolo-radius-md, 1rem);
+    --shadow-sm: var(--cocolo-shadow-sm, 0 1px 2px rgb(29 51 44 / 0.06));
+    --shadow-md: var(--cocolo-shadow-md, 0 18px 42px rgb(29 51 44 / 0.1));
+    --transition-fast: var(--cocolo-transition-fast, 160ms ease);
   }
 
   .app-shell--content-only[data-slot='app-shell'] {
@@ -80,8 +81,8 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button']:hover:not(:disabled) {
-    background: #12584f;
-    box-shadow: 0 4px 12px rgb(23 107 98 / 0.2);
+    background: var(--cocolo-brand-strong, #145742);
+    box-shadow: var(--cocolo-shadow-hover, 0 4px 12px rgb(40 124 98 / 0.18));
     transform: translateY(-1px);
   }
 
@@ -91,7 +92,7 @@ const uiStyles = `
 
   .app-shell[data-slot='app-shell'] [data-slot='button']:focus-visible,
   .app-shell[data-slot='app-shell'] [data-slot='badge']:focus-visible {
-    outline: 3px solid rgb(67 169 155 / 0.35);
+    outline: 3px solid var(--cocolo-focus-ring, rgb(244 175 77 / 0.28));
     outline-offset: 2px;
   }
 
@@ -106,7 +107,7 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='secondary']:hover:not(:disabled) {
-    background: #d8e9e6;
+    background: var(--cocolo-brand-soft, #dcefe3);
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='outline'] {
@@ -136,7 +137,7 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='destructive']:hover:not(:disabled) {
-    background: #a93440;
+    background: var(--cocolo-danger-strong, #963d38);
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='link'] {
@@ -148,7 +149,7 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='link']:hover:not(:disabled) {
-    color: #0f514a;
+    color: var(--cocolo-brand-strong, #145742);
     background: transparent;
     box-shadow: none;
     text-decoration: underline;
@@ -248,8 +249,8 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='badge'][data-variant='success'] {
-    color: #14543f;
-    background: #d9f2e5;
+    color: var(--cocolo-success, #2f7d58);
+    background: var(--cocolo-success-soft, #e4f3e8);
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='input'],
@@ -273,7 +274,7 @@ const uiStyles = `
   .app-shell[data-slot='app-shell'] [data-slot='input']:focus-visible,
   .app-shell[data-slot='app-shell'] [data-slot='select']:focus-visible {
     border-color: var(--ring);
-    box-shadow: 0 0 0 3px rgb(67 169 155 / 0.18);
+    box-shadow: 0 0 0 3px var(--cocolo-focus-ring, rgb(244 175 77 / 0.28));
     outline: none;
   }
 
@@ -326,9 +327,9 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='alert'][data-variant='destructive'] {
-    border-color: #f2b8bd;
-    color: #8e2633;
-    background: #fff0f1;
+    border-color: var(--cocolo-coral-soft, #fbe2d8);
+    color: var(--cocolo-danger, #b54842);
+    background: var(--cocolo-danger-soft, #fff0ed);
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='empty-state'] {
@@ -877,6 +878,7 @@ export function AppShell({
   return (
     <main
       data-slot="app-shell"
+      data-design-system="cocolo"
       className={cn(
         'app-shell',
         !hasSidebar && 'app-shell--content-only',

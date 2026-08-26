@@ -80,57 +80,43 @@ const roles = [
   },
 ] as const;
 
+const steps = [
+  {
+    number: '01',
+    label: '気づく',
+    title: 'いつもの場所で、通知に気づく。',
+    description: 'LINEは、予定や回覧が届いたことを知らせる入口に。',
+  },
+  {
+    number: '02',
+    label: '見る',
+    title: 'CoCoLoで、必要な情報を見る。',
+    description: '日時、場所、回答、資料を、目的ごとの画面で確認。',
+  },
+  {
+    number: '03',
+    label: '戻る',
+    title: 'あとから、同じ場所に戻れる。',
+    description: '会話をさかのぼらなくても、最新の状態を見つけられます。',
+  },
+] as const;
+
 function FeatureIcon({ name }: { name: (typeof features)[number]['icon'] }) {
-  const paths = {
-    calendar: (
-      <>
-        <path d="M7 3v3M17 3v3M4 9h16" />
-        <rect x="4" y="5" width="16" height="15" rx="2" />
-        <path d="m8 14 2 2 5-5" />
-      </>
-    ),
-    bulletin: (
-      <>
-        <path d="M8 4h8l3 3v13H5V4h3Z" />
-        <path d="M15 4v4h4M8 12h8M8 16h5" />
-      </>
-    ),
-    car: (
-      <>
-        <path d="m5 11 2-5h10l2 5M4 11h16v6H4z" />
-        <path d="M7 17v2M17 17v2M7 14h.01M17 14h.01" />
-      </>
-    ),
-    wallet: (
-      <>
-        <path d="M4 6h15a1 1 0 0 1 1 1v11H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12" />
-        <path d="M15 10h5v5h-5a2.5 2.5 0 0 1 0-5Z" />
-      </>
-    ),
-    users: (
-      <>
-        <circle cx="9" cy="8" r="3" />
-        <path d="M3 20a6 6 0 0 1 12 0M16 4a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5" />
-      </>
-    ),
-    bell: (
-      <>
-        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
-        <path d="M10 21h4" />
-      </>
-    ),
+  const glyphs = {
+    calendar: '予',
+    bulletin: '回',
+    car: '送',
+    wallet: '集',
+    users: '人',
+    bell: '通',
   } as const;
 
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      {paths[name]}
-    </svg>
-  );
+  return <span aria-hidden="true">{glyphs[name]}</span>;
 }
 
 export function LandingPage() {
   return (
-    <div className="landing-page">
+    <div className="landing-page" data-design-system="cocolo">
       <a className="landing-skip-link" href="#landing-main">
         本文へ移動
       </a>
@@ -142,16 +128,20 @@ export function LandingPage() {
             href="/"
             aria-label="CoCoLo トップページ"
           >
-            <span aria-hidden="true">C</span>
+            <span className="landing-brand-mark" aria-hidden="true">
+              C
+            </span>
             CoCoLo
           </a>
+          <span className="landing-header-tagline">みんなの連絡帳</span>
           <nav className="landing-nav" aria-label="トップページメニュー">
             <a href="#challenge">課題</a>
+            <a href="#how">使い方</a>
             <a href="#line-and-cocolo">LINEとの使い分け</a>
             <a href="#features">できること</a>
           </nav>
           <a className="landing-header-cta" href="/login">
-            利用中の方はログイン
+            ログイン
           </a>
         </div>
       </header>
@@ -160,18 +150,19 @@ export function LandingPage() {
         <section className="landing-hero" aria-labelledby="landing-hero-title">
           <div className="landing-container landing-hero-grid">
             <div className="landing-hero-copy">
-              <p className="landing-eyebrow">
-                保護者と運営者のためのチーム運営ツール
+              <p className="landing-kicker">
+                <span>CoCoLo</span> みんなの連絡帳
               </p>
               <h1 id="landing-hero-title">
-                大切な連絡が、
-                <span>チャットに埋もれない</span>
-                チームへ。
+                伝えたいことが、
+                <span>ちゃんと届く。</span>
+                <em>必要なときに、戻れる。</em>
               </h1>
               <p className="landing-hero-lead">
-                練習や試合の予定、出欠、回覧、送迎、注文・集金。
+                大切な連絡が、チャットに埋もれないように。
+                部活やクラブの連絡を、気軽にやりとりできる場所へ。
                 LINEは通知の入口に、確定した情報はCoCoLoに整理。
-                探す、聞き直す、集計し直す手間を減らします。
+                探す、聞き直す、集計し直す時間を減らします。
               </p>
               <div className="landing-actions">
                 <a
@@ -179,38 +170,71 @@ export function LandingPage() {
                   href="/login"
                 >
                   利用中の方はログイン
-                  <span aria-hidden="true">→</span>
+                  <span aria-hidden="true">↗</span>
                 </a>
                 <a
                   className="landing-button landing-button-secondary"
-                  href="#features"
+                  href="#how"
                 >
-                  できることを見る
+                  まずは使い方を見る
                 </a>
               </div>
               <ul
                 className="landing-topic-list"
                 aria-label="CoCoLoで整理できる情報"
               >
-                <li>予定</li>
-                <li>出欠</li>
-                <li>回覧</li>
-                <li>送迎</li>
-                <li>注文・集金</li>
+                <li>
+                  <span aria-hidden="true">○</span> 予定
+                </li>
+                <li>
+                  <span aria-hidden="true">○</span> 出欠
+                </li>
+                <li>
+                  <span aria-hidden="true">○</span> 回覧
+                </li>
+                <li>
+                  <span aria-hidden="true">○</span> 送迎
+                </li>
+                <li>
+                  <span aria-hidden="true">○</span> 注文・集金
+                </li>
               </ul>
             </div>
             <figure className="landing-hero-visual">
               <div className="landing-hero-image-wrap">
                 <img
                   src="/assets/cocolo-hero-organized-communication.webp"
-                  alt=""
+                  alt="CoCoLoで予定や連絡を整理したイメージ"
                   width="1400"
                   height="933"
                   fetchPriority="high"
                 />
+                <div className="landing-hero-sticker landing-hero-sticker-top">
+                  <span className="landing-sticker-dot" aria-hidden="true" />
+                  今日の予定
+                  <strong>3件</strong>
+                </div>
+                <div className="landing-hero-sticker landing-hero-sticker-bottom">
+                  <span aria-hidden="true">✓</span>
+                  みんなの回答がまとまりました
+                </div>
               </div>
-              <figcaption>ばらばらの連絡を、目的ごとの情報へ。</figcaption>
+              <figcaption>
+                <span aria-hidden="true">✦</span>
+                ばらばらの連絡を、目的ごとの情報へ。
+              </figcaption>
             </figure>
+          </div>
+          <div className="landing-container landing-hero-note">
+            <span>
+              <strong>01</strong> むずかしい操作は、できるだけ少なく
+            </span>
+            <span>
+              <strong>02</strong> 必要な情報は、いつも同じ場所に
+            </span>
+            <span>
+              <strong>03</strong> 役割に合わせて、見やすく
+            </span>
           </div>
         </section>
 
@@ -237,9 +261,40 @@ export function LandingPage() {
               ))}
             </div>
             <p className="landing-challenge-answer">
-              <span aria-hidden="true">✓</span>
+              <span aria-hidden="true">↗</span>
               CoCoLoは、情報ごとに決まった居場所をつくります。
             </p>
+          </div>
+        </section>
+
+        <section
+          className="landing-section landing-how"
+          id="how"
+          aria-labelledby="how-title"
+        >
+          <div className="landing-container">
+            <div className="landing-section-heading landing-section-heading-centered">
+              <p className="landing-eyebrow">HOW COCOLO WORKS</p>
+              <h2 id="how-title">いつもの連絡に、戻れる場所を。</h2>
+              <p>
+                新しいことをたくさん覚えなくても大丈夫。気づいて、見て、あとから戻る。それだけです。
+              </p>
+            </div>
+            <div className="landing-step-grid">
+              {steps.map((step, index) => (
+                <article className="landing-step-card" key={step.number}>
+                  <div className="landing-step-topline">
+                    <span>{step.number}</span>
+                    {index < steps.length - 1 ? (
+                      <i aria-hidden="true">→</i>
+                    ) : null}
+                  </div>
+                  <p className="landing-step-label">{step.label}</p>
+                  <h3>{step.title}</h3>
+                  <p>{step.description}</p>
+                </article>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -269,7 +324,7 @@ export function LandingPage() {
                 </ul>
               </article>
               <div className="landing-flow-arrow" aria-hidden="true">
-                →
+                ↗
               </div>
               <article className="landing-handoff-card landing-handoff-card-cocolo">
                 <p className="landing-handoff-label">CoCoLo</p>
@@ -360,29 +415,35 @@ export function LandingPage() {
                 連絡を便利にするだけでなく、誰に何を見せるかもチーム運営の一部として設計します。
               </p>
             </div>
-            <ul className="landing-trust-list">
-              <li>
-                <span aria-hidden="true">01</span>
-                <div>
-                  <strong>役割に応じた表示</strong>
-                  <p>運営者、スタッフ、保護者に必要な情報を分けます。</p>
-                </div>
-              </li>
-              <li>
-                <span aria-hidden="true">02</span>
-                <div>
-                  <strong>チーム単位で整理</strong>
-                  <p>所属するチームを境界に、情報を取り扱います。</p>
-                </div>
-              </li>
-              <li>
-                <span aria-hidden="true">03</span>
-                <div>
-                  <strong>必要最小限の共有</strong>
-                  <p>グループ通知へ不要な個人情報を載せない方針です。</p>
-                </div>
-              </li>
-            </ul>
+            <div className="landing-trust-panel">
+              <p className="landing-trust-panel-label">CoCoLoの考え方</p>
+              <ul className="landing-trust-list">
+                <li>
+                  <span aria-hidden="true">01</span>
+                  <div>
+                    <strong>役割に応じた表示</strong>
+                    <p>運営者、スタッフ、保護者に必要な情報を分けます。</p>
+                  </div>
+                </li>
+                <li>
+                  <span aria-hidden="true">02</span>
+                  <div>
+                    <strong>チーム単位で整理</strong>
+                    <p>所属するチームを境界に、情報を取り扱います。</p>
+                  </div>
+                </li>
+                <li>
+                  <span aria-hidden="true">03</span>
+                  <div>
+                    <strong>必要最小限の共有</strong>
+                    <p>グループ通知へ不要な個人情報を載せない方針です。</p>
+                  </div>
+                </li>
+              </ul>
+              <p className="landing-trust-panel-note">
+                便利さと安心を、どちらもあきらめないために。
+              </p>
+            </div>
           </div>
         </section>
 
@@ -402,7 +463,7 @@ export function LandingPage() {
             </div>
             <div className="landing-actions">
               <a className="landing-button landing-button-light" href="/login">
-                利用中の方はログイン <span aria-hidden="true">→</span>
+                利用中の方はログイン <span aria-hidden="true">↗</span>
               </a>
               <a
                 className="landing-button landing-button-outline-light"
@@ -423,7 +484,9 @@ export function LandingPage() {
               href="/"
               aria-label="CoCoLo トップページ"
             >
-              <span aria-hidden="true">C</span>
+              <span className="landing-brand-mark" aria-hidden="true">
+                C
+              </span>
               CoCoLo
             </a>
             <p>部活・クラブの予定、回答、連絡をひとつの場所へ。</p>
