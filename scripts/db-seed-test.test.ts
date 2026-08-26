@@ -84,6 +84,14 @@ test('規模fixtureの生成IDはUUIDv7形式を保つ', () => {
   assert.match(sql, /lpad\(\(510000 \+ \(\(team - 1\) \* 20\)/);
 });
 
+test('Auth fixtureのチームCユーザーをCのownerへ紐付ける', () => {
+  const sql = buildTestDataStatements('auth-user-a', 'auth-user-c').join('\n');
+  assert.match(
+    sql,
+    /'00000000-0000-7000-8000-000000000003', 'auth-user-c', 'owner', 'active'/,
+  );
+});
+
 test('fixture投入後は全テーブルの最低件数を検証する', () => {
   const query = buildFixtureCountQuery();
   assert.match(query, /count\(\*\)::bigint AS row_count FROM members/);
