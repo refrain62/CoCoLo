@@ -43,6 +43,7 @@ import {
 } from './features/orders-payments/index.js';
 import { createRideOperationsApi } from './features/ride-operations/ride-operations-api.js';
 import { RideOperationsPanel } from './features/ride-operations/ride-operations-panel.js';
+import { LandingPage } from './landing-page.js';
 import { createMemberApi } from './member-api.js';
 import { MemberManagementPage } from './member-management-page.js';
 import {
@@ -75,7 +76,11 @@ function DeepLinkState({
   );
 }
 
-export function AuthenticatedApp() {
+export function AuthenticatedApp({
+  publicRoot = false,
+}: {
+  publicRoot?: boolean;
+}) {
   // 認証状態が確定するまでLoginPageを表示し、部員APIへ到達できる画面をsession保有者に限定する。
   const { authenticatedFetch, isLoggingOut, logout, session } = useAuth();
   const [pathname, setPathname] = useState(() => window.location.pathname);
@@ -292,7 +297,7 @@ export function AuthenticatedApp() {
         token={invitationToken}
       />
     );
-  if (!session) return <LoginPage />;
+  if (!session) return publicRoot ? <LandingPage /> : <LoginPage />;
   if (isResolvingTeam)
     return (
       <AppShell>
@@ -574,10 +579,14 @@ export function AuthenticatedApp() {
   );
 }
 
-export function AuthenticatedRuntime() {
+export function AuthenticatedRuntime({
+  publicRoot = false,
+}: {
+  publicRoot?: boolean;
+}) {
   return (
     <AuthProvider>
-      <AuthenticatedApp />
+      <AuthenticatedApp publicRoot={publicRoot} />
     </AuthProvider>
   );
 }
