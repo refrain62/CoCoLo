@@ -93,6 +93,15 @@
 
 ## 完了判定の共通結果
 
+## RIDE-002 実DB統合・競合制御追補記録
+
+- 対象: 実装PR #221。RIDE-002のローカルfixture、確定公開中の表示名保護、複数送迎予定をまたぐ同時更新、CIのinstall script無効化環境を追補した。
+- 実装: `members`と`tenant_memberships`で異なる行型を持つDBトリガーを分離し、表示名変更と確定公開の状態遷移を同じtenant・plan順のadvisory lockで直列化した。fixtureは旧形式の生成IDだけを限定補修し、再実行で確定済み業務データの状態や表示名を上書きしない。
+- 検証: `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm test:contract`、migration SQL/checksum、database integrity、trust root、fresh Supabase 40 migration、DB central RLS concurrency、API members DB 6を成功させた。GitHub Actions qualityも成功した。
+- 敵対的レビュー: サブエージェントによるtenant越境、認可、個人情報、入力検証、状態遷移、競合、seed再実行、CI再現性の確認でCritical / Highは0件とした。Mediumの2-plan同時車登録を専用実DBテストで明示する課題は残した。
+- 反映: 実装PR #221を2026-08-27に`develop`へ統合した。CIで判明したdomain build順序も修正し、install script無効化時のunit test再現性を確保した。
+- 残課題: Google Maps設定、Supabase stagingのRLS・競合、manager/guardianの実ブラウザ受入は、再開台帳の`RIDE-002-ACCEPTANCE`へ残す。
+
 完了した実装は、tenant越境、認可、個人情報、入力検証、状態遷移、競合、外部サービス未接続の表示をレビュー対象にしました。
 
 CriticalとHighが残る実装を完了扱いにしていません。
