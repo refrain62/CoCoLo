@@ -1,5 +1,9 @@
 import { createSupabaseTokenVerifier } from '@cocolo/auth';
-import { createMemberRepositories, createPrismaClient } from '@cocolo/db';
+import {
+  createMemberRepositories,
+  createPrismaClient,
+  createSystemAdminRepository,
+} from '@cocolo/db';
 import { createAttachmentRepositories } from '@cocolo/db/attachment';
 import { createAuthInvitationRepository } from '@cocolo/db/auth-invitation';
 import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
@@ -33,6 +37,7 @@ const runtime = readRuntimeEnvironment(process.env);
 const port = Number(process.env.PORT ?? 8787);
 const prisma = createPrismaClient();
 const featureContractRepository = createFeatureContractRepository(prisma);
+const systemAdminRepository = createSystemAdminRepository(prisma);
 const notificationFeatureEnabled = async (input: {
   tenantId: string;
   actorUserId: string;
@@ -152,6 +157,7 @@ const app = createApp({
   },
   ...repositories,
   eventRepository,
+  systemAdminRepository,
   centralFeatures,
 });
 serve({ fetch: app.fetch, port });

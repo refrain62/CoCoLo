@@ -44,6 +44,7 @@ import {
   isNotificationDeepLink,
   parseNotificationDeepLink,
 } from './notification-deep-link.js';
+import { createSystemAdminApi } from './system-admin-api.js';
 import { SystemAdminPage } from './system-admin-page.js';
 import { isSystemAdminPath } from './system-admin-routes.js';
 import { SystemAdminShell } from './system-admin-shell.js';
@@ -107,6 +108,14 @@ export function AuthenticatedApp() {
   const systemContextApi = useMemo(
     () =>
       createSystemContextApi({
+        getAccessToken: () => session?.accessToken ?? null,
+        fetcher: authenticatedFetch,
+      }),
+    [authenticatedFetch, session?.accessToken],
+  );
+  const systemAdminApi = useMemo(
+    () =>
+      createSystemAdminApi({
         getAccessToken: () => session?.accessToken ?? null,
         fetcher: authenticatedFetch,
       }),
@@ -322,7 +331,11 @@ export function AuthenticatedApp() {
         onLogout={() => void logout()}
       >
         {(systemRoute) => (
-          <SystemAdminPage onNavigate={navigateInApp} route={systemRoute} />
+          <SystemAdminPage
+            api={systemAdminApi}
+            onNavigate={navigateInApp}
+            route={systemRoute}
+          />
         )}
       </SystemAdminShell>
     );

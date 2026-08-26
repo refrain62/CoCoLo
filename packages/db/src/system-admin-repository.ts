@@ -210,7 +210,8 @@ export function createSystemAdminRepository(
       assertActorUserId(input.actorUserId);
       if (input.title !== undefined)
         assertAnnouncementText(input.title, 'タイトル', 200);
-      if (input.body !== undefined) assertAnnouncementText(input.body, '本文');
+      if (input.body !== undefined)
+        assertAnnouncementText(input.body, '本文', 5000);
       if (input.status !== undefined) assertAnnouncementStatus(input.status);
       return client.$transaction(async (tx) => {
         await setSystemAdminContext(tx, input.actorUserId);

@@ -20,6 +20,9 @@ const tenantIndependentTables = new Set([
   'feature_definitions',
   'feature_plan_definitions',
   'auth_identities',
+  // system_adminの操作対象はtenantを持たず、JWTのuser/role contextでRLS境界を作る。
+  'system_announcements',
+  'system_audit_logs',
 ]);
 
 function compactSql(content: string) {

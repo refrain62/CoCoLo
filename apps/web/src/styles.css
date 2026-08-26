@@ -1013,6 +1013,50 @@ a:hover {
   font-size: 0.92rem;
 }
 
+.system-admin-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.system-admin-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(10rem, 1fr);
+  gap: 1rem;
+}
+
+.system-admin-form label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.system-admin-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.system-admin-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.system-admin-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.system-admin-card-heading [data-slot='card-title'] {
+  min-width: 0;
+}
+
 .admin-eyebrow,
 .admin-hero-kicker {
   margin: 0 0 0.45rem !important;
@@ -1270,6 +1314,15 @@ a:hover {
 
   .feature-plan-summary {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .system-admin-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .system-admin-form-actions {
+    align-items: stretch;
     flex-direction: column;
   }
 }

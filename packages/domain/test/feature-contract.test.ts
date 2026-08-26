@@ -39,6 +39,38 @@ test('paid featureは有効なplanとfeature keyがなければ無効になる',
   assert.equal(orders?.reason, 'unavailable');
 });
 
+test('system adminが停止した機能はplanやflagがあっても無効になる', () => {
+  const [orders] = evaluateEffectiveFeatures({
+    definitions: [
+      {
+        key: 'orders',
+        billingType: 'paid',
+        displayName: '購買・集金',
+        defaultEnabled: false,
+        systemEnabled: false,
+      },
+    ],
+    plan: {
+      status: 'active',
+      featureKeys: ['orders'],
+      startsAt: new Date('2026-01-01T00:00:00.000Z'),
+      endsAt: null,
+    },
+    flags: [
+      {
+        featureKey: 'orders',
+        enabled: true,
+        source: 'operator',
+        startsAt: new Date('2026-01-01T00:00:00.000Z'),
+        endsAt: null,
+      },
+    ],
+    now,
+  });
+  assert.equal(orders?.enabled, false);
+  assert.equal(orders?.reason, 'unavailable');
+});
+
 test('paid flagの有効化だけではplanなしで利用できない', () => {
   const [orders] = evaluateEffectiveFeatures({
     definitions: definitions.slice(1),

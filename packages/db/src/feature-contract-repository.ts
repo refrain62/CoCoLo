@@ -136,6 +136,7 @@ function toSnapshot(
     billingType: 'free' | 'paid';
     displayName: string;
     defaultEnabled: boolean;
+    systemEnabled: boolean;
   }>,
   plan: {
     planKey: string;
@@ -194,6 +195,7 @@ export function createFeatureContractRepository(
         billingType: definition.billingType,
         displayName: definition.displayName,
         defaultEnabled: definition.defaultEnabled,
+        systemEnabled: definition.systemEnabled,
       })),
       plan
         ? {

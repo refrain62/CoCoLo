@@ -2,6 +2,7 @@ export * from './auth-invitation.ts';
 export * from './feature-contract.ts';
 export * from './line-delivery-contract.ts';
 export * from './subject-member.ts';
+export * from './system-admin-contract.ts';
 export * from './upload-contract.ts';
 
 export const apiVersion = 'v1';
