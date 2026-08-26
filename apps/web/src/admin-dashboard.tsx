@@ -131,7 +131,12 @@ export function AdminDashboard({
       >
         <div className="admin-action-grid">
           {eventsPath && canNavigate('events') ? (
-            <button type="button" onClick={() => onNavigate(eventsPath)}>
+            <Button
+              className="admin-action-button"
+              type="button"
+              variant="outline"
+              onClick={() => onNavigate(eventsPath)}
+            >
               <span className="admin-action-icon" aria-hidden="true">
                 ◷
               </span>
@@ -140,12 +145,17 @@ export function AdminDashboard({
                 <small>開催予定と未回答を確認</small>
               </span>
               <span aria-hidden="true">→</span>
-            </button>
+            </Button>
           ) : null}
           {role !== 'guardian' &&
           announcementsPath &&
           canNavigate('announcements') ? (
-            <button type="button" onClick={() => onNavigate(announcementsPath)}>
+            <Button
+              className="admin-action-button"
+              type="button"
+              variant="outline"
+              onClick={() => onNavigate(announcementsPath)}
+            >
               <span className="admin-action-icon" aria-hidden="true">
                 ▤
               </span>
@@ -154,10 +164,15 @@ export function AdminDashboard({
                 <small>チームにお知らせを共有</small>
               </span>
               <span aria-hidden="true">→</span>
-            </button>
+            </Button>
           ) : null}
           {featuresPath && canNavigate('features') ? (
-            <button type="button" onClick={() => onNavigate(featuresPath)}>
+            <Button
+              className="admin-action-button"
+              type="button"
+              variant="outline"
+              onClick={() => onNavigate(featuresPath)}
+            >
               <span className="admin-action-icon" aria-hidden="true">
                 ✦
               </span>
@@ -166,7 +181,7 @@ export function AdminDashboard({
                 <small>有効な機能とプランを確認</small>
               </span>
               <span aria-hidden="true">→</span>
-            </button>
+            </Button>
           ) : null}
         </div>
       </Section>
