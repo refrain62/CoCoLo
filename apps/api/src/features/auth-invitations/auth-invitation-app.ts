@@ -47,6 +47,7 @@ function projectInvitation(invitation: {
   id: string;
   memberId: string;
   role: 'guardian';
+  linkType: 'self' | 'guardian';
   relationship: string;
   status: 'pending' | 'accepted' | 'expired' | 'revoked';
   expiresAt: Date;
@@ -56,6 +57,7 @@ function projectInvitation(invitation: {
     id: invitation.id,
     memberId: invitation.memberId,
     role: invitation.role,
+    linkType: invitation.linkType,
     relationship: invitation.relationship,
     status: invitation.status,
     expiresAt: invitation.expiresAt.toISOString(),
@@ -125,6 +127,7 @@ export function createAuthInvitationApp(options: {
       actorUserId: auth.userId,
       role: auth.membership.role,
       memberId: parsed.data.memberId,
+      linkType: parsed.data.linkType,
       relationship: parsed.data.relationship,
       expiresAt: new Date(
         Date.now() + parsed.data.expiresInHours * 60 * 60 * 1000,
@@ -194,6 +197,7 @@ export function createAuthInvitationApp(options: {
         '入力値が不正です。',
         parsed.error.flatten(),
       );
+    // providerはクライアント入力だが、subjectは署名済みJWTに紐づくSupabase identity lookupからだけ解決する。
     const providerSubject = c.get('authProviderSubjects')[parsed.data.provider];
     if (!providerSubject)
       return errorResponse(

@@ -99,6 +99,24 @@ export function AdminShell({
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  useEffect(() => {
+    if (!contract) return;
+    const requestedRoute = resolveAdminRoute(pathname);
+    const requestedItem = adminNavigation.find(
+      (item) => item.route === requestedRoute,
+    );
+    if (!requestedItem) return;
+    const features = contract.features.map(({ key, enabled }) => ({
+      key,
+      enabled,
+    }));
+    if (isAdminNavigationVisible(requestedItem, role, features)) return;
+    const dashboardPath = canonicalAdminPath('/admin');
+    if (pathname === dashboardPath) return;
+    window.history.replaceState({}, '', dashboardPath);
+    setPathname(dashboardPath);
+  }, [contract, pathname, role]);
+
   const visibleNavigation = useMemo(() => {
     if (!contract)
       return adminNavigation.filter((item) => item.route === 'dashboard');

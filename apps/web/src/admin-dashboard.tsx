@@ -11,7 +11,7 @@ import {
   EmptyState,
   Section,
 } from '@cocolo/ui';
-import { isAdminRouteVisible } from './admin-routes.js';
+import { adminNavigation, isAdminRouteVisible } from './admin-routes.js';
 import type { AuthRole } from './auth-context-api.js';
 import type { FeatureContractSnapshot } from './features/feature-contract/feature-contract-api.js';
 
@@ -52,6 +52,12 @@ export function AdminDashboard({
   ).length;
   const canNavigate = (route: Parameters<typeof isAdminRouteVisible>[0]) =>
     isAdminRouteVisible(route, role, contract.features);
+  const pathFor = (route: Parameters<typeof isAdminRouteVisible>[0]) =>
+    adminNavigation.find((item) => item.route === route)?.href;
+  const membersPath = pathFor('members');
+  const eventsPath = pathFor('events');
+  const announcementsPath = pathFor('announcements');
+  const featuresPath = pathFor('features');
 
   return (
     <div className="admin-page-stack">
@@ -60,12 +66,11 @@ export function AdminDashboard({
         title={`${team.tenantName}の運営状況`}
         description={`${roleLabels[role]}として、今日の確認が必要な情報をまとめています。`}
         actions={
-          <Button
-            variant="outline"
-            onClick={() => onNavigate('/admin/members')}
-          >
-            メンバーを確認
-          </Button>
+          membersPath && canNavigate('members') ? (
+            <Button variant="outline" onClick={() => onNavigate(membersPath)}>
+              メンバーを確認
+            </Button>
+          ) : undefined
         }
       >
         <div className="admin-hero-card">
@@ -86,7 +91,7 @@ export function AdminDashboard({
       <div className="admin-metric-grid">
         <Card className="admin-metric-card">
           <CardHeader>
-            <CardDescription>利用できる機能</CardDescription>
+            <CardDescription>チームで有効な機能</CardDescription>
             <CardTitle>{enabledCount}個</CardTitle>
           </CardHeader>
           <CardContent>
@@ -95,7 +100,7 @@ export function AdminDashboard({
         </Card>
         <Card className="admin-metric-card">
           <CardHeader>
-            <CardDescription>有償機能</CardDescription>
+            <CardDescription>利用中の有償機能</CardDescription>
             <CardTitle>{paidCount}個</CardTitle>
           </CardHeader>
           <CardContent>
@@ -125,8 +130,13 @@ export function AdminDashboard({
         description="迷わず次の操作へ進めるよう、主要な画面をまとめています。"
       >
         <div className="admin-action-grid">
-          {canNavigate('events') ? (
-            <button type="button" onClick={() => onNavigate('/admin/events')}>
+          {eventsPath && canNavigate('events') ? (
+            <Button
+              className="admin-action-button"
+              type="button"
+              variant="outline"
+              onClick={() => onNavigate(eventsPath)}
+            >
               <span className="admin-action-icon" aria-hidden="true">
                 ◷
               </span>
@@ -135,12 +145,16 @@ export function AdminDashboard({
                 <small>開催予定と未回答を確認</small>
               </span>
               <span aria-hidden="true">→</span>
-            </button>
+            </Button>
           ) : null}
-          {role !== 'guardian' && canNavigate('announcements') ? (
-            <button
+          {role !== 'guardian' &&
+          announcementsPath &&
+          canNavigate('announcements') ? (
+            <Button
+              className="admin-action-button"
               type="button"
-              onClick={() => onNavigate('/admin/announcements')}
+              variant="outline"
+              onClick={() => onNavigate(announcementsPath)}
             >
               <span className="admin-action-icon" aria-hidden="true">
                 ▤
@@ -150,10 +164,15 @@ export function AdminDashboard({
                 <small>チームにお知らせを共有</small>
               </span>
               <span aria-hidden="true">→</span>
-            </button>
+            </Button>
           ) : null}
-          {canNavigate('features') ? (
-            <button type="button" onClick={() => onNavigate('/admin/features')}>
+          {featuresPath && canNavigate('features') ? (
+            <Button
+              className="admin-action-button"
+              type="button"
+              variant="outline"
+              onClick={() => onNavigate(featuresPath)}
+            >
               <span className="admin-action-icon" aria-hidden="true">
                 ✦
               </span>
@@ -162,7 +181,7 @@ export function AdminDashboard({
                 <small>有効な機能とプランを確認</small>
               </span>
               <span aria-hidden="true">→</span>
-            </button>
+            </Button>
           ) : null}
         </div>
       </Section>

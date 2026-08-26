@@ -20,6 +20,7 @@ describe('auth invitation API', () => {
             id: '018f5b2d-8b5f-7c4a-8f10-123456789abe',
             memberId: '018f5b2d-8b5f-7c4a-8f10-123456789abd',
             role: 'guardian',
+            linkType: 'guardian',
             relationship: '保護者',
             inviteUrl: 'https://app.example.com/invite/opaque',
             expiresAt: '2026-08-25T12:00:00.000Z',
@@ -32,6 +33,7 @@ describe('auth invitation API', () => {
       api.create({
         memberId: '018f5b2d-8b5f-7c4a-8f10-123456789abd',
         role: 'guardian',
+        linkType: 'guardian',
         relationship: '保護者',
         expiresInHours: 72,
       }),
@@ -52,6 +54,7 @@ describe('auth invitation API', () => {
             tenantId: '018f5b2d-8b5f-7c4a-8f10-123456789abc',
             memberId: '018f5b2d-8b5f-7c4a-8f10-123456789abd',
             role: 'guardian',
+            linkType: 'guardian',
             linkStatus: 'active',
           },
         });

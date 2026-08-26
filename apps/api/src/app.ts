@@ -951,98 +951,65 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     app.use('/api/v1/orders/*', authenticate);
   }
 
-  if (options.centralFeatures?.featureContract) {
-    const featureContractRepository =
-      options.centralFeatures.featureContract.repository;
-    const useFeature = (path: string, featureKey: string) => {
-      app.use(
-        path,
-        createFeatureEntitlementMiddleware(
-          featureContractRepository,
-          featureKey,
-        ),
-      );
-    };
+  const featureContractRepository =
+    options.centralFeatures?.featureContract?.repository;
+  const featureContractUnavailable: MiddlewareHandler<ApiEnv> = async (c) =>
+    errorResponse(
+      c,
+      503,
+      'FEATURE_CONTRACT_NOT_CONFIGURED',
+      '機能契約を確認できないため、この機能を利用できません。',
+    );
+  const useFeature = (path: string, featureKey: string) => {
+    app.use(
+      path,
+      featureContractRepository
+        ? createFeatureEntitlementMiddleware(
+            featureContractRepository,
+            featureKey,
+          )
+        : featureContractUnavailable,
+    );
+  };
+  if (options.memberRepository || options.promotionRepository) {
     useFeature('/api/v1/members', 'members');
     useFeature('/api/v1/members/*', 'members');
-    if (options.centralFeatures?.boardContact) {
-      useFeature('/api/v1/board-members', 'board-contacts');
-      useFeature('/api/v1/board-members/*', 'board-contacts');
-    }
-    if (options.eventRepository) {
-      useFeature('/api/v1/events', 'events-attendance');
-      useFeature('/api/v1/events/*', 'events-attendance');
-    }
-    if (options.centralFeatures.attachments) {
-      useFeature('/api/v1/uploads', 'attachments');
-      useFeature('/api/v1/uploads/*', 'attachments');
-    }
-    if (options.centralFeatures.bulletinBoard) {
-      useFeature('/api/v1/announcements', 'bulletin-board');
-      useFeature('/api/v1/announcements/*', 'bulletin-board');
-    }
-    if (options.centralFeatures.line) {
-      useFeature('/api/v1/line/status', 'line-notifications');
-      useFeature('/api/v1/line/status/*', 'line-notifications');
-      useFeature('/api/v1/line/connect', 'line-notifications');
-      useFeature('/api/v1/line/connect/*', 'line-notifications');
-      useFeature('/api/v1/line/notifications', 'line-notifications');
-      useFeature('/api/v1/line/notifications/*', 'line-notifications');
-    }
-    if (options.lineDeliveryProducer) {
-      useFeature('/api/v1/notifications/line', 'line-notifications');
-      useFeature('/api/v1/notifications/line/*', 'line-notifications');
-    }
-    if (options.centralFeatures.ride) {
-      useFeature('/api/v1/ride-plans', 'ride-operations');
-      useFeature('/api/v1/ride-plans/*', 'ride-operations');
-    }
-    if (options.centralFeatures.orders) {
-      useFeature('/api/v1/orders', 'orders-payments');
-      useFeature('/api/v1/orders/*', 'orders-payments');
-    }
   }
-  if (
-    options.lineDeliveryProducer &&
-    !options.centralFeatures?.featureContract
-  ) {
-    const featureContractUnavailable: MiddlewareHandler<ApiEnv> = async (c) =>
-      errorResponse(
-        c,
-        503,
-        'FEATURE_CONTRACT_NOT_CONFIGURED',
-        '機能契約を確認できないため、LINE通知を利用できません。',
-      );
-    app.use('/api/v1/notifications/line', featureContractUnavailable);
-    app.use('/api/v1/notifications/line/*', featureContractUnavailable);
+  if (options.centralFeatures?.boardContact) {
+    useFeature('/api/v1/board-members', 'board-contacts');
+    useFeature('/api/v1/board-members/*', 'board-contacts');
   }
-  if (
-    options.centralFeatures?.boardContact &&
-    !options.centralFeatures?.featureContract
-  ) {
-    const featureContractUnavailable: MiddlewareHandler<ApiEnv> = async (c) =>
-      errorResponse(
-        c,
-        503,
-        'FEATURE_CONTRACT_NOT_CONFIGURED',
-        '機能契約を確認できないため、役員・連絡先を利用できません。',
-      );
-    app.use('/api/v1/board-members', featureContractUnavailable);
-    app.use('/api/v1/board-members/*', featureContractUnavailable);
+  if (options.eventRepository) {
+    useFeature('/api/v1/events', 'events-attendance');
+    useFeature('/api/v1/events/*', 'events-attendance');
   }
-  if (
-    options.centralFeatures?.ride &&
-    !options.centralFeatures?.featureContract
-  ) {
-    const featureContractUnavailable: MiddlewareHandler<ApiEnv> = async (c) =>
-      errorResponse(
-        c,
-        503,
-        'FEATURE_CONTRACT_NOT_CONFIGURED',
-        '機能契約を確認できないため、送迎を利用できません。',
-      );
-    app.use('/api/v1/ride-plans', featureContractUnavailable);
-    app.use('/api/v1/ride-plans/*', featureContractUnavailable);
+  if (options.centralFeatures?.attachments) {
+    useFeature('/api/v1/uploads', 'attachments');
+    useFeature('/api/v1/uploads/*', 'attachments');
+  }
+  if (options.centralFeatures?.bulletinBoard) {
+    useFeature('/api/v1/announcements', 'bulletin-board');
+    useFeature('/api/v1/announcements/*', 'bulletin-board');
+  }
+  if (options.centralFeatures?.line) {
+    useFeature('/api/v1/line/status', 'line-notifications');
+    useFeature('/api/v1/line/status/*', 'line-notifications');
+    useFeature('/api/v1/line/connect', 'line-notifications');
+    useFeature('/api/v1/line/connect/*', 'line-notifications');
+    useFeature('/api/v1/line/notifications', 'line-notifications');
+    useFeature('/api/v1/line/notifications/*', 'line-notifications');
+  }
+  if (options.lineDeliveryProducer) {
+    useFeature('/api/v1/notifications/line', 'line-notifications');
+    useFeature('/api/v1/notifications/line/*', 'line-notifications');
+  }
+  if (options.centralFeatures?.ride) {
+    useFeature('/api/v1/ride-plans', 'ride-operations');
+    useFeature('/api/v1/ride-plans/*', 'ride-operations');
+  }
+  if (options.centralFeatures?.orders) {
+    useFeature('/api/v1/orders', 'orders-payments');
+    useFeature('/api/v1/orders/*', 'orders-payments');
   }
 
   // 認証後のtenant/userだけをキーに使い、production系では起動時に分散adapterを要求する。

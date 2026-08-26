@@ -15,6 +15,10 @@ import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
 import { createR2AttachmentStorageFromEnv } from './features/attachments/r2-real-attachment-storage.js';
 import {
+  createFeatureContractApp,
+  createStaticFeatureContractOperatorAuth,
+} from './features/feature-contract/feature-contract-app.js';
+import {
   createLineMessagingAdapter,
   createLineNotificationService,
 } from './features/line-notifications/index.js';
@@ -104,6 +108,17 @@ const centralFeatures = {
   },
   featureContract: {
     repository: featureContractRepository,
+    ...(runtime.featureContractOperatorToken &&
+    runtime.featureContractGrantToken &&
+    runtime.featureContractProviderWebhookSecret
+      ? {
+          operatorAuth: createStaticFeatureContractOperatorAuth({
+            token: runtime.featureContractOperatorToken,
+            grantToken: runtime.featureContractGrantToken,
+            providerWebhookSecret: runtime.featureContractProviderWebhookSecret,
+          }),
+        }
+      : {}),
   },
   orders: {
     repository: createPrismaOrdersRepository(prisma),
@@ -141,3 +156,33 @@ const app = createApp({
 });
 serve({ fetch: app.fetch, port });
 console.log(`CoCoLo API listening on ${port}`);
+if (
+  runtime.featureContractOperatorToken &&
+  runtime.featureContractGrantToken &&
+  runtime.featureContractProviderWebhookSecret &&
+  runtime.featureContractOperatorHost &&
+  runtime.featureContractOperatorPort
+) {
+  if (runtime.featureContractOperatorPort === port)
+    throw new Error(
+      'FEATURE_CONTRACT_OPERATOR_PORTは公開APIのPORTと別の値にしてください。',
+    );
+  const operatorApp = createFeatureContractApp({
+    repository: featureContractRepository,
+    operatorAuth: createStaticFeatureContractOperatorAuth({
+      token: runtime.featureContractOperatorToken,
+      grantToken: runtime.featureContractGrantToken,
+      providerWebhookSecret: runtime.featureContractProviderWebhookSecret,
+    }),
+    includePublicRoutes: false,
+    includeOperatorRoutes: true,
+  });
+  serve({
+    fetch: operatorApp.fetch,
+    hostname: runtime.featureContractOperatorHost,
+    port: runtime.featureContractOperatorPort,
+  });
+  console.log(
+    `CoCoLo feature contract operator listener on ${runtime.featureContractOperatorHost}:${runtime.featureContractOperatorPort}`,
+  );
+}

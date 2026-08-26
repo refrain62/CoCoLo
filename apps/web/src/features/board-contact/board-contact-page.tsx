@@ -1,3 +1,4 @@
+import { Button, Input, ResponsiveTable, Select } from '@cocolo/ui';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import {
   type BoardContactApi,
@@ -91,7 +92,7 @@ function BoardContactTable({
     return <p role="status">この年度の役職は登録されていません。</p>;
 
   return (
-    <table>
+    <ResponsiveTable>
       <caption className="visually-hidden">年度役員一覧</caption>
       <thead>
         <tr>
@@ -104,23 +105,31 @@ function BoardContactTable({
       <tbody>
         {contacts.map((contact) => (
           <tr key={contact.id}>
-            <td>{contact.roleName}</td>
-            <td>{roleTypeLabels[contact.roleType]}</td>
-            <td>{formatContact(contact, canManage)}</td>
+            <td data-label="役職">{contact.roleName}</td>
+            <td data-label="種別">{roleTypeLabels[contact.roleType]}</td>
+            <td data-label="連絡先">{formatContact(contact, canManage)}</td>
             {canManage ? (
-              <td>
-                <button type="button" onClick={() => onEdit(contact)}>
+              <td data-label="操作">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onEdit(contact)}
+                >
                   編集
-                </button>{' '}
-                <button type="button" onClick={() => onRemove(contact)}>
+                </Button>{' '}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onRemove(contact)}
+                >
                   削除
-                </button>
+                </Button>
               </td>
             ) : null}
           </tr>
         ))}
       </tbody>
-    </table>
+    </ResponsiveTable>
   );
 }
 
@@ -231,7 +240,7 @@ export function BoardContactPage({
       <section aria-labelledby="board-contact-year-heading">
         <h2 id="board-contact-year-heading">対象年度</h2>
         <label htmlFor="board-contact-fiscal-year">年度</label>
-        <input
+        <Input
           id="board-contact-fiscal-year"
           inputMode="numeric"
           max="2100"
@@ -244,9 +253,9 @@ export function BoardContactPage({
           }}
         />
         {canManage ? (
-          <button type="button" onClick={() => void copyPreviousYear()}>
+          <Button variant="outline" onClick={() => void copyPreviousYear()}>
             前年度の役職枠を引き継ぐ
-          </button>
+          </Button>
         ) : null}
       </section>
 
@@ -271,7 +280,7 @@ export function BoardContactPage({
           <form noValidate onSubmit={save}>
             <div>
               <label htmlFor="board-contact-role-name">役職名</label>
-              <input
+              <Input
                 id="board-contact-role-name"
                 maxLength={100}
                 required
@@ -286,7 +295,7 @@ export function BoardContactPage({
             </div>
             <div>
               <label htmlFor="board-contact-role-type">役職種別</label>
-              <select
+              <Select
                 id="board-contact-role-type"
                 value={form.roleType}
                 onChange={(event) =>
@@ -299,11 +308,11 @@ export function BoardContactPage({
                 <option value="admin">管理者</option>
                 <option value="staff">スタッフ</option>
                 <option value="member">部員</option>
-              </select>
+              </Select>
             </div>
             <div>
               <label htmlFor="board-contact-assignee">担当者ID</label>
-              <input
+              <Input
                 id="board-contact-assignee"
                 maxLength={128}
                 value={form.assigneeUserId}
@@ -317,7 +326,7 @@ export function BoardContactPage({
             </div>
             <div>
               <label htmlFor="board-contact-line">LINE連絡先</label>
-              <input
+              <Input
                 id="board-contact-line"
                 maxLength={200}
                 value={form.lineContact}
@@ -331,7 +340,7 @@ export function BoardContactPage({
             </div>
             <div>
               <label htmlFor="board-contact-phone">電話番号</label>
-              <input
+              <Input
                 id="board-contact-phone"
                 inputMode="tel"
                 maxLength={32}
@@ -394,13 +403,13 @@ export function BoardContactPage({
             </fieldset>
             {error ? <p role="alert">{error}</p> : null}
             {success ? <p role="status">{success}</p> : null}
-            <button type="submit" disabled={isSaving}>
+            <Button type="submit" disabled={isSaving}>
               {isSaving ? '保存中…' : editingId ? '更新する' : '登録する'}
-            </button>{' '}
+            </Button>{' '}
             {editingId ? (
-              <button type="button" onClick={resetForm}>
+              <Button variant="outline" onClick={resetForm}>
                 編集を取り消す
-              </button>
+              </Button>
             ) : null}
           </form>
         </section>

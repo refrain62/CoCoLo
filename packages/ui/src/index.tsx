@@ -296,6 +296,12 @@ const uiStyles = `
     background: var(--card);
   }
 
+  .app-shell[data-slot='app-shell'] [data-slot='responsive-table-wrapper'] {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+  }
+
   .app-shell[data-slot='app-shell'] [data-slot='table'] {
     width: 100%;
     border-collapse: collapse;
@@ -325,6 +331,91 @@ const uiStyles = `
 
   .app-shell[data-slot='app-shell'] [data-slot='table-row']:hover {
     background: color-mix(in srgb, var(--accent) 42%, transparent);
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='responsive-table'] {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='responsive-table'] th,
+  .app-shell[data-slot='app-shell'] [data-slot='responsive-table'] td {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    text-align: left;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='responsive-table'] th {
+    color: var(--muted-foreground);
+    background: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 750;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='responsive-table'] tr:last-child td {
+    border-bottom: 0;
+  }
+
+  @media (max-width: 640px) {
+    .app-shell[data-slot='app-shell'] [data-slot='responsive-table-wrapper'] {
+      border: 0;
+      background: transparent;
+    }
+
+    .app-shell[data-slot='app-shell'] [data-slot='responsive-table'] {
+      display: block;
+    }
+
+    .app-shell[data-slot='app-shell'] [data-slot='responsive-table'] thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .app-shell[data-slot='app-shell'] [data-slot='responsive-table'] tbody {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .app-shell[data-slot='app-shell'] [data-slot='responsive-table'] tr {
+      display: grid;
+      gap: 0.45rem;
+      padding: 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .app-shell[data-slot='app-shell'] [data-slot='responsive-table'] td {
+      display: grid;
+      grid-template-columns: minmax(5.5rem, 34%) 1fr;
+      gap: 0.75rem;
+      padding: 0.15rem 0;
+      border: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .app-shell[data-slot='app-shell'] [data-slot='responsive-table'] td::before {
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+      font-weight: 750;
+      letter-spacing: 0.03em;
+      content: attr(data-label);
+    }
+
+    .app-shell[data-slot='app-shell'] [data-slot='responsive-table'] td[data-label='']::before {
+      content: none;
+    }
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='alert'] {
@@ -636,6 +727,21 @@ export function Table({
   return (
     <div data-slot="table-wrapper">
       <table data-slot="table" className={cn(className)} {...props}>
+        {children}
+      </table>
+    </div>
+  );
+}
+
+/** モバイルでは行をカードへ再配置し、管理画面の横スクロールを避ける表です。 */
+export function ResponsiveTable({
+  children,
+  className,
+  ...props
+}: TableHTMLAttributes<HTMLTableElement>) {
+  return (
+    <div data-slot="responsive-table-wrapper">
+      <table data-slot="responsive-table" className={cn(className)} {...props}>
         {children}
       </table>
     </div>

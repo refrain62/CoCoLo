@@ -106,7 +106,6 @@ export const adminNavigation: readonly AdminNavigationItem[] = [
     label: '役員・連絡先',
     description: '年度の役職と連絡先を確認',
     featureKey: 'board-contacts',
-    roles: ['staff', 'guardian'],
   },
   {
     route: 'features',

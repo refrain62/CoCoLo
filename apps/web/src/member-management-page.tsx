@@ -1,4 +1,5 @@
 import { formatGrade } from '@cocolo/domain';
+import { ResponsiveTable } from '@cocolo/ui';
 import {
   type Dispatch,
   type FormEvent,
@@ -302,7 +303,7 @@ function MemberTable({
     return <p role="status">表示できる部員がいません。</p>;
 
   return (
-    <table>
+    <ResponsiveTable>
       <caption className="visually-hidden">部員一覧</caption>
       <thead>
         <tr>
@@ -317,18 +318,18 @@ function MemberTable({
       <tbody>
         {members.map((member) => (
           <tr key={member.id}>
-            <td>{member.name}</td>
-            <td>{member.kana || '—'}</td>
-            <td>{formatMemberCategory(member.category)}</td>
-            <td>
+            <td data-label="氏名">{member.name}</td>
+            <td data-label="ふりがな">{member.kana || '—'}</td>
+            <td data-label="区分">{formatMemberCategory(member.category)}</td>
+            <td data-label="学年・年代">
               {formatGrade(
                 member.category,
                 member.gradeLevel,
                 member.ageGroup ?? null,
               )}
             </td>
-            <td>{formatMemberStatus(member.status)}</td>
-            <td>
+            <td data-label="状態">{formatMemberStatus(member.status)}</td>
+            <td data-label="操作">
               {canManage ? (
                 <MemberEditForm
                   api={api}
@@ -344,7 +345,7 @@ function MemberTable({
           </tr>
         ))}
       </tbody>
-    </table>
+    </ResponsiveTable>
   );
 }
 
@@ -605,6 +606,7 @@ function InvitationPanel({
 }) {
   const activeMembers = members.filter((member) => member.status === 'active');
   const [memberId, setMemberId] = useState(activeMembers[0]?.id ?? '');
+  const [linkType, setLinkType] = useState<'self' | 'guardian'>('guardian');
   const [relationship, setRelationship] = useState('保護者');
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -625,6 +627,7 @@ function InvitationPanel({
       const result = await api.create({
         memberId,
         role: 'guardian',
+        linkType,
         relationship: relationship.trim(),
         expiresInHours: 72,
       });
@@ -638,10 +641,8 @@ function InvitationPanel({
 
   return (
     <section aria-labelledby="member-invitation-heading">
-      <h2 id="member-invitation-heading">保護者を招待</h2>
-      <p>
-        招待URLは発行後72時間で失効します。URLは安全な経路で共有してください。
-      </p>
+      <h2 id="member-invitation-heading">メンバーを招待</h2>
+      <p>本人または保護者を招待できます。招待URLは発行後72時間で失効します。</p>
       {activeMembers.length === 0 ? (
         <p role="status">招待できる在籍中の部員がいません。</p>
       ) : (
@@ -658,6 +659,21 @@ function InvitationPanel({
                 {member.name}
               </option>
             ))}
+          </select>
+          <label htmlFor="invitation-link-type">連携する人</label>
+          <select
+            id="invitation-link-type"
+            required
+            value={linkType}
+            onChange={(event) => {
+              const next = event.target.value as 'self' | 'guardian';
+              setLinkType(next);
+              if (next === 'self') setRelationship('本人');
+              else if (relationship === '本人') setRelationship('保護者');
+            }}
+          >
+            <option value="self">本人</option>
+            <option value="guardian">保護者</option>
           </select>
           <label htmlFor="invitation-relationship">続柄</label>
           <input

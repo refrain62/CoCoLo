@@ -10,6 +10,7 @@ import {
   createLineNotificationService,
   type LineActor,
 } from '../dist/features/line-notifications/index.js';
+import { createFeatureContractFeatures } from './feature-contract-fixture.ts';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
@@ -396,7 +397,10 @@ test('LINEの認証済み操作を中央APIへmountできる', async () => {
     membershipRepository: {
       findActiveByUserId: async () => ({ tenantId: TENANT_A, role: 'owner' }),
     },
-    centralFeatures: { line: { service: fixture.service } },
+    centralFeatures: {
+      ...createFeatureContractFeatures(),
+      line: { service: fixture.service },
+    },
   });
 
   const response = await app.request('/api/v1/line/status', {

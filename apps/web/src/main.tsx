@@ -64,7 +64,14 @@ function App() {
     applyPageMetadata(window.location.pathname);
   }, []);
   // 公開トップページでは認証処理や管理機能のコードを読み込まず、公開LPと認証済み画面を分離する。
-  if (entry === 'landing') return <LandingPage />;
+  if (entry === 'landing')
+    return (
+      <AuthenticatedLoadBoundary>
+        <Suspense fallback={<AuthenticatedLoading />}>
+          <AuthenticatedRuntime publicRoot={<LandingPage />} />
+        </Suspense>
+      </AuthenticatedLoadBoundary>
+    );
 
   // マニュアルは認証情報やチームデータを含まないため、ログイン前にも公開する。
   if (entry === 'manual')

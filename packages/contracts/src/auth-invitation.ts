@@ -2,12 +2,14 @@ import { z } from 'zod';
 
 export const authProviderSchema = z.enum(['google', 'line']);
 export const invitationRoleSchema = z.literal('guardian');
+export const invitationLinkTypeSchema = z.enum(['self', 'guardian']);
 export const invitationIdSchema = z.string().uuid();
 
 export const invitationCreateSchema = z
   .object({
     memberId: z.string().uuid(),
     role: invitationRoleSchema,
+    linkType: invitationLinkTypeSchema,
     relationship: z.string().trim().min(1).max(100),
     expiresInHours: z.number().int().min(1).max(168).default(72),
   })
@@ -36,6 +38,7 @@ const invitationItemSchema = z
     id: invitationIdSchema,
     memberId: z.string().uuid(),
     role: invitationRoleSchema,
+    linkType: invitationLinkTypeSchema,
     relationship: z.string().trim().min(1).max(100),
     status: invitationStatusSchema,
     expiresAt: z.string().datetime({ offset: true }),
@@ -57,6 +60,7 @@ export const invitationCreateResponseSchema = z
       id: invitationIdSchema,
       memberId: z.string().uuid(),
       role: invitationRoleSchema,
+      linkType: invitationLinkTypeSchema,
       relationship: z.string().trim().min(1).max(100),
       inviteUrl: z.string().trim().min(1).max(2048),
       expiresAt: z.string().datetime({ offset: true }),
@@ -70,6 +74,7 @@ export const invitationAcceptResponseSchema = z
       tenantId: z.string().uuid(),
       memberId: z.string().uuid(),
       role: invitationRoleSchema,
+      linkType: invitationLinkTypeSchema,
       linkStatus: z.literal('active'),
     }),
   })

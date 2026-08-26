@@ -17,6 +17,7 @@ import {
   createBoardContactApp,
 } from './features/board-contact/index.js';
 import { createBulletinBoardApp } from './features/bulletin-board/bulletin-board-app.js';
+import type { FeatureContractOperatorAuth } from './features/feature-contract/feature-contract-app.js';
 import { createFeatureContractApp } from './features/feature-contract/feature-contract-app.js';
 import { createLineNotificationApp } from './features/line-notifications/routes.js';
 import { createOrdersPaymentsApp } from './features/orders-payments/orders-payments-app.js';
@@ -44,7 +45,10 @@ export type CentralFeatureRoutes = {
   };
   boardContact?: { repository: BoardContactRepository };
   bulletinBoard?: { repository: BulletinBoardRepository };
-  featureContract?: { repository: FeatureContractRepository };
+  featureContract?: {
+    repository: FeatureContractRepository;
+    operatorAuth?: FeatureContractOperatorAuth;
+  };
   orders?: { repository: OrdersRepository };
   line?: {
     service: import('./features/line-notifications/line-service.js').LineNotificationService;
@@ -126,6 +130,8 @@ export function mountCentralFeatureRoutes(options: CentralFeatureRouteOptions) {
       '/',
       createFeatureContractApp({
         repository: features.featureContract.repository,
+        operatorAuth: features.featureContract.operatorAuth,
+        includeOperatorRoutes: false,
         useCentralAuth: true,
       }),
     );

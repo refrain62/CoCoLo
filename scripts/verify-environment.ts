@@ -93,6 +93,26 @@ if (allowed[appEnv].PUBLIC_APP_URL)
   assert.equal(process.env.PUBLIC_APP_URL, allowed[appEnv].PUBLIC_APP_URL);
 if (appEnv !== 'local') {
   assert.ok(
+    process.env.FEATURE_CONTRACT_OPERATOR_TOKEN,
+    `${appEnv} 環境では FEATURE_CONTRACT_OPERATOR_TOKEN が必要です。`,
+  );
+  assert.ok(
+    process.env.FEATURE_CONTRACT_GRANT_TOKEN,
+    `${appEnv} 環境では FEATURE_CONTRACT_GRANT_TOKEN が必要です。`,
+  );
+  assert.ok(
+    process.env.FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET,
+    `${appEnv} 環境では FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET が必要です。`,
+  );
+  assert.ok(
+    process.env.FEATURE_CONTRACT_OPERATOR_HOST,
+    `${appEnv} 環境では FEATURE_CONTRACT_OPERATOR_HOST が必要です。`,
+  );
+  assert.ok(
+    process.env.FEATURE_CONTRACT_OPERATOR_PORT,
+    `${appEnv} 環境では FEATURE_CONTRACT_OPERATOR_PORT が必要です。`,
+  );
+  assert.ok(
     process.env.SUPABASE_ALLOWED_URL,
     `${appEnv} 環境では SUPABASE_ALLOWED_URL が必要です。`,
   );

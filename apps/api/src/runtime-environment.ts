@@ -26,6 +26,11 @@ export type RuntimeEnvironment = {
   rateLimitStoreMode: RateLimitStoreMode;
   rateLimitFailClosed: true;
   rateLimitAdapterModule?: string;
+  featureContractOperatorToken?: string;
+  featureContractGrantToken?: string;
+  featureContractProviderWebhookSecret?: string;
+  featureContractOperatorHost?: string;
+  featureContractOperatorPort?: number;
 };
 
 const allowedBuckets: Record<AppEnvironment, string> = {
@@ -95,6 +100,18 @@ export function readRuntimeEnvironment(
   ) as RateLimitStoreMode;
   const rateLimitFailClosed = required(environment, 'RATE_LIMIT_FAIL_CLOSED');
   const rateLimitAdapterModule = environment.RATE_LIMIT_ADAPTER_MODULE?.trim();
+  const featureContractOperatorToken =
+    environment.FEATURE_CONTRACT_OPERATOR_TOKEN?.trim();
+  const featureContractGrantToken =
+    environment.FEATURE_CONTRACT_GRANT_TOKEN?.trim();
+  const featureContractProviderWebhookSecret =
+    environment.FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET?.trim();
+  const featureContractOperatorHost =
+    environment.FEATURE_CONTRACT_OPERATOR_HOST?.trim();
+  const operatorPortValue = environment.FEATURE_CONTRACT_OPERATOR_PORT?.trim();
+  const featureContractOperatorPort = operatorPortValue
+    ? Number(operatorPortValue)
+    : undefined;
   const supabaseIssuer = `${supabaseUrl}/auth/v1`;
 
   assertUrl('SUPABASE_URL', supabaseUrl);
@@ -125,6 +142,58 @@ export function readRuntimeEnvironment(
       rateLimitAdapterModule,
       options.rateLimitAdapterPolicy,
     );
+  }
+  const operatorConfigCount = [
+    featureContractOperatorToken,
+    featureContractGrantToken,
+    featureContractProviderWebhookSecret,
+    featureContractOperatorHost,
+    operatorPortValue,
+  ].filter(Boolean).length;
+  if (operatorConfigCount !== 0 && operatorConfigCount !== 5)
+    throw new Error(
+      '課金連携のoperator token、grant token、provider secret、host、portは同時に設定してください。',
+    );
+  if (featureContractOperatorToken && featureContractOperatorToken.length < 32)
+    throw new Error(
+      'FEATURE_CONTRACT_OPERATOR_TOKENは32文字以上で設定してください。',
+    );
+  if (featureContractGrantToken && featureContractGrantToken.length < 32)
+    throw new Error(
+      'FEATURE_CONTRACT_GRANT_TOKENは32文字以上で設定してください。',
+    );
+  if (
+    featureContractProviderWebhookSecret &&
+    featureContractProviderWebhookSecret.length < 32
+  )
+    throw new Error(
+      'FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRETは32文字以上で設定してください。',
+    );
+  if (
+    featureContractOperatorHost &&
+    (featureContractOperatorHost.length > 253 ||
+      /\s/.test(featureContractOperatorHost) ||
+      featureContractOperatorHost === '0.0.0.0' ||
+      featureContractOperatorHost === '::')
+  )
+    throw new Error(
+      'FEATURE_CONTRACT_OPERATOR_HOSTは公開wildcard以外の空白を含まない253文字以内で設定してください。',
+    );
+  if (
+    featureContractOperatorPort !== undefined &&
+    (!Number.isInteger(featureContractOperatorPort) ||
+      featureContractOperatorPort < 1 ||
+      featureContractOperatorPort > 65535)
+  )
+    throw new Error(
+      'FEATURE_CONTRACT_OPERATOR_PORTは1から65535の整数で設定してください。',
+    );
+  if (appEnv !== 'local') {
+    required(environment, 'FEATURE_CONTRACT_OPERATOR_TOKEN');
+    required(environment, 'FEATURE_CONTRACT_GRANT_TOKEN');
+    required(environment, 'FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET');
+    required(environment, 'FEATURE_CONTRACT_OPERATOR_HOST');
+    required(environment, 'FEATURE_CONTRACT_OPERATOR_PORT');
   }
 
   const allowedUrl = environment.SUPABASE_ALLOWED_URL?.trim();
@@ -178,5 +247,18 @@ export function readRuntimeEnvironment(
     rateLimitStoreMode,
     rateLimitFailClosed: true,
     ...(rateLimitAdapterModule ? { rateLimitAdapterModule } : {}),
+    ...(featureContractOperatorToken &&
+    featureContractGrantToken &&
+    featureContractProviderWebhookSecret &&
+    featureContractOperatorHost &&
+    featureContractOperatorPort
+      ? {
+          featureContractOperatorToken,
+          featureContractGrantToken,
+          featureContractProviderWebhookSecret,
+          featureContractOperatorHost,
+          featureContractOperatorPort,
+        }
+      : {}),
   };
 }

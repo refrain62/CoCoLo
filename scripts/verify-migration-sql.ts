@@ -18,6 +18,7 @@ const migrationsRoot = path.join(
 );
 const tenantIndependentTables = new Set([
   'feature_definitions',
+  'feature_plan_definitions',
   'auth_identities',
 ]);
 

@@ -7,25 +7,34 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
   type AuthClient,
   type AuthSession,
   createAuthClient,
+  createOAuthTransaction,
   type OAuthProvider,
-  parseOAuthCallback,
+  type OAuthTransaction,
 } from './auth-client.js';
+
+type OAuthSignInOptions = { invitationToken?: string };
 
 type AuthContextValue = {
   session: AuthSession | null;
+  oauthProvider: OAuthProvider | null;
+  oauthInvitationTokenHash: string | null;
   isSigningIn: boolean;
   isRefreshing: boolean;
   isLoggingOut: boolean;
   requiresReauthentication: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
-  signInWithOAuth: (provider: OAuthProvider) => void;
+  signInWithOAuth: (
+    provider: OAuthProvider,
+    options?: OAuthSignInOptions,
+  ) => Promise<void>;
   refreshSession: () => Promise<AuthSession | null>;
   logout: () => Promise<void>;
   authenticatedFetch: (
@@ -45,6 +54,37 @@ const STORAGE_KEYS = {
   expiresAt: 'cocolo.expiresAt',
 } as const;
 const REFRESH_SKEW_SECONDS = 60;
+const OAUTH_TRANSACTION_KEY = 'cocolo.oauthTransaction';
+const OAUTH_TRANSACTION_MAX_AGE_MS = 10 * 60 * 1000;
+const OAUTH_CALLBACK_PATH = '/auth/callback';
+const OAUTH_CREDENTIAL_PARAMS = [
+  'access_token',
+  'refresh_token',
+  'id_token',
+  'token_type',
+  'expires_in',
+  'expires_at',
+] as const;
+
+export function validateOAuthCallback(
+  transaction: OAuthTransaction | null,
+  params: URLSearchParams,
+  now = Date.now(),
+) {
+  const state = params.get('state');
+  const code = params.get('code');
+  const callbackNonce = params.get('nonce');
+  // Supabase AuthのPKCE code exchangeがprovider ID tokenのnonceを検証する（docs/integration/oauth-security.md）ため、callback queryへのnonce反映は任意です。
+  return Boolean(
+    transaction &&
+      code &&
+      state &&
+      state === transaction.state &&
+      (callbackNonce === null || callbackNonce === transaction.nonce) &&
+      now >= transaction.createdAt &&
+      now - transaction.createdAt <= OAUTH_TRANSACTION_MAX_AGE_MS,
+  );
+}
 
 export class AuthSessionError extends Error {
   readonly status = 401;
@@ -96,6 +136,120 @@ function clearPersistedSession(storage: StorageLike | null) {
   } catch {
     // logout時は保存先の例外を画面へ渡さず、メモリ上のsessionを先に消去する。
   }
+}
+
+function getOAuthStorage(): StorageLike | null {
+  try {
+    return typeof window === 'undefined' ? null : window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+function saveOAuthTransaction(
+  transaction: Awaited<ReturnType<typeof createOAuthTransaction>>,
+): boolean {
+  try {
+    const storage = getOAuthStorage();
+    if (!storage) return false;
+    storage.setItem(OAUTH_TRANSACTION_KEY, JSON.stringify(transaction));
+    return true;
+  } catch {
+    // OAuth transactionを保存できない環境ではredirectせず、fail-closedにする。
+    return false;
+  }
+}
+
+function readOAuthTransaction() {
+  let raw: string | null = null;
+  try {
+    raw = getOAuthStorage()?.getItem(OAUTH_TRANSACTION_KEY) ?? null;
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    if (
+      (value.provider !== 'google' && value.provider !== 'line') ||
+      typeof value.redirectTo !== 'string' ||
+      typeof value.returnTo !== 'string' ||
+      !isSafeOAuthReturnPath(value.returnTo) ||
+      !isOAuthValue(value.state) ||
+      !isOAuthValue(value.nonce) ||
+      !isOAuthValue(value.codeVerifier) ||
+      !isOAuthValue(value.codeChallenge) ||
+      (value.invitationTokenHash !== null &&
+        !isOAuthValue(value.invitationTokenHash)) ||
+      value.codeChallengeMethod !== 'S256' ||
+      typeof value.createdAt !== 'number' ||
+      !Number.isFinite(value.createdAt)
+    )
+      return null;
+    return value as Awaited<ReturnType<typeof createOAuthTransaction>>;
+  } catch {
+    return null;
+  }
+}
+
+function isSafeOAuthReturnPath(value: string) {
+  return (
+    value.length <= 2048 &&
+    value.startsWith('/') &&
+    !value.startsWith('//') &&
+    !value.includes('\\')
+  );
+}
+
+function isOAuthValue(value: unknown) {
+  return (
+    typeof value === 'string' &&
+    value.length >= 16 &&
+    value.length <= 256 &&
+    /^[A-Za-z0-9_-]+$/u.test(value)
+  );
+}
+
+function clearOAuthTransaction() {
+  try {
+    getOAuthStorage()?.removeItem(OAUTH_TRANSACTION_KEY);
+  } catch {
+    // callback検証後のcleanup失敗はtoken受入可否へ影響させない。
+  }
+}
+
+function clearOAuthCallbackUrl() {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.hash = '';
+  try {
+    window.history.replaceState(null, document.title, url.pathname);
+    return true;
+  } catch {
+    // queryを残したままcode交換へ進まず、再読み込みで秘密情報をURLから除去する。
+    try {
+      window.location.replace(url.pathname);
+    } catch {
+      window.location.hash = '';
+    }
+    return false;
+  }
+}
+
+function getOAuthRedirectTo() {
+  return `${window.location.origin}${OAUTH_CALLBACK_PATH}`;
+}
+
+function getOAuthReturnTo() {
+  return window.location.pathname;
+}
+
+export function containsOAuthCredential(search: string, hash: string) {
+  const query = new URLSearchParams(search);
+  const fragment = new URLSearchParams(hash.replace(/^#/u, ''));
+  return OAUTH_CREDENTIAL_PARAMS.some(
+    (key) => query.has(key) || fragment.has(key),
+  );
 }
 
 function canReplayRequest(init?: RequestInit) {
@@ -300,6 +454,13 @@ export function AuthProvider({
   client = defaultAuthClient,
 }: PropsWithChildren<{ client?: AuthClient }>) {
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [oauthProvider, setOAuthProvider] = useState<OAuthProvider | null>(
+    null,
+  );
+  const [oauthInvitationTokenHash, setOAuthInvitationTokenHash] = useState<
+    string | null
+  >(null);
+  const oauthCallbackHandled = useRef(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -330,26 +491,75 @@ export function AuthProvider({
   }, [manager]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.location.hash) return;
-    try {
-      const callbackSession = parseOAuthCallback(window.location.hash);
-      if (!callbackSession) return;
-      manager.adoptSession(callbackSession);
-      window.history.replaceState(
-        null,
-        document.title,
-        `${window.location.pathname}${window.location.search}`,
-      );
-    } catch {
-      setError('OAuthログインを完了できませんでした。');
+    if (typeof window === 'undefined') return;
+    if (oauthCallbackHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const hasCodeCallback = params.has('code') || params.has('error');
+    const hasCredentialCallback = containsOAuthCredential(
+      window.location.search,
+      window.location.hash,
+    );
+    const hasCallbackPathParameters =
+      window.location.pathname === OAUTH_CALLBACK_PATH &&
+      (window.location.search.length > 0 || window.location.hash.length > 0);
+    if (
+      !hasCodeCallback &&
+      !hasCredentialCallback &&
+      !hasCallbackPathParameters
+    )
+      return;
+    oauthCallbackHandled.current = true;
+    setOAuthProvider(null);
+    setOAuthInvitationTokenHash(null);
+    const transaction = readOAuthTransaction();
+    clearOAuthTransaction();
+    if (!clearOAuthCallbackUrl()) {
+      setError('OAuthログインを完了できませんでした。再度お試しください。');
+      return;
     }
-  }, [manager]);
+    if (!hasCodeCallback) {
+      setError('OAuthログインを完了できませんでした。再度お試しください。');
+      return;
+    }
+    async function completeOAuth() {
+      const code = params.get('code');
+      if (
+        !transaction ||
+        transaction.redirectTo !== getOAuthRedirectTo() ||
+        !validateOAuthCallback(transaction, params)
+      ) {
+        setError('OAuthログインの確認情報が無効です。');
+        return;
+      }
+      if (!code || !client.exchangeOAuthCode) {
+        setError('OAuthログインを完了できませんでした。');
+        return;
+      }
+      try {
+        const callbackSession = await client.exchangeOAuthCode(
+          code,
+          transaction.codeVerifier,
+          transaction.redirectTo,
+        );
+        manager.adoptSession(callbackSession);
+        setOAuthProvider(transaction.provider);
+        setOAuthInvitationTokenHash(transaction.invitationTokenHash);
+        window.history.replaceState(null, document.title, transaction.returnTo);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      } catch {
+        setError('OAuthログインを完了できませんでした。');
+      }
+    }
+    void completeOAuth();
+  }, [client, manager]);
 
   const signIn = useCallback(
     async (email: string, password: string) => {
       setIsSigningIn(true);
       setError(null);
       setRequiresReauthentication(false);
+      setOAuthProvider(null);
+      setOAuthInvitationTokenHash(null);
       try {
         await manager.signIn(email, password);
       } catch {
@@ -362,7 +572,7 @@ export function AuthProvider({
   );
 
   const signInWithOAuth = useCallback(
-    (provider: OAuthProvider) => {
+    async (provider: OAuthProvider, options?: OAuthSignInOptions) => {
       if (!client.getOAuthAuthorizeUrl) {
         setError('OAuthログインが設定されていません。');
         return;
@@ -372,8 +582,26 @@ export function AuthProvider({
         return;
       }
       setError(null);
-      const redirectTo = `${window.location.origin}${window.location.pathname}${window.location.search}`;
-      window.location.assign(client.getOAuthAuthorizeUrl(provider, redirectTo));
+      setOAuthProvider(null);
+      setOAuthInvitationTokenHash(null);
+      try {
+        const redirectTo = getOAuthRedirectTo();
+        const transaction = await createOAuthTransaction(
+          provider,
+          redirectTo,
+          getOAuthReturnTo(),
+          options?.invitationToken,
+        );
+        if (!saveOAuthTransaction(transaction)) {
+          setError('OAuthログインを開始できません。');
+          return;
+        }
+        window.location.assign(
+          client.getOAuthAuthorizeUrl(provider, redirectTo, transaction),
+        );
+      } catch {
+        setError('OAuthログインを開始できません。');
+      }
     },
     [client],
   );
@@ -390,6 +618,8 @@ export function AuthProvider({
   const logout = useCallback(async () => {
     setIsLoggingOut(true);
     setError(null);
+    setOAuthProvider(null);
+    setOAuthInvitationTokenHash(null);
     try {
       await manager.logout();
     } catch {
@@ -408,6 +638,8 @@ export function AuthProvider({
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
+      oauthProvider,
+      oauthInvitationTokenHash,
       isSigningIn,
       isRefreshing,
       isLoggingOut,
@@ -426,6 +658,8 @@ export function AuthProvider({
       isRefreshing,
       isSigningIn,
       logout,
+      oauthInvitationTokenHash,
+      oauthProvider,
       refreshSession,
       requiresReauthentication,
       session,
@@ -489,10 +723,10 @@ export function LoginPage() {
         </form>
         <fieldset className="auth-provider-actions">
           <legend>OAuthでログイン</legend>
-          <button type="button" onClick={() => signInWithOAuth('line')}>
+          <button type="button" onClick={() => void signInWithOAuth('line')}>
             LINEでログイン
           </button>
-          <button type="button" onClick={() => signInWithOAuth('google')}>
+          <button type="button" onClick={() => void signInWithOAuth('google')}>
             Googleでログイン
           </button>
         </fieldset>

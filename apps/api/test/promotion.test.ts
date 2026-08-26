@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createApp } from '../dist/app.js';
 import type { MembershipContext, PromotionRepository } from '../src/app.js';
+import { createFeatureContractFeatures } from './feature-contract-fixture.ts';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const memberships: Record<string, MembershipContext> = {
@@ -48,6 +49,7 @@ function createTestApp(
         };
       },
     },
+    centralFeatures: createFeatureContractFeatures(),
   });
 }
 
@@ -204,6 +206,7 @@ test('年度繰り上げのリクエスト競合は409で返す', async () => {
         throw error;
       },
     },
+    centralFeatures: createFeatureContractFeatures(),
   });
 
   const response = await app.request('/api/v1/members/promote', {

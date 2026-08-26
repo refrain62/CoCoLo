@@ -10,6 +10,7 @@ test('招待作成はguardian対象と期限上限を固定する', () => {
   const parsed = invitationCreateSchema.parse({
     memberId: '00000000-0000-7000-8000-000000000001',
     role: 'guardian',
+    linkType: 'guardian',
     relationship: '保護者',
   });
   assert.equal(parsed.expiresInHours, 72);
@@ -17,9 +18,19 @@ test('招待作成はguardian対象と期限上限を固定する', () => {
     invitationCreateSchema.safeParse({
       memberId: '00000000-0000-7000-8000-000000000001',
       role: 'staff',
+      linkType: 'self',
       relationship: '保護者',
     }).success,
     false,
+  );
+  assert.equal(
+    invitationCreateSchema.safeParse({
+      memberId: '00000000-0000-7000-8000-000000000001',
+      role: 'guardian',
+      linkType: 'self',
+      relationship: '本人',
+    }).success,
+    true,
   );
 });
 
@@ -47,6 +58,7 @@ test('招待作成responseはraw tokenを返さずfragment付きURLだけを返�
       id: '00000000-0000-7000-8000-000000000001',
       memberId: '00000000-0000-7000-8000-000000000002',
       role: 'guardian',
+      linkType: 'guardian',
       relationship: '保護者',
       inviteUrl:
         'https://app.example.test/invite/00000000-0000-7000-8000-000000000001#token=opaque-token',
@@ -60,6 +72,7 @@ test('招待作成responseはraw tokenを返さずfragment付きURLだけを返�
         id: '00000000-0000-7000-8000-000000000001',
         memberId: '00000000-0000-7000-8000-000000000002',
         role: 'guardian',
+        linkType: 'guardian',
         relationship: '保護者',
         token: 'a'.repeat(64),
         expiresAt: '2026-08-25T00:00:00.000Z',

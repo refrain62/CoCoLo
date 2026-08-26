@@ -1,6 +1,6 @@
 import { AppShell } from '@cocolo/ui';
 import { useEffect, useState } from 'react';
-import type { OAuthProvider } from '../../auth-client.js';
+import { hashOAuthBinding, type OAuthProvider } from '../../auth-client.js';
 import { useAuth } from '../../auth-context.js';
 import {
   type AuthInvitationApi,
@@ -8,7 +8,6 @@ import {
 } from './auth-invitation-api.js';
 
 const INVITATION_TOKEN_KEY = 'cocolo.pendingInvitationToken';
-const INVITATION_PROVIDER_KEY = 'cocolo.pendingInvitationProvider';
 
 function isInvitationToken(value: string | null) {
   return Boolean(value && value.length >= 32 && value.length <= 256);
@@ -51,29 +50,23 @@ export function readInvitationToken(
   const token = new URLSearchParams(hash.replace(/^#/, '')).get('token');
   if (isInvitationToken(token)) {
     setStoredValue(INVITATION_TOKEN_KEY, token as string);
-    window.history.replaceState(
-      null,
-      document.title,
-      `${window.location.pathname}${window.location.search}`,
-    );
+    try {
+      window.history.replaceState(
+        null,
+        document.title,
+        `${window.location.pathname}${window.location.search}`,
+      );
+    } catch {
+      window.location.hash = '';
+    }
     return token;
   }
   const stored = getStoredValue(INVITATION_TOKEN_KEY);
   return isInvitationToken(stored) ? stored : null;
 }
 
-function readProvider(): OAuthProvider | null {
-  const value = getStoredValue(INVITATION_PROVIDER_KEY);
-  return value === 'google' || value === 'line' ? value : null;
-}
-
-function storeProvider(provider: OAuthProvider) {
-  setStoredValue(INVITATION_PROVIDER_KEY, provider);
-}
-
 function clearInvitationState() {
   removeStoredValue(INVITATION_TOKEN_KEY);
-  removeStoredValue(INVITATION_PROVIDER_KEY);
 }
 
 export function InvitationAcceptPage({
@@ -85,19 +78,46 @@ export function InvitationAcceptPage({
   onAccepted: (tenantId: string) => void;
   token: string | null;
 }) {
-  const { session, signInWithOAuth } = useAuth();
-  const [provider, setProvider] = useState<OAuthProvider | null>(readProvider);
+  const { oauthInvitationTokenHash, oauthProvider, session, signInWithOAuth } =
+    useAuth();
   const [isAccepting, setIsAccepting] = useState(false);
+  const [isInvitationBindingVerified, setIsInvitationBindingVerified] =
+    useState(false);
   const [accepted, setAccepted] = useState(false);
   const [acceptedTenantId, setAcceptedTenantId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session || !token || !provider || isAccepting || accepted) return;
+    setIsInvitationBindingVerified(false);
+    if (!token || !oauthInvitationTokenHash) return;
+    let active = true;
+    void hashOAuthBinding(token)
+      .then((hash) => {
+        if (active)
+          setIsInvitationBindingVerified(hash === oauthInvitationTokenHash);
+      })
+      .catch(() => {
+        if (active) setError('招待の確認に失敗しました。');
+      });
+    return () => {
+      active = false;
+    };
+  }, [oauthInvitationTokenHash, token]);
+
+  useEffect(() => {
+    if (
+      !session ||
+      !token ||
+      !oauthProvider ||
+      !isInvitationBindingVerified ||
+      isAccepting ||
+      accepted
+    )
+      return;
     setIsAccepting(true);
     setError(null);
     void api
-      .accept({ token, provider })
+      .accept({ token, provider: oauthProvider })
       .then((result) => {
         if (result.linkStatus !== 'active') {
           setError('部員との連携を有効化できませんでした。');
@@ -115,14 +135,20 @@ export function InvitationAcceptPage({
         );
       })
       .finally(() => setIsAccepting(false));
-  }, [accepted, api, isAccepting, provider, session, token]);
+  }, [
+    accepted,
+    api,
+    isAccepting,
+    isInvitationBindingVerified,
+    oauthProvider,
+    session,
+    token,
+  ]);
 
   function beginOAuth(nextProvider: OAuthProvider) {
     if (!token) return;
-    storeProvider(nextProvider);
-    setProvider(nextProvider);
     setError(null);
-    signInWithOAuth(nextProvider);
+    void signInWithOAuth(nextProvider, { invitationToken: token });
   }
 
   if (!token)
@@ -181,10 +207,11 @@ export function InvitationAcceptPage({
           <p role="status">
             {isAccepting
               ? 'OAuthアカウントとの連携を確認しています。'
-              : 'OAuth providerを選択して再ログインしてください。'}
+              : 'OAuthアカウントとの連携を確認しています。'}
           </p>
         )}
-        {session && !isAccepting ? (
+        {(!session || !oauthProvider || !isInvitationBindingVerified) &&
+        !isAccepting ? (
           <fieldset className="auth-provider-actions">
             <legend>連携するOAuth provider</legend>
             <button type="button" onClick={() => beginOAuth('line')}>

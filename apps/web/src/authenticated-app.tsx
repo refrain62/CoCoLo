@@ -1,6 +1,6 @@
 import type { TeamOption } from '@cocolo/contracts/auth-team-selection';
 import { AppShell } from '@cocolo/ui';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { AdminDashboard } from './admin-dashboard.js';
 import type { AdminRoute } from './admin-routes.js';
 import { AdminShell } from './admin-shell.js';
@@ -49,6 +49,7 @@ import {
   isNotificationDeepLink,
   parseNotificationDeepLink,
 } from './notification-deep-link.js';
+import { TeamSettingsPage } from './team-settings-page.js';
 
 function navigateInApp(path: string) {
   window.history.pushState({}, '', path);
@@ -75,9 +76,10 @@ function DeepLinkState({
   );
 }
 
-export function AuthenticatedApp() {
+export function AuthenticatedApp({ publicRoot }: { publicRoot?: ReactNode }) {
   // 認証状態が確定するまでLoginPageを表示し、部員APIへ到達できる画面をsession保有者に限定する。
   const { authenticatedFetch, isLoggingOut, logout, session } = useAuth();
+  const [pathname, setPathname] = useState(() => window.location.pathname);
   const [selectedTeam, setSelectedTeam] = useState<TeamOption | null>(null);
   const [isResolvingTeam, setIsResolvingTeam] = useState(true);
   const [teamError, setTeamError] = useState<string | null>(null);
@@ -89,6 +91,16 @@ export function AuthenticatedApp() {
   const [invitationToken, setInvitationToken] = useState<string | null>(() =>
     readInvitationToken(),
   );
+  useEffect(() => {
+    const handlePopState = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+  useEffect(() => {
+    setInvitationToken(
+      isInvitationPath(pathname) ? readInvitationToken(pathname) : null,
+    );
+  }, [pathname]);
   const teamSelectionApi = useMemo(
     () =>
       createTeamSelectionApi({
@@ -115,7 +127,7 @@ export function AuthenticatedApp() {
         const storedId = getStoredSelectedTeamId();
         const storedTeam = teams.find((team) => team.tenantId === storedId);
         const mustChooseTeam =
-          isNotificationDeepLink(window.location.pathname) && teams.length > 1;
+          isNotificationDeepLink(pathname) && teams.length > 1;
         const nextTeam = mustChooseTeam
           ? null
           : (storedTeam ?? (teams.length === 1 ? teams[0] : null));
@@ -131,7 +143,7 @@ export function AuthenticatedApp() {
     return () => {
       active = false;
     };
-  }, [session, teamSelectionApi]);
+  }, [pathname, session, teamSelectionApi]);
   const selectedTeamId = selectedTeam?.tenantId ?? null;
   const authInvitationApi = useMemo(
     () =>
@@ -254,7 +266,7 @@ export function AuthenticatedApp() {
       active = false;
     };
   }, [authContextApi, memberApi, selectedTeam, session]);
-  if (isInvitationPath(window.location.pathname))
+  if (isInvitationPath(pathname))
     return (
       <InvitationAcceptPage
         api={authInvitationApi}
@@ -281,7 +293,7 @@ export function AuthenticatedApp() {
         token={invitationToken}
       />
     );
-  if (!session) return <LoginPage />;
+  if (!session) return publicRoot ?? <LoginPage />;
   if (isResolvingTeam)
     return (
       <AppShell>
@@ -343,9 +355,7 @@ export function AuthenticatedApp() {
       contract.features.some(
         (feature) => feature.key === key && feature.enabled,
       );
-    const notificationTarget = parseNotificationDeepLink(
-      window.location.pathname,
-    );
+    const notificationTarget = parseNotificationDeepLink(pathname);
     const intro = {
       members: [
         'Members',
@@ -523,13 +533,17 @@ export function AuthenticatedApp() {
           />
         ) : null}
         {route === 'settings' ? (
+          <TeamSettingsPage
+            onNavigate={(path) => navigateInApp(path)}
+            role={currentRole}
+            team={currentTeam}
+          />
+        ) : null}
+        {route === 'board-contacts' ? (
           <BoardContactPage
             api={boardContactApi}
             canManage={currentRole === 'owner' || currentRole === 'admin'}
           />
-        ) : null}
-        {route === 'board-contacts' ? (
-          <BoardContactPage api={boardContactApi} canManage={false} />
         ) : null}
       </div>
     );
@@ -565,10 +579,14 @@ export function AuthenticatedApp() {
   );
 }
 
-export function AuthenticatedRuntime() {
+export function AuthenticatedRuntime({
+  publicRoot,
+}: {
+  publicRoot?: ReactNode;
+}) {
   return (
     <AuthProvider>
-      <AuthenticatedApp />
+      <AuthenticatedApp publicRoot={publicRoot} />
     </AuthProvider>
   );
 }
