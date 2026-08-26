@@ -208,6 +208,7 @@ function Header() {
         >
           <a href="#problems">CoCoLoとは</a>
           <a href="#features">できること</a>
+          <a href="#line">LINE連携</a>
           <a href="#security">安心への取り組み</a>
           <a href="#faq">よくある質問</a>
           <div className="mobile-nav-actions">
@@ -408,7 +409,11 @@ export function LandingPage() {
   }, []);
 
   return (
-    <div className="landing-page" data-design-system="cocolo">
+    <div
+      className="landing-page"
+      data-design-system="cocolo"
+      data-line-integration="primary"
+    >
       <a className="landing-skip-link" href="#lp-main">
         本文へ移動
       </a>
@@ -420,7 +425,8 @@ export function LandingPage() {
           <div className="container hero-grid">
             <div className="hero-copy">
               <div className="eyebrow">
-                <Icon name="sparkle" size={16} /> チーム運営を、ひとつの場所に
+                <span className="eyebrow-dot" aria-hidden="true" />
+                LINEとつながる、チーム運営
               </div>
               <h1>
                 チームの毎日を、
@@ -434,8 +440,19 @@ export function LandingPage() {
                 <br className="desktop-break" />
                 みんなの「楽しい！」をもっと増やそう。
               </p>
+              <div className="hero-line-note">
+                <span className="line-badge" aria-hidden="true">
+                  LINE
+                </span>
+                <span>
+                  <strong>通知はLINE、整理はCoCoLo。</strong>
+                  <small>
+                    LINEグループへの通知から、必要なWeb画面へつながります。
+                  </small>
+                </span>
+              </div>
               <div className="hero-actions">
-                <a href="#contact" className="btn btn-primary btn-large">
+                <a href="/login" className="btn btn-primary btn-large">
                   無料ではじめる <Icon name="arrow" size={18} />
                 </a>
                 <a href="#features" className="text-link">
@@ -600,6 +617,23 @@ export function LandingPage() {
                 </span>
               </div>
             </div>
+            <div className="line-callout reveal" id="line">
+              <span className="line-callout-mark" aria-hidden="true">
+                LINE
+              </span>
+              <div>
+                <span className="section-kicker">LINE連携</span>
+                <h3>
+                  LINEグループへの通知を入口に、運営情報はCoCoLoで整える。
+                </h3>
+                <p>
+                  Botが参加するLINEグループへ通知。予定や出欠、資料の確認状況はCoCoLoで管理し、必要なWeb画面へ迷わず戻れます。
+                </p>
+              </div>
+              <span className="line-callout-arrow" aria-hidden="true">
+                <Icon name="arrow" size={20} />
+              </span>
+            </div>
           </div>
         </section>
 
@@ -637,7 +671,7 @@ export function LandingPage() {
                     <Icon name="arrow" size={17} />
                   </span>
                 </div>
-                <h3>メンバーを招待</h3>
+                <h3>LINEでメンバーを招待</h3>
                 <p>
                   専用URLを送って、
                   <br />
@@ -752,7 +786,7 @@ export function LandingPage() {
             <span className="cta-icon">
               <Icon name="heart" size={30} />
             </span>
-            <p className="cta-kicker">さあ、チームの毎日を変えよう</p>
+            <p className="cta-kicker">LINE通知で、チームの毎日を変えよう</p>
             <h2>
               運営をもっとラクに。
               <br />
