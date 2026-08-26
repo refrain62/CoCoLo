@@ -23,6 +23,8 @@ describe('公開トップページ', () => {
 
   it('ログインと操作マニュアルへの導線を持つ', () => {
     expect(html).toContain('href="/login"');
+    expect(html).toContain('チームログイン');
+    expect(html).not.toContain('href="/admin"');
     expect(html).toContain('href="/manual"');
     expect(html).not.toContain('mailto:');
   });

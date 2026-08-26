@@ -7,7 +7,12 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { AuthProvider, LoginPage, useAuth } from './auth-context.js';
+import {
+  AuthProvider,
+  type LoginMode,
+  LoginPage,
+  useAuth,
+} from './auth-context.js';
 import { createAuthInvitationApi } from './features/auth-invitations/auth-invitation-api.js';
 import {
   InvitationAcceptPage,
@@ -15,12 +20,17 @@ import {
   readInvitationToken,
 } from './features/auth-invitations/auth-invitation-page.js';
 import { setStoredSelectedTeamId } from './features/auth-team-selection/selected-team-storage.js';
+import { isSystemAdminPath } from './system-admin-routes.js';
 
 const AuthenticatedApp = lazy(() =>
   import('./authenticated-app.js').then(({ AuthenticatedApp: app }) => ({
     default: app,
   })),
 );
+
+export function resolveLoginMode(pathname: string): LoginMode {
+  return isSystemAdminPath(pathname) ? 'system' : 'team';
+}
 
 function AuthenticatedLoading() {
   return (
@@ -74,7 +84,8 @@ function AuthBoundary({ publicRoot }: { publicRoot?: ReactNode }) {
       />
     );
 
-  if (!session) return publicRoot ?? <LoginPage />;
+  if (!session)
+    return publicRoot ?? <LoginPage mode={resolveLoginMode(pathname)} />;
 
   return (
     <Suspense fallback={<AuthenticatedLoading />}>

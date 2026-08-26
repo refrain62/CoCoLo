@@ -28,8 +28,8 @@ export function resolvePageMetadata(pathname: string): PageMetadata {
     };
   if (pathname === '/login')
     return {
-      title: 'CoCoLoへログイン',
-      description: 'CoCoLoを利用中の方のログインページです。',
+      title: 'CoCoLo | チームログイン',
+      description: 'CoCoLoを利用中のチームメンバー向けログインページです。',
     };
   if (
     pathname === '/admin' ||

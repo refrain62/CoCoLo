@@ -25,7 +25,7 @@ describe('ページメタデータ', () => {
   it.each([
     ['/', 'CoCoLo | 部活・クラブの連絡と運営をひとつに'],
     ['/manual', 'CoCoLo 操作マニュアル'],
-    ['/login', 'CoCoLoへログイン'],
+    ['/login', 'CoCoLo | チームログイン'],
     ['/admin/events', 'CoCoLo | チーム管理'],
     ['/team/events', 'CoCoLo | チーム管理'],
     ['/dashboard', 'CoCoLo | ダッシュボード'],
