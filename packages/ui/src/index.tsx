@@ -37,22 +37,22 @@ const uiStyles = `
     --card-foreground: var(--cocolo-ink, #1d332c);
     --popover: var(--cocolo-surface, #fffdf8);
     --popover-foreground: var(--cocolo-ink, #1d332c);
-    --primary: var(--cocolo-brand, #287c62);
-    --primary-foreground: var(--cocolo-surface, #fffdf8);
+    --primary: var(--cocolo-brand, #06c755);
+    --primary-foreground: var(--cocolo-brand-foreground, #1f1f1f);
     --secondary: var(--cocolo-brand-soft, #dcefe3);
-    --secondary-foreground: var(--cocolo-brand-strong, #145742);
+    --secondary-foreground: var(--cocolo-brand-strong, #006b35);
     --muted: var(--cocolo-sand, #f7f3ea);
     --muted-foreground: var(--cocolo-muted, #667b73);
     --accent: var(--cocolo-coral-soft, #fbe2d8);
     --accent-foreground: var(--cocolo-coral-ink, #b2523e);
     --destructive: var(--cocolo-danger, #b54842);
     --destructive-foreground: var(--cocolo-surface-raised, #ffffff);
-    --border: var(--cocolo-line, #dbe5dc);
+    --border: var(--cocolo-line, #e8e8e8);
     --input: var(--cocolo-border-strong, #c4d4c8);
     --ring: var(--cocolo-focus, #f4af4d);
     --radius: var(--cocolo-radius-md, 1rem);
-    --shadow-sm: var(--cocolo-shadow-sm, 0 1px 2px rgb(29 51 44 / 0.06));
-    --shadow-md: var(--cocolo-shadow-md, 0 18px 42px rgb(29 51 44 / 0.1));
+    --shadow-sm: var(--cocolo-shadow-sm, 0 1px 2px rgb(31 31 31 / 0.06));
+    --shadow-md: var(--cocolo-shadow-md, 0 18px 42px rgb(31 31 31 / 0.1));
     --transition-fast: var(--cocolo-transition-fast, 160ms ease);
   }
 
@@ -92,9 +92,14 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button']:hover:not(:disabled) {
-    background: var(--cocolo-brand-strong, #145742);
-    box-shadow: var(--cocolo-shadow-hover, 0 4px 12px rgb(40 124 98 / 0.18));
+    background: var(--cocolo-brand-strong, #006b35);
+    box-shadow: var(--cocolo-shadow-hover, 0 4px 12px rgb(6 199 85 / 0.18));
     transform: translateY(-1px);
+  }
+
+  .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='default']:hover:not(:disabled),
+  .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='destructive']:hover:not(:disabled) {
+    color: var(--cocolo-surface-raised, #ffffff);
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button']:active:not(:disabled) {
@@ -160,7 +165,7 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='link']:hover:not(:disabled) {
-    color: var(--cocolo-brand-strong, #145742);
+    color: var(--cocolo-brand-strong, #006b35);
     background: transparent;
     box-shadow: none;
     text-decoration: underline;
