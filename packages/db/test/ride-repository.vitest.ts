@@ -113,7 +113,7 @@ describe('送迎Prisma repository', () => {
   });
 
   it('運転者表示名は所属プロフィールを更新し、送迎テーブルへ複製しない', async () => {
-    const fake = createFakePrisma([[planRow], [], [offerRow]]);
+    const fake = createFakePrisma([[], [planRow], [], [offerRow]]);
     const offer = await createRideRepository(fake.client).createOffer(
       actor,
       planRow.id,
@@ -124,6 +124,11 @@ describe('送迎Prisma repository', () => {
     expect(
       fake.queries.some((query) =>
         query.sql.includes('app_set_ride_display_name'),
+      ),
+    ).toBe(true);
+    expect(
+      fake.queries.some((query) =>
+        query.sql.includes('app_lock_ride_driver_plans'),
       ),
     ).toBe(true);
     const insert = fake.queries.find((query) =>

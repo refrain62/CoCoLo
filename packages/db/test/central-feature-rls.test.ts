@@ -35,6 +35,7 @@ const directUrl = process.env.DIRECT_URL;
 const enabled = Boolean(appUrl && directUrl);
 let app: PrismaClient | undefined;
 let direct: PrismaClient | undefined;
+let finalizer: PrismaClient | undefined;
 
 async function rows<T>(
   client: PrismaClient,
@@ -101,6 +102,26 @@ async function rejects(work: () => Promise<unknown>) {
   await assert.rejects(work);
 }
 
+async function waitForAdvisoryLockWait(
+  client: PrismaClient,
+  pid: number,
+): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const waitingLocks = await rows<{ locktype: string }>(
+      client,
+      `SELECT locktype
+         FROM pg_locks
+        WHERE pid = $1
+          AND locktype = 'advisory'
+          AND granted = false`,
+      pid,
+    );
+    if (waitingLocks.length === 1) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('表示名更新がplan lock待ちになりませんでした。');
+}
+
 const fixtureTables = [
   'tenants',
   'tenant_memberships',
@@ -147,12 +168,15 @@ async function seedFixture(client: PrismaClient) {
   return withRlsDisabled(client, async () => {
     await execute(
       client,
-      `INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status)
+      `INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status, display_name)
      VALUES
-       ('00000000-0000-7000-8000-000000000114', $1::uuid, 'admin-a', 'admin', 'active'),
-       ('00000000-0000-7000-8000-000000000115', $1::uuid, 'staff-a', 'staff', 'active'),
-       ('00000000-0000-7000-8000-000000000116', $1::uuid, 'guardian-a2', 'guardian', 'active')
-     ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = EXCLUDED.role, status = EXCLUDED.status`,
+       ('00000000-0000-7000-8000-000000000114', $1::uuid, 'admin-a', 'admin', 'active', NULL),
+       ('00000000-0000-7000-8000-000000000115', $1::uuid, 'staff-a', 'staff', 'active', '送迎担当 staff-a'),
+       ('00000000-0000-7000-8000-000000000116', $1::uuid, 'guardian-a2', 'guardian', 'active', NULL)
+     ON CONFLICT (tenant_id, user_id) DO UPDATE
+       SET role = EXCLUDED.role,
+           status = EXCLUDED.status,
+           display_name = COALESCE(EXCLUDED.display_name, tenant_memberships.display_name)`,
       tenantA,
     );
     await execute(
@@ -577,6 +601,7 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
 }, async () => {
   app = new PrismaClient({ datasources: { db: { url: appUrl } } });
   direct = new PrismaClient({ datasources: { db: { url: directUrl } } });
+  finalizer = new PrismaClient({ datasources: { db: { url: appUrl } } });
   await cleanupFixture(direct);
   await seedFixture(direct);
 
@@ -720,6 +745,100 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
       ridePlanA,
     );
   });
+
+  if (!direct || !finalizer) {
+    throw new Error('実DBのdirect/finalizer clientが初期化されていません。');
+  }
+  await withContext(app, tenantA, 'owner-a', 'owner', async (tx) => {
+    await execute(
+      tx,
+      `SELECT set_config('app.ride_reopen_reason', 'other', true)`,
+    );
+    await execute(
+      tx,
+      `UPDATE ride_plans SET status = 'closed'::ride_plan_status WHERE id = $1::uuid`,
+      ridePlanA,
+    );
+  });
+
+  // 確定処理が保持するplan lockに表示名更新も参加し、確定後変更を防ぐ。
+  let releaseFinalization = () => undefined;
+  const finalizationGate = new Promise<void>((resolve) => {
+    releaseFinalization = resolve;
+  });
+  let signalFinalizationReady = () => undefined;
+  let rejectFinalizationReady = (_error: unknown) => undefined;
+  const finalizationReady = new Promise<void>((resolve, reject) => {
+    signalFinalizationReady = resolve;
+    rejectFinalizationReady = reject;
+  });
+  const finalization = withContext(
+    finalizer,
+    tenantA,
+    'admin-a',
+    'admin',
+    async (tx) => {
+      await execute(
+        tx,
+        `UPDATE ride_plans SET status = 'finalized'::ride_plan_status WHERE id = $1::uuid`,
+        ridePlanA,
+      );
+      signalFinalizationReady();
+      await finalizationGate;
+    },
+  );
+  void finalization.catch((error) => {
+    rejectFinalizationReady(error);
+  });
+  let profileUpdate: Promise<unknown> | undefined;
+  try {
+    await finalizationReady;
+    let signalProfileReady = (_pid: number) => undefined;
+    let rejectProfileReady = (_error: unknown) => undefined;
+    const profileReady = new Promise<number>((resolve, reject) => {
+      signalProfileReady = resolve;
+      rejectProfileReady = reject;
+    });
+    profileUpdate = withContext(
+      app,
+      tenantA,
+      'staff-a',
+      'staff',
+      async (tx) => {
+        const profilePidRows = await rows<{ pid: number }>(
+          tx,
+          `SELECT pg_backend_pid()::int AS pid`,
+        );
+        const profilePid = Number(profilePidRows[0]?.pid);
+        assert.ok(Number.isInteger(profilePid) && profilePid > 0);
+        signalProfileReady(profilePid);
+        await rows(
+          tx,
+          `SELECT app_set_ride_display_name($1::uuid, $2::text)`,
+          tenantA,
+          '送迎担当 競合確認',
+        );
+      },
+    );
+    void profileUpdate.catch((error) => {
+      rejectProfileReady(error);
+    });
+    const profilePid = await profileReady;
+    await waitForAdvisoryLockWait(direct, profilePid);
+    releaseFinalization();
+    await finalization;
+    await assert.rejects(profileUpdate, /確定公開中の運転者名/);
+    const unchanged = await rows<{ display_name: string }>(
+      direct,
+      `SELECT display_name FROM tenant_memberships WHERE tenant_id = $1::uuid AND user_id = 'staff-a'`,
+      tenantA,
+    );
+    assert.equal(unchanged[0]?.display_name, '送迎担当 staff-a');
+  } finally {
+    releaseFinalization();
+    await finalization.catch(() => undefined);
+    await profileUpdate?.catch(() => undefined);
+  }
 
   await withContext(app, tenantA, 'guardian-a2', 'guardian', async (tx) => {
     assert.equal(await count(tx, 'ride_assignments'), 1);
@@ -884,4 +1003,5 @@ after(async () => {
   if (direct) await cleanupFixture(direct);
   await app?.$disconnect();
   await direct?.$disconnect();
+  await finalizer?.$disconnect();
 });
