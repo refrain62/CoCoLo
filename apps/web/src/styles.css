@@ -7,21 +7,26 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
-  /* CoCoLo design system: one palette, one rhythm, one language across the app. */
-  --cocolo-ink: #1d332c;
-  --cocolo-ink-soft: #315047;
-  --cocolo-muted: #667b73;
-  --cocolo-brand: #287c62;
-  --cocolo-brand-strong: #145742;
-  --cocolo-brand-soft: #dcefe3;
-  --cocolo-sand: #f7f3ea;
-  --cocolo-sand-deep: #efe7d7;
+  /* CoCoLo design system: LINE Greenを主役に、CoCoLoの温かい差し色を残す。 */
+  --cocolo-ink: #1f1f1f;
+  --cocolo-ink-soft: #3f3f3f;
+  --cocolo-muted: #777777;
+  --cocolo-brand: #06c755;
+  --cocolo-brand-strong: #006b35;
+  --cocolo-brand-foreground: #1f1f1f;
+  --cocolo-brand-soft: #e5f7eb;
+  --cocolo-sand: #f5f5f5;
+  --cocolo-sand-deep: #eeeeee;
   --cocolo-coral: #f07d62;
+  --cocolo-coral-strong: #d95644;
   --cocolo-coral-ink: #b2523e;
   --cocolo-coral-soft: #fbe2d8;
+  --cocolo-yellow: #f7c75d;
+  --cocolo-link: #4270ed;
+  --cocolo-navy: #262f4a;
   --cocolo-surface: #fffdf8;
   --cocolo-surface-muted: #f3f7f1;
-  --cocolo-line: #dbe5dc;
+  --cocolo-line: #e8e8e8;
   --cocolo-focus: #f4af4d;
   --cocolo-danger: #b54842;
   --cocolo-danger-strong: #963d38;
@@ -35,9 +40,9 @@
   --cocolo-sidebar-active: #23694f;
   --cocolo-border-strong: #c4d4c8;
   --cocolo-danger-border: #f2c4c0;
-  --cocolo-table-head: #eef4ee;
-  --cocolo-table-row-hover: #f3fbf9;
-  --cocolo-event-practice: #287c62;
+  --cocolo-table-head: #f5f5f5;
+  --cocolo-table-row-hover: #f3fbf6;
+  --cocolo-event-practice: #06c755;
   --cocolo-event-match: #b54842;
   --cocolo-event-other: #7050a3;
   --cocolo-focus-ring: rgb(244 175 77 / 0.28);
@@ -50,13 +55,13 @@
   --cocolo-space-7: 3rem;
   --cocolo-control-height: 2.75rem;
   --cocolo-transition-fast: 160ms ease;
-  --cocolo-radius-sm: 0.65rem;
-  --cocolo-radius-md: 1rem;
-  --cocolo-radius-lg: 1.5rem;
+  --cocolo-radius-sm: 0.5rem;
+  --cocolo-radius-md: 0.75rem;
+  --cocolo-radius-lg: 1.25rem;
   --cocolo-radius-xl: 2rem;
-  --cocolo-shadow-sm: 0 1px 2px rgb(29 51 44 / 0.06);
-  --cocolo-shadow-hover: 0 4px 12px rgb(40 124 98 / 0.18);
-  --cocolo-shadow-md: 0 18px 42px rgb(29 51 44 / 0.1);
+  --cocolo-shadow-sm: 0 1px 2px rgb(31 31 31 / 0.06);
+  --cocolo-shadow-hover: 0 4px 12px rgb(6 199 85 / 0.18);
+  --cocolo-shadow-md: 0 18px 42px rgb(31 31 31 / 0.1);
 
   /* Backwards-compatible aliases used by the authenticated app. */
   --ink: var(--cocolo-ink);
@@ -424,15 +429,16 @@ a:hover {
   padding: 0.6rem 0.95rem;
   border: 1px solid transparent;
   background: var(--brand);
-  color: var(--cocolo-surface-raised);
+  color: var(--cocolo-brand-foreground);
   cursor: pointer;
   font-size: 0.88rem;
   font-weight: 750;
-  transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .app-content button:hover:not(:disabled) {
   background: var(--brand-strong);
+  color: var(--cocolo-surface-raised);
   box-shadow: 0 5px 14px rgb(40 124 98 / 0.2);
   transform: translateY(-1px);
 }
@@ -444,6 +450,7 @@ a:hover {
 
 .app-content button[aria-pressed='true'] {
   background: var(--brand-strong);
+  color: var(--cocolo-surface-raised);
   box-shadow: inset 0 0 0 2px rgb(255 255 255 / 0.28);
 }
 

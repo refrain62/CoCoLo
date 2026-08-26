@@ -42,4 +42,13 @@ describe('公開トップページ', () => {
     expect(html).toContain('<svg');
     expect(html).toContain('type="button"');
   });
+
+  it('LINE連携を主導線として明示する', () => {
+    expect(html).toContain('data-line-integration="primary"');
+    expect(html).toContain('LINEとつながる、チーム運営');
+    expect(html).toContain('href="#line"');
+    expect(html).toContain('LINEグループへの通知');
+    expect(html).toContain('無料ではじめる');
+    expect(html).not.toContain('LINEで無料ではじめる');
+  });
 });
