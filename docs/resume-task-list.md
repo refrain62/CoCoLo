@@ -1,6 +1,6 @@
 # 中断再開タスクリスト
 
-更新日：2026-08-26
+更新日：2026-08-27
 
 基準：`origin/develop`
 
@@ -32,7 +32,7 @@
 | `[!]` | OPS-001〜007 | Auth、PostgreSQL、R2、LINE、rate limit、GitHub保護、production昇格、公開LPの性能基準とstaging再計測の外部条件を満たす |
 | `[ ]` | ORIG-REQ-001 | 当初要求の未実装分を機能単位に分解し、仕様・コード・実DB・staging受入まで完了する |
 | `[~]` | UI-001〜003 | role別主要画面、保存APIの冪等性、未接続・失敗・権限不足の表示を受入する |
-| `[ ]` | ADMIN-TEAM-001 | `/admin`にシステム管理（全体お知らせ・有償機能の切り替え）、`/team`に選択中チームの管理、利用者向けURLを別経路で用意し、ログイン後は直近2週間の予定・締め切りを一覧とカレンダーで表示する。system admin認証とtenant単位の認可をAPIでも分離する |
+| `[!]` | ADMIN-TEAM-001-ACCEPTANCE | stagingでSupabaseの`system_admin` claim付与、migration適用、実DBのRLS（公開publishedのみ・tenant越境不可）、実ブラウザの`/admin`・`/team`・`/dashboard`受入を確認する（実装履歴は[完了履歴](resume-task-history.md)） |
 
 各IDの詳細な仕様は[機能仕様書](functional-specification.md)と[統合契約](integration/)を参照します。
 
