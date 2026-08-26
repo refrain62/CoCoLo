@@ -49,12 +49,17 @@ main ── push ──▶ staging deploy
 | Secret | `STAGING_E2E_TEST_PASSWORD` | staging専用E2Eユーザーのパスワード。 |
 | Secret | `R2_ACCESS_KEY_ID` | staging private bucketへ接続するaccess key ID。Web、ログ、artifactへ渡さない。 |
 | Secret | `R2_SECRET_ACCESS_KEY` | staging private bucketへ接続するsecret access key。ログ、artifactへ出力しない。 |
+| Secret | `FEATURE_CONTRACT_OPERATOR_TOKEN` | 課金連携専用の32文字以上のsecret。Webや通常JWTへ渡さない。 |
+| Secret | `FEATURE_CONTRACT_GRANT_TOKEN` | 手動の有償feature付与専用の32文字以上のsecret。provider同期tokenと共有しない。 |
+| Secret | `FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET` | 課金provider署名検証専用の32文字以上のsecret。operator tokenと共有しない。 |
 | Variable | `SUPABASE_URL` | staging Supabase projectのURL。HTTPSを使う。 |
 | Variable | `SUPABASE_JWKS_URL` | staging SupabaseのJWKS URL。`SUPABASE_URL`のprojectと一致させる。 |
 | Variable | `R2_ENDPOINT` | staging用Cloudflare R2 endpoint。HTTPSを使い、production endpointと分離する。 |
 | Variable | `PUBLIC_APP_URL` | staging Webアプリの公開HTTPS URL。 |
 | Variable | `PUBLIC_APP_URL_ALLOWLIST` | コード側のstaging固定allowlistに含まれるURLだけを指定する。任意のURL追加は拒否する。 |
 | Variable | `RATE_LIMIT_ADAPTER_MODULE` | providerをlockfileとallowlistへ追加した場合だけ設定する。現時点は実provider未同梱のため未設定。 |
+| Variable | `FEATURE_CONTRACT_OPERATOR_HOST` | 課金連携専用のprivate listenerをbindするhost。公開Web listenerと分離する。 |
+| Variable | `FEATURE_CONTRACT_OPERATOR_PORT` | 課金連携専用listenerの1〜65535のport。private gatewayからだけ到達可能にする。 |
 
 Workflow内で次の値は固定されており、Environment variableとして別値を設定しません。
 
@@ -81,6 +86,9 @@ Workflow内で次の値は固定されており、Environment variableとして�
 | Secret | `PRODUCTION_DEPLOY_ADAPTER` | production providerへ配置する実行可能なadapter。 |
 | Secret | `R2_ACCESS_KEY_ID` | production private bucketへ接続するaccess key ID。stagingと分離する。 |
 | Secret | `R2_SECRET_ACCESS_KEY` | production private bucketへ接続するsecret access key。ログ、artifactへ出力しない。 |
+| Secret | `FEATURE_CONTRACT_OPERATOR_TOKEN` | 課金連携専用の32文字以上のsecret。stagingと共有しない。 |
+| Secret | `FEATURE_CONTRACT_GRANT_TOKEN` | 手動の有償feature付与専用の32文字以上のsecret。stagingと共有しない。 |
+| Secret | `FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET` | 課金provider署名検証専用の32文字以上のsecret。stagingと共有しない。 |
 | Variable | `SUPABASE_URL` | production Supabase projectのURL。stagingと異なる場合は後述の昇格前提を満たすこと。 |
 | Variable | `SUPABASE_JWKS_URL` | production SupabaseのJWKS URL。 |
 | Variable | `R2_ENDPOINT` | production用Cloudflare R2 endpoint。HTTPSを使い、staging endpointと分離する。 |
@@ -89,6 +97,8 @@ Workflow内で次の値は固定されており、Environment variableとして�
 | Variable | `RETIRED_DATA_RETENTION_DAYS` | 退部データを保持する日数。運用上の保存期間を整数で設定する。 |
 | Variable | `AUDIT_LOG_RETENTION_DAYS` | 監査ログを保持する日数。運用上の保存期間を整数で設定する。 |
 | Variable | `RATE_LIMIT_ADAPTER_MODULE` | providerをlockfileとallowlistへ追加した場合だけ設定する。stagingと同じmoduleを無条件に共有しない。現時点は未設定。 |
+| Variable | `FEATURE_CONTRACT_OPERATOR_HOST` | 課金連携専用のprivate listenerをbindするhost。公開Web listenerと分離する。 |
+| Variable | `FEATURE_CONTRACT_OPERATOR_PORT` | 課金連携専用listenerの1〜65535のport。private gatewayからだけ到達可能にする。 |
 
 Workflow内で次の値は固定されており、Environment variableとして別値を設定しません。
 
@@ -102,6 +112,10 @@ Workflow内で次の値は固定されており、Environment variableとして�
 
 productionも実provider未同梱のため、`RATE_LIMIT_ADAPTER_MODULE` 未設定では起動と昇格を継続しません。
 providerを追加する場合は、stagingとproductionのRedis endpoint、Secret、監視、namespaceを分離し、実Redis検証の記録をstaging evidenceへ残します。
+
+課金provider連携を有効にする前に、migration ownerの保護された運用手順で`tenant_billing_accounts`へprovider accountとtenantの紐付けを登録します。アプリとprovider同期routeからこの紐付けを作成・変更することはできず、紐付けのないpayloadは拒否されます。
+
+手動の有償feature付与では、同じ保護手順で`feature_grant_approvals`へ対象tenant、feature、付与期間、課金状態、subscription ID、承認者、承認期限と、別途発行した承認tokenのSHA-256だけを記録します。`paid-grant`のgrant tokenは全tenant共通のsecretそのものを送らず、`<tenantId>.<HMAC-SHA256(grant-secret, tenantId)>`形式のtenant束縛tokenを送り、`x-cocolo-approval-token`には承認台帳ごとのtokenを送ります。routeはprovider account、現行プランの課金状態・契約ID・期間、承認ID、承認tokenを照合し、承認済みレコードを一度だけ消費します。承認台帳がない、期限切れ、既に消費済み、対象tenant・feature・期間が異なる、または課金状態が有効でない付与は拒否されます。
 
 ### Webのビルド設定に関する重要な前提
 

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   evaluateEffectiveFeatures,
   type FeatureContractSnapshot,
@@ -8,19 +9,20 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 export type FeatureContractErrorCode =
   | 'FORBIDDEN'
   | 'NOT_FOUND'
+  | 'CONFLICT'
   | 'PAID_FEATURE_REQUIRES_PLAN';
 
 type FeatureContractMemberRole = 'owner' | 'admin' | 'staff' | 'guardian';
 type FeatureContractRlsRole = FeatureContractMemberRole | 'operator';
 
 export class FeatureContractError extends Error {
-  readonly status: 403 | 404;
+  readonly status: 403 | 404 | 409;
   readonly code: FeatureContractErrorCode;
 
   constructor(
     code: FeatureContractErrorCode,
     message: string,
-    status: 403 | 404,
+    status: 403 | 404 | 409,
   ) {
     super(message);
     this.name = 'FeatureContractError';
@@ -46,6 +48,9 @@ export type FeatureContractRepository = {
   syncPlan: (input: {
     tenantId: string;
     actorUserId: string;
+    providerAccountId: string;
+    eventId: string;
+    version: number;
     planKey: string;
     status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'expired';
     featureKeys: string[];
@@ -56,6 +61,13 @@ export type FeatureContractRepository = {
   grantPaidFeature: (input: {
     tenantId: string;
     actorUserId: string;
+    providerAccountId: string;
+    approvalId: string;
+    billingStatus: 'active' | 'trialing' | 'past_due' | 'canceled' | 'expired';
+    billingProviderSubscriptionId: string;
+    approvalToken: string;
+    eventId: string;
+    version: number;
     featureKey: string;
     enabled: boolean;
     reason: string;
@@ -65,6 +77,20 @@ export type FeatureContractRepository = {
 };
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
+
+function payloadHash(input: object) {
+  return createHash('sha256').update(JSON.stringify(input)).digest('hex');
+}
+
+function secretHash(input: string) {
+  return createHash('sha256').update(input).digest('hex');
+}
+
+async function lockTenant(client: Prisma.TransactionClient, tenantId: string) {
+  await client.$executeRaw`
+    SELECT pg_advisory_xact_lock(hashtextextended(${`feature-contract:${tenantId}`}, 0))
+  `;
+}
 
 async function setRlsContext(
   client: DatabaseClient,
@@ -275,11 +301,102 @@ export function createFeatureContractRepository(
           403,
         );
       const featureKeys = [...new Set(input.featureKeys)];
+      const hash = payloadHash({
+        tenantId: input.tenantId,
+        providerAccountId: input.providerAccountId,
+        eventId: input.eventId,
+        version: input.version,
+        planKey: input.planKey,
+        status: input.status,
+        featureKeys: [...featureKeys].sort(),
+        billingProviderSubscriptionId: input.billingProviderSubscriptionId,
+        startsAt: input.startsAt.toISOString(),
+        endsAt: input.endsAt?.toISOString() ?? null,
+      });
       await client.$transaction(async (tx) => {
         await setRlsContext(tx, {
           tenantId: input.tenantId,
           userId: input.actorUserId,
           role: 'operator',
+        });
+        await lockTenant(tx, input.tenantId);
+        const billingAccount = await tx.tenantBillingAccount.findUnique({
+          where: { providerAccountId: input.providerAccountId },
+          select: { tenantId: true },
+        });
+        if (billingAccount?.tenantId !== input.tenantId)
+          throw new FeatureContractError(
+            'FORBIDDEN',
+            '課金provider accountとteamの紐付けを確認できません。',
+            403,
+          );
+        const previousEvent = await tx.featureContractEvent.findUnique({
+          where: {
+            tenantId_eventId: {
+              tenantId: input.tenantId,
+              eventId: input.eventId,
+            },
+          },
+        });
+        if (previousEvent) {
+          if (
+            previousEvent.operation !== 'plan_sync' ||
+            previousEvent.payloadHash !== hash
+          )
+            throw new FeatureContractError(
+              'CONFLICT',
+              '同じevent IDに異なる課金連携内容が指定されています。',
+              409,
+            );
+          return;
+        }
+        const catalog = await tx.featurePlanDefinition.findUnique({
+          where: { planKey: input.planKey },
+          select: { featureKeys: true },
+        });
+        if (!catalog)
+          throw new FeatureContractError(
+            'NOT_FOUND',
+            '指定されたプランがカタログにありません。',
+            404,
+          );
+        const allowedFeatureKeys = new Set(catalog.featureKeys);
+        if (
+          featureKeys.some((featureKey) => !allowedFeatureKeys.has(featureKey))
+        )
+          throw new FeatureContractError(
+            'FORBIDDEN',
+            'プランで許可されていないfeature keyが含まれています。',
+            403,
+          );
+        const definitions = await tx.featureDefinition.findMany({
+          where: { key: { in: featureKeys } },
+          select: { key: true },
+        });
+        if (definitions.length !== featureKeys.length)
+          throw new FeatureContractError(
+            'NOT_FOUND',
+            'プランに未知のfeature keyが含まれています。',
+            404,
+          );
+        const currentPlan = await tx.tenantPlan.findUnique({
+          where: { tenantId: input.tenantId },
+          select: { providerVersion: true },
+        });
+        if (currentPlan && currentPlan.providerVersion >= input.version)
+          throw new FeatureContractError(
+            'CONFLICT',
+            '古い課金連携イベントは適用できません。',
+            409,
+          );
+        await tx.featureContractEvent.create({
+          data: {
+            tenantId: input.tenantId,
+            eventId: input.eventId,
+            operation: 'plan_sync',
+            version: input.version,
+            payloadHash: hash,
+          },
         });
         const plan = await tx.tenantPlan.upsert({
           where: { tenantId: input.tenantId },
@@ -289,6 +406,7 @@ export function createFeatureContractRepository(
             status: input.status,
             featureKeys,
             billingProviderSubscriptionId: input.billingProviderSubscriptionId,
+            providerVersion: input.version,
             startsAt: input.startsAt,
             endsAt: input.endsAt,
           },
@@ -297,6 +415,7 @@ export function createFeatureContractRepository(
             status: input.status,
             featureKeys,
             billingProviderSubscriptionId: input.billingProviderSubscriptionId,
+            providerVersion: input.version,
             startsAt: input.startsAt,
             endsAt: input.endsAt,
           },
@@ -312,10 +431,8 @@ export function createFeatureContractRepository(
               planKey: input.planKey,
               status: input.status,
               featureKeys,
-              billingProviderSubscriptionId:
-                input.billingProviderSubscriptionId,
-              startsAt: input.startsAt.toISOString(),
-              endsAt: input.endsAt?.toISOString() ?? null,
+              eventId: input.eventId,
+              version: input.version,
             },
           },
         });
@@ -334,12 +451,58 @@ export function createFeatureContractRepository(
           'feature flagの適用期間が不正です。',
           403,
         );
+      const hash = payloadHash({
+        tenantId: input.tenantId,
+        providerAccountId: input.providerAccountId,
+        approvalId: input.approvalId,
+        billingStatus: input.billingStatus,
+        billingProviderSubscriptionId: input.billingProviderSubscriptionId,
+        eventId: input.eventId,
+        version: input.version,
+        featureKey: input.featureKey,
+        enabled: input.enabled,
+        reason: input.reason,
+        approvalTokenHash: secretHash(input.approvalToken),
+        startsAt: input.startsAt.toISOString(),
+        endsAt: input.endsAt?.toISOString() ?? null,
+      });
       await client.$transaction(async (tx) => {
         await setRlsContext(tx, {
           tenantId: input.tenantId,
           userId: input.actorUserId,
           role: 'operator',
         });
+        await lockTenant(tx, input.tenantId);
+        const billingAccount = await tx.tenantBillingAccount.findUnique({
+          where: { providerAccountId: input.providerAccountId },
+          select: { tenantId: true },
+        });
+        if (billingAccount?.tenantId !== input.tenantId)
+          throw new FeatureContractError(
+            'FORBIDDEN',
+            '課金providerアカウントとチームの紐付けを確認できません。',
+            403,
+          );
+        const previousEvent = await tx.featureContractEvent.findUnique({
+          where: {
+            tenantId_eventId: {
+              tenantId: input.tenantId,
+              eventId: input.eventId,
+            },
+          },
+        });
+        if (previousEvent) {
+          if (
+            previousEvent.operation !== 'paid_grant' ||
+            previousEvent.payloadHash !== hash
+          )
+            throw new FeatureContractError(
+              'CONFLICT',
+              '同じevent IDに異なる課金連携内容が指定されています。',
+              409,
+            );
+          return;
+        }
         const definition = await tx.featureDefinition.findUnique({
           where: { key: input.featureKey },
           select: { billingType: true },
@@ -356,6 +519,81 @@ export function createFeatureContractRepository(
             '無償機能はチーム管理者が変更してください。',
             403,
           );
+        const approval = await tx.featureGrantApproval.findUnique({
+          where: {
+            tenantId_id: {
+              tenantId: input.tenantId,
+              id: input.approvalId,
+            },
+          },
+        });
+        const now = new Date();
+        if (
+          approval?.status !== 'approved' ||
+          approval.providerAccountId !== input.providerAccountId ||
+          approval.featureKey !== input.featureKey ||
+          secretHash(input.approvalToken) !== approval.approvalTokenHash ||
+          approval.billingStatus !== input.billingStatus ||
+          approval.billingProviderSubscriptionId !==
+            input.billingProviderSubscriptionId ||
+          approval.approvedAt > now ||
+          (approval.expiresAt !== null && now >= approval.expiresAt) ||
+          input.startsAt < approval.startsAt ||
+          (approval.endsAt !== null &&
+            (input.endsAt === null || input.endsAt > approval.endsAt))
+        )
+          throw new FeatureContractError(
+            'FORBIDDEN',
+            '有償featureの承認記録または課金状態を確認できません。',
+            403,
+          );
+        const currentPlan = await tx.tenantPlan.findUnique({
+          where: { tenantId: input.tenantId },
+          select: {
+            status: true,
+            billingProviderSubscriptionId: true,
+            startsAt: true,
+            endsAt: true,
+          },
+        });
+        if (
+          !currentPlan ||
+          currentPlan.status !== input.billingStatus ||
+          currentPlan.billingProviderSubscriptionId !==
+            input.billingProviderSubscriptionId ||
+          currentPlan.startsAt > now ||
+          (currentPlan.endsAt !== null && now >= currentPlan.endsAt)
+        )
+          throw new FeatureContractError(
+            'FORBIDDEN',
+            '現在の契約状態を確認できないため、有償featureを付与できません。',
+            403,
+          );
+        const currentFlag = await tx.tenantFeatureFlag.findUnique({
+          where: {
+            tenantId_featureKey: {
+              tenantId: input.tenantId,
+              featureKey: input.featureKey,
+            },
+          },
+          select: { providerVersion: true },
+        });
+        if (currentFlag && currentFlag.providerVersion >= input.version)
+          throw new FeatureContractError(
+            'CONFLICT',
+            '古い課金連携イベントは適用できません。',
+            409,
+          );
+        await tx.featureContractEvent.create({
+          data: {
+            tenantId: input.tenantId,
+            eventId: input.eventId,
+            operation: 'paid_grant',
+            version: input.version,
+            payloadHash: hash,
+            approvalId: input.approvalId,
+          },
+        });
         await tx.tenantFeatureFlag.upsert({
           where: {
             tenantId_featureKey: {
@@ -370,6 +608,7 @@ export function createFeatureContractRepository(
             source: 'operator',
             changedByUserId: input.actorUserId,
             reason: input.reason,
+            providerVersion: input.version,
             startsAt: input.startsAt,
             endsAt: input.endsAt,
           },
@@ -378,9 +617,19 @@ export function createFeatureContractRepository(
             source: 'operator',
             changedByUserId: input.actorUserId,
             reason: input.reason,
+            providerVersion: input.version,
             startsAt: input.startsAt,
             endsAt: input.endsAt,
           },
+        });
+        await tx.featureGrantApproval.update({
+          where: {
+            tenantId_id: {
+              tenantId: input.tenantId,
+              id: input.approvalId,
+            },
+          },
+          data: { status: 'consumed', consumedAt: new Date() },
         });
         await tx.auditLog.create({
           data: {
@@ -392,9 +641,9 @@ export function createFeatureContractRepository(
               featureKey: input.featureKey,
               enabled: input.enabled,
               source: 'operator',
-              reason: input.reason,
-              startsAt: input.startsAt.toISOString(),
-              endsAt: input.endsAt?.toISOString() ?? null,
+              approvalId: input.approvalId,
+              eventId: input.eventId,
+              version: input.version,
             },
           },
         });

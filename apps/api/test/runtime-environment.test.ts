@@ -29,6 +29,12 @@ const validStagingEnvironment = {
   RATE_LIMIT_STORE: 'distributed',
   RATE_LIMIT_FAIL_CLOSED: 'true',
   RATE_LIMIT_ADAPTER_MODULE: '@cocolo/test-rate-limit-adapter',
+  FEATURE_CONTRACT_OPERATOR_TOKEN: 'operator-secret-that-is-long-enough-123456',
+  FEATURE_CONTRACT_GRANT_TOKEN: 'grant-secret-that-is-long-enough-123456',
+  FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET:
+    'provider-secret-that-is-long-enough-123456',
+  FEATURE_CONTRACT_OPERATOR_HOST: '127.0.0.1',
+  FEATURE_CONTRACT_OPERATOR_PORT: '9876',
 };
 
 test('API起動時に許可されたstaging環境を解決する', () => {
@@ -52,6 +58,15 @@ test('API起動時に許可されたstaging環境を解決する', () => {
       rateLimitStoreMode: 'distributed',
       rateLimitFailClosed: true,
       rateLimitAdapterModule: validStagingEnvironment.RATE_LIMIT_ADAPTER_MODULE,
+      featureContractOperatorToken:
+        validStagingEnvironment.FEATURE_CONTRACT_OPERATOR_TOKEN,
+      featureContractGrantToken:
+        validStagingEnvironment.FEATURE_CONTRACT_GRANT_TOKEN,
+      featureContractProviderWebhookSecret:
+        validStagingEnvironment.FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET,
+      featureContractOperatorHost:
+        validStagingEnvironment.FEATURE_CONTRACT_OPERATOR_HOST,
+      featureContractOperatorPort: 9876,
     },
   );
 });
@@ -89,6 +104,21 @@ test('stagingで分散storeとadapter moduleを省略した起動を拒否する
   );
 });
 
+test('stagingでは課金連携listenerの認証と接続設定を必須にする', () => {
+  const environment: Record<string, string | undefined> = {
+    ...validStagingEnvironment,
+  };
+  delete environment.FEATURE_CONTRACT_OPERATOR_TOKEN;
+
+  assert.throws(
+    () =>
+      readRuntimeEnvironment(environment, {
+        rateLimitAdapterPolicy: testAdapterPolicy,
+      }),
+    /課金連携のoperator token、grant token、provider secret、host、portは同時に設定してください。/,
+  );
+});
+
 test('stagingでin-memoryとfail-open設定を拒否する', () => {
   assert.throws(
     () =>
@@ -105,6 +135,20 @@ test('stagingでin-memoryとfail-open設定を拒否する', () => {
         RATE_LIMIT_FAIL_CLOSED: 'false',
       }),
     /RATE_LIMIT_FAIL_CLOSED は true に固定してください。/,
+  );
+});
+
+test('課金連携listenerは公開wildcard hostへbindできない', () => {
+  assert.throws(
+    () =>
+      readRuntimeEnvironment(
+        {
+          ...validStagingEnvironment,
+          FEATURE_CONTRACT_OPERATOR_HOST: '0.0.0.0',
+        },
+        { rateLimitAdapterPolicy: testAdapterPolicy },
+      ),
+    /FEATURE_CONTRACT_OPERATOR_HOSTは公開wildcard以外/,
   );
 });
 
