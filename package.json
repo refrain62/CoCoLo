@@ -9,7 +9,7 @@
   "scripts": {
     "test": "pnpm -r --if-present test",
     "test:contracts": "node --test packages/contracts/test/*.test.ts",
-    "test:unit": "node --test scripts/db-seed-test.test.ts scripts/verify-pr-description.test.ts scripts/verify-uuidv7-migration.test.ts scripts/verify-toolchain.test.ts scripts/line-ending-policy.test.ts && vitest run && pnpm -r --if-present test:unit",
+    "test:unit": "node --test scripts/db-seed-test.test.ts scripts/db-load-test.test.ts scripts/verify-pr-description.test.ts scripts/verify-uuidv7-migration.test.ts scripts/verify-toolchain.test.ts scripts/line-ending-policy.test.ts && vitest run && pnpm -r --if-present test:unit",
     "test:integration": "node scripts/supabase-local.ts integration",
     "test:integration:raw": "pnpm -r --workspace-concurrency=1 --if-present test:integration",
     "test:e2e:local": "node scripts/run-e2e.ts local",
@@ -56,6 +56,7 @@
     "create:pgpass": "node scripts/create-pgpass.ts",
     "db:prepare:test": "node scripts/db-prepare-test.ts",
     "db:seed:test": "node scripts/db-seed-test.ts",
+    "test:load": "node scripts/db-load-test.ts",
     "dev:local": "node scripts/supabase-local.ts dev",
     "local:status": "node scripts/supabase-local.ts status",
     "local:stop": "node scripts/supabase-local.ts stop",
