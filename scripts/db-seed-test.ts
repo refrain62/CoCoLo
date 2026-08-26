@@ -739,6 +739,30 @@ SELECT '${uuid(1831)}', '${tenantC}', '${uuid(1801)}', '${uuid(1821)}', '${uuid(
 WHERE NOT EXISTS (SELECT 1 FROM ride_assignments existing WHERE existing.id = '${uuid(1831)}')
 ON CONFLICT (id) DO NOTHING;
 `,
+    sql`
+UPDATE tenant_memberships tm
+SET display_name = '送迎担当 ' || tm.user_id
+FROM ride_offers ro
+WHERE ro.tenant_id = tm.tenant_id
+  AND ro.driver_user_id = tm.user_id
+  AND ro.id IN ('${uuid(1811)}'::uuid, '${uuid(1812)}'::uuid)
+  AND tm.status = 'active'::membership_status
+  AND NOT EXISTS (
+    SELECT 1
+      FROM ride_offers finalized_ro
+      JOIN ride_assignments finalized_a
+        ON finalized_a.tenant_id = finalized_ro.tenant_id
+       AND finalized_a.plan_id = finalized_ro.plan_id
+       AND finalized_a.offer_id = finalized_ro.id
+      JOIN ride_plans finalized_rp
+        ON finalized_rp.tenant_id = finalized_a.tenant_id
+       AND finalized_rp.id = finalized_a.plan_id
+     WHERE finalized_ro.tenant_id = tm.tenant_id
+       AND finalized_ro.driver_user_id = tm.user_id
+       AND finalized_rp.status = 'finalized'::ride_plan_status
+  )
+  AND NULLIF(BTRIM(tm.display_name), '') IS NULL;
+`,
     sql`UPDATE ride_requests SET status = 'assigned' WHERE id = '${uuid(1821)}' AND status = 'pending';`,
     sql`UPDATE ride_requests SET status = 'unassigned' WHERE id = '${uuid(1822)}' AND status = 'pending';`,
     sql`UPDATE ride_offers SET status = 'cancelled' WHERE id = '${uuid(1812)}' AND status = 'open';`,
@@ -1161,7 +1185,7 @@ SELECT
   ('00000000-0000-7000-8000-' || lpad((440000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((430000 + series)::text, 12, '0'))::uuid,
-  'club-' || lpad(series::text, 4, '0') || '-member-10-parent-1',
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-member-10-parent-1',
   4 + (series % 5),
   'open'::ride_offer_status
 FROM generate_series(1, 1000) AS generated(series)
@@ -1177,7 +1201,7 @@ SELECT
   ('00000000-0000-7000-8000-' || lpad((441000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((430000 + series)::text, 12, '0'))::uuid,
-  'club-' || lpad(series::text, 4, '0') || '-member-10-parent-2',
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-member-10-parent-2',
   1 + (series % 3),
   'open'::ride_offer_status
 FROM generate_series(1, 1000) AS generated(series)
@@ -1194,7 +1218,7 @@ SELECT
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((430000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((20000 + ((series - 1) * 10) + 1)::text, 12, '0'))::uuid,
-  'club-' || lpad(series::text, 4, '0') || '-member-01-parent-1',
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-member-01-parent-1',
   1 + (series % 3),
   'pending'::ride_request_status
 FROM generate_series(1, 1000) AS generated(series)
@@ -1211,7 +1235,7 @@ SELECT
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((430000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((20000 + ((series - 1) * 10) + 2)::text, 12, '0'))::uuid,
-  'club-' || lpad(series::text, 4, '0') || '-member-02-parent-2',
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-member-02-parent-2',
   1 + (series % 2),
   'pending'::ride_request_status
 FROM generate_series(1, 1000) AS generated(series)
@@ -1236,6 +1260,109 @@ WHERE NOT EXISTS (
   WHERE existing.id = ('00000000-0000-7000-8000-' || lpad((460000 + series)::text, 12, '0'))::uuid
 )
 ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+UPDATE ride_offers ro
+SET driver_user_id = 'club-' || CASE
+  WHEN right(ro.id::text, 12)::bigint - 440000 >= 1000
+    THEN (right(ro.id::text, 12)::bigint - 440000)::text
+  ELSE lpad((right(ro.id::text, 12)::bigint - 440000)::text, 3, '0')
+END || '-member-10-parent-1'
+WHERE ro.id BETWEEN '00000000-0000-7000-8000-000000440001'::uuid
+                 AND '00000000-0000-7000-8000-000000441000'::uuid
+  AND ro.tenant_id BETWEEN '00000000-0000-7000-8000-000000010001'::uuid
+                       AND '00000000-0000-7000-8000-000000011001'::uuid
+  AND ro.driver_user_id = 'club-' || lpad((right(ro.id::text, 12)::bigint - 440000)::text, 4, '0') || '-member-10-parent-1'
+  AND EXISTS (
+    SELECT 1 FROM ride_plans rp
+    WHERE rp.tenant_id = ro.tenant_id
+      AND rp.id = ro.plan_id
+      AND rp.status <> 'finalized'::ride_plan_status
+  );
+`,
+    sql`
+UPDATE ride_offers ro
+SET driver_user_id = 'club-' || CASE
+  WHEN right(ro.id::text, 12)::bigint - 441000 >= 1000
+    THEN (right(ro.id::text, 12)::bigint - 441000)::text
+  ELSE lpad((right(ro.id::text, 12)::bigint - 441000)::text, 3, '0')
+END || '-member-10-parent-2'
+WHERE ro.id BETWEEN '00000000-0000-7000-8000-000000441001'::uuid
+                 AND '00000000-0000-7000-8000-000000442000'::uuid
+  AND ro.tenant_id BETWEEN '00000000-0000-7000-8000-000000010001'::uuid
+                       AND '00000000-0000-7000-8000-000000011001'::uuid
+  AND ro.driver_user_id = 'club-' || lpad((right(ro.id::text, 12)::bigint - 441000)::text, 4, '0') || '-member-10-parent-2'
+  AND EXISTS (
+    SELECT 1 FROM ride_plans rp
+    WHERE rp.tenant_id = ro.tenant_id
+      AND rp.id = ro.plan_id
+      AND rp.status <> 'finalized'::ride_plan_status
+  );
+`,
+    sql`
+UPDATE ride_requests rr
+SET requester_user_id = 'club-' || CASE
+  WHEN right(rr.id::text, 12)::bigint - 450000 >= 1000
+    THEN (right(rr.id::text, 12)::bigint - 450000)::text
+  ELSE lpad((right(rr.id::text, 12)::bigint - 450000)::text, 3, '0')
+END || '-member-01-parent-1'
+WHERE rr.id BETWEEN '00000000-0000-7000-8000-000000450001'::uuid
+                 AND '00000000-0000-7000-8000-000000451000'::uuid
+  AND rr.tenant_id BETWEEN '00000000-0000-7000-8000-000000010001'::uuid
+                       AND '00000000-0000-7000-8000-000000011001'::uuid
+  AND rr.requester_user_id = 'club-' || lpad((right(rr.id::text, 12)::bigint - 450000)::text, 4, '0') || '-member-01-parent-1'
+  AND EXISTS (
+    SELECT 1 FROM ride_plans rp
+    WHERE rp.tenant_id = rr.tenant_id
+      AND rp.id = rr.plan_id
+      AND rp.status <> 'finalized'::ride_plan_status
+  );
+`,
+    sql`
+UPDATE ride_requests rr
+SET requester_user_id = 'club-' || CASE
+  WHEN right(rr.id::text, 12)::bigint - 451000 >= 1000
+    THEN (right(rr.id::text, 12)::bigint - 451000)::text
+  ELSE lpad((right(rr.id::text, 12)::bigint - 451000)::text, 3, '0')
+END || '-member-02-parent-2'
+WHERE rr.id BETWEEN '00000000-0000-7000-8000-000000451001'::uuid
+                 AND '00000000-0000-7000-8000-000000452000'::uuid
+  AND rr.tenant_id BETWEEN '00000000-0000-7000-8000-000000010001'::uuid
+                       AND '00000000-0000-7000-8000-000000011001'::uuid
+  AND rr.requester_user_id = 'club-' || lpad((right(rr.id::text, 12)::bigint - 451000)::text, 4, '0') || '-member-02-parent-2'
+  AND EXISTS (
+    SELECT 1 FROM ride_plans rp
+    WHERE rp.tenant_id = rr.tenant_id
+      AND rp.id = rr.plan_id
+      AND rp.status <> 'finalized'::ride_plan_status
+  );
+`,
+    sql`
+UPDATE tenant_memberships tm
+SET display_name = '送迎担当 ' || tm.user_id
+FROM ride_offers ro
+WHERE ro.tenant_id = tm.tenant_id
+  AND ro.driver_user_id = tm.user_id
+  AND ro.id BETWEEN '00000000-0000-7000-8000-000000440001'::uuid
+                 AND '00000000-0000-7000-8000-000000442000'::uuid
+  AND ro.tenant_id BETWEEN '00000000-0000-7000-8000-000000010001'::uuid
+                       AND '00000000-0000-7000-8000-000000011001'::uuid
+  AND tm.status = 'active'::membership_status
+  AND NOT EXISTS (
+    SELECT 1
+      FROM ride_offers finalized_ro
+      JOIN ride_assignments finalized_a
+        ON finalized_a.tenant_id = finalized_ro.tenant_id
+       AND finalized_a.plan_id = finalized_ro.plan_id
+       AND finalized_a.offer_id = finalized_ro.id
+      JOIN ride_plans finalized_rp
+        ON finalized_rp.tenant_id = finalized_a.tenant_id
+       AND finalized_rp.id = finalized_a.plan_id
+     WHERE finalized_ro.tenant_id = tm.tenant_id
+       AND finalized_ro.driver_user_id = tm.user_id
+       AND finalized_rp.status = 'finalized'::ride_plan_status
+  )
+  AND NULLIF(BTRIM(tm.display_name), '') IS NULL;
 `,
     sql`
 UPDATE ride_requests

@@ -9,7 +9,7 @@
   "scripts": {
     "test": "pnpm -r --if-present test",
     "test:contracts": "node --test packages/contracts/test/*.test.ts",
-    "test:unit": "node --test scripts/db-seed-test.test.ts scripts/db-load-test.test.ts scripts/verify-pr-description.test.ts scripts/verify-uuidv7-migration.test.ts scripts/verify-toolchain.test.ts scripts/line-ending-policy.test.ts scripts/measure-lp.test.ts && vitest run && pnpm -r --if-present test:unit",
+    "test:unit": "node --test scripts/db-seed-test.test.ts scripts/db-load-test.test.ts scripts/verify-pr-description.test.ts scripts/verify-uuidv7-migration.test.ts scripts/verify-toolchain.test.ts scripts/line-ending-policy.test.ts scripts/measure-lp.test.ts && pnpm --filter @cocolo/domain build && vitest run && pnpm -r --if-present test:unit",
     "test:integration": "node scripts/supabase-local.ts integration",
     "test:integration:raw": "pnpm -r --workspace-concurrency=1 --if-present test:integration",
     "test:e2e:local": "node scripts/run-e2e.ts local",
@@ -25,7 +25,7 @@
     "typecheck": "tsc -p tsconfig.scripts.json --noEmit && pnpm -r --if-present typecheck",
     "generate:openapi": "node scripts/generate-openapi.ts",
     "lint:openapi": "node scripts/verify-openapi.ts",
-    "test:contract": "node --test packages/contracts/test/*.test.ts",
+    "test:contract": "pnpm --filter @cocolo/contracts build && node --test packages/contracts/test/*.test.ts",
     "test:release": "node --test scripts/release-artifact.test.ts",
     "verify:workspace-boundaries": "depcruise --config .dependency-cruiser.cjs apps packages --output-type err-long && node scripts/verify-workspace-boundaries.ts",
     "verify:migration-sql": "node scripts/verify-migration-sql.ts",

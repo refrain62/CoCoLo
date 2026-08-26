@@ -690,6 +690,15 @@ export function createRideRepository(client: PrismaClient): RideRepository {
       )
         throw new RideRepositoryConflictError('運転者の表示名が不正です。');
       return runInRideTransaction(client, actor, async (tx) => {
+        if (driverDisplayName !== undefined) {
+          // 表示名更新が取得する全plan lockを、plan lockより先に揃える。
+          await tx.$queryRaw`
+            SELECT app_lock_ride_driver_plans(
+              ${actor.tenantId}::uuid,
+              ${planId}::uuid
+            )
+          `;
+        }
         await lockPlan(tx, actor, planId);
         const plan = await requirePlan(tx, actor, planId);
         if (plan.status !== 'open')
