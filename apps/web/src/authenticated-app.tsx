@@ -44,7 +44,13 @@ import {
   isNotificationDeepLink,
   parseNotificationDeepLink,
 } from './notification-deep-link.js';
+import { SystemAdminPage } from './system-admin-page.js';
+import { isSystemAdminPath } from './system-admin-routes.js';
+import { SystemAdminShell } from './system-admin-shell.js';
+import { createSystemContextApi } from './system-context-api.js';
 import { TeamSettingsPage } from './team-settings-page.js';
+import { UserDashboard } from './user-dashboard.js';
+import { UserShell } from './user-shell.js';
 
 function navigateInApp(path: string) {
   window.history.pushState({}, '', path);
@@ -75,6 +81,8 @@ export function AuthenticatedApp() {
   // 認証済みのsessionだけを受け取り、部員APIへ到達できる画面をsession保有者に限定する。
   const { authenticatedFetch, isLoggingOut, logout, session } = useAuth();
   const [pathname, setPathname] = useState(() => window.location.pathname);
+  const systemAdminPath = isSystemAdminPath(pathname);
+  const [isSystemAdmin, setIsSystemAdmin] = useState<boolean | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<TeamOption | null>(null);
   const [isResolvingTeam, setIsResolvingTeam] = useState(true);
   const [teamError, setTeamError] = useState<string | null>(null);
@@ -96,12 +104,56 @@ export function AuthenticatedApp() {
       }),
     [authenticatedFetch, session?.accessToken],
   );
+  const systemContextApi = useMemo(
+    () =>
+      createSystemContextApi({
+        getAccessToken: () => session?.accessToken ?? null,
+        fetcher: authenticatedFetch,
+      }),
+    [authenticatedFetch, session?.accessToken],
+  );
+  useEffect(() => {
+    if (!systemAdminPath) {
+      setIsSystemAdmin(null);
+      return;
+    }
+    let active = true;
+    setIsSystemAdmin(null);
+    void systemContextApi
+      .get()
+      .then(() => {
+        if (active) setIsSystemAdmin(true);
+      })
+      .catch(() => {
+        if (active) setIsSystemAdmin(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [systemAdminPath, systemContextApi]);
+  useEffect(() => {
+    if (systemAdminPath && isSystemAdmin === false) {
+      window.history.replaceState({}, '', '/team');
+      setPathname('/team');
+    }
+  }, [isSystemAdmin, systemAdminPath]);
+  useEffect(() => {
+    if (!systemAdminPath && (pathname === '/' || pathname === '/login')) {
+      window.history.replaceState({}, '', '/dashboard');
+      setPathname('/dashboard');
+    }
+  }, [pathname, systemAdminPath]);
   useEffect(() => {
     if (!session) {
       clearStoredSelectedTeamId();
       setSelectedTeam(null);
       setTeamError(null);
       setIsResolvingTeam(false);
+      return;
+    }
+    if (systemAdminPath) {
+      setIsResolvingTeam(false);
+      setTeamError(null);
       return;
     }
     let active = true;
@@ -130,7 +182,7 @@ export function AuthenticatedApp() {
     return () => {
       active = false;
     };
-  }, [pathname, session, teamSelectionApi]);
+  }, [pathname, session, systemAdminPath, teamSelectionApi]);
   const selectedTeamId = selectedTeam?.tenantId ?? null;
   const authInvitationApi = useMemo(
     () =>
@@ -231,7 +283,7 @@ export function AuthenticatedApp() {
     [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
   useEffect(() => {
-    if (!session || !selectedTeam) return;
+    if (!session || !selectedTeam || systemAdminPath) return;
     let active = true;
     setRole(null);
     setEventsError(null);
@@ -252,8 +304,29 @@ export function AuthenticatedApp() {
     return () => {
       active = false;
     };
-  }, [authContextApi, memberApi, selectedTeam, session]);
+  }, [authContextApi, memberApi, selectedTeam, session, systemAdminPath]);
   if (!session) return null;
+  if (systemAdminPath) {
+    if (isSystemAdmin === null)
+      return (
+        <AppShell>
+          <section className="app-state-card" role="status">
+            システム管理者権限を確認しています。
+          </section>
+        </AppShell>
+      );
+    if (!isSystemAdmin) return null;
+    return (
+      <SystemAdminShell
+        isLoggingOut={isLoggingOut}
+        onLogout={() => void logout()}
+      >
+        {(systemRoute) => (
+          <SystemAdminPage onNavigate={navigateInApp} route={systemRoute} />
+        )}
+      </SystemAdminShell>
+    );
+  }
   if (isResolvingTeam)
     return (
       <AppShell>
@@ -376,14 +449,14 @@ export function AuthenticatedApp() {
         return (
           <DeepLinkState
             message="対象の予定リンクを確認できません。"
-            onBack={() => navigateInApp('/admin/events')}
+            onBack={() => navigateInApp('/team/events')}
           />
         );
       if (!isFeatureEnabled('events-attendance'))
         return (
           <DeepLinkState
             message="このチームでは予定機能を利用できません。"
-            onBack={() => navigateInApp('/admin')}
+            onBack={() => navigateInApp('/team')}
           />
         );
       return (
@@ -395,7 +468,7 @@ export function AuthenticatedApp() {
             memberOptions={eventMembers}
             selectionStorageKey={subjectMemberStorageKey}
             initialEventId={notificationTarget.id}
-            onBack={() => navigateInApp('/admin/events')}
+            onBack={() => navigateInApp('/team/events')}
             onAccessDenied={requestTeamSelection}
           />
         </div>
@@ -407,14 +480,14 @@ export function AuthenticatedApp() {
         return (
           <DeepLinkState
             message="対象の回覧リンクを確認できません。"
-            onBack={() => navigateInApp('/admin/announcements')}
+            onBack={() => navigateInApp('/team/announcements')}
           />
         );
       if (!isFeatureEnabled('bulletin-board'))
         return (
           <DeepLinkState
             message="このチームでは回覧機能を利用できません。"
-            onBack={() => navigateInApp('/admin')}
+            onBack={() => navigateInApp('/team')}
           />
         );
       return (
@@ -426,7 +499,7 @@ export function AuthenticatedApp() {
             attachmentsEnabled={isFeatureEnabled('attachments')}
             role={currentRole}
             initialAnnouncementId={notificationTarget.id}
-            onBack={() => navigateInApp('/admin/announcements')}
+            onBack={() => navigateInApp('/team/announcements')}
             onAccessDenied={requestTeamSelection}
           />
         </div>
@@ -509,7 +582,21 @@ export function AuthenticatedApp() {
     );
   }
 
-  return (
+  return pathname === '/dashboard' || pathname.startsWith('/dashboard/') ? (
+    <UserShell
+      isLoggingOut={isLoggingOut}
+      onLogout={() => void logout()}
+      role={currentRole}
+      team={currentTeam}
+    >
+      <UserDashboard
+        eventsApi={eventsApi}
+        featureContractApi={featureContractApi}
+        onNavigate={navigateInApp}
+        ordersApi={ordersApi}
+      />
+    </UserShell>
+  ) : (
     <AdminShell
       featureContractApi={featureContractApi}
       isLoggingOut={isLoggingOut}

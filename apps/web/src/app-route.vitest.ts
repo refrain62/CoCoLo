@@ -26,7 +26,9 @@ describe('ページメタデータ', () => {
     ['/', 'CoCoLo | 部活・クラブの連絡と運営をひとつに'],
     ['/manual', 'CoCoLo 操作マニュアル'],
     ['/login', 'CoCoLoへログイン'],
-    ['/admin/events', 'CoCoLo | チーム管理'],
+    ['/admin/events', 'CoCoLo | システム管理'],
+    ['/team/events', 'CoCoLo | チーム管理'],
+    ['/dashboard', 'CoCoLo | ダッシュボード'],
   ])('%sの用途に合うtitleを返す', (pathname, title) => {
     expect(resolvePageMetadata(pathname).title).toBe(title);
     expect(resolvePageMetadata(pathname).description).not.toBe('');

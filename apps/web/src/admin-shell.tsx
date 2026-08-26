@@ -10,7 +10,7 @@ import {
 import {
   type AdminRoute,
   adminNavigation,
-  canonicalAdminPath,
+  canonicalTeamPath,
   isAdminNavigationVisible,
   resolveAdminRoute,
 } from './admin-routes.js';
@@ -64,7 +64,7 @@ export function AdminShell({
   const [contractError, setContractError] = useState<string | null>(null);
 
   useEffect(() => {
-    const canonicalPath = canonicalAdminPath(window.location.pathname);
+    const canonicalPath = canonicalTeamPath(window.location.pathname);
     if (canonicalPath !== window.location.pathname)
       window.history.replaceState({}, '', canonicalPath);
     applyPageMetadata(canonicalPath);
@@ -111,7 +111,7 @@ export function AdminShell({
       enabled,
     }));
     if (isAdminNavigationVisible(requestedItem, role, features)) return;
-    const dashboardPath = canonicalAdminPath('/admin');
+    const dashboardPath = canonicalTeamPath('/team');
     if (pathname === dashboardPath) return;
     window.history.replaceState({}, '', dashboardPath);
     setPathname(dashboardPath);
@@ -140,7 +140,7 @@ export function AdminShell({
       : activeRoute;
 
   function navigate(path: string) {
-    const canonicalPath = canonicalAdminPath(path);
+    const canonicalPath = canonicalTeamPath(path);
     if (canonicalPath === window.location.pathname) return;
     window.history.pushState({}, '', canonicalPath);
     setPathname(canonicalPath);
@@ -179,7 +179,7 @@ export function AdminShell({
         <>
           <CoCoLoLogoMark />
           <span>
-            CoCoLo <small>Admin</small>
+            CoCoLo <small>Team</small>
           </span>
         </>
       }
@@ -192,6 +192,9 @@ export function AdminShell({
           </div>
           <div className="admin-topbar-actions">
             <Badge variant="outline">{currentEnvironment()}</Badge>
+            <a className="admin-help-link" href="/dashboard">
+              ダッシュボード
+            </a>
             <a className="admin-help-link" href="/manual">
               ヘルプ
             </a>

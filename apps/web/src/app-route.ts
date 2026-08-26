@@ -29,6 +29,21 @@ export function resolvePageMetadata(pathname: string): PageMetadata {
       title: 'CoCoLoへログイン',
       description: 'CoCoLoを利用中の方のログインページです。',
     };
+  if (pathname === '/admin' || pathname.startsWith('/admin/'))
+    return {
+      title: 'CoCoLo | システム管理',
+      description: 'CoCoLo全体のお知らせと有償機能を管理する画面です。',
+    };
+  if (pathname === '/dashboard' || pathname.startsWith('/dashboard/'))
+    return {
+      title: 'CoCoLo | ダッシュボード',
+      description: '直近2週間の予定と締め切りを確認できます。',
+    };
+  if (pathname === '/team' || pathname.startsWith('/team/'))
+    return {
+      title: 'CoCoLo | チーム管理',
+      description: '選択中チームの管理画面です。',
+    };
   return {
     title: 'CoCoLo | チーム管理',
     description: 'CoCoLoの認証済みチーム管理画面です。',

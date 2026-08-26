@@ -30,6 +30,15 @@ export type AdminNavigationItem = {
 };
 
 const legacyAdminPaths: Readonly<Record<string, AdminRoute>> = {
+  '/admin/members': 'members',
+  '/admin/events': 'events',
+  '/admin/orders': 'orders',
+  '/admin/announcements': 'announcements',
+  '/admin/line': 'line',
+  '/admin/ride': 'ride',
+  '/admin/settings': 'settings',
+  '/admin/board-contacts': 'board-contacts',
+  '/admin/features': 'features',
   '/members': 'members',
   '/events': 'events',
   '/orders': 'orders',
@@ -40,30 +49,34 @@ const legacyAdminPaths: Readonly<Record<string, AdminRoute>> = {
   '/features': 'features',
 };
 
+export function isLegacyTeamPath(pathname: string) {
+  return pathname in legacyAdminPaths;
+}
+
 export const adminNavigation: readonly AdminNavigationItem[] = [
   {
     route: 'dashboard',
-    href: '/admin',
+    href: '/team',
     label: 'ダッシュボード',
     description: 'チームの状況を確認',
   },
   {
     route: 'members',
-    href: '/admin/members',
+    href: '/team/members',
     label: 'メンバー',
     description: '部員と所属を管理',
     featureKey: 'members',
   },
   {
     route: 'events',
-    href: '/admin/events',
+    href: '/team/events',
     label: '予定・出欠',
     description: '予定と回答を管理',
     featureKey: 'events-attendance',
   },
   {
     route: 'orders',
-    href: '/admin/orders',
+    href: '/team/orders',
     label: '購買・集金',
     description: '注文と支払いを管理',
     featureKey: 'orders-payments',
@@ -71,14 +84,14 @@ export const adminNavigation: readonly AdminNavigationItem[] = [
   },
   {
     route: 'announcements',
-    href: '/admin/announcements',
+    href: '/team/announcements',
     label: '回覧・添付',
     description: 'お知らせとファイルを共有',
     featureKey: 'bulletin-board',
   },
   {
     route: 'line',
-    href: '/admin/line',
+    href: '/team/line',
     label: 'LINE通知',
     description: '接続と通知を管理',
     featureKey: 'line-notifications',
@@ -86,7 +99,7 @@ export const adminNavigation: readonly AdminNavigationItem[] = [
   },
   {
     route: 'ride',
-    href: '/admin/ride',
+    href: '/team/ride',
     label: '送迎管理',
     description: '乗車希望と配車を管理',
     featureKey: 'ride-operations',
@@ -94,7 +107,7 @@ export const adminNavigation: readonly AdminNavigationItem[] = [
   },
   {
     route: 'settings',
-    href: '/admin/settings',
+    href: '/team/settings',
     label: 'チーム設定',
     description: '役員連絡先と運用設定',
     featureKey: 'board-contacts',
@@ -102,14 +115,14 @@ export const adminNavigation: readonly AdminNavigationItem[] = [
   },
   {
     route: 'board-contacts',
-    href: '/admin/board-contacts',
+    href: '/team/board-contacts',
     label: '役員・連絡先',
     description: '年度の役職と連絡先を確認',
     featureKey: 'board-contacts',
   },
   {
     route: 'features',
-    href: '/admin/features',
+    href: '/team/features',
     label: '機能契約',
     description: 'プランと機能flagを確認',
     roles: ['owner', 'admin'],
@@ -125,12 +138,15 @@ export function resolveAdminRoute(pathname: string): AdminRoute {
 }
 
 export function canonicalAdminPath(pathname: string) {
-  if (pathname === '/' || pathname === '/login') return '/admin';
+  if (pathname === '/' || pathname === '/login' || pathname === '/admin')
+    return '/team';
   const route = legacyAdminPaths[pathname];
   return route
     ? (adminNavigation.find((item) => item.route === route)?.href ?? pathname)
     : pathname;
 }
+
+export const canonicalTeamPath = canonicalAdminPath;
 
 export function isAdminRouteVisible(
   route: AdminRoute,
