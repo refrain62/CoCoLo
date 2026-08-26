@@ -540,7 +540,10 @@ export function AuthenticatedApp({ publicRoot }: { publicRoot?: ReactNode }) {
           />
         ) : null}
         {route === 'board-contacts' ? (
-          <BoardContactPage api={boardContactApi} canManage={false} />
+          <BoardContactPage
+            api={boardContactApi}
+            canManage={currentRole === 'owner' || currentRole === 'admin'}
+          />
         ) : null}
       </div>
     );

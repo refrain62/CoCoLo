@@ -80,7 +80,7 @@ describe('管理画面ルート', () => {
     expect(
       boardContacts &&
         isAdminNavigationVisible(boardContacts, 'admin', boardContactFeatures),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('送迎は管理者と保護者に表示する', () => {
