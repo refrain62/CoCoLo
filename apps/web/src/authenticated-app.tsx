@@ -49,6 +49,7 @@ import {
   isNotificationDeepLink,
   parseNotificationDeepLink,
 } from './notification-deep-link.js';
+import { TeamSettingsPage } from './team-settings-page.js';
 
 function navigateInApp(path: string) {
   window.history.pushState({}, '', path);
@@ -532,9 +533,10 @@ export function AuthenticatedApp({ publicRoot }: { publicRoot?: ReactNode }) {
           />
         ) : null}
         {route === 'settings' ? (
-          <BoardContactPage
-            api={boardContactApi}
-            canManage={currentRole === 'owner' || currentRole === 'admin'}
+          <TeamSettingsPage
+            onNavigate={(path) => navigateInApp(path)}
+            role={currentRole}
+            team={currentTeam}
           />
         ) : null}
         {route === 'board-contacts' ? (
