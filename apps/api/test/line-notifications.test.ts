@@ -3,7 +3,6 @@ import { createHmac } from 'node:crypto';
 import test from 'node:test';
 import { createInMemoryLineRepository } from '@cocolo/db/line';
 import { createApp } from '../dist/app.js';
-import { createFeatureContractFeatures } from './feature-contract-fixture.ts';
 import {
   createFakeLineAdapter,
   createLineMessagingAdapter,
@@ -11,6 +10,7 @@ import {
   createLineNotificationService,
   type LineActor,
 } from '../dist/features/line-notifications/index.js';
+import { createFeatureContractFeatures } from './feature-contract-fixture.ts';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
