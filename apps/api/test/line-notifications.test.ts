@@ -3,6 +3,7 @@ import { createHmac } from 'node:crypto';
 import test from 'node:test';
 import { createInMemoryLineRepository } from '@cocolo/db/line';
 import { createApp } from '../dist/app.js';
+import { createFeatureContractFeatures } from './feature-contract-fixture.ts';
 import {
   createFakeLineAdapter,
   createLineMessagingAdapter,
@@ -396,7 +397,10 @@ test('LINEの認証済み操作を中央APIへmountできる', async () => {
     membershipRepository: {
       findActiveByUserId: async () => ({ tenantId: TENANT_A, role: 'owner' }),
     },
-    centralFeatures: { line: { service: fixture.service } },
+    centralFeatures: {
+      ...createFeatureContractFeatures(),
+      line: { service: fixture.service },
+    },
   });
 
   const response = await app.request('/api/v1/line/status', {

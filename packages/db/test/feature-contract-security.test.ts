@@ -3,13 +3,21 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import test from 'node:test';
 
-const migration = readFileSync(
+const baseMigration = readFileSync(
   resolve(
     import.meta.dirname,
     '../prisma/migrations/20260825100000_team_feature_contract/migration.sql',
   ),
   'utf8',
 );
+const operatorMigration = readFileSync(
+  resolve(
+    import.meta.dirname,
+    '../prisma/migrations/20260826110000_feature_contract_operator_grants/migration.sql',
+  ),
+  'utf8',
+);
+const migration = `${baseMigration}\n${operatorMigration}`;
 
 test('課金operatorのfeature変更監査はmembership RLSと分離される', () => {
   assert.match(

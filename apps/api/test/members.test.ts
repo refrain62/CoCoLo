@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createApp } from '../dist/app.js';
 import type { MemberRecord, MembershipContext } from '../src/app.js';
+import { createFeatureContractFeatures } from './feature-contract-fixture.ts';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
@@ -89,6 +90,7 @@ function createTestApp() {
         createdAt: members[0]?.createdAt ?? '2026-08-22T00:00:00.000Z',
       }),
     },
+    centralFeatures: createFeatureContractFeatures(),
   });
 }
 
@@ -374,6 +376,7 @@ test('リポジトリの予期しない失敗は requestId 付きの500へ収束
       update: async () => null,
       retire: async () => null,
     },
+    centralFeatures: createFeatureContractFeatures(),
   });
   const response = await app.request('/api/v1/members', {
     method: 'POST',

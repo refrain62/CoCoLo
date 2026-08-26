@@ -4,6 +4,7 @@ import type { MemberRole } from '@cocolo/contracts/member';
 import type { MemberRecord } from '../dist/app.js';
 import { createApp } from '../dist/app.js';
 import { createStructuredLogger } from '../dist/security/structured-logger.js';
+import { createFeatureContractFeatures } from './feature-contract-fixture.ts';
 
 const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const MEMBER_A = '00000000-0000-7000-8000-000000000002';
@@ -45,6 +46,7 @@ function createMemberApp(
       logger: createStructuredLogger((line) => logs.push(line)),
       pathResolver: () => '/api/v1/members',
     },
+    centralFeatures: createFeatureContractFeatures(),
   });
 }
 
@@ -100,6 +102,44 @@ test('中央APIの正常な部員一覧はruntime response契約を通る', asyn
       createdAt: '2026-08-23T00:00:00.000Z',
     },
   ]);
+});
+
+test('feature契約未設定の部員APIは業務handlerへ到達せず503で拒否する', async () => {
+  let handlerCalls = 0;
+  const app = createApp({
+    verifyToken: async () => ({
+      userId: TOKEN,
+      issuer: 'https://example.supabase.co/auth/v1',
+      audience: 'authenticated',
+      expiresAt: Math.floor(Date.now() / 1000) + 300,
+    }),
+    membershipRepository: {
+      findActiveByUserId: async () => ({ tenantId: TENANT_A, role: 'owner' }),
+    },
+    memberRepository: {
+      list: async () => {
+        handlerCalls += 1;
+        return [];
+      },
+      create: async () => {
+        handlerCalls += 1;
+        throw new Error('not used');
+      },
+      update: async () => null,
+      retire: async () => null,
+    },
+  });
+
+  const response = await app.request('/api/v1/members', {
+    headers: { authorization: `Bearer ${TOKEN}` },
+  });
+
+  assert.equal(response.status, 503);
+  assert.equal(
+    (await response.json()).error.code,
+    'FEATURE_CONTRACT_NOT_CONFIGURED',
+  );
+  assert.equal(handlerCalls, 0);
 });
 
 test('中央APIの不正な公開レスポンスは元の本文を返さず500に収束する', async () => {

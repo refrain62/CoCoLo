@@ -9,6 +9,7 @@ import type {
 import type { MembershipContext } from '../dist/app.js';
 import { createApp } from '../dist/app.js';
 import { InMemoryRateLimitStore } from '../dist/security/rate-limit.js';
+import { createFeatureContractFeatures } from './feature-contract-fixture.ts';
 
 const TENANT_ID = '00000000-0000-7000-8000-000000000001';
 const EVENT_ID = '00000000-0000-7000-8000-000000000101';
@@ -99,6 +100,7 @@ function createTestApp(localStore?: InMemoryRateLimitStore) {
       findActiveByUserId: async (userId) => memberships[userId] ?? null,
     },
     eventRepository: createRepository(),
+    centralFeatures: createFeatureContractFeatures(),
     rateLimit: localStore ? { localStore } : undefined,
   });
 }
