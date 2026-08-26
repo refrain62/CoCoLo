@@ -136,4 +136,20 @@ describe('送迎Prisma repository', () => {
       actorUserId: actor.userId,
     });
   });
+
+  it('closed予定の救済用表示名更新は専用DB関数へ委譲する', async () => {
+    const fake = createFakePrisma([[{ display_name: '山田 太郎' }]]);
+    const displayName = await createRideRepository(fake.client).setDisplayName(
+      actor,
+      { displayName: ' 山田 太郎 ' },
+    );
+
+    expect(displayName).toBe('山田 太郎');
+    expect(
+      fake.queries.some((query) =>
+        query.sql.includes('app_set_ride_display_name'),
+      ),
+    ).toBe(true);
+    expect(fake.audits).toHaveLength(0);
+  });
 });

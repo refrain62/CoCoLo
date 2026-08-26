@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  rideDisplayNameUpdateSchema,
   rideOfferCreateSchema,
   ridePlanCreateSchema,
   ridePlanTransitionSchema,
@@ -22,6 +23,10 @@ test('送迎入力は容量、日時、Google Maps URLの基本形式を検証�
     { capacity: 4, driverDisplayName: '山田 太郎' },
   );
   assert.deepEqual(
+    rideDisplayNameUpdateSchema.parse({ displayName: ' 山田 太郎 ' }),
+    { displayName: '山田 太郎' },
+  );
+  assert.deepEqual(
     rideRequestCreateSchema.parse({
       memberId: '00000000-0000-7000-8000-000000000001',
     }),
@@ -37,6 +42,7 @@ test('送迎入力は定員超過、未知フィールド、非URLを拒否す�
   assert.throws(() =>
     rideOfferCreateSchema.parse({ capacity: 4, driverDisplayName: ' ' }),
   );
+  assert.throws(() => rideDisplayNameUpdateSchema.parse({ displayName: ' ' }));
   assert.throws(() =>
     ridePlanCreateSchema.parse({
       title: '練習試合',

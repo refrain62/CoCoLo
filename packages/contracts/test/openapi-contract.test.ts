@@ -74,6 +74,14 @@ test('RIDE-002の送迎全routeと状態変更契約をOpenAPIへ公開する', 
   assert.ok(paths['/ride-plans/{planId}/dispatch']?.get);
   assert.ok(paths['/ride-plans/{planId}/metrics']?.get);
   assert.ok(paths['/ride-plans/{planId}/status']?.post);
+  assert.ok(paths['/ride-profile/display-name']?.patch);
+  assert.deepEqual(components.schemas.RideDisplayNameUpdateInput.required, [
+    'displayName',
+  ]);
+  assert.equal(
+    components.schemas.RideDisplayNameUpdateInput.additionalProperties,
+    false,
+  );
   const transition = components.schemas.RidePlanTransitionInput.oneOf[1];
   assert.ok(transition);
   const reasonCode = transition.properties.reasonCode;

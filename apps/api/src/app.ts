@@ -58,6 +58,7 @@ import {
 import {
   rideAssignmentResponseEnvelopeSchema,
   rideDispatchResponseEnvelopeSchema,
+  rideDisplayNameResponseEnvelopeSchema,
   rideMatchResponseSchema,
   rideMetricsResponseEnvelopeSchema,
   rideOfferResponseEnvelopeSchema,
@@ -714,6 +715,12 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       schema: systemContextResponseSchema,
     },
     {
+      method: 'PATCH',
+      path: /^\/api\/v1\/ride-profile\/display-name$/,
+      status: 200,
+      schema: rideDisplayNameResponseEnvelopeSchema,
+    },
+    {
       method: 'GET',
       path: /^\/api\/v1\/ride-plans$/,
       status: 200,
@@ -1039,6 +1046,8 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     app.use('/api/v1/line/*', authenticate);
   }
   if (options.centralFeatures?.ride) {
+    app.use('/api/v1/ride-profile', authenticate);
+    app.use('/api/v1/ride-profile/*', authenticate);
     app.use('/api/v1/ride-plans', authenticate);
     app.use('/api/v1/ride-plans/*', authenticate);
   }
@@ -1100,6 +1109,8 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     useFeature('/api/v1/notifications/line/*', 'line-notifications');
   }
   if (options.centralFeatures?.ride) {
+    useFeature('/api/v1/ride-profile', 'ride-operations');
+    useFeature('/api/v1/ride-profile/*', 'ride-operations');
     useFeature('/api/v1/ride-plans', 'ride-operations');
     useFeature('/api/v1/ride-plans/*', 'ride-operations');
   }
@@ -1243,6 +1254,8 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     app.use('/api/v1/line/*', authenticatedRateLimitForRoutes);
   }
   if (options.centralFeatures?.ride) {
+    app.use('/api/v1/ride-profile', authenticatedRateLimit);
+    app.use('/api/v1/ride-profile/*', authenticatedRateLimit);
     app.use('/api/v1/ride-plans', authenticatedRateLimit);
     app.use('/api/v1/ride-plans/*', authenticatedRateLimit);
   }

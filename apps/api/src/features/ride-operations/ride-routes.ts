@@ -1,5 +1,6 @@
 import {
   rideAssignmentSchema,
+  rideDisplayNameUpdateSchema,
   rideMatchSchema,
   rideOfferCreateSchema,
   ridePlanCreateSchema,
@@ -97,6 +98,29 @@ export function registerRideRoutes(
   app: RideRouteApp,
   dependencies: RideRouteDependencies,
 ) {
+  app.patch('/api/v1/ride-profile/display-name', async (context) => {
+    const auth = parseAuth(context, dependencies);
+    if (!auth)
+      return errorResponse(context, 401, 'UNAUTHENTICATED', '認証が必要です。');
+    const parsed = rideDisplayNameUpdateSchema.safeParse(
+      await parseJson(context),
+    );
+    if (!parsed.success)
+      return errorResponse(
+        context,
+        400,
+        'VALIDATION_ERROR',
+        '配車表示名の入力が不正です。',
+      );
+    try {
+      return context.json({
+        data: await dependencies.service.setDisplayName(auth, parsed.data),
+      });
+    } catch (error) {
+      return handleError(context, error);
+    }
+  });
+
   app.get('/api/v1/ride-plans', async (context) => {
     const auth = parseAuth(context, dependencies);
     if (!auth)

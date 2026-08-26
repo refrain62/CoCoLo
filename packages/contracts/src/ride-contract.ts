@@ -51,6 +51,12 @@ export const rideOfferCreateSchema = z
   })
   .strict();
 
+export const rideDisplayNameUpdateSchema = z
+  .object({
+    displayName: z.string().trim().min(1).max(200),
+  })
+  .strict();
+
 export const rideRequestCreateSchema = z
   .object({
     ...subjectMemberIdFields,
@@ -89,6 +95,9 @@ export const ridePlanIdSchema = uuid;
 export type RidePlanCreateInput = z.infer<typeof ridePlanCreateSchema>;
 export type RidePlanUpdateInput = z.infer<typeof ridePlanUpdateSchema>;
 export type RideOfferCreateInput = z.infer<typeof rideOfferCreateSchema>;
+export type RideDisplayNameUpdateInput = z.infer<
+  typeof rideDisplayNameUpdateSchema
+>;
 export type RideRequestCreateInput = z.infer<typeof rideRequestCreateSchema>;
 export type RideAssignmentInput = z.infer<typeof rideAssignmentSchema>;
 export type RideMatchInput = z.infer<typeof rideMatchSchema>;

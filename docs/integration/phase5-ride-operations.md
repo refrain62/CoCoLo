@@ -56,7 +56,9 @@ HTTP入力から`tenantId`、`userId`、運転者識別子を受け取りませ�
 
 表示名を追加する場合は、権限付きのプロフィール投影をrepository側でjoinし、送迎テーブルや監査metadataへ氏名を複製しません。
 
-確定公開後の利用者向けsnapshotは、同一tenantのactive membershipに保存された`display_name`をDB関数内でjoinし、担当部員・希望者本人・運転者本人に許可された行だけへ`memberName`と`driverName`として投影します。運転者名を`ride_offers`や割当へ複製せず、未設定または所属停止の運転者を含む配車表は確定できません。
+確定公開後の利用者向けsnapshotは、同一tenantのmembershipに保存された`display_name`をDB関数内でjoinし、担当部員・希望者本人・運転者本人に許可された行だけへ`memberName`と`driverName`として投影します。運転者名を`ride_offers`や割当へ複製せず、未設定または所属停止の運転者を含む配車表は確定できません。
+
+確定公開中は、対象部員の`members.name`と運転者の`tenant_memberships.display_name`を変更できません。表示名変更は`PATCH /api/v1/ride-profile/display-name`で確定前に実施し、公開後に変更する場合は送迎予定を再編集へ戻してから行います。この制約により、公開中の表示名がプロフィール更新だけで変わることを防ぎます。既存の`closed`予定も同じprofile routeで表示名を設定してから確定できます。
 
 ## マッチングと定員
 

@@ -1,5 +1,6 @@
 import type {
   RideAssignmentInput,
+  RideDisplayNameUpdateInput,
   RideOfferCreateInput,
   RidePlanCreateInput,
   RidePlanTransitionInput,
@@ -139,6 +140,9 @@ export type RideOperationsApi = {
   listPlans: () => Promise<RidePlan[]>;
   createPlan: (input: RidePlanCreateInput) => Promise<RidePlan>;
   updatePlan: (planId: string, input: RidePlanUpdateInput) => Promise<RidePlan>;
+  setDisplayName: (
+    input: RideDisplayNameUpdateInput,
+  ) => Promise<{ displayName: string }>;
   getSnapshot: (planId: string) => Promise<RideSnapshot>;
   createOffer: (
     planId: string,
@@ -185,12 +189,16 @@ export function createRideOperationsApi({
   getSelectedTeamId = getStoredSelectedTeamId,
   fetcher = fetch,
 }: RideApiOptions = {}): RideOperationsApi {
-  async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  async function request<T>(
+    path: string,
+    init?: RequestInit,
+    resource = 'ride-plans',
+  ): Promise<T> {
     const accessToken = getAccessToken();
     if (!accessToken)
       throw new RideApiError(401, 'UNAUTHENTICATED', 'ログインが必要です。');
     const selectedTeamId = getSelectedTeamId();
-    const response = await fetcher(`${baseUrl}/api/v1/ride-plans${path}`, {
+    const response = await fetcher(`${baseUrl}/api/v1/${resource}${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',
@@ -223,6 +231,14 @@ export function createRideOperationsApi({
         method: 'PATCH',
         body: JSON.stringify(input),
       });
+      return response.data;
+    },
+    async setDisplayName(input) {
+      const response = await request<{ data: { displayName: string } }>(
+        '/display-name',
+        { method: 'PATCH', body: JSON.stringify(input) },
+        'ride-profile',
+      );
       return response.data;
     },
     async getSnapshot(planId) {

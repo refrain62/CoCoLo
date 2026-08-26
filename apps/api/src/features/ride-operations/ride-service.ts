@@ -1,6 +1,7 @@
 import type {
   RideActor,
   RideAssignmentInput,
+  RideDisplayNameUpdateInput,
   RideOfferCreateInput,
   RidePlanCreateInput,
   RidePlanTransitionInput,
@@ -86,6 +87,10 @@ export type RideService = {
     planId: string,
     input: RideOfferCreateInput,
   ) => Promise<RideOfferView>;
+  setDisplayName: (
+    actor: RideActor,
+    input: RideDisplayNameUpdateInput,
+  ) => Promise<{ displayName: string }>;
   createRequest: (
     actor: RideActor,
     planId: string,
@@ -238,6 +243,9 @@ export function createRideService(repository: RideRepository): RideService {
         actor,
         await repository.createOffer(actor, planId, input),
       );
+    },
+    async setDisplayName(actor, input) {
+      return { displayName: await repository.setDisplayName(actor, input) };
     },
     async createRequest(actor, planId, input) {
       return toRequestView(

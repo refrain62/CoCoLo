@@ -41,6 +41,9 @@ export type RideOfferCreateInput = {
   capacity: number;
   driverDisplayName?: string;
 };
+export type RideDisplayNameUpdateInput = {
+  displayName: string;
+};
 export type RideRequestCreateInput = {
   memberId: string;
   passengerCount: number;
@@ -117,6 +120,10 @@ export type RideRepository = {
     planId: string,
     input: RideOfferCreateInput,
   ) => Promise<RideOffer>;
+  setDisplayName: (
+    actor: RideActor,
+    input: RideDisplayNameUpdateInput,
+  ) => Promise<string>;
   createRequest: (
     actor: RideActor,
     planId: string,
@@ -715,6 +722,37 @@ export function createRideRepository(client: PrismaClient): RideRepository {
         });
         return offer;
       });
+    },
+
+    async setDisplayName(actor, input) {
+      const displayName = input.displayName.trim();
+      if (!displayName || displayName.length > 200)
+        throw new RideRepositoryConflictError('運転者の表示名が不正です。');
+      try {
+        return await runInRideTransaction(client, actor, async (tx) => {
+          const rows = await tx.$queryRaw<Array<{ display_name: string }>>`
+            SELECT app_set_ride_display_name(
+              ${actor.tenantId}::uuid,
+              ${displayName}
+            ) AS display_name
+          `;
+          const row = rows[0];
+          if (!row?.display_name)
+            throw new RideRepositoryConflictError(
+              '運転者の表示名を更新できません。',
+            );
+          return row.display_name;
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.includes('確定公開中の運転者名')
+        )
+          throw new RideRepositoryConflictError(
+            '確定公開中の送迎があるため、表示名を変更できません。予定を再編集に戻してから変更してください。',
+          );
+        throw error;
+      }
     },
 
     async createRequest(actor, planId, input) {
