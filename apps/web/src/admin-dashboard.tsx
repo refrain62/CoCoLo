@@ -52,9 +52,12 @@ export function AdminDashboard({
   ).length;
   const canNavigate = (route: Parameters<typeof isAdminRouteVisible>[0]) =>
     isAdminRouteVisible(route, role, contract.features);
-  const membersPath = adminNavigation.find(
-    (item) => item.route === 'members',
-  )?.href;
+  const pathFor = (route: Parameters<typeof isAdminRouteVisible>[0]) =>
+    adminNavigation.find((item) => item.route === route)?.href;
+  const membersPath = pathFor('members');
+  const eventsPath = pathFor('events');
+  const announcementsPath = pathFor('announcements');
+  const featuresPath = pathFor('features');
 
   return (
     <div className="admin-page-stack">
@@ -88,7 +91,7 @@ export function AdminDashboard({
       <div className="admin-metric-grid">
         <Card className="admin-metric-card">
           <CardHeader>
-            <CardDescription>利用できる機能</CardDescription>
+            <CardDescription>チームで有効な機能</CardDescription>
             <CardTitle>{enabledCount}個</CardTitle>
           </CardHeader>
           <CardContent>
@@ -97,7 +100,7 @@ export function AdminDashboard({
         </Card>
         <Card className="admin-metric-card">
           <CardHeader>
-            <CardDescription>有償機能</CardDescription>
+            <CardDescription>利用中の有償機能</CardDescription>
             <CardTitle>{paidCount}個</CardTitle>
           </CardHeader>
           <CardContent>
@@ -127,8 +130,8 @@ export function AdminDashboard({
         description="迷わず次の操作へ進めるよう、主要な画面をまとめています。"
       >
         <div className="admin-action-grid">
-          {canNavigate('events') ? (
-            <button type="button" onClick={() => onNavigate('/admin/events')}>
+          {eventsPath && canNavigate('events') ? (
+            <button type="button" onClick={() => onNavigate(eventsPath)}>
               <span className="admin-action-icon" aria-hidden="true">
                 ◷
               </span>
@@ -139,11 +142,10 @@ export function AdminDashboard({
               <span aria-hidden="true">→</span>
             </button>
           ) : null}
-          {role !== 'guardian' && canNavigate('announcements') ? (
-            <button
-              type="button"
-              onClick={() => onNavigate('/admin/announcements')}
-            >
+          {role !== 'guardian' &&
+          announcementsPath &&
+          canNavigate('announcements') ? (
+            <button type="button" onClick={() => onNavigate(announcementsPath)}>
               <span className="admin-action-icon" aria-hidden="true">
                 ▤
               </span>
@@ -154,8 +156,8 @@ export function AdminDashboard({
               <span aria-hidden="true">→</span>
             </button>
           ) : null}
-          {canNavigate('features') ? (
-            <button type="button" onClick={() => onNavigate('/admin/features')}>
+          {featuresPath && canNavigate('features') ? (
+            <button type="button" onClick={() => onNavigate(featuresPath)}>
               <span className="admin-action-icon" aria-hidden="true">
                 ✦
               </span>

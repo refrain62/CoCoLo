@@ -822,6 +822,16 @@ a:hover {
     white-space: nowrap;
   }
 
+  .app-shell .app-content [data-slot='responsive-table'] {
+    overflow: visible;
+    white-space: normal;
+  }
+
+  .app-shell .app-content [data-slot='responsive-table'] td,
+  .app-shell .app-content [data-slot='responsive-table'] th {
+    white-space: normal;
+  }
+
   .app-content th,
   .app-content td {
     padding: 0.7rem;
