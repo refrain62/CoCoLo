@@ -1,6 +1,6 @@
 :root {
-  color: #1d332c;
-  background: #f7f3ea;
+  color: var(--cocolo-ink);
+  background: var(--cocolo-sand);
   font-family:
     "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, ui-sans-serif, system-ui,
     -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -24,14 +24,38 @@
   --cocolo-line: #dbe5dc;
   --cocolo-focus: #f4af4d;
   --cocolo-danger: #b54842;
+  --cocolo-danger-strong: #963d38;
   --cocolo-danger-soft: #fff0ed;
   --cocolo-success: #2f7d58;
   --cocolo-success-soft: #e4f3e8;
+  --cocolo-surface-raised: #ffffff;
+  --cocolo-surface-inverse: #145742;
+  --cocolo-sidebar-text: #d9eee3;
+  --cocolo-sidebar-muted: #a9d6c1;
+  --cocolo-sidebar-active: #23694f;
+  --cocolo-border-strong: #c4d4c8;
+  --cocolo-danger-border: #f2c4c0;
+  --cocolo-table-head: #eef4ee;
+  --cocolo-table-row-hover: #f3fbf9;
+  --cocolo-event-practice: #287c62;
+  --cocolo-event-match: #b54842;
+  --cocolo-event-other: #7050a3;
+  --cocolo-focus-ring: rgb(244 175 77 / 0.28);
+  --cocolo-space-1: 0.25rem;
+  --cocolo-space-2: 0.5rem;
+  --cocolo-space-3: 0.75rem;
+  --cocolo-space-4: 1rem;
+  --cocolo-space-5: 1.5rem;
+  --cocolo-space-6: 2rem;
+  --cocolo-space-7: 3rem;
+  --cocolo-control-height: 2.75rem;
+  --cocolo-transition-fast: 160ms ease;
   --cocolo-radius-sm: 0.65rem;
   --cocolo-radius-md: 1rem;
   --cocolo-radius-lg: 1.5rem;
   --cocolo-radius-xl: 2rem;
   --cocolo-shadow-sm: 0 1px 2px rgb(29 51 44 / 0.06);
+  --cocolo-shadow-hover: 0 4px 12px rgb(40 124 98 / 0.18);
   --cocolo-shadow-md: 0 18px 42px rgb(29 51 44 / 0.1);
 
   /* Backwards-compatible aliases used by the authenticated app. */
@@ -97,7 +121,7 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgb(20 184 166 / 0.32);
+  outline: 3px solid var(--cocolo-focus-ring);
   outline-offset: 2px;
 }
 
@@ -173,7 +197,7 @@ a:hover {
   align-items: center;
   gap: 0.75rem;
   padding: 0.5rem 0.75rem 1.5rem;
-  color: #fff;
+  color: var(--cocolo-surface-raised);
   font-size: 1.15rem;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -203,7 +227,7 @@ a:hover {
   min-height: 44px;
   padding: 0.6rem 0.75rem;
   border-radius: 0.7rem;
-  color: #d9eee3;
+  color: var(--cocolo-sidebar-text);
   font-size: 0.9rem;
   text-decoration: none;
   transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
@@ -212,7 +236,7 @@ a:hover {
 .app-nav a:hover,
 .app-nav a:focus-visible {
   background: rgb(255 255 255 / 0.11);
-  color: #fff;
+  color: var(--cocolo-surface-raised);
   transform: translateX(2px);
 }
 
@@ -220,7 +244,7 @@ a:hover {
   padding: 1rem 0.75rem 0;
   margin-top: auto;
   border-top: 1px solid rgb(255 255 255 / 0.14);
-  color: #b9d8ca;
+  color: var(--cocolo-sidebar-muted);
   font-size: 0.78rem;
   line-height: 1.6;
 }
@@ -344,7 +368,7 @@ a:hover {
 .app-content select,
 .app-content textarea {
   width: 100%;
-  min-height: 44px;
+  min-height: var(--cocolo-control-height);
   padding: 0.65rem 0.75rem;
   border: 1px solid var(--cocolo-line);
   background: var(--surface);
@@ -372,11 +396,11 @@ a:hover {
 }
 
 .app-content button {
-  min-height: 44px;
+  min-height: var(--cocolo-control-height);
   padding: 0.6rem 0.95rem;
   border: 1px solid transparent;
   background: var(--brand);
-  color: #fff;
+  color: var(--cocolo-surface-raised);
   cursor: pointer;
   font-size: 0.88rem;
   font-weight: 750;
@@ -432,7 +456,7 @@ a:hover {
   padding: 0.45rem 0.65rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: var(--cocolo-surface-raised);
 }
 
 .app-content input[type='checkbox'],
@@ -459,8 +483,8 @@ a:hover {
 }
 
 .app-content th {
-  background: #f8fafc;
-  color: #475569;
+  background: var(--cocolo-table-head);
+  color: var(--cocolo-muted);
   font-size: 0.76rem;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -472,12 +496,12 @@ a:hover {
 }
 
 .app-content tbody tr:hover {
-  background: #f8fafc;
+  background: var(--cocolo-table-row-hover);
 }
 
 .app-content [role='alert'] {
   padding: 0.75rem 0.9rem;
-  border: 1px solid #fecdd3;
+  border: 1px solid var(--cocolo-danger-border);
   border-radius: var(--radius-sm);
   background: var(--danger-soft);
   color: var(--danger);
@@ -527,8 +551,8 @@ a:hover {
   padding: clamp(1.4rem, 4vw, 2.25rem);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: rgb(255 255 255 / 0.96);
-  box-shadow: 0 24px 60px rgb(15 23 42 / 0.12);
+  background: var(--cocolo-surface-raised);
+  box-shadow: var(--cocolo-shadow-md);
 }
 
 .auth-shell .auth-card {
@@ -622,22 +646,22 @@ a:hover {
   padding: 1.1rem;
   margin: 1rem 0;
   border: 1px solid var(--line);
-  border-inline-start: 0.35rem solid #64748b;
+  border-inline-start: 0.35rem solid var(--cocolo-muted);
   border-radius: var(--radius-md);
-  background: #fff;
+  background: var(--cocolo-surface-raised);
   box-shadow: var(--shadow-sm);
 }
 
 .event-card-practice {
-  border-inline-start-color: #2563eb;
+  border-inline-start-color: var(--cocolo-event-practice);
 }
 
 .event-card-match {
-  border-inline-start-color: #dc2626;
+  border-inline-start-color: var(--cocolo-event-match);
 }
 
 .event-card-event {
-  border-inline-start-color: #9333ea;
+  border-inline-start-color: var(--cocolo-event-other);
 }
 
 .event-card > p {
@@ -815,14 +839,14 @@ a:hover {
 
 /* 管理画面はナビゲーションと本文の視線を分け、画面ごとの状態を読み取りやすくする。 */
 .admin-shell {
-  --admin-sidebar: var(--cocolo-brand-strong);
-  --admin-sidebar-muted: #a9d6c1;
-  --admin-sidebar-active: #23694f;
+  --admin-sidebar: var(--cocolo-surface-inverse);
+  --admin-sidebar-muted: var(--cocolo-sidebar-muted);
+  --admin-sidebar-active: var(--cocolo-sidebar-active);
   background: var(--cocolo-surface-muted);
 }
 
 .admin-shell .app-sidebar {
-  padding: 1.4rem 0.9rem;
+  padding: var(--cocolo-space-5) var(--cocolo-space-3);
   background:
     radial-gradient(circle at 25% 0%, rgb(77 157 122 / 0.35), transparent 16rem),
     var(--admin-sidebar);
@@ -843,7 +867,7 @@ a:hover {
 }
 
 .admin-shell .app-nav {
-  gap: 0.3rem;
+  gap: var(--cocolo-space-1);
 }
 
 .admin-shell .app-nav a {
@@ -859,7 +883,7 @@ a:hover {
 .admin-shell .app-nav a:focus-visible,
 .admin-shell .app-nav a[aria-current='page'] {
   background: var(--admin-sidebar-active);
-  color: #fff;
+  color: var(--cocolo-surface-raised);
   transform: none;
 }
 
@@ -930,7 +954,7 @@ a:hover {
 
 .admin-page-stack {
   display: grid;
-  gap: 1.25rem;
+  gap: var(--cocolo-space-5);
 }
 
 .admin-page-stack > * {
@@ -1014,7 +1038,7 @@ a:hover {
 .feature-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
+  gap: var(--cocolo-space-4);
 }
 
 .admin-metric-card [data-slot='card-title'] {
@@ -1028,7 +1052,7 @@ a:hover {
 .admin-action-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
+  gap: var(--cocolo-space-3);
 }
 
 .admin-action-grid button {
@@ -1042,13 +1066,13 @@ a:hover {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   color: var(--ink);
-  background: #fff;
+  background: var(--cocolo-surface-raised);
   text-align: left;
 }
 
 .admin-action-grid button:hover {
-  border-color: #84cfc0;
-  background: #f3fbf9;
+  border-color: var(--cocolo-brand);
+  background: var(--cocolo-table-row-hover);
 }
 
 .admin-action-grid button span:nth-child(2) {
@@ -1089,13 +1113,13 @@ a:hover {
   padding: 1rem 1.1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: #fff;
+  background: var(--cocolo-surface-raised);
   color: var(--muted);
   font-size: 0.9rem;
 }
 
 .admin-contract-error {
-  border-color: #f2b8bd;
+  border-color: var(--cocolo-danger-border);
   color: var(--danger);
   background: var(--danger-soft);
 }
@@ -1107,9 +1131,9 @@ a:hover {
   gap: 1rem;
   padding: 1rem;
   margin-bottom: 1rem;
-  border: 1px solid #c9e6df;
+  border: 1px solid var(--cocolo-border-strong);
   border-radius: var(--radius-md);
-  background: #f3fbf9;
+  background: var(--cocolo-table-row-hover);
 }
 
 .feature-plan-summary strong,

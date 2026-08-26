@@ -27,21 +27,22 @@ const uiStyles = `
     --popover: var(--cocolo-surface, #fffdf8);
     --popover-foreground: var(--cocolo-ink, #1d332c);
     --primary: var(--cocolo-brand, #287c62);
-    --primary-foreground: #fffdf8;
+    --primary-foreground: var(--cocolo-surface, #fffdf8);
     --secondary: var(--cocolo-brand-soft, #dcefe3);
     --secondary-foreground: var(--cocolo-brand-strong, #145742);
     --muted: var(--cocolo-sand, #f7f3ea);
     --muted-foreground: var(--cocolo-muted, #667b73);
     --accent: var(--cocolo-coral-soft, #fbe2d8);
-    --accent-foreground: #8f4937;
+    --accent-foreground: var(--cocolo-coral-ink, #b2523e);
     --destructive: var(--cocolo-danger, #b54842);
-    --destructive-foreground: #fff8f5;
+    --destructive-foreground: var(--cocolo-surface-raised, #ffffff);
     --border: var(--cocolo-line, #dbe5dc);
-    --input: #cbdacf;
+    --input: var(--cocolo-border-strong, #c4d4c8);
     --ring: var(--cocolo-focus, #f4af4d);
     --radius: var(--cocolo-radius-md, 1rem);
     --shadow-sm: var(--cocolo-shadow-sm, 0 1px 2px rgb(29 51 44 / 0.06));
     --shadow-md: var(--cocolo-shadow-md, 0 18px 42px rgb(29 51 44 / 0.1));
+    --transition-fast: var(--cocolo-transition-fast, 160ms ease);
   }
 
   .app-shell--content-only[data-slot='app-shell'] {
@@ -81,7 +82,7 @@ const uiStyles = `
 
   .app-shell[data-slot='app-shell'] [data-slot='button']:hover:not(:disabled) {
     background: var(--cocolo-brand-strong, #145742);
-    box-shadow: 0 4px 12px rgb(23 107 98 / 0.2);
+    box-shadow: var(--cocolo-shadow-hover, 0 4px 12px rgb(40 124 98 / 0.18));
     transform: translateY(-1px);
   }
 
@@ -91,7 +92,7 @@ const uiStyles = `
 
   .app-shell[data-slot='app-shell'] [data-slot='button']:focus-visible,
   .app-shell[data-slot='app-shell'] [data-slot='badge']:focus-visible {
-    outline: 3px solid rgb(67 169 155 / 0.35);
+    outline: 3px solid var(--cocolo-focus-ring, rgb(244 175 77 / 0.28));
     outline-offset: 2px;
   }
 
@@ -136,7 +137,7 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='destructive']:hover:not(:disabled) {
-    background: #963d38;
+    background: var(--cocolo-danger-strong, #963d38);
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='link'] {
@@ -273,7 +274,7 @@ const uiStyles = `
   .app-shell[data-slot='app-shell'] [data-slot='input']:focus-visible,
   .app-shell[data-slot='app-shell'] [data-slot='select']:focus-visible {
     border-color: var(--ring);
-    box-shadow: 0 0 0 3px rgb(67 169 155 / 0.18);
+    box-shadow: 0 0 0 3px var(--cocolo-focus-ring, rgb(244 175 77 / 0.28));
     outline: none;
   }
 
@@ -877,6 +878,7 @@ export function AppShell({
   return (
     <main
       data-slot="app-shell"
+      data-design-system="cocolo"
       className={cn(
         'app-shell',
         !hasSidebar && 'app-shell--content-only',

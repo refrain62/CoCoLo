@@ -1,19 +1,19 @@
 .event-card {
-  border-left: 0.35rem solid #59636e;
+  border-left: 0.35rem solid var(--cocolo-muted);
   margin-block: 1rem;
   padding: 1rem;
 }
 
 .event-card-practice {
-  border-left-color: #2563eb;
+  border-left-color: var(--cocolo-event-practice);
 }
 
 .event-card-match {
-  border-left-color: #dc2626;
+  border-left-color: var(--cocolo-event-match);
 }
 
 .event-card-event {
-  border-left-color: #9333ea;
+  border-left-color: var(--cocolo-event-other);
 }
 
 .event-type {
