@@ -29,10 +29,9 @@
 | `[~]` | NOT-001 | 中央producerの通知元境界はPR #177、回覧掲載producerはPR #183で統合済み。未払いproducer、staffの手動通知権限仕様、実LINE受入を確定する |
 | `[~]` | NOT-002 / NOT-003 | FS-NOT-002のWeb deep link・OAuth復帰・複数チーム選択はPR #179で実装済み。staging専用LINE groupの接続、Webhook、送信、unknown、再送、実ブラウザ受入を残す |
 | `[ ]` | RIDE-002 | Google Mapsのkey、origin、費用、障害時表示、未設定時の扱いを確定する |
-| `[!]` | OPS-001〜007 | Auth、PostgreSQL、R2、LINE、rate limit、GitHub保護、production昇格の外部条件を満たす |
+| `[!]` | OPS-001〜007 | Auth、PostgreSQL、R2、LINE、rate limit、GitHub保護、production昇格、公開LPの性能基準とstaging再計測の外部条件を満たす |
 | `[ ]` | ORIG-REQ-001 | 当初要求の未実装分を機能単位に分解し、仕様・コード・実DB・staging受入まで完了する |
 | `[~]` | UI-001〜003 | role別主要画面、保存APIの冪等性、未接続・失敗・権限不足の表示を受入する |
-| `[ ]` | LP-002 | 公開LPの初回バンドルから認証済み管理機能を分離し、低速端末でLCPとINPを計測する |
 
 各IDの詳細な仕様は[機能仕様書](functional-specification.md)と[統合契約](integration/)を参照します。
 

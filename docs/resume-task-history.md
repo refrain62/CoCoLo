@@ -22,7 +22,8 @@
 | LOCAL-FIXTURE-002 | 1,001チーム・10,010部員・20,020保護者リンク、全31テーブル1,000件超、状態パターン、RLS付きDB負荷試験 | PR #199を`develop`へ統合。敵対的レビュー、品質ゲート、実DB件数検証、1,000件負荷試験成功 |
 | UI安全性 | 二重送信防止、権限別操作表示、認証レイアウト、主要タップ領域、複数幅ブラウザ受入 | `develop`統合済み。認証済み主要画面のrole別受入は継続 |
 | UI-018〜024 | 認証済みroot、team feature flag導線、レスポンシブ表、チーム設定・役員連絡先分離、共通UI、role別ルート | PR #204を`develop`へ統合。docs-only PR #205で台帳を分離更新。品質ゲート、`pnpm ci:fast`、390px/1280pxブラウザ確認成功。実DB・外部provider・staging受入は継続 |
-| LP-001 / FS-UI-004 | 未認証ルートの公開LP、課題と機能の訴求、提供状態、ログイン導線、認証済み画面との分離、専用ヒーロー画像 | PR #194を`develop`へ統合。`pnpm test`、`pnpm test:unit`、`pnpm build`、lint、typecheck、390pxから1440pxのブラウザ確認、キーボード操作、コントラスト、品質ゲート成功。敵対的レビューのCriticalとHighは0件。初回バンドル分離はLP-002で継続 |
+| LP-001 / FS-UI-004 | 未認証ルートの公開LP、課題と機能の訴求、提供状態、ログイン導線、認証済み画面との分離、専用ヒーロー画像 | PR #194を`develop`へ統合。`pnpm test`、`pnpm test:unit`、`pnpm build`、lint、typecheck、390pxから1440pxのブラウザ確認、キーボード操作、コントラスト、品質ゲート成功。敵対的レビューのCriticalとHighは0件 |
+| LP-002 | 公開LPの初回バンドルから認証済み管理機能を分離し、低速端末のLCP・INP計測を再現可能にした | 実装PR #208を`develop`へ統合。`pnpm measure:lp`を10回実行し、390x844、CPU 4倍、150ms遅延、下り1.6Mbps、上り750kbps、cache無効、Chromium headlessでLCP p75 2148ms / INP p75 56msを記録。`pnpm test`、`pnpm test:unit`、`pnpm build`、typecheck、Biome、production bundle、trust-root、品質ゲート成功。性能基準の運用値とstaging再計測はOPSの外部条件として継続 |
 | BILLING-001 | 有償・無償feature、チーム単位のplan・flag、effective entitlement、監査境界 | PR #172を`develop`へ統合。CI、`pnpm test`、`pnpm build`、migration・trust検証成功。課金provider接続は外部条件として継続 |
 | BRD-001 / feature契約 | 役員・連絡先の`board-contacts`契約、API fail-closed、Webメニュー制御、無料feature migration | PR #185を`develop`へ統合。`pnpm test` 200件、`pnpm build`、unit、Biome、workspace boundary、migration、trust、品質ゲート成功。個人情報境界、Web閲覧、実DB/RLS受入は継続 |
 | BRD-001 / 年度引き継ぎ | 行ごとのUUIDv7生成、INSERT影響行数による`copiedCount`、APIレスポンスの件数整合 | PR #187を`develop`へ統合。`pnpm test` 200件、`pnpm build`、lint、workspace boundary、品質ゲート成功。実DB/RLSの複数行受入は継続 |
@@ -42,6 +43,16 @@
 - 検証: `pnpm ci:fast`、trust-root、Betterleaks、toolchain、migration、Biome、workspace境界、unit/contract、typecheck、lint、build、production bundleを成功させた。
 - 統合: 実装PR #204（merge commit `cab87b73e2a7aa5a7982e9d9f26761e267830f88`）とdocs-only PR #205（merge commit `a848ca096f9517ea6d623813be5a63ccc47d1e01`）を2026-08-26に`develop`へ統合した。
 - 残課題: 実DB/RLS、OAuth・課金provider、LINE・R2、staging E2Eは外部条件として再開台帳へ残す。
+
+## LP-002 実施記録
+
+- 対象: 公開LPの初回バンドルを認証済み管理機能から分離し、低速端末条件でLCPとINPを同じ手順で計測できるようにした。
+- 計測: `scripts/measure-lp.ts`がVite previewを起動し、390x844、CPU 4倍、150ms遅延、下り1.6Mbps、上り750kbps、cache無効、service worker無効、10回以上の反復を固定する。結果は`.ci-reports/lp-performance.json`へ保存し、秘密情報と個人情報は保存しない。
+- 結果: 実装時点のSHA `9b22fec78a81ac9595c1fd11d5e04170351f6bb1`で10回計測し、LCP p75 `2148ms`、INP p75 `56ms`、各回9 interactionを記録した。
+- 検証: `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm typecheck`、`pnpm lint:biome`、`pnpm verify:production-bundle`、`pnpm verify:trust-root`、`git diff --check`、品質ゲートを成功させた。追加スクリプトと`package.json`のhashはtrusted manifestへ登録した。
+- 敵対的レビュー: LCP/INPの定義、低速条件、反復回数、外部URL入力、ブラウザ・previewの後始末、trust-root登録を確認し、Critical / Highは0件。
+- 統合: 実装PR #208（merge commit `7d98a662c77604ad0fcadafe4faaa40fd47dfa9c`）を2026-08-26に`develop`へ統合した。
+- 残課題: 製品リリースの性能閾値、staging環境での同一artifact再計測、継続監視はOPSの外部条件として再開台帳に残す。
 
 ## 完了判定の共通結果
 
