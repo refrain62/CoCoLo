@@ -8,7 +8,7 @@
 
 ## 実装範囲
 
-今回のブランチは、中央の `app.ts`、`main.tsx`、Prisma schema、共有indexを変更せず、後から接続できるfeature単位の境界を追加しています。
+注文機能は、中央のAPI app、Webルート、Prismaの中央feature schemaへ接続済みです。
 
 | 層 | 実装 | 接続方法 |
 | --- | --- | --- |
@@ -18,11 +18,9 @@
 | API | 認証、所属、権限、注文、集金、集計、CSVを提供する独立Hono app | `createOrdersPaymentsApp` |
 | Web | 保護者の注文入力と管理者の集金確認、集計、CSV出力 | `OrdersPaymentsPage` |
 
-現在のPrisma schemaには注文系テーブルがないため、repositoryは分離adapterとしてメモリ実装を提供します。
+repositoryはメモリ実装をテスト用に残し、実行時はtransaction-localなRLS contextを設定するPrisma永続adapterを利用します。
 
-この実装はAPIの認可と業務ルールを先に検証するためのものであり、本番DBへの永続化が完了したことを意味しません。
-
-DBを接続する統合担当は、repositoryのメソッド契約をSQLまたはPrismaの永続adapterへ移し、注文系テーブルとRLSを同じ変更単位で追加します。
+注文系テーブル、状態ガード、監査、冪等キー、tenant複合参照、RLSは中央feature schemaへ適用されます。
 
 ## API接続
 
@@ -132,6 +130,7 @@ CSV出力の監査には行数と列名だけを保存し、注文者名や部�
 
 * **テナント複合参照**：商品、注文、注文明細、部員の参照にtenant境界を含めます。
 * **RLS**：既存の `app.tenant_id`、`app.user_id`、`app.role` をtransaction-localに設定してからSQLを実行します。
+* **担当linkの状態**：guardianの注文・注文明細参照と登録は、同一tenantの `guardian_members.status = 'active'` に限定します。
 * **状態制約**：募集案件は `open → closed → completed`、集金は `unpaid ↔ paid` だけを許可します。
 * **監査**：注文登録、支払状態変更、集計、CSV出力をappend-only監査へ記録します。
 * **金額の再計算**：注文明細へ登録する金額は商品単価と数量からサーバー側で再計算します。
@@ -155,11 +154,4 @@ pnpm --filter @cocolo/web build
 
 DB専用テストは `packages/db` のbuild後に実行し、未生成のdomain distへ依存しない順序に固定しています。
 
-統合担当は次の作業を別コミットで行います。
-
-* 既存 `app.ts` へfeature appをmountする。
-* 既存 `main.tsx` から画面を表示するルートを追加する。
-* Prisma schema、migration、RLS、seedへ注文系モデルを追加する。
-* `packages/contracts/openapi.yaml` を契約生成手順へ追加する。
-* 実PostgreSQLでtenant A/B、owner、admin、staff、guardianを使った統合テストを追加する。
-* local、staging、productionのDB migration適用と切り戻し手順を確認する。
+残る受入作業は、実PostgreSQLでtenant A/B、owner、admin、staff、guardianを使った統合テスト、ならびにlocal・staging・productionのDB migration適用と切り戻し手順の確認です。

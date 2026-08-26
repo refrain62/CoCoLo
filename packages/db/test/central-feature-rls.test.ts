@@ -686,6 +686,7 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
       1,
     );
     assert.equal(await count(tx, 'order_entries'), 1);
+    assert.equal(await count(tx, 'order_lines'), 1);
     assert.equal(await count(tx, 'ride_requests'), 1);
     assert.equal(await count(tx, 'ride_assignments'), 0);
     assert.equal(await count(tx, 'line_notification_queue'), 0);
@@ -839,6 +840,32 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
       ),
     );
   });
+
+  if (!direct) throw new Error('実DBのdirect clientが初期化されていません。');
+  await execute(
+    direct,
+    `UPDATE guardian_members
+        SET status = 'revoked'::member_link_status
+      WHERE tenant_id = $1::uuid
+        AND user_id = 'guardian-a2'
+        AND member_id = $2::uuid`,
+    tenantA,
+    memberA2,
+  );
+  await withContext(app, tenantA, 'guardian-a2', 'guardian', async (tx) => {
+    assert.equal(await count(tx, 'order_entries'), 0);
+    assert.equal(await count(tx, 'order_lines'), 0);
+  });
+  await execute(
+    direct,
+    `UPDATE guardian_members
+        SET status = 'active'::member_link_status
+      WHERE tenant_id = $1::uuid
+        AND user_id = 'guardian-a2'
+        AND member_id = $2::uuid`,
+    tenantA,
+    memberA2,
+  );
 
   const noContext = await app.$transaction(async (tx) => {
     await execute(
