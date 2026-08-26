@@ -3112,6 +3112,7 @@
         "required": [
           "memberId",
           "role",
+          "linkType",
           "relationship"
         ],
         "additionalProperties": false,
@@ -3123,6 +3124,13 @@
           "role": {
             "type": "string",
             "const": "guardian"
+          },
+          "linkType": {
+            "type": "string",
+            "enum": [
+              "self",
+              "guardian"
+            ]
           },
           "relationship": {
             "type": "string",
@@ -3165,6 +3173,7 @@
           "id",
           "memberId",
           "role",
+          "linkType",
           "relationship",
           "status",
           "expiresAt",
@@ -3183,6 +3192,13 @@
           "role": {
             "type": "string",
             "const": "guardian"
+          },
+          "linkType": {
+            "type": "string",
+            "enum": [
+              "self",
+              "guardian"
+            ]
           },
           "relationship": {
             "type": "string",
@@ -3269,6 +3285,13 @@
                 "type": "string",
                 "const": "guardian"
               },
+              "linkType": {
+                "type": "string",
+                "enum": [
+                  "self",
+                  "guardian"
+                ]
+              },
               "relationship": {
                 "type": "string",
                 "minLength": 1,
@@ -3300,6 +3323,7 @@
               "tenantId",
               "memberId",
               "role",
+              "linkType",
               "linkStatus"
             ],
             "additionalProperties": false,
@@ -3315,6 +3339,13 @@
               "role": {
                 "type": "string",
                 "const": "guardian"
+              },
+              "linkType": {
+                "type": "string",
+                "enum": [
+                  "self",
+                  "guardian"
+                ]
               },
               "linkStatus": {
                 "type": "string",

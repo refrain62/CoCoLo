@@ -93,16 +93,18 @@ function createTestApp({
               id: '00000000-0000-7000-8000-000000000010',
               memberId: '00000000-0000-7000-8000-000000000011',
               role: 'guardian',
+              linkType: 'guardian',
               relationship: '保護者',
               status: 'pending',
               expiresAt: new Date('2026-08-28T00:00:00.000Z'),
               acceptedAt: null,
             },
           ],
-          create: async () => ({
+          create: async (input) => ({
             id: '00000000-0000-7000-8000-000000000010',
             memberId: '00000000-0000-7000-8000-000000000011',
             role: 'guardian',
+            linkType: input.linkType,
             relationship: '保護者',
             status: 'pending',
             expiresAt: new Date('2026-08-28T00:00:00.000Z'),
@@ -113,6 +115,7 @@ function createTestApp({
             id: '00000000-0000-7000-8000-000000000010',
             memberId: '00000000-0000-7000-8000-000000000011',
             role: 'guardian',
+            linkType: 'guardian',
             relationship: '保護者',
             status: 'revoked',
             expiresAt: new Date('2026-08-28T00:00:00.000Z'),
@@ -122,6 +125,7 @@ function createTestApp({
             tenantId: TENANT_ID,
             memberId: '00000000-0000-7000-8000-000000000011',
             role: 'guardian',
+            linkType: 'guardian',
             linkStatus: 'active',
           }),
         },
@@ -249,12 +253,14 @@ test('ownerは対象memberへのopaque招待を発行・一覧できる', async 
     body: JSON.stringify({
       memberId: '00000000-0000-7000-8000-000000000011',
       role: 'guardian',
-      relationship: '保護者',
+      linkType: 'self',
+      relationship: '本人',
     }),
   });
   assert.equal(created.status, 201);
   const createdBody = await created.json();
   assert.equal('token' in createdBody.data, false);
+  assert.equal(createdBody.data.linkType, 'self');
   assert.match(
     createdBody.data.inviteUrl,
     /^https:\/\/app\.example\.test\/invite\/[^#]+#token=[A-Za-z0-9_-]+$/,
@@ -279,6 +285,7 @@ test('membershipがないOAuth利用者もopaque招待を受諾できる', async
     tenantId: TENANT_ID,
     memberId: '00000000-0000-7000-8000-000000000011',
     role: 'guardian',
+    linkType: 'guardian',
     linkStatus: 'active',
   });
 });

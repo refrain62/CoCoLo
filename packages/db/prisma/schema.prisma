@@ -318,6 +318,7 @@ model AuthInvitation {
   tenantId         String               @map("tenant_id") @db.Uuid
   memberId         String               @map("member_id") @db.Uuid
   role             Role
+  linkType         MemberLinkType       @default(guardian) @map("link_type")
   relationship     String               @db.VarChar(100)
   tokenHash        String               @unique @map("token_hash") @db.Char(64)
   invitedByUserId  String               @map("invited_by_user_id") @db.VarChar(128)

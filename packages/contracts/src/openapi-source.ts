@@ -1944,11 +1944,12 @@ export const openapiDocument = {
       },
       InvitationCreateInput: {
         type: 'object',
-        required: ['memberId', 'role', 'relationship'],
+        required: ['memberId', 'role', 'linkType', 'relationship'],
         additionalProperties: false,
         properties: {
           memberId: { type: 'string', format: 'uuid' },
           role: { type: 'string', const: 'guardian' },
+          linkType: { type: 'string', enum: ['self', 'guardian'] },
           relationship: { type: 'string', minLength: 1, maxLength: 100 },
           expiresInHours: {
             type: 'integer',
@@ -1973,6 +1974,7 @@ export const openapiDocument = {
           'id',
           'memberId',
           'role',
+          'linkType',
           'relationship',
           'status',
           'expiresAt',
@@ -1983,6 +1985,7 @@ export const openapiDocument = {
           id: { type: 'string', format: 'uuid' },
           memberId: { type: 'string', format: 'uuid' },
           role: { type: 'string', const: 'guardian' },
+          linkType: { type: 'string', enum: ['self', 'guardian'] },
           relationship: { type: 'string', minLength: 1, maxLength: 100 },
           status: {
             type: 'string',
@@ -2031,6 +2034,7 @@ export const openapiDocument = {
               id: { type: 'string', format: 'uuid' },
               memberId: { type: 'string', format: 'uuid' },
               role: { type: 'string', const: 'guardian' },
+              linkType: { type: 'string', enum: ['self', 'guardian'] },
               relationship: { type: 'string', minLength: 1, maxLength: 100 },
               token: { type: 'string', minLength: 32, maxLength: 256 },
               expiresAt: { type: 'string', format: 'date-time' },
@@ -2045,12 +2049,19 @@ export const openapiDocument = {
         properties: {
           data: {
             type: 'object',
-            required: ['tenantId', 'memberId', 'role', 'linkStatus'],
+            required: [
+              'tenantId',
+              'memberId',
+              'role',
+              'linkType',
+              'linkStatus',
+            ],
             additionalProperties: false,
             properties: {
               tenantId: { type: 'string', format: 'uuid' },
               memberId: { type: 'string', format: 'uuid' },
               role: { type: 'string', const: 'guardian' },
+              linkType: { type: 'string', enum: ['self', 'guardian'] },
               linkStatus: { type: 'string', const: 'active' },
             },
           },

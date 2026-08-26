@@ -12,6 +12,7 @@ export type InvitationAcceptResult = {
   tenantId: string;
   memberId: string;
   role: 'guardian';
+  linkType: 'self' | 'guardian';
   linkStatus: 'active';
 };
 
@@ -19,6 +20,7 @@ export type InvitationCreateResult = {
   id: string;
   memberId: string;
   role: 'guardian';
+  linkType: 'self' | 'guardian';
   relationship: string;
   inviteUrl: string;
   expiresAt: string;

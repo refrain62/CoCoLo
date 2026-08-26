@@ -4,6 +4,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 type MemberRole = 'owner' | 'admin' | 'staff' | 'guardian';
 type InvitationStatus = 'pending' | 'accepted' | 'expired' | 'revoked';
 type AuthProvider = 'google' | 'line';
+type MemberLinkType = 'self' | 'guardian';
 
 export type AuthInvitationErrorCode =
   | 'FORBIDDEN'
@@ -30,6 +31,7 @@ export type AuthInvitationRecord = {
   id: string;
   memberId: string;
   role: 'guardian';
+  linkType: MemberLinkType;
   relationship: string;
   status: InvitationStatus;
   expiresAt: Date;
@@ -47,6 +49,7 @@ export type AuthInvitationRepository = {
     actorUserId: string;
     role: 'owner' | 'admin';
     memberId: string;
+    linkType: MemberLinkType;
     relationship: string;
     expiresAt: Date;
   }) => Promise<AuthInvitationRecord & { token: string }>;
@@ -65,6 +68,7 @@ export type AuthInvitationRepository = {
     tenantId: string;
     memberId: string;
     role: 'guardian';
+    linkType: MemberLinkType;
     linkStatus: 'active';
   }>;
 };
@@ -79,6 +83,7 @@ async function setConfig(
     role: MemberRole;
     invitationAccepting?: boolean;
     invitationTokenHash?: string;
+    invitationLinkType?: MemberLinkType;
   },
 ) {
   await client.$queryRaw`
@@ -91,6 +96,9 @@ async function setConfig(
       }, true),
       set_config('app.invitation_token_hash', ${
         input.invitationTokenHash ?? ''
+      }, true),
+      set_config('app.invitation_link_type', ${
+        input.invitationLinkType ?? ''
       }, true)
   `;
 }
@@ -125,6 +133,7 @@ function toRecord(row: {
   id: string;
   memberId: string;
   role: MemberRole;
+  linkType: MemberLinkType;
   relationship: string;
   status: InvitationStatus;
   expiresAt: Date;
@@ -140,6 +149,7 @@ function toRecord(row: {
     id: row.id,
     memberId: row.memberId,
     role: 'guardian',
+    linkType: row.linkType,
     relationship: row.relationship,
     status: row.status,
     expiresAt: row.expiresAt,
@@ -151,6 +161,7 @@ const invitationSelect = {
   id: true,
   memberId: true,
   role: true,
+  linkType: true,
   relationship: true,
   status: true,
   expiresAt: true,
@@ -229,6 +240,7 @@ export function createAuthInvitationRepository(
             tenantId: input.tenantId,
             memberId: input.memberId,
             role: 'guardian',
+            linkType: input.linkType,
             relationship: input.relationship,
             tokenHash: hashToken(token),
             invitedByUserId: input.actorUserId,
@@ -246,6 +258,7 @@ export function createAuthInvitationRepository(
             metadata: {
               memberId: input.memberId,
               role: 'guardian',
+              linkType: input.linkType,
               relationship: input.relationship,
               expiresAt: input.expiresAt.toISOString(),
             },
@@ -336,6 +349,7 @@ export function createAuthInvitationRepository(
           role: 'guardian',
           invitationAccepting: true,
           invitationTokenHash: tokenHash,
+          invitationLinkType: invitation.linkType,
         });
         const conflictingIdentity = await tx.authIdentity.findFirst({
           where: {
@@ -418,13 +432,13 @@ export function createAuthInvitationRepository(
             userId: input.userId,
             memberId: invitation.memberId,
             relationship: invitation.relationship,
-            linkType: 'guardian',
+            linkType: invitation.linkType,
             status: 'active',
             consentedAt: new Date(),
           },
           update: {
             relationship: invitation.relationship,
-            linkType: 'guardian',
+            linkType: invitation.linkType,
             status: 'active',
             consentedAt: new Date(),
           },
@@ -447,6 +461,7 @@ export function createAuthInvitationRepository(
             resourceId: invitation.id,
             metadata: {
               memberId: invitation.memberId,
+              linkType: invitation.linkType,
               provider: input.provider,
             },
           },
@@ -455,6 +470,7 @@ export function createAuthInvitationRepository(
           tenantId: invitation.tenantId,
           memberId: invitation.memberId,
           role: 'guardian' as const,
+          linkType: invitation.linkType,
           linkStatus: link.status as 'active',
         };
       }),
