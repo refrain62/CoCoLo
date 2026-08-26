@@ -80,6 +80,17 @@
 - 敵対的レビュー: tenant越境、system admin認証、個人情報露出、入力検証、状態遷移、監査ログの改変防止、paid feature条件、二重送信、失敗・未接続表示を確認し、Critical / Highは0件とした。
 - 残課題: Supabaseの`system_admin` claim付与、staging migration、実DBのRLS、実ブラウザの`/admin`・`/team`・`/dashboard`受入は、再開台帳の`ADMIN-TEAM-001-ACCEPTANCE`へ移した。
 
+## RIDE-002 実施記録
+
+- 対象: 確定した送迎予定を、許可された利用者へ部員名・運転者表示名・乗車人数付きで安全に投影し、ログイン後の送迎操作から配車表示名を設定できるようにした。
+- 実装: 確定配車のDB projectionへ同一tenantの`members.name`と`tenant_memberships.display_name`をjoinし、manager、requester、driver、担当部員を持つguardianだけへ必要な行を返す。運転者名を`ride_offers`や割当行へ複製しない。
+- 表示名: `PATCH /api/v1/ride-profile/display-name`を追加し、認証済み本人のactive membershipだけを1〜200文字で更新する。既存の`closed`予定も確定前に表示名を設定でき、変更は監査ログへ記録する。
+- 状態保護: 確定公開中の対象部員名と運転者表示名をDBトリガーで固定し、予定を再編集へ戻した後だけ変更できるようにした。これにより、確定済みsnapshotがプロフィール変更で動的に変わらない。
+- 敵対的レビュー: 初回実装に対する「確定後の動的joinで表示名が変わる」「既存closed予定に表示名の救済経路がない」というHigh指摘をフォローアップPR #217で修正した。Critical / Highの未解決指摘は0件。
+- 反映: 実装PR #216（merge commit `07cb8bdb5d023e2da0ccf0e1216dbaeb6d32d51d`）とフォローアップPR #217（merge commit `1a999ef575a932d2511af99f6f14c1c4413e5e14`）を2026-08-26に`develop`へ統合した。
+- 検証: `pnpm test`、`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm test:database-integrity`、`pnpm verify:migration-sql`、`pnpm verify:migration-checksum`、`pnpm verify:trust-root`、`pnpm lint:openapi`、`git diff --check`を成功させた。全workspace testはAPI 223件を含め成功した。
+- 残課題: `DIRECT_URL`未設定のUUIDv7 migration実DB検証、Google Mapsのkey・許可origin・費用上限・障害時表示、Supabase実DBのRLS・競合、manager/guardianのstagingブラウザ受入は、再開台帳の`RIDE-002-ACCEPTANCE`へ移した。
+
 ## 完了判定の共通結果
 
 完了した実装は、tenant越境、認可、個人情報、入力検証、状態遷移、競合、外部サービス未接続の表示をレビュー対象にしました。
