@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '@cocolo/ui';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import {
   type BoardContactApi,
@@ -91,7 +92,7 @@ function BoardContactTable({
     return <p role="status">この年度の役職は登録されていません。</p>;
 
   return (
-    <table>
+    <ResponsiveTable>
       <caption className="visually-hidden">年度役員一覧</caption>
       <thead>
         <tr>
@@ -104,11 +105,11 @@ function BoardContactTable({
       <tbody>
         {contacts.map((contact) => (
           <tr key={contact.id}>
-            <td>{contact.roleName}</td>
-            <td>{roleTypeLabels[contact.roleType]}</td>
-            <td>{formatContact(contact, canManage)}</td>
+            <td data-label="役職">{contact.roleName}</td>
+            <td data-label="種別">{roleTypeLabels[contact.roleType]}</td>
+            <td data-label="連絡先">{formatContact(contact, canManage)}</td>
             {canManage ? (
-              <td>
+              <td data-label="操作">
                 <button type="button" onClick={() => onEdit(contact)}>
                   編集
                 </button>{' '}
@@ -120,7 +121,7 @@ function BoardContactTable({
           </tr>
         ))}
       </tbody>
-    </table>
+    </ResponsiveTable>
   );
 }
 

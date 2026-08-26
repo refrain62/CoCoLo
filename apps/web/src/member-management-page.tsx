@@ -1,4 +1,5 @@
 import { formatGrade } from '@cocolo/domain';
+import { ResponsiveTable } from '@cocolo/ui';
 import {
   type Dispatch,
   type FormEvent,
@@ -302,7 +303,7 @@ function MemberTable({
     return <p role="status">表示できる部員がいません。</p>;
 
   return (
-    <table>
+    <ResponsiveTable>
       <caption className="visually-hidden">部員一覧</caption>
       <thead>
         <tr>
@@ -317,18 +318,18 @@ function MemberTable({
       <tbody>
         {members.map((member) => (
           <tr key={member.id}>
-            <td>{member.name}</td>
-            <td>{member.kana || '—'}</td>
-            <td>{formatMemberCategory(member.category)}</td>
-            <td>
+            <td data-label="氏名">{member.name}</td>
+            <td data-label="ふりがな">{member.kana || '—'}</td>
+            <td data-label="区分">{formatMemberCategory(member.category)}</td>
+            <td data-label="学年・年代">
               {formatGrade(
                 member.category,
                 member.gradeLevel,
                 member.ageGroup ?? null,
               )}
             </td>
-            <td>{formatMemberStatus(member.status)}</td>
-            <td>
+            <td data-label="状態">{formatMemberStatus(member.status)}</td>
+            <td data-label="操作">
               {canManage ? (
                 <MemberEditForm
                   api={api}
@@ -344,7 +345,7 @@ function MemberTable({
           </tr>
         ))}
       </tbody>
-    </table>
+    </ResponsiveTable>
   );
 }
 
