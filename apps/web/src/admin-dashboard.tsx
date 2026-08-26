@@ -11,7 +11,7 @@ import {
   EmptyState,
   Section,
 } from '@cocolo/ui';
-import { isAdminRouteVisible } from './admin-routes.js';
+import { adminNavigation, isAdminRouteVisible } from './admin-routes.js';
 import type { AuthRole } from './auth-context-api.js';
 import type { FeatureContractSnapshot } from './features/feature-contract/feature-contract-api.js';
 
@@ -52,6 +52,9 @@ export function AdminDashboard({
   ).length;
   const canNavigate = (route: Parameters<typeof isAdminRouteVisible>[0]) =>
     isAdminRouteVisible(route, role, contract.features);
+  const membersPath = adminNavigation.find(
+    (item) => item.route === 'members',
+  )?.href;
 
   return (
     <div className="admin-page-stack">
@@ -60,11 +63,8 @@ export function AdminDashboard({
         title={`${team.tenantName}の運営状況`}
         description={`${roleLabels[role]}として、今日の確認が必要な情報をまとめています。`}
         actions={
-          canNavigate('members') ? (
-            <Button
-              variant="outline"
-              onClick={() => onNavigate('/admin/members')}
-            >
+          membersPath && canNavigate('members') ? (
+            <Button variant="outline" onClick={() => onNavigate(membersPath)}>
               メンバーを確認
             </Button>
           ) : undefined
