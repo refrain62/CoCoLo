@@ -44,4 +44,13 @@ describe('公開トップページ', () => {
     expect(html).toContain('<footer');
     expect(html.match(/<h1/g)).toHaveLength(1);
   });
+
+  it('初めての利用者にも使い方とデザインシステムの意図を伝える', () => {
+    expect(html).toContain('data-design-system="cocolo"');
+    expect(html).toContain('href="#how"');
+    expect(html).toContain('気づく');
+    expect(html).toContain('見る');
+    expect(html).toContain('戻る');
+    expect(html).not.toContain('<svg');
+  });
 });

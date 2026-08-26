@@ -17,6 +17,7 @@
   --cocolo-sand: #f7f3ea;
   --cocolo-sand-deep: #efe7d7;
   --cocolo-coral: #f07d62;
+  --cocolo-coral-ink: #b2523e;
   --cocolo-coral-soft: #fbe2d8;
   --cocolo-surface: #fffdf8;
   --cocolo-surface-muted: #f3f7f1;
@@ -541,8 +542,8 @@ a:hover {
   place-items: center;
   margin-bottom: 1.2rem;
   border-radius: 1rem;
-  background: linear-gradient(135deg, #2dd4bf, #f97316);
-  color: #082f49;
+  background: linear-gradient(135deg, var(--cocolo-brand), var(--cocolo-coral));
+  color: var(--cocolo-surface);
   font-size: 1.25rem;
   font-weight: 900;
 }
@@ -605,9 +606,9 @@ a:hover {
 }
 
 .team-selection-card fieldset label:has(input:checked) {
-  border-color: #2dd4bf;
+  border-color: var(--cocolo-brand);
   background: var(--brand-soft);
-  box-shadow: 0 0 0 3px rgb(45 212 191 / 0.12);
+  box-shadow: 0 0 0 3px rgb(40 124 98 / 0.14);
 }
 
 .team-selection-card > button {

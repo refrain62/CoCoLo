@@ -8,6 +8,7 @@
   --landing-sand: var(--cocolo-sand, #f7f3ea);
   --landing-sand-deep: var(--cocolo-sand-deep, #efe7d7);
   --landing-coral: var(--cocolo-coral, #f07d62);
+  --landing-coral-ink: var(--cocolo-coral-ink, #b2523e);
   --landing-coral-soft: var(--cocolo-coral-soft, #fbe2d8);
   --landing-surface: var(--cocolo-surface, #fffdf8);
   --landing-line: var(--cocolo-line, #dbe5dc);
@@ -244,7 +245,7 @@
 
 .landing-hero h1 em {
   display: block;
-  color: var(--landing-coral);
+  color: var(--landing-coral-ink);
   font-style: normal;
 }
 
@@ -327,7 +328,7 @@
 }
 
 .landing-topic-list li span {
-  color: var(--landing-coral);
+  color: var(--landing-coral-ink);
   font-size: 0.68rem;
 }
 
@@ -426,7 +427,7 @@
 }
 
 .landing-hero-visual figcaption span {
-  color: var(--landing-coral);
+  color: var(--landing-coral-ink);
 }
 
 .landing-hero-note {
@@ -449,7 +450,7 @@
 .landing-hero-note strong {
   display: block;
   margin-bottom: 0.25rem;
-  color: var(--landing-coral);
+  color: var(--landing-coral-ink);
   font-size: 0.68rem;
   letter-spacing: 0.1em;
 }
@@ -603,7 +604,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: var(--landing-coral);
+  color: var(--landing-coral-ink);
   font-size: 0.7rem;
   font-weight: 900;
   letter-spacing: 0.1em;
@@ -702,7 +703,7 @@
 
 .landing-handoff-card li::before {
   margin-right: 0.55rem;
-  color: var(--landing-coral);
+  color: currentColor;
   content: "✓";
   font-weight: 900;
 }

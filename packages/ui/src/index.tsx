@@ -80,7 +80,7 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button']:hover:not(:disabled) {
-    background: #12584f;
+    background: var(--cocolo-brand-strong, #145742);
     box-shadow: 0 4px 12px rgb(23 107 98 / 0.2);
     transform: translateY(-1px);
   }
@@ -106,7 +106,7 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='secondary']:hover:not(:disabled) {
-    background: #d8e9e6;
+    background: var(--cocolo-brand-soft, #dcefe3);
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='outline'] {
@@ -136,7 +136,7 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='destructive']:hover:not(:disabled) {
-    background: #a93440;
+    background: #963d38;
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='link'] {
@@ -148,7 +148,7 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='button'][data-variant='link']:hover:not(:disabled) {
-    color: #0f514a;
+    color: var(--cocolo-brand-strong, #145742);
     background: transparent;
     box-shadow: none;
     text-decoration: underline;
@@ -248,8 +248,8 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='badge'][data-variant='success'] {
-    color: #14543f;
-    background: #d9f2e5;
+    color: var(--cocolo-success, #2f7d58);
+    background: var(--cocolo-success-soft, #e4f3e8);
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='input'],
@@ -326,9 +326,9 @@ const uiStyles = `
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='alert'][data-variant='destructive'] {
-    border-color: #f2b8bd;
-    color: #8e2633;
-    background: #fff0f1;
+    border-color: var(--cocolo-coral-soft, #fbe2d8);
+    color: var(--cocolo-danger, #b54842);
+    background: var(--cocolo-danger-soft, #fff0ed);
   }
 
   .app-shell[data-slot='app-shell'] [data-slot='empty-state'] {
