@@ -60,12 +60,14 @@ export function AdminDashboard({
         title={`${team.tenantName}の運営状況`}
         description={`${roleLabels[role]}として、今日の確認が必要な情報をまとめています。`}
         actions={
-          <Button
-            variant="outline"
-            onClick={() => onNavigate('/admin/members')}
-          >
-            メンバーを確認
-          </Button>
+          canNavigate('members') ? (
+            <Button
+              variant="outline"
+              onClick={() => onNavigate('/admin/members')}
+            >
+              メンバーを確認
+            </Button>
+          ) : undefined
         }
       >
         <div className="admin-hero-card">
