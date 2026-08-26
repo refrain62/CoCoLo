@@ -25,6 +25,7 @@
 | LP-001 / FS-UI-004 | 未認証ルートの公開LP、課題と機能の訴求、提供状態、ログイン導線、認証済み画面との分離、専用ヒーロー画像 | PR #194を`develop`へ統合。`pnpm test`、`pnpm test:unit`、`pnpm build`、lint、typecheck、390pxから1440pxのブラウザ確認、キーボード操作、コントラスト、品質ゲート成功。敵対的レビューのCriticalとHighは0件 |
 | LP-002 | 公開LPの初回バンドルから認証済み管理機能を分離し、低速端末のLCP・INP計測を再現可能にした | 実装PR #208を`develop`へ統合。`pnpm measure:lp`を10回実行し、390x844、CPU 4倍、150ms遅延、下り1.6Mbps、上り750kbps、cache無効、Chromium headlessでLCP p75 2148ms / INP p75 56msを記録。`pnpm test`、`pnpm test:unit`、`pnpm build`、typecheck、Biome、production bundle、trust-root、品質ゲート成功。性能基準の運用値とstaging再計測はOPSの外部条件として継続 |
 | LP-003 / FS-UI-004 | LINE Design Systemを参照した公開LPと共通UIの再設計、LINE通知とWeb正本の役割分担、アクセシビリティ確認 | 実装PR #212を`develop`へ統合（merge commit `6e3e9606f9915fae9d11acb148d8919885d1d728`）。`pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm lint`、390px / 430px / 768px / 1280pxのブラウザ確認、敵対的レビューを完了。GitHub quality runは記録時点でqueuedのため、成功とは扱わない |
+| ADMIN-TEAM-001 | `/admin`のシステム管理、`/team`の選択中チーム管理、`/dashboard`の利用者向け予定・締め切り一覧と14日カレンダー | 実装PR #211・#214を`develop`へ統合。docs-onlyの完了記録PRで本履歴を更新。ローカル品質検証は成功し、staging実DB/RLSと実ブラウザ受入は`ADMIN-TEAM-001-ACCEPTANCE`として継続 |
 | BILLING-001 | 有償・無償feature、チーム単位のplan・flag、effective entitlement、監査境界 | PR #172を`develop`へ統合。CI、`pnpm test`、`pnpm build`、migration・trust検証成功。課金provider接続は外部条件として継続 |
 | BRD-001 / feature契約 | 役員・連絡先の`board-contacts`契約、API fail-closed、Webメニュー制御、無料feature migration | PR #185を`develop`へ統合。`pnpm test` 200件、`pnpm build`、unit、Biome、workspace boundary、migration、trust、品質ゲート成功。個人情報境界、Web閲覧、実DB/RLS受入は継続 |
 | BRD-001 / 年度引き継ぎ | 行ごとのUUIDv7生成、INSERT影響行数による`copiedCount`、APIレスポンスの件数整合 | PR #187を`develop`へ統合。`pnpm test` 200件、`pnpm build`、lint、workspace boundary、品質ゲート成功。実DB/RLSの複数行受入は継続 |
@@ -66,6 +67,18 @@
 - 検証: `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm lint`、`git diff --check`を成功させた。実ブラウザで390px、430px、768px、1280pxを確認し、LINEアンカー、モバイルメニュー、FAQ開閉、実行時エラーなしを確認した。
 - 統合: 実装PR #212を2026-08-26に`develop`へ統合した。GitHub quality runは履歴作成時点でqueuedであり、CI成功済みとは記録していない。
 - 残課題: 実LINE接続、staging通知到達、実環境E2EはNOT-001 / NOT-002およびOPS-001〜007の外部条件として再開台帳に残す。
+
+## ADMIN-TEAM-001 実施記録
+
+- 対象: システム全体の管理経路を`/admin`、選択中チームの管理経路を`/team`、利用者向けの認証済み経路を`/dashboard`へ分離し、ログイン後の遷移先をダッシュボードへ統一した。
+- ダッシュボード: JST基準の直近14日を対象に、予定、出欠締切、注文締切を一覧表示し、同じ期間を日曜始まりのカレンダーで表示する。予定の詳細遷移と締切種別を利用者向け画面に残した。
+- システム管理: 署名済みJWTの`app_metadata.system_admin`とDB側RLS roleを二重確認し、全体お知らせの作成・編集・公開状態変更、system auditのappend-only記録、featureの全体停止・再開をAPIと画面へ追加した。feature停止時もplan、provider、grantの有償契約条件は緩和しない。
+- チーム管理: 既存の`/admin/*`管理画面をチーム管理経路として扱い、ルートメタデータと選択中tenantの認可境界を整理した。system APIはtenant headerに依存せず、team APIとは別の認証・rate limit経路にした。
+- セキュリティ: お知らせはsystem adminが全件を管理し、利用者は公開済みのお知らせだけを自tenant membership経由で参照する。system auditは更新・削除不可とし、APIの入力、UUIDv7、状態値、認証、tenant越境を検証した。
+- 反映: タスク登録PR #210、経路・ダッシュボード実装PR #211、システム管理実装PR #214を`develop`へ統合した。完了記録は実装PRと分離したdocs-only PRで更新した。
+- 検証: `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm lint`、`pnpm verify:migration-sql`、`pnpm verify:migration-checksum`、`git diff --check`を成功させた。`DIRECT_URL`未設定のためUUIDv7 migration検査、`APP_ENV`未設定のためschema drift検査は実行していない。
+- 敵対的レビュー: tenant越境、system admin認証、個人情報露出、入力検証、状態遷移、監査ログの改変防止、paid feature条件、二重送信、失敗・未接続表示を確認し、Critical / Highは0件とした。
+- 残課題: Supabaseの`system_admin` claim付与、staging migration、実DBのRLS、実ブラウザの`/admin`・`/team`・`/dashboard`受入は、再開台帳の`ADMIN-TEAM-001-ACCEPTANCE`へ移した。
 
 ## 完了判定の共通結果
 
