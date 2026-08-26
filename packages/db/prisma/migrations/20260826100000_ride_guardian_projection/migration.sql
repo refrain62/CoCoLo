@@ -2,8 +2,7 @@
 ALTER TABLE tenant_memberships
   ADD COLUMN IF NOT EXISTS display_name varchar(200);
 
-ALTER TABLE ride_offers
-  ADD COLUMN IF NOT EXISTS driver_display_name varchar(200);
+COMMENT ON COLUMN tenant_memberships.display_name IS '同一tenant内で利用者が公開する表示名';
 
 CREATE OR REPLACE FUNCTION app_guard_ride_driver_display_name()
 RETURNS trigger
@@ -22,10 +21,14 @@ BEGIN
           ON o.tenant_id = a.tenant_id
          AND o.id = a.offer_id
          AND o.plan_id = a.plan_id
+        LEFT JOIN tenant_memberships tm
+          ON tm.tenant_id = o.tenant_id
+         AND tm.user_id = o.driver_user_id
+         AND tm.status = 'active'::membership_status
        WHERE a.tenant_id = NEW.tenant_id
          AND a.plan_id = NEW.id
          AND (
-           NULLIF(BTRIM(o.driver_display_name), '') IS NULL
+           NULLIF(BTRIM(COALESCE(tm.display_name, '')), '') IS NULL
          )
     ) THEN
       RAISE EXCEPTION '運転者の表示名を設定してから送迎を確定してください';
@@ -99,7 +102,7 @@ AS $$
     a.offer_id,
     a.passenger_count,
     m.name,
-    ro.driver_display_name
+    tm.display_name
   FROM ride_assignments a
   JOIN ride_plans rp
     ON rp.tenant_id = a.tenant_id
@@ -114,11 +117,15 @@ AS $$
     ON ro.tenant_id = a.tenant_id
    AND ro.id = a.offer_id
    AND ro.plan_id = a.plan_id
+  JOIN tenant_memberships tm
+    ON tm.tenant_id = ro.tenant_id
+   AND tm.user_id = ro.driver_user_id
+   AND tm.status = 'active'::membership_status
   WHERE app_has_active_membership(target_tenant_id)
     AND a.tenant_id = target_tenant_id
     AND a.plan_id = target_plan_id
     AND rp.status = 'finalized'::ride_plan_status
-    AND NULLIF(BTRIM(ro.driver_display_name), '') IS NOT NULL
+    AND NULLIF(BTRIM(tm.display_name), '') IS NOT NULL
     AND (
       app_is_event_manager()
       OR rr.requester_user_id = current_setting('app.user_id', true)

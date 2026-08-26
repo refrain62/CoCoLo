@@ -112,9 +112,9 @@ test('RIDE-002の送迎全routeと状態変更契約をOpenAPIへ公開する', 
     'driverName',
   ]);
   assert.equal(confirmedAssignment.properties.memberName.minLength, 1);
-  assert.equal(confirmedAssignment.properties.memberName.maxLength, 128);
+  assert.equal(confirmedAssignment.properties.memberName.maxLength, 200);
   assert.equal(confirmedAssignment.properties.driverName.minLength, 1);
-  assert.equal(confirmedAssignment.properties.driverName.maxLength, 128);
+  assert.equal(confirmedAssignment.properties.driverName.maxLength, 200);
   const snapshot =
     components.schemas.RideSnapshotResponseEnvelope.properties.data;
   assert.ok(snapshot.properties.confirmedAssignments);

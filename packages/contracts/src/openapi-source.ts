@@ -1661,8 +1661,8 @@ export const openapiDocument = {
           requestId: { type: 'string', format: 'uuid' },
           offerId: { type: 'string', format: 'uuid' },
           passengerCount: { type: 'integer', minimum: 1, maximum: 8 },
-          memberName: { type: 'string', minLength: 1, maxLength: 128 },
-          driverName: { type: 'string', minLength: 1, maxLength: 128 },
+          memberName: { type: 'string', minLength: 1, maxLength: 200 },
+          driverName: { type: 'string', minLength: 1, maxLength: 200 },
         },
       },
       RideSnapshotResponseEnvelope: {

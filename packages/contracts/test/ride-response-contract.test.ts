@@ -154,7 +154,7 @@ test('送迎snapshotの確定公開投影は表示名だけを含み、長さを
         requests: [],
         assignments: [],
         confirmedAssignments: [
-          { ...confirmedAssignment, driverName: 'あ'.repeat(129) },
+          { ...confirmedAssignment, driverName: 'あ'.repeat(201) },
         ],
         history: [],
       },

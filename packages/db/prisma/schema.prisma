@@ -889,14 +889,13 @@ model RidePlan {
 }
 
 model RideOffer {
-  id                String          @id @default(uuid(7)) @db.Uuid
-  tenantId          String          @map("tenant_id") @db.Uuid
-  planId            String          @map("plan_id") @db.Uuid
-  driverUserId      String          @map("driver_user_id") @db.VarChar(128)
-  driverDisplayName String?         @map("driver_display_name") @db.VarChar(200)
-  capacity          Int
-  status            RideOfferStatus @default(open)
-  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  id           String          @id @default(uuid(7)) @db.Uuid
+  tenantId     String          @map("tenant_id") @db.Uuid
+  planId       String          @map("plan_id") @db.Uuid
+  driverUserId String          @map("driver_user_id") @db.VarChar(128)
+  capacity     Int
+  status       RideOfferStatus @default(open)
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   plan          RidePlan        @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   assignments   RideAssignment[]

@@ -63,6 +63,15 @@ const planRow = {
   created_at: '2026-08-22T00:00:00.000Z',
 };
 
+const offerRow = {
+  id: '00000000-0000-7000-8000-000000000012',
+  plan_id: planRow.id,
+  driver_user_id: actor.userId,
+  capacity: 4,
+  status: 'open' as const,
+  created_at: '2026-08-22T00:00:00.000Z',
+};
+
 describe('送迎Prisma repository', () => {
   it('tenant条件・パラメータ化SQL・監査を同じtransactionで実行する', async () => {
     const fake = createFakePrisma([
@@ -101,5 +110,30 @@ describe('送迎Prisma repository', () => {
       }),
     ).rejects.toBeInstanceOf(RideRepositoryForbiddenError);
     expect(fake.audits).toHaveLength(0);
+  });
+
+  it('運転者表示名は所属プロフィールを更新し、送迎テーブルへ複製しない', async () => {
+    const fake = createFakePrisma([[planRow], [], [offerRow]]);
+    const offer = await createRideRepository(fake.client).createOffer(
+      actor,
+      planRow.id,
+      { capacity: 4, driverDisplayName: ' 山田 太郎 ' },
+    );
+
+    expect(offer.capacity).toBe(4);
+    expect(
+      fake.queries.some((query) =>
+        query.sql.includes('app_set_ride_display_name'),
+      ),
+    ).toBe(true);
+    const insert = fake.queries.find((query) =>
+      query.sql.includes('INSERT INTO ride_offers'),
+    );
+    expect(insert?.sql).not.toContain('driver_display_name');
+    expect(insert?.values).toContain(4);
+    expect(fake.audits[0]).toMatchObject({
+      action: 'ride.offer.create',
+      actorUserId: actor.userId,
+    });
   });
 });

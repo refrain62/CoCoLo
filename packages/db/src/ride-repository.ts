@@ -669,7 +669,6 @@ export function createRideRepository(client: PrismaClient): RideRepository {
 
     async createOffer(actor, planId, input) {
       const driverDisplayName = input.driverDisplayName?.trim();
-      let offerDisplayName: string | null = null;
       if (
         !Number.isInteger(input.capacity) ||
         input.capacity < 1 ||
@@ -691,34 +690,19 @@ export function createRideRepository(client: PrismaClient): RideRepository {
             '受付中でない送迎には車を登録できません。',
           );
         if (driverDisplayName !== undefined) {
-          const displayNameRows = await tx.$queryRaw<
-            Array<{ display_name: string }>
-          >`
+          await tx.$queryRaw`
             SELECT app_set_ride_display_name(
               ${actor.tenantId}::uuid,
               ${driverDisplayName}
-            ) AS display_name
+            )
           `;
-          offerDisplayName = displayNameRows[0]?.display_name ?? null;
-        } else {
-          const displayNameRows = await tx.$queryRaw<
-            Array<{ display_name: string | null }>
-          >`
-            SELECT display_name
-              FROM tenant_memberships
-             WHERE tenant_id = ${actor.tenantId}::uuid
-               AND user_id = ${actor.userId}
-               AND status = 'active'::membership_status
-          `;
-          offerDisplayName = displayNameRows[0]?.display_name ?? null;
         }
         const rows = await tx.$queryRaw<OfferRow[]>`
           INSERT INTO ride_offers
-            (id, tenant_id, plan_id, driver_user_id, driver_display_name,
-             capacity, status)
+            (id, tenant_id, plan_id, driver_user_id, capacity, status)
           VALUES
             (${uuidv7()}::uuid, ${actor.tenantId}::uuid, ${plan.id}::uuid,
-             ${actor.userId}, ${offerDisplayName}, ${input.capacity}, 'open')
+             ${actor.userId}, ${input.capacity}, 'open')
           RETURNING id, plan_id, driver_user_id, capacity, status, created_at
         `;
         const row = rows[0];

@@ -61,8 +61,8 @@ const rideConfirmedAssignmentResponseSchema = z
     requestId: uuid,
     offerId: uuid,
     passengerCount: z.number().int().min(1).max(8),
-    memberName: z.string().min(1).max(128),
-    driverName: z.string().min(1).max(128),
+    memberName: z.string().min(1).max(200),
+    driverName: z.string().min(1).max(200),
   })
   .strict();
 

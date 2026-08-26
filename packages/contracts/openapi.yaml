@@ -2634,12 +2634,12 @@
           "memberName": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 128
+            "maxLength": 200
           },
           "driverName": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 128
+            "maxLength": 200
           }
         }
       },
