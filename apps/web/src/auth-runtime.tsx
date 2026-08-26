@@ -26,7 +26,7 @@ function AuthenticatedLoading() {
   return (
     <AppShell>
       <section className="app-state-card" aria-live="polite" role="status">
-        管理画面を準備しています。
+        CoCoLoを準備しています。
       </section>
     </AppShell>
   );
@@ -67,8 +67,8 @@ function AuthBoundary({ publicRoot }: { publicRoot?: ReactNode }) {
         api={invitationApi}
         onAccepted={(tenantId) => {
           setStoredSelectedTeamId(tenantId);
-          window.history.replaceState(null, document.title, '/admin');
-          setPathname('/admin');
+          window.history.replaceState(null, document.title, '/dashboard');
+          setPathname('/dashboard');
         }}
         token={invitationToken}
       />

@@ -9,13 +9,15 @@ import {
 
 describe('管理画面ルート', () => {
   it('公開入口から認証済み利用者を管理画面へ正規化する', () => {
-    expect(canonicalAdminPath('/')).toBe('/admin');
-    expect(canonicalAdminPath('/login')).toBe('/admin');
+    expect(canonicalAdminPath('/')).toBe('/team');
+    expect(canonicalAdminPath('/login')).toBe('/team');
+    expect(canonicalAdminPath('/admin/members')).toBe('/team/members');
   });
 
   it('パスを専用画面へ解決する', () => {
     expect(resolveAdminRoute('/admin')).toBe('dashboard');
-    expect(resolveAdminRoute('/admin/members')).toBe('members');
+    expect(resolveAdminRoute('/team')).toBe('dashboard');
+    expect(resolveAdminRoute('/team/members')).toBe('members');
     expect(resolveAdminRoute('/admin/board-contacts')).toBe('board-contacts');
     expect(resolveAdminRoute('/admin/features')).toBe('features');
     expect(

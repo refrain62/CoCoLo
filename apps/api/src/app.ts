@@ -78,6 +78,7 @@ import {
   memberListResponseSchemaForRole,
   memberMutationResponseSchemaForRole,
   promotionResponseSchema,
+  systemContextResponseSchema,
 } from '@cocolo/contracts/runtime-response';
 import {
   uploadCleanupResponseSchema,
@@ -224,6 +225,9 @@ export type ApiEnv = {
     auth: {
       userId: string;
       membership: MembershipContext;
+    };
+    systemAuth: {
+      userId: string;
     };
   };
 };
@@ -667,6 +671,12 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     },
     {
       method: 'GET',
+      path: /^\/api\/v1\/system\/context$/,
+      status: 200,
+      schema: systemContextResponseSchema,
+    },
+    {
+      method: 'GET',
       path: /^\/api\/v1\/ride-plans$/,
       status: 200,
       schema: ridePlanListResponseSchema,
@@ -909,10 +919,54 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     await next();
   };
 
+  // system adminはtenant membershipを持たない運用も許可するが、署名済みapp_metadataのclaimだけで判定する。
+  const authenticateSystemAdmin: MiddlewareHandler<ApiEnv> = async (
+    c,
+    next,
+  ) => {
+    const token = extractBearerToken(c.req.header('authorization') ?? null);
+    if (!options.verifyToken)
+      return errorResponse(
+        c,
+        503,
+        'AUTH_NOT_CONFIGURED',
+        '認証が設定されていません。',
+      );
+    if (!token)
+      return errorResponse(c, 401, 'UNAUTHENTICATED', '認証が必要です。');
+    try {
+      const claims = await options.verifyToken(token);
+      if (claims.expiresAt <= Math.floor(Date.now() / 1000))
+        return errorResponse(
+          c,
+          401,
+          'UNAUTHENTICATED',
+          '認証の有効期限が切れています。',
+        );
+      if (!claims.systemAdmin)
+        return errorResponse(
+          c,
+          403,
+          'FORBIDDEN',
+          'システム管理者の権限がありません。',
+        );
+      c.set('systemAuth', { userId: claims.userId });
+    } catch {
+      return errorResponse(
+        c,
+        401,
+        'UNAUTHENTICATED',
+        '認証情報を確認できません。',
+      );
+    }
+    await next();
+  };
+
   app.use('/api/v1/members/*', authenticate);
   app.use('/api/v1/notifications/line', authenticate);
   app.use('/api/v1/notifications/line/:notificationId/retry', authenticate);
   app.use('/api/v1/auth/context', authenticate);
+  app.use('/api/v1/system/context', authenticateSystemAdmin);
   if (options.centralFeatures?.authInvitations) {
     app.use('/api/v1/auth/invitations', authenticate);
     app.use('/api/v1/auth/invitations/:invitationId/revoke', authenticate);
@@ -1056,6 +1110,22 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
     authenticatedRateLimit,
   );
   app.use('/api/v1/auth/context', authenticatedRateLimit);
+  app.use(
+    '/api/v1/system/context',
+    createRateLimitMiddleware({
+      scope: 'authenticated',
+      ...rateLimitPolicies.authenticated,
+      store: rateLimitStore,
+      now: rateLimitOptions.now,
+      namespace: rateLimitNamespace,
+      timeoutMs: rateLimitOptions.timeoutMs,
+      keyResolver: (c) => ({
+        kind: 'user',
+        tenantId: 'system-admin',
+        userId: c.get('systemAuth').userId,
+      }),
+    }),
+  );
   if (options.centralFeatures?.authInvitations) {
     app.use('/api/v1/auth/invitations', authenticatedRateLimit);
     app.use(
@@ -1130,6 +1200,11 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
         role: auth.membership.role,
       },
     });
+  });
+
+  app.get('/api/v1/system/context', (c) => {
+    c.get('systemAuth');
+    return c.json({ data: { systemAdmin: true } });
   });
 
   // tenantIdはリクエストから受け取らず、authenticateが設定した所属をrepositoryへ渡す。

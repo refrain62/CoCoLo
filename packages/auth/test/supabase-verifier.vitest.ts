@@ -37,6 +37,30 @@ describe('Supabase JWT verifier', () => {
     expect(claims.userId).toBe('user-a');
     expect(claims.audience).toBe('authenticated');
     expect(claims.authProviders).toEqual(['google']);
+    expect(claims.systemAdmin).toBe(false);
+  });
+
+  it('署名済みapp_metadataのsystem_adminだけをsystem admin claimとして返す', async () => {
+    const { privateKey, publicKey } = await generateKeyPair('RS256');
+    const jwk = await exportJWK(publicKey);
+    const kid = 'system-admin-key';
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ keys: [{ ...jwk, kid, alg: 'RS256' }] }), {
+        headers: { 'content-type': 'application/json' },
+      });
+    const token = await new SignJWT({
+      app_metadata: { system_admin: true },
+    })
+      .setProtectedHeader({ alg: 'RS256', kid })
+      .setIssuer(issuer)
+      .setAudience('authenticated')
+      .setSubject('system-user')
+      .setExpirationTime('5m')
+      .sign(privateKey);
+
+    await expect(
+      createSupabaseTokenVerifier({ jwksUrl, issuer })(token),
+    ).resolves.toMatchObject({ userId: 'system-user', systemAdmin: true });
   });
 
   it('Supabase Authのidentity_dataからprovider subjectを取得する', async () => {

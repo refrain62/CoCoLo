@@ -5,6 +5,8 @@ export type AuthClaims = {
   issuer: string;
   audience: string;
   expiresAt: number;
+  /** Supabaseの署名済みapp_metadataから読み取ったシステム管理者権限。 */
+  systemAdmin?: boolean;
   authProviders?: AuthProvider[];
   authProviderSubjects?: Partial<Record<AuthProvider, string>>;
 };
@@ -34,6 +36,12 @@ function readAuthProviders(payload: Record<string, unknown>) {
   return [...new Set(values)].filter(
     (value): value is AuthProvider => value === 'google' || value === 'line',
   );
+}
+
+function readSystemAdmin(payload: Record<string, unknown>) {
+  const metadata = payload.app_metadata;
+  if (!metadata || typeof metadata !== 'object') return false;
+  return (metadata as { system_admin?: unknown }).system_admin === true;
 }
 
 function readProviderSubjects(payload: unknown) {
@@ -118,6 +126,7 @@ export function createSupabaseTokenVerifier({
       issuer,
       audience,
       expiresAt: payload.exp,
+      systemAdmin: readSystemAdmin(payload as Record<string, unknown>),
       authProviders,
       authProviderSubjects,
     };
