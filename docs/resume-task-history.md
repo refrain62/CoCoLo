@@ -25,6 +25,7 @@
 | LP-001 / FS-UI-004 | 未認証ルートの公開LP、課題と機能の訴求、提供状態、ログイン導線、認証済み画面との分離、専用ヒーロー画像 | PR #194を`develop`へ統合。`pnpm test`、`pnpm test:unit`、`pnpm build`、lint、typecheck、390pxから1440pxのブラウザ確認、キーボード操作、コントラスト、品質ゲート成功。敵対的レビューのCriticalとHighは0件 |
 | LP-002 | 公開LPの初回バンドルから認証済み管理機能を分離し、低速端末のLCP・INP計測を再現可能にした | 実装PR #208を`develop`へ統合。`pnpm measure:lp`を10回実行し、390x844、CPU 4倍、150ms遅延、下り1.6Mbps、上り750kbps、cache無効、Chromium headlessでLCP p75 2148ms / INP p75 56msを記録。`pnpm test`、`pnpm test:unit`、`pnpm build`、typecheck、Biome、production bundle、trust-root、品質ゲート成功。性能基準の運用値とstaging再計測はOPSの外部条件として継続 |
 | LP-003 / FS-UI-004 | LINE Design Systemを参照した公開LPと共通UIの再設計、LINE通知とWeb正本の役割分担、アクセシビリティ確認 | 実装PR #212を`develop`へ統合（merge commit `6e3e9606f9915fae9d11acb148d8919885d1d728`）。`pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm lint`、390px / 430px / 768px / 1280pxのブラウザ確認、敵対的レビューを完了。GitHub quality runは記録時点でqueuedのため、成功とは扱わない |
+| LOGIN-LOGO-001 / FS-UI-004 | ログイン画面の旧アイコンを公開LP・認証済み画面と共通のCoCoLoロゴへ統一 | 実装PR #224を`develop`へ統合（merge commit `db8e959ac6afbe7c3305d6e23cb3325ef1a64f32`）。対象Vitest 7件、`pnpm test`、`pnpm build`、`pnpm lint`、`git diff --check`、品質ゲートを成功。実ブラウザのログイン画面受入は認証providerを含むstaging条件として継続 |
 | ADMIN-TEAM-001 | `/admin`のシステム管理、`/team`の選択中チーム管理、`/dashboard`の利用者向け予定・締め切り一覧と14日カレンダー | 実装PR #211・#214を`develop`へ統合。docs-onlyの完了記録PRで本履歴を更新。ローカル品質検証は成功し、staging実DB/RLSと実ブラウザ受入は`ADMIN-TEAM-001-ACCEPTANCE`として継続 |
 | BILLING-001 | 有償・無償feature、チーム単位のplan・flag、effective entitlement、監査境界 | PR #172を`develop`へ統合。CI、`pnpm test`、`pnpm build`、migration・trust検証成功。課金provider接続は外部条件として継続 |
 | BRD-001 / feature契約 | 役員・連絡先の`board-contacts`契約、API fail-closed、Webメニュー制御、無料feature migration | PR #185を`develop`へ統合。`pnpm test` 200件、`pnpm build`、unit、Biome、workspace boundary、migration、trust、品質ゲート成功。個人情報境界、Web閲覧、実DB/RLS受入は継続 |
@@ -67,6 +68,16 @@
 - 検証: `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm lint`、`git diff --check`を成功させた。実ブラウザで390px、430px、768px、1280pxを確認し、LINEアンカー、モバイルメニュー、FAQ開閉、実行時エラーなしを確認した。
 - 統合: 実装PR #212を2026-08-26に`develop`へ統合した。GitHub quality runは履歴作成時点でqueuedであり、CI成功済みとは記録していない。
 - 残課題: 実LINE接続、staging通知到達、実環境E2EはNOT-001 / NOT-002およびOPS-001〜007の外部条件として再開台帳に残す。
+
+## LOGIN-LOGO-001 実施記録
+
+- 対象: ログイン画面だけに残っていた旧来の「C」アイコンを、公開LPと認証済み画面で利用する共通ロゴへ置き換えた。
+- 実装: `CoCoLoLogoMark`とCoCoLo表記をログイン画面へ追加し、共通ロゴの3色目を`--cocolo-brand`へ束縛してLINE Greenへ統一した。
+- 境界: 表示とCSSだけを変更し、認証処理、OAuth、API、DB、tenant認可、個人情報、外部LINE連携には変更を加えていない。
+- 敵対的レビュー: 旧アイコンの残存、LPと認証画面のブランド表示差分、ロゴ装飾の読み上げ、テスト不足を確認し、Critical / Highは0件とした。
+- 検証: 対象Vitest 7件、`pnpm test`、`pnpm build`、`pnpm lint`、`git diff --check`、GitHub Actions品質ゲートを成功させた。
+- 統合: 実装PR #224を2026-08-27に`develop`へ統合した。本記録は実装PRと分離したdocs-only PRで追加した。
+- 残課題: 実ブラウザのログイン画面幅別受入は、認証provider設定を含むstaging受入時に実施する。
 
 ## ADMIN-TEAM-001 実施記録
 
