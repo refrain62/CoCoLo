@@ -239,7 +239,7 @@ a:hover {
 .app-brand-mark > span:nth-child(3) {
   width: 0.95rem;
   height: 1.15rem;
-  background: #70b49a;
+  background: var(--cocolo-brand, #06c755);
   transform: none;
   left: 0.62rem;
   top: 0.78rem;
@@ -590,17 +590,15 @@ a:hover {
   margin: 0;
 }
 
-.auth-card-icon {
-  display: grid;
-  width: 3rem;
-  height: 3rem;
-  place-items: center;
+.auth-card-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
   margin-bottom: 1.2rem;
-  border-radius: 1rem;
-  background: linear-gradient(135deg, var(--cocolo-brand), var(--cocolo-coral));
-  color: var(--cocolo-surface);
+  color: var(--cocolo-ink);
   font-size: 1.25rem;
-  font-weight: 900;
+  font-weight: 800;
+  letter-spacing: -0.03em;
 }
 
 .auth-eyebrow {
