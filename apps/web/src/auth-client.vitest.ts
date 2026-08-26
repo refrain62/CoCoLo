@@ -2,9 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   AuthApiError,
   createAuthClient,
+  hashOAuthBinding,
   parseOAuthCallback,
 } from './auth-client.js';
-import { createAuthSessionManager } from './auth-context.js';
+import {
+  containsOAuthCredential,
+  createAuthSessionManager,
+  validateOAuthCallback,
+} from './auth-context.js';
 
 function response(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -14,7 +19,7 @@ function response(body: unknown, status = 200) {
 }
 
 describe('Supabase Auth client', () => {
-  it('LINE/Google OAuthのauthorize URLはproviderとredirectだけを渡す', () => {
+  it('LINE/Google OAuthのauthorize URLはstate・nonce・PKCEを渡す', () => {
     const client = createAuthClient({
       baseUrl: 'https://example.supabase.co',
       anonKey: 'public-anon-key',
@@ -23,23 +28,164 @@ describe('Supabase Auth client', () => {
     expect(
       client.getOAuthAuthorizeUrl?.(
         'line',
-        'https://app.example.com/invite?token=opaque-token',
+        'https://app.example.com/auth/callback',
+        {
+          state: 'state-value',
+          nonce: 'nonce-value',
+          codeChallenge: 'challenge-value',
+          codeChallengeMethod: 'S256',
+        },
       ),
     ).toBe(
-      'https://example.supabase.co/auth/v1/authorize?provider=line&redirect_to=https%3A%2F%2Fapp.example.com%2Finvite%3Ftoken%3Dopaque-token',
+      'https://example.supabase.co/auth/v1/authorize?provider=line&redirect_to=https%3A%2F%2Fapp.example.com%2Fauth%2Fcallback&state=state-value&nonce=nonce-value&code_challenge=challenge-value&code_challenge_method=S256',
     );
   });
 
-  it('OAuth callbackのhashからsessionを作り、refresh tokenを保持する', () => {
+  it('OAuth providerのruntime値をallowlistへ限定する', () => {
+    const client = createAuthClient({
+      baseUrl: 'https://example.supabase.co',
+      anonKey: 'public-anon-key',
+    });
+    expect(() =>
+      client.getOAuthAuthorizeUrl?.(
+        'twitter' as 'google',
+        'https://app.example.com/auth/callback',
+        {
+          state: 'state-value',
+          nonce: 'nonce-value',
+          codeChallenge: 'challenge-value',
+          codeChallengeMethod: 'S256',
+        },
+      ),
+    ).toThrow('OAuth providerが不正です。');
+  });
+
+  it('OAuth implicit callbackのhash tokenは受け付けない', () => {
     expect(
       parseOAuthCallback(
         '#access_token=oauth-access&refresh_token=oauth-refresh&expires_in=3600',
       ),
-    ).toMatchObject({
-      accessToken: 'oauth-access',
-      refreshToken: 'oauth-refresh',
-    });
+    ).toBeNull();
     expect(parseOAuthCallback('#error=access_denied')).toBeNull();
+  });
+
+  it('OAuth credentialはqueryとhashから検出でき、招待tokenだけは対象外にする', () => {
+    expect(containsOAuthCredential('', '#access_token=secret')).toBe(true);
+    expect(containsOAuthCredential('?refresh_token=secret', '')).toBe(true);
+    expect(containsOAuthCredential('', '#token=opaque-invitation')).toBe(false);
+  });
+
+  it('招待tokenのbinding hashは同じ値だけ一致する', async () => {
+    const hash = await hashOAuthBinding('invitation-token');
+    await expect(hashOAuthBinding('invitation-token')).resolves.toBe(hash);
+    await expect(hashOAuthBinding('another-token')).resolves.not.toBe(hash);
+  });
+
+  it('PKCE code exchangeはcodeとverifierをtoken endpointへ送る', async () => {
+    let request: { url: string; init: RequestInit } | undefined;
+    const client = createAuthClient({
+      baseUrl: 'https://example.supabase.co',
+      anonKey: 'public-anon-key',
+      fetcher: async (input, init) => {
+        request = { url: String(input), init: init ?? {} };
+        return response({
+          access_token: 'access-token',
+          refresh_token: 'refresh-token',
+          expires_in: 3600,
+        });
+      },
+    });
+
+    await expect(
+      client.exchangeOAuthCode?.(
+        'oauth-code',
+        'pkce-verifier',
+        'https://app.example.com/callback',
+      ),
+    ).resolves.toMatchObject({ accessToken: 'access-token' });
+    expect(request?.url).toBe(
+      'https://example.supabase.co/auth/v1/token?grant_type=pkce',
+    );
+    expect(JSON.parse(String(request?.init.body))).toEqual({
+      auth_code: 'oauth-code',
+      code_verifier: 'pkce-verifier',
+      redirect_uri: 'https://app.example.com/callback',
+    });
+  });
+
+  it('OAuth callbackはstate・nonce・有効期限を検証する', () => {
+    const transaction = {
+      provider: 'google' as const,
+      redirectTo: 'https://app.example.com/callback',
+      state: 'expected-state-1234',
+      nonce: 'expected-nonce-1234',
+      codeVerifier: 'verifier-1234567890',
+      codeChallenge: 'challenge-1234567890',
+      codeChallengeMethod: 'S256' as const,
+      returnTo: '/invite/invitation-id',
+      invitationTokenHash: null,
+      createdAt: 1_000,
+    };
+
+    expect(
+      validateOAuthCallback(
+        transaction,
+        new URLSearchParams({
+          code: 'oauth-code',
+          state: 'expected-state-1234',
+          nonce: 'expected-nonce-1234',
+        }),
+        1_001,
+      ),
+    ).toBe(true);
+    expect(
+      validateOAuthCallback(
+        transaction,
+        new URLSearchParams({
+          code: 'oauth-code',
+          state: 'expected-state-1234',
+        }),
+        1_001,
+      ),
+    ).toBe(true);
+    expect(
+      validateOAuthCallback(
+        transaction,
+        new URLSearchParams({ code: 'oauth-code', state: 'wrong-state' }),
+        1_001,
+      ),
+    ).toBe(false);
+    expect(
+      validateOAuthCallback(
+        transaction,
+        new URLSearchParams({
+          code: 'oauth-code',
+          state: 'expected-state-1234',
+          nonce: 'wrong-nonce',
+        }),
+        1_001,
+      ),
+    ).toBe(false);
+    expect(
+      validateOAuthCallback(
+        transaction,
+        new URLSearchParams({
+          code: 'oauth-code',
+          state: 'expected-state-1234',
+        }),
+        1_000 + 10 * 60 * 1000 + 1,
+      ),
+    ).toBe(false);
+    expect(
+      validateOAuthCallback(
+        transaction,
+        new URLSearchParams({
+          code: 'oauth-code',
+          state: 'expected-state-1234',
+        }),
+        999,
+      ),
+    ).toBe(false);
   });
 
   it('password grantの応答からセッションを作る', async () => {

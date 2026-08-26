@@ -78,6 +78,7 @@ function DeepLinkState({
 export function AuthenticatedApp() {
   // 認証状態が確定するまでLoginPageを表示し、部員APIへ到達できる画面をsession保有者に限定する。
   const { authenticatedFetch, isLoggingOut, logout, session } = useAuth();
+  const [pathname, setPathname] = useState(() => window.location.pathname);
   const [selectedTeam, setSelectedTeam] = useState<TeamOption | null>(null);
   const [isResolvingTeam, setIsResolvingTeam] = useState(true);
   const [teamError, setTeamError] = useState<string | null>(null);
@@ -89,6 +90,16 @@ export function AuthenticatedApp() {
   const [invitationToken, setInvitationToken] = useState<string | null>(() =>
     readInvitationToken(),
   );
+  useEffect(() => {
+    const handlePopState = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+  useEffect(() => {
+    setInvitationToken(
+      isInvitationPath(pathname) ? readInvitationToken(pathname) : null,
+    );
+  }, [pathname]);
   const teamSelectionApi = useMemo(
     () =>
       createTeamSelectionApi({
@@ -115,7 +126,7 @@ export function AuthenticatedApp() {
         const storedId = getStoredSelectedTeamId();
         const storedTeam = teams.find((team) => team.tenantId === storedId);
         const mustChooseTeam =
-          isNotificationDeepLink(window.location.pathname) && teams.length > 1;
+          isNotificationDeepLink(pathname) && teams.length > 1;
         const nextTeam = mustChooseTeam
           ? null
           : (storedTeam ?? (teams.length === 1 ? teams[0] : null));
@@ -131,7 +142,7 @@ export function AuthenticatedApp() {
     return () => {
       active = false;
     };
-  }, [session, teamSelectionApi]);
+  }, [pathname, session, teamSelectionApi]);
   const selectedTeamId = selectedTeam?.tenantId ?? null;
   const authInvitationApi = useMemo(
     () =>
@@ -254,7 +265,7 @@ export function AuthenticatedApp() {
       active = false;
     };
   }, [authContextApi, memberApi, selectedTeam, session]);
-  if (isInvitationPath(window.location.pathname))
+  if (isInvitationPath(pathname))
     return (
       <InvitationAcceptPage
         api={authInvitationApi}
@@ -343,9 +354,7 @@ export function AuthenticatedApp() {
       contract.features.some(
         (feature) => feature.key === key && feature.enabled,
       );
-    const notificationTarget = parseNotificationDeepLink(
-      window.location.pathname,
-    );
+    const notificationTarget = parseNotificationDeepLink(pathname);
     const intro = {
       members: [
         'Members',

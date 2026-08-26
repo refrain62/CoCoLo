@@ -194,6 +194,7 @@ export function createAuthInvitationApp(options: {
         '入力値が不正です。',
         parsed.error.flatten(),
       );
+    // providerはクライアント入力だが、subjectは署名済みJWTに紐づくSupabase identity lookupからだけ解決する。
     const providerSubject = c.get('authProviderSubjects')[parsed.data.provider];
     if (!providerSubject)
       return errorResponse(
