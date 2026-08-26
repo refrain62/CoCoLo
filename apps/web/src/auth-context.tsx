@@ -1,4 +1,4 @@
-import { AppShell } from '@cocolo/ui';
+import { AppShell, CoCoLoLogoMark } from '@cocolo/ui';
 import {
   createContext,
   type FormEvent,
@@ -694,8 +694,9 @@ export function LoginPage() {
   return (
     <AppShell className="auth-shell" nav={null}>
       <section className="auth-card" aria-labelledby="auth-heading">
-        <div className="auth-card-icon" aria-hidden="true">
-          C
+        <div className="auth-card-brand" aria-hidden="true">
+          <CoCoLoLogoMark />
+          <span>CoCoLo</span>
         </div>
         <p className="auth-eyebrow">TEAM OPERATIONS</p>
         <h1 id="auth-heading">CoCoLoへログイン</h1>
