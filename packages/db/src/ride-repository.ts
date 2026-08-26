@@ -3,6 +3,7 @@ import {
   calculateRideMetrics,
   matchRideRequests,
   type RideAssignment,
+  type RideConfirmedAssignment,
   type RideHistoryEntry,
   type RideMetrics,
   type RideOffer,
@@ -36,7 +37,10 @@ export type RidePlanUpdateInput = {
   destinationMapsUrl?: string | null;
 };
 
-export type RideOfferCreateInput = { capacity: number };
+export type RideOfferCreateInput = {
+  capacity: number;
+  driverDisplayName?: string;
+};
 export type RideRequestCreateInput = {
   memberId: string;
   passengerCount: number;
@@ -175,6 +179,14 @@ type AssignmentRow = {
   offer_id: string;
   passenger_count: number;
   created_at: SqlDate;
+};
+type ConfirmedAssignmentRow = {
+  id: string;
+  request_id: string;
+  offer_id: string;
+  passenger_count: number;
+  member_name: string;
+  driver_name: string;
 };
 
 const managerRoles = new Set<RideRole>(['owner', 'admin', 'staff']);
@@ -418,6 +430,19 @@ async function readSnapshot(
      ORDER BY a.created_at ASC, a.id ASC
      LIMIT ${MAX_RIDE_COLLECTION_ITEMS + 1}
   `;
+  const confirmedAssignments =
+    plan.status === 'finalized'
+      ? await client.$queryRaw<ConfirmedAssignmentRow[]>`
+          SELECT id, request_id, offer_id, passenger_count,
+                 member_name, driver_name
+            FROM app_ride_confirmed_assignments(
+              ${actor.tenantId}::uuid,
+              ${plan.id}::uuid
+            )
+           ORDER BY id ASC
+           LIMIT ${MAX_RIDE_COLLECTION_ITEMS + 1}
+        `
+      : [];
   assertRideCollectionSize(offers.length, MAX_RIDE_COLLECTION_ITEMS, '車');
   assertRideCollectionSize(
     requests.length,
@@ -428,6 +453,11 @@ async function readSnapshot(
     assignments.length,
     MAX_RIDE_COLLECTION_ITEMS,
     '割当',
+  );
+  assertRideCollectionSize(
+    confirmedAssignments.length,
+    MAX_RIDE_COLLECTION_ITEMS,
+    '確定配車',
   );
   const history = await client.auditLog.findMany({
     where: {
@@ -453,6 +483,16 @@ async function readSnapshot(
     offers: offers.map(toOffer),
     requests: requests.map(toRequest),
     assignments: assignments.map(toAssignment),
+    confirmedAssignments: confirmedAssignments.map(
+      (row): RideConfirmedAssignment => ({
+        id: row.id,
+        requestId: row.request_id,
+        offerId: row.offer_id,
+        passengerCount: row.passenger_count,
+        memberName: row.member_name,
+        driverName: row.driver_name,
+      }),
+    ),
     history: history.map(toHistory),
   };
 }
@@ -628,6 +668,7 @@ export function createRideRepository(client: PrismaClient): RideRepository {
     },
 
     async createOffer(actor, planId, input) {
+      const driverDisplayName = input.driverDisplayName?.trim();
       if (
         !Number.isInteger(input.capacity) ||
         input.capacity < 1 ||
@@ -636,6 +677,11 @@ export function createRideRepository(client: PrismaClient): RideRepository {
         throw new RideRepositoryConflictError(
           '乗車可能数は1〜20人で指定してください。',
         );
+      if (
+        input.driverDisplayName !== undefined &&
+        (!driverDisplayName || driverDisplayName.length > 200)
+      )
+        throw new RideRepositoryConflictError('運転者の表示名が不正です。');
       return runInRideTransaction(client, actor, async (tx) => {
         await lockPlan(tx, actor, planId);
         const plan = await requirePlan(tx, actor, planId);
@@ -643,11 +689,20 @@ export function createRideRepository(client: PrismaClient): RideRepository {
           throw new RideRepositoryConflictError(
             '受付中でない送迎には車を登録できません。',
           );
+        if (driverDisplayName !== undefined) {
+          await tx.$queryRaw`
+            SELECT app_set_ride_display_name(
+              ${actor.tenantId}::uuid,
+              ${driverDisplayName}
+            )
+          `;
+        }
         const rows = await tx.$queryRaw<OfferRow[]>`
           INSERT INTO ride_offers
             (id, tenant_id, plan_id, driver_user_id, capacity, status)
           VALUES
-            (${uuidv7()}::uuid, ${actor.tenantId}::uuid, ${plan.id}::uuid, ${actor.userId}, ${input.capacity}, 'open')
+            (${uuidv7()}::uuid, ${actor.tenantId}::uuid, ${plan.id}::uuid,
+             ${actor.userId}, ${input.capacity}, 'open')
           RETURNING id, plan_id, driver_user_id, capacity, status, created_at
         `;
         const row = rows[0];

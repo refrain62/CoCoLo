@@ -14,7 +14,13 @@ test('送迎入力は容量、日時、Google Maps URLの基本形式を検証�
     destinationMapsUrl: 'https://www.google.com/maps/search/?api=1&query=Tokyo',
   });
   assert.equal(plan.title, '練習試合');
-  assert.equal(rideOfferCreateSchema.parse({ capacity: 4 }).capacity, 4);
+  assert.deepEqual(
+    rideOfferCreateSchema.parse({
+      capacity: 4,
+      driverDisplayName: ' 山田 太郎 ',
+    }),
+    { capacity: 4, driverDisplayName: '山田 太郎' },
+  );
   assert.deepEqual(
     rideRequestCreateSchema.parse({
       memberId: '00000000-0000-7000-8000-000000000001',
@@ -28,6 +34,9 @@ test('送迎入力は容量、日時、Google Maps URLの基本形式を検証�
 
 test('送迎入力は定員超過、未知フィールド、非URLを拒否する', () => {
   assert.throws(() => rideOfferCreateSchema.parse({ capacity: 21 }));
+  assert.throws(() =>
+    rideOfferCreateSchema.parse({ capacity: 4, driverDisplayName: ' ' }),
+  );
   assert.throws(() =>
     ridePlanCreateSchema.parse({
       title: '練習試合',

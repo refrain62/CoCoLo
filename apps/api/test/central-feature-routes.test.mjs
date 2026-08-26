@@ -206,6 +206,7 @@ function createTestApp({
             offers: [],
             requests: [],
             assignments: [],
+            confirmedAssignments: [],
             history: [],
           }),
           autoMatch: async () => ({ assignments: [], unassignedRequestIds: [] }),

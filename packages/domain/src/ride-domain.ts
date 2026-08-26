@@ -45,6 +45,15 @@ export type RideAssignment = {
   createdAt: string;
 };
 
+export type RideConfirmedAssignment = {
+  id: string;
+  requestId: string;
+  offerId: string;
+  passengerCount: number;
+  memberName: string;
+  driverName: string;
+};
+
 export type RideHistoryEntry = {
   id: string;
   action:
@@ -65,6 +74,7 @@ export type RideSnapshot = {
   offers: RideOffer[];
   requests: RideRequest[];
   assignments: RideAssignment[];
+  confirmedAssignments?: RideConfirmedAssignment[];
   history: RideHistoryEntry[];
 };
 

@@ -1395,6 +1395,7 @@ export const openapiDocument = {
         additionalProperties: false,
         properties: {
           capacity: { type: 'integer', minimum: 1, maximum: 20 },
+          driverDisplayName: { type: 'string', minLength: 1, maxLength: 200 },
         },
       },
       RideOfferResponseEnvelope: {
@@ -1642,6 +1643,28 @@ export const openapiDocument = {
           passengerCount: { type: 'integer', minimum: 1, maximum: 8 },
         },
       },
+      RideConfirmedAssignment: {
+        type: 'object',
+        description:
+          '確定公開後に認可済みの利用者へ表示する安全な配車投影。未確定時は配列自体が空になる。',
+        required: [
+          'id',
+          'requestId',
+          'offerId',
+          'passengerCount',
+          'memberName',
+          'driverName',
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          requestId: { type: 'string', format: 'uuid' },
+          offerId: { type: 'string', format: 'uuid' },
+          passengerCount: { type: 'integer', minimum: 1, maximum: 8 },
+          memberName: { type: 'string', minLength: 1, maxLength: 200 },
+          driverName: { type: 'string', minLength: 1, maxLength: 200 },
+        },
+      },
       RideSnapshotResponseEnvelope: {
         type: 'object',
         required: ['data'],
@@ -1649,7 +1672,14 @@ export const openapiDocument = {
         properties: {
           data: {
             type: 'object',
-            required: ['plan', 'offers', 'requests', 'assignments', 'history'],
+            required: [
+              'plan',
+              'offers',
+              'requests',
+              'assignments',
+              'confirmedAssignments',
+              'history',
+            ],
             additionalProperties: false,
             properties: {
               plan: {
@@ -1669,6 +1699,15 @@ export const openapiDocument = {
                 type: 'array',
                 maxItems: 100,
                 items: { $ref: '#/components/schemas/RideSnapshotAssignment' },
+              },
+              confirmedAssignments: {
+                type: 'array',
+                description:
+                  '確定公開後に認可済みの行だけを含む。未確定時は空配列。',
+                maxItems: 100,
+                items: {
+                  $ref: '#/components/schemas/RideConfirmedAssignment',
+                },
               },
               history: {
                 type: 'array',

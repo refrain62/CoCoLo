@@ -26,6 +26,15 @@ export type RidePlan = {
   createdAt: string;
 };
 
+export type RideConfirmedAssignment = {
+  id: string;
+  requestId: string;
+  offerId: string;
+  memberName: string;
+  driverName: string;
+  passengerCount: number;
+};
+
 export type RideSnapshot = {
   plan: RidePlan;
   offers: Array<{
@@ -47,6 +56,7 @@ export type RideSnapshot = {
     offerId: string;
     passengerCount: number;
   }>;
+  confirmedAssignments: RideConfirmedAssignment[];
   history: Array<{
     id: string;
     action:

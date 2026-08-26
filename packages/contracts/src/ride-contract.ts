@@ -47,6 +47,7 @@ export const ridePlanUpdateSchema = z
 export const rideOfferCreateSchema = z
   .object({
     capacity: z.number().int().min(1).max(20),
+    driverDisplayName: z.string().trim().min(1).max(200).optional(),
   })
   .strict();
 

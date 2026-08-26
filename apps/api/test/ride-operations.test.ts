@@ -132,6 +132,17 @@ function createFakeRepository(): TestRepository {
       offers: visibleOffers,
       requests: visibleRequests,
       assignments: visibleAssignments,
+      confirmedAssignments:
+        plan.status === 'finalized'
+          ? visibleAssignments.map((assignment) => ({
+              id: assignment.id,
+              requestId: assignment.requestId,
+              offerId: assignment.offerId,
+              passengerCount: assignment.passengerCount,
+              memberName: '対象部員',
+              driverName: '運転者',
+            }))
+          : [],
       history,
     };
   }
@@ -449,6 +460,60 @@ test('guardianは担当部員の希望だけ登録でき、snapshotに他人のu
   const body = await snapshotResponse.text();
   assert.equal(body.includes('requesterUserId'), false);
   assert.equal(body.includes('driverUserId'), false);
+});
+
+test('確定後のguardian snapshotは表示名付きの安全な配車投影を返す', async () => {
+  const repository = createFakeRepository();
+  const managerApp = createTestApp(manager, repository).app;
+  const planResponse = await request(managerApp, '/api/v1/ride-plans', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: '表示名確認',
+      departureAt: '2026-08-23T08:00:00+09:00',
+    }),
+  });
+  const plan = (await planResponse.json()).data;
+  await request(managerApp, `/api/v1/ride-plans/${plan.id}/offers`, {
+    method: 'POST',
+    body: JSON.stringify({ capacity: 1 }),
+  });
+  await request(managerApp, `/api/v1/ride-plans/${plan.id}/requests`, {
+    method: 'POST',
+    body: JSON.stringify({ memberId, passengerCount: 1 }),
+  });
+  await request(managerApp, `/api/v1/ride-plans/${plan.id}/match`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  await request(managerApp, `/api/v1/ride-plans/${plan.id}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'close' }),
+  });
+  const finalized = await request(
+    managerApp,
+    `/api/v1/ride-plans/${plan.id}/status`,
+    { method: 'POST', body: JSON.stringify({ action: 'finalize' }) },
+  );
+  assert.equal(finalized.status, 200);
+
+  const guardianResponse = await request(
+    createTestApp(guardian, repository).app,
+    `/api/v1/ride-plans/${plan.id}`,
+  );
+  assert.equal(guardianResponse.status, 200);
+  const body = (await guardianResponse.json()).data;
+  assert.deepEqual(body.confirmedAssignments, [
+    {
+      id: '00000000-0000-7000-8000-000000000004',
+      requestId: '00000000-0000-7000-8000-000000000003',
+      offerId: '00000000-0000-7000-8000-000000000002',
+      passengerCount: 1,
+      memberName: '対象部員',
+      driverName: '運転者',
+    },
+  ]);
+  assert.equal(JSON.stringify(body).includes('driverUserId'), false);
+  assert.equal(JSON.stringify(body).includes('requesterUserId'), false);
 });
 
 test('管理者は定員超過を未割当として確認し、メトリクスと監査件数を得られる', async () => {

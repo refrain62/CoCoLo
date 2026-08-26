@@ -56,6 +56,8 @@ HTTP入力から`tenantId`、`userId`、運転者識別子を受け取りませ�
 
 表示名を追加する場合は、権限付きのプロフィール投影をrepository側でjoinし、送迎テーブルや監査metadataへ氏名を複製しません。
 
+確定公開後の利用者向けsnapshotは、同一tenantのactive membershipに保存された`display_name`をDB関数内でjoinし、担当部員・希望者本人・運転者本人に許可された行だけへ`memberName`と`driverName`として投影します。運転者名を`ride_offers`や割当へ複製せず、未設定または所属停止の運転者を含む配車表は確定できません。
+
 ## マッチングと定員
 
 補助マッチングは、作成時刻、同時刻ならIDの昇順で車と希望を並べるfirst-fitです。

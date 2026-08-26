@@ -27,6 +27,7 @@ import {
 import {
   createRideOperationsApi,
   RideApiError,
+  type RideConfirmedAssignment,
   type RideDispatch,
   type RideMetrics,
   type RideOperationsApi,
@@ -57,19 +58,51 @@ function errorMessage(error: unknown) {
   return '通信に失敗しました。';
 }
 
-function SafeMapsLink({ url, label }: { url: string | null; label: string }) {
+export function SafeMapsLink({
+  url,
+  label,
+  missingMessage,
+}: {
+  url: string | null;
+  label: string;
+  missingMessage?: string;
+}) {
   let safeUrl: string | null = null;
   try {
     safeUrl = validateGoogleMapsUrl(url);
   } catch {
     safeUrl = null;
   }
-  if (!url) return <span>{label}: 未設定</span>;
+  if (!url) return <span>{missingMessage ?? `${label}: 未設定`}</span>;
   if (!safeUrl) return <span>{label}: URLを確認できません</span>;
   return (
     <a href={safeUrl} target="_blank" rel="noreferrer">
       {label}
     </a>
+  );
+}
+
+export function GuardianConfirmedAssignments({
+  status,
+  assignments,
+}: {
+  status: RidePlan['status'];
+  assignments: RideConfirmedAssignment[];
+}) {
+  if (status !== 'finalized' || assignments.length === 0) return null;
+
+  return (
+    <section aria-labelledby="ride-assignment-heading">
+      <h3 id="ride-assignment-heading">確定した配車</h3>
+      <ul>
+        {assignments.map((assignment) => (
+          <li key={assignment.id}>
+            {assignment.memberName}：運転者 {assignment.driverName}、
+            {assignment.passengerCount}人
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -161,6 +194,7 @@ export function RideOperationsPanel({
   const [metrics, setMetrics] = useState<RideMetrics | null>(null);
   const [dispatch, setDispatch] = useState<RideDispatch | null>(null);
   const [capacity, setCapacity] = useState('');
+  const [driverDisplayName, setDriverDisplayName] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState(() =>
     readSubjectMemberId(selectionStorageKey, members),
   );
@@ -289,7 +323,12 @@ export function RideOperationsPanel({
     setError(null);
     setNotice(null);
     try {
-      await api.createOffer(activePlanId, { capacity: parsedCapacity });
+      await api.createOffer(activePlanId, {
+        capacity: parsedCapacity,
+        ...(driverDisplayName.trim()
+          ? { driverDisplayName: driverDisplayName.trim() }
+          : {}),
+      });
       setCapacity('');
       if (await load()) setNotice('車の登録を受け付けました。');
     } catch (requestError) {
@@ -560,6 +599,7 @@ export function RideOperationsPanel({
             <SafeMapsLink
               url={snapshot.plan.pickupMapsUrl}
               label="集合場所を地図で開く"
+              missingMessage="集合場所の地図は未設定。運営に確認"
             />{' '}
             <SafeMapsLink
               url={snapshot.plan.destinationMapsUrl}
@@ -584,6 +624,16 @@ export function RideOperationsPanel({
                   type="number"
                   value={capacity}
                   onChange={(event) => setCapacity(event.target.value)}
+                />
+                <label htmlFor="ride-driver-display-name">
+                  配車表に表示する運転者名
+                </label>
+                <Input
+                  id="ride-driver-display-name"
+                  maxLength={200}
+                  value={driverDisplayName}
+                  onChange={(event) => setDriverDisplayName(event.target.value)}
+                  placeholder="例：山田 太郎"
                 />
                 <Button type="submit" disabled={isSaving}>
                   登録する
@@ -653,34 +703,11 @@ export function RideOperationsPanel({
               ))}
             </ul>
           )}
-          {!isManager &&
-          snapshot.plan.status === 'finalized' &&
-          snapshot.assignments.length > 0 ? (
-            <section aria-labelledby="ride-assignment-heading">
-              <h3 id="ride-assignment-heading">確定した配車</h3>
-              <ul>
-                {snapshot.assignments.map((assignment) =>
-                  (() => {
-                    const request = snapshot.requests.find(
-                      (item) => item.id === assignment.requestId,
-                    );
-                    const member = members.find(
-                      (item) => item.id === request?.memberId,
-                    );
-                    const offer = snapshot.offers.find(
-                      (item) => item.id === assignment.offerId,
-                    );
-                    return (
-                      <li key={assignment.id}>
-                        {member?.label ?? '対象部員'}：
-                        {assignment.passengerCount}人、 車（定員
-                        {offer?.capacity ?? '確認中'}人）
-                      </li>
-                    );
-                  })(),
-                )}
-              </ul>
-            </section>
+          {!isManager ? (
+            <GuardianConfirmedAssignments
+              status={snapshot.plan.status}
+              assignments={snapshot.confirmedAssignments ?? []}
+            />
           ) : null}
         </section>
 
