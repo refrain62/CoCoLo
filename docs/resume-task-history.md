@@ -1,6 +1,6 @@
 # 完了タスクと実施履歴
 
-更新日：2026-08-26
+更新日：2026-08-27
 
 この文書は、完了済み作業の結果だけを短く残す履歴です。
 
@@ -24,6 +24,7 @@
 | UI-018〜024 | 認証済みroot、team feature flag導線、レスポンシブ表、チーム設定・役員連絡先分離、共通UI、role別ルート | PR #204を`develop`へ統合。docs-only PR #205で台帳を分離更新。品質ゲート、`pnpm ci:fast`、390px/1280pxブラウザ確認成功。実DB・外部provider・staging受入は継続 |
 | LP-001 / FS-UI-004 | 未認証ルートの公開LP、課題と機能の訴求、提供状態、ログイン導線、認証済み画面との分離、専用ヒーロー画像 | PR #194を`develop`へ統合。`pnpm test`、`pnpm test:unit`、`pnpm build`、lint、typecheck、390pxから1440pxのブラウザ確認、キーボード操作、コントラスト、品質ゲート成功。敵対的レビューのCriticalとHighは0件 |
 | LP-002 | 公開LPの初回バンドルから認証済み管理機能を分離し、低速端末のLCP・INP計測を再現可能にした | 実装PR #208を`develop`へ統合。`pnpm measure:lp`を10回実行し、390x844、CPU 4倍、150ms遅延、下り1.6Mbps、上り750kbps、cache無効、Chromium headlessでLCP p75 2148ms / INP p75 56msを記録。`pnpm test`、`pnpm test:unit`、`pnpm build`、typecheck、Biome、production bundle、trust-root、品質ゲート成功。性能基準の運用値とstaging再計測はOPSの外部条件として継続 |
+| LP-003 / FS-UI-004 | LINE Design Systemを参照した公開LPと共通UIの再設計、LINE通知とWeb正本の役割分担、アクセシビリティ確認 | 実装PR #212を`develop`へ統合（merge commit `6e3e9606f9915fae9d11acb148d8919885d1d728`）。`pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm lint`、390px / 430px / 768px / 1280pxのブラウザ確認、敵対的レビューを完了。GitHub quality runは記録時点でqueuedのため、成功とは扱わない |
 | BILLING-001 | 有償・無償feature、チーム単位のplan・flag、effective entitlement、監査境界 | PR #172を`develop`へ統合。CI、`pnpm test`、`pnpm build`、migration・trust検証成功。課金provider接続は外部条件として継続 |
 | BRD-001 / feature契約 | 役員・連絡先の`board-contacts`契約、API fail-closed、Webメニュー制御、無料feature migration | PR #185を`develop`へ統合。`pnpm test` 200件、`pnpm build`、unit、Biome、workspace boundary、migration、trust、品質ゲート成功。個人情報境界、Web閲覧、実DB/RLS受入は継続 |
 | BRD-001 / 年度引き継ぎ | 行ごとのUUIDv7生成、INSERT影響行数による`copiedCount`、APIレスポンスの件数整合 | PR #187を`develop`へ統合。`pnpm test` 200件、`pnpm build`、lint、workspace boundary、品質ゲート成功。実DB/RLSの複数行受入は継続 |
@@ -53,6 +54,18 @@
 - 敵対的レビュー: LCP/INPの定義、低速条件、反復回数、外部URL入力、ブラウザ・previewの後始末、trust-root登録を確認し、Critical / Highは0件。
 - 統合: 実装PR #208（merge commit `7d98a662c77604ad0fcadafe4faaa40fd47dfa9c`）を2026-08-26に`develop`へ統合した。
 - 残課題: 製品リリースの性能閾値、staging環境での同一artifact再計測、継続監視はOPSの外部条件として再開台帳に残す。
+
+## LP-003 実施記録
+
+- 対象: LINE連携をサービスの入口として扱う公開LPと、公開LP・認証済み画面で共有するデザイントークンを見直した。
+- 方針: LINE Design SystemのFoundation、Color Guide、Typographyを参照し、LINE Greenを主操作、白とグレーを情報整理、CoCoLoのコーラルとイエローを補助色として整理した。
+- 責務: LINEグループへの通知と対象Web画面への入口をLINEの役割、予定・出欠・資料・権限などの業務データをCoCoLoの正本とし、個人LINE通知やグループ自動接続を公開LPで約束しない構成にした。
+- 実装: 公開LPのヒーロー、ナビゲーション、LINE連携説明、導入手順、CTA、共通UIプリミティブ、theme-color、角丸、影、フォーカス、reduced-motionを更新した。
+- 敵対的レビュー: tenant越境、認可、個人情報、入力検証、状態遷移、競合は静的LP変更の対象外であることを確認した。LINEを明示したCTAのリンク先不一致とLINE Green上の白文字コントラスト不足をCritical / High相当の指摘として修正し、残件を0件にした。
+- アクセシビリティ: LINE Green（`#06C755`）上の通常文字は濃色文字とし、白文字はコントラストを確保できる濃い緑面に限定した。44px操作領域、visible focus、reduced-motion、横スクロールなしを確認した。
+- 検証: `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm lint`、`git diff --check`を成功させた。実ブラウザで390px、430px、768px、1280pxを確認し、LINEアンカー、モバイルメニュー、FAQ開閉、実行時エラーなしを確認した。
+- 統合: 実装PR #212を2026-08-26に`develop`へ統合した。GitHub quality runは履歴作成時点でqueuedであり、CI成功済みとは記録していない。
+- 残課題: 実LINE接続、staging通知到達、実環境E2EはNOT-001 / NOT-002およびOPS-001〜007の外部条件として再開台帳に残す。
 
 ## 完了判定の共通結果
 
