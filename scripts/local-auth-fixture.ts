@@ -22,8 +22,7 @@ const fixtureUsers = {
     appMetadata: {},
   },
   systemAdmin: {
-    email:
-      process.env.LOCAL_SYSTEM_ADMIN_EMAIL ?? 'system-admin@example.test',
+    email: process.env.LOCAL_SYSTEM_ADMIN_EMAIL ?? 'system-admin@example.test',
     password:
       process.env.LOCAL_SYSTEM_ADMIN_PASSWORD ?? 'system-admin-password',
     appMetadata: { system_admin: true },
