@@ -8,7 +8,7 @@ describe('CoCoLo共通デザインシステム', () => {
     const html = renderToStaticMarkup(
       createElement(
         AppShell,
-        { nav: null } as AppShellProps,
+        {} as AppShellProps,
         createElement(Button, { variant: 'secondary' }, '次へ'),
       ),
     );
@@ -18,5 +18,9 @@ describe('CoCoLo共通デザインシステム', () => {
     expect(html).toContain('data-slot="button"');
     expect(html).toContain('--cocolo-brand');
     expect(html).toContain('--cocolo-focus-ring');
+    expect(html).toContain('class="app-brand-mark"');
+    expect(html).toContain(
+      'class="app-brand-mark" aria-hidden="true"><span></span><span></span><span></span>',
+    );
   });
 });

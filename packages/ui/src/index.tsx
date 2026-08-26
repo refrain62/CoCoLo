@@ -18,6 +18,17 @@ export function cn(...values: ClassValue[]) {
   return values.filter(Boolean).join(' ');
 }
 
+/** CoCoLoの3色マークを、公開ページと認証済み画面で共通利用します。 */
+export function CoCoLoLogoMark({ className }: { className?: string }) {
+  return (
+    <span className={cn('app-brand-mark', className)} aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
+
 const uiStyles = `
   .app-shell[data-slot='app-shell'] {
     --background: var(--cocolo-surface-muted, #f3f7f1);
@@ -857,9 +868,7 @@ export function AppShell({
 }: AppShellProps) {
   const brandContent = brand ?? (
     <>
-      <span className="app-brand-mark" aria-hidden="true">
-        C
-      </span>
+      <CoCoLoLogoMark />
       <span>CoCoLo</span>
     </>
   );

@@ -7,6 +7,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CoCoLoLogoMark,
   EmptyState,
   Section,
 } from '@cocolo/ui';
@@ -77,7 +78,7 @@ export function AdminDashboard({
             </p>
           </div>
           <div className="admin-hero-mark" aria-hidden="true">
-            {team.tenantName.slice(0, 1).toUpperCase()}
+            <CoCoLoLogoMark className="admin-hero-logo" />
           </div>
         </div>
       </Section>
