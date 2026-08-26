@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  assertFixtureCounts,
+  buildFixtureCountQuery,
   buildTestDataStatements,
   fixtureTables,
   scaleFixture,
@@ -44,20 +46,25 @@ test('ローカルfixtureは全業務テーブルと規模検証データを定�
   ];
 
   assert.deepEqual([...fixtureTables], expectedTables);
-  assert.match(sql, /generate_series\(1, 500\)/);
+  assert.match(sql, /generate_series\(1, 1001\)/);
   assert.match(sql, /generate_series\(1, 101\)/);
-  assert.match(sql, /500チーム×10人=5,000人/);
+  assert.match(sql, /1,001チーム×10人=10,010人/);
   assert.match(sql, /attendance_responses/);
   assert.match(sql, /guardian_members/);
   assert.match(sql, /line_delivery_outbox/);
+  assert.match(sql, /'disconnected'::line_connection_status/);
+  assert.match(sql, /status = 'completed'/);
+  assert.match(sql, /status = 'rejected'/);
+  assert.match(sql, /generate_series\(1, 1000\)/);
   assert.deepEqual(scaleFixture, {
-    teams: 500,
+    teams: 1_001,
     membersPerTeam: 10,
-    members: 5_000,
+    members: 10_010,
     guardiansPerMember: 2,
-    guardians: 10_000,
-    pagerMembers: 101,
-    pagerAnnouncements: 101,
+    guardians: 20_020,
+    pagerMembers: 1_001,
+    pagerAnnouncements: 1_001,
+    minimumRowsPerTable: 1_000,
   });
   assert.deepEqual(testTenantIds, {
     tenantA: '00000000-0000-7000-8000-000000000001',
@@ -74,5 +81,25 @@ test('規模fixtureの生成IDはUUIDv7形式を保つ', () => {
     sql,
     /lpad\(\(20000 \+ \(\(team - 1\) \* 10\) \+ member\)::text, 12, '0'\)/,
   );
-  assert.match(sql, /lpad\(\(30000 \+ \(\(team - 1\) \* 20\)/);
+  assert.match(sql, /lpad\(\(510000 \+ \(\(team - 1\) \* 20\)/);
+});
+
+test('fixture投入後は全テーブルの最低件数を検証する', () => {
+  const query = buildFixtureCountQuery();
+  assert.match(query, /count\(\*\)::bigint AS row_count FROM members/);
+  assert.doesNotThrow(() =>
+    assertFixtureCounts(
+      fixtureTables.map((table) => ({ table_name: table, row_count: 1_000 })),
+    ),
+  );
+  assert.throws(
+    () =>
+      assertFixtureCounts(
+        fixtureTables.map((table) => ({
+          table_name: table,
+          row_count: table === 'events' ? 999 : 1_000,
+        })),
+      ),
+    /fixtureの件数不足: events/,
+  );
 });

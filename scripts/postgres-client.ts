@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 export type PrismaClientLike = Readonly<{
   $executeRawUnsafe: (query: string, ...values: unknown[]) => Promise<number>;
   $queryRawUnsafe: <T>(query: string, ...values: unknown[]) => Promise<T>;
+  $transaction: <T>(
+    callback: (client: PrismaClientLike) => Promise<T>,
+  ) => Promise<T>;
   $disconnect: () => Promise<void>;
 }>;
 

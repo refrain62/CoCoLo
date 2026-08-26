@@ -11,13 +11,14 @@ export const testTenantIds = {
 } as const;
 
 export const scaleFixture = {
-  teams: 500,
+  teams: 1_001,
   membersPerTeam: 10,
-  members: 5_000,
+  members: 10_010,
   guardiansPerMember: 2,
-  guardians: 10_000,
-  pagerMembers: 101,
-  pagerAnnouncements: 101,
+  guardians: 20_020,
+  pagerMembers: 1_001,
+  pagerAnnouncements: 1_001,
+  minimumRowsPerTable: 1_000,
 } as const;
 
 export const fixtureTables = [
@@ -54,6 +55,11 @@ export const fixtureTables = [
   'ride_assignments',
 ] as const;
 
+type FixtureCountRow = {
+  table_name: string;
+  row_count: bigint | number | string;
+};
+
 const uuid = (suffix: number) =>
   `00000000-0000-7000-8000-${String(suffix).padStart(12, '0')}`;
 const sql = String.raw;
@@ -84,12 +90,12 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
--- 実運用の規模検証用。500チームを各10部員で作り、tenant境界と一覧性能を確認する。
+-- 実運用の規模検証用。1,001チームを各10部員で作り、tenant境界と一覧性能を確認する。
 INSERT INTO tenants (id, name)
 SELECT
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
-  '大量検証チーム' || lpad(series::text, 3, '0')
-FROM generate_series(1, 500) AS generated(series)
+  '大量検証チーム' || lpad(series::text, 4, '0')
+FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
@@ -111,23 +117,23 @@ SET role = EXCLUDED.role, status = EXCLUDED.status;
     sql`
 INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status)
 SELECT
-  ('00000000-0000-7000-8000-' || lpad((40000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((500000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
-  'club-' || lpad(series::text, 3, '0') || '-owner',
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
   'owner'::role,
   'active'::membership_status
-FROM generate_series(1, 500) AS generated(series)
+FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (tenant_id, user_id) DO NOTHING;
 `,
     sql`
 INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status)
 SELECT
-  ('00000000-0000-7000-8000-' || lpad((50000 + ((team - 1) * 20) + ((member - 1) * 2) + parent)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((510000 + ((team - 1) * 20) + ((member - 1) * 2) + parent)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((10000 + team)::text, 12, '0'))::uuid,
-  'club-' || lpad(team::text, 3, '0') || '-member-' || lpad(member::text, 2, '0') || '-parent-' || parent,
+  'club-' || CASE WHEN team >= 1000 THEN team::text ELSE lpad(team::text, 3, '0') END || '-member-' || lpad(member::text, 2, '0') || '-parent-' || parent,
   'guardian'::role,
   'active'::membership_status
-FROM generate_series(1, 500) AS teams(team)
+FROM generate_series(1, 1001) AS teams(team)
 CROSS JOIN generate_series(1, 10) AS members(member)
 CROSS JOIN generate_series(1, 2) AS parents(parent)
 ON CONFLICT (tenant_id, user_id) DO NOTHING;
@@ -143,6 +149,16 @@ VALUES
   ('line-notifications', 'paid', 'LINE通知', false),
   ('ride-operations', 'paid', '送迎管理', false),
   ('board-contacts', 'free', '役員・連絡先', true)
+ON CONFLICT (key) DO NOTHING;
+`,
+    sql`
+INSERT INTO feature_definitions (key, billing_type, display_name, default_enabled)
+SELECT
+  'scale-feature-' || lpad(series::text, 4, '0'),
+  CASE WHEN series % 4 = 0 THEN 'paid'::feature_billing_type ELSE 'free'::feature_billing_type END,
+  '大量検証機能' || lpad(series::text, 4, '0'),
+  series % 3 <> 0
+FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (key) DO NOTHING;
 `,
     sql`
@@ -171,7 +187,7 @@ SELECT
   ARRAY['members', 'events-attendance', 'bulletin-board', 'attachments', 'orders-payments', 'line-notifications', 'ride-operations', 'board-contacts']::text[],
   '2026-01-01T00:00:00Z',
   NULL
-FROM generate_series(1, 500) AS generated(series)
+FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (tenant_id) DO NOTHING;
 `,
     sql`
@@ -205,12 +221,12 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
--- 500チーム×10人=5,000人。active/suspended/retired、student/adultを混在させる。
+-- 1,001チーム×10人=10,010人。active/suspended/retired、student/adultを混在させる。
 INSERT INTO members (id, tenant_id, name, kana, category, grade_level, age_group, status, note)
 SELECT
   ('00000000-0000-7000-8000-' || lpad((20000 + ((team - 1) * 10) + member)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((10000 + team)::text, 12, '0'))::uuid,
-  '大量検証部員' || lpad(team::text, 3, '0') || '-' || member,
+  '大量検証部員' || lpad(team::text, 4, '0') || '-' || member,
   'たいりょう' || team || '-' || member,
   CASE WHEN member = 10 THEN 'adult'::member_category ELSE 'student'::member_category END,
   CASE WHEN member = 10 THEN NULL ELSE 1 + ((team + member) % 16) END,
@@ -219,7 +235,7 @@ SELECT
        WHEN member = 8 AND team % 7 = 0 THEN 'suspended'::member_status
        ELSE 'active'::member_status END,
   NULL
-FROM generate_series(1, 500) AS teams(team)
+FROM generate_series(1, 1001) AS teams(team)
 CROSS JOIN generate_series(1, 10) AS members(member)
 ON CONFLICT (id) DO NOTHING;
 `,
@@ -257,15 +273,15 @@ ON CONFLICT (tenant_id, user_id, member_id) DO NOTHING;
 INSERT INTO guardian_members
   (id, tenant_id, user_id, member_id, relationship, link_type, status, consented_at)
 SELECT
-  ('00000000-0000-7000-8000-' || lpad((30000 + ((team - 1) * 20) + ((member - 1) * 2) + parent)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((510000 + ((team - 1) * 20) + ((member - 1) * 2) + parent)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((10000 + team)::text, 12, '0'))::uuid,
-  'club-' || lpad(team::text, 3, '0') || '-member-' || lpad(member::text, 2, '0') || '-parent-' || parent,
+  'club-' || CASE WHEN team >= 1000 THEN team::text ELSE lpad(team::text, 3, '0') END || '-member-' || lpad(member::text, 2, '0') || '-parent-' || parent,
   ('00000000-0000-7000-8000-' || lpad((20000 + ((team - 1) * 10) + member)::text, 12, '0'))::uuid,
   CASE WHEN parent = 1 THEN '母' ELSE '父' END,
   'guardian'::member_link_type,
   CASE WHEN member = 9 AND team % 5 = 0 THEN 'revoked'::member_link_status ELSE 'active'::member_link_status END,
   CASE WHEN member = 9 AND team % 5 = 0 THEN NULL ELSE '2026-08-20T00:00:00Z'::timestamptz END
-FROM generate_series(1, 500) AS teams(team)
+FROM generate_series(1, 1001) AS teams(team)
 CROSS JOIN generate_series(1, 10) AS members(member)
 CROSS JOIN generate_series(1, 2) AS parents(parent)
 ON CONFLICT (tenant_id, user_id, member_id) DO NOTHING;
@@ -339,20 +355,25 @@ INSERT INTO events
 SELECT
   ('00000000-0000-7000-8000-' || lpad((7000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
-  'チーム活動' || lpad(series::text, 3, '0'),
-  'practice'::event_type,
+  'チーム活動' || lpad(series::text, 4, '0'),
+  CASE series % 4
+    WHEN 0 THEN 'practice'::event_type
+    WHEN 1 THEN 'match'::event_type
+    WHEN 2 THEN 'event'::event_type
+    ELSE 'practice'::event_type
+  END,
   timestamp '2099-04-01T10:00:00Z' + (series || ' days')::interval,
   timestamp '2099-04-01T12:00:00Z' + (series || ' days')::interval,
-  '大量検証会場' || series,
-  '飲み物、タオル',
-  0,
-  NULL,
-  NULL,
-  true,
+  CASE WHEN series % 5 = 0 THEN NULL ELSE '大量検証会場' || series END,
+  CASE series % 3 WHEN 0 THEN NULL WHEN 1 THEN '飲み物、タオル' ELSE 'ユニフォーム、昼食' END,
+  CASE series % 5 WHEN 0 THEN 0 WHEN 1 THEN 500 ELSE 1500 + (series % 4) * 1000 END,
+  CASE WHEN series % 4 = 1 THEN '対戦チーム' || series ELSE NULL END,
+  CASE WHEN series % 4 = 1 THEN timestamp '2099-04-01T08:00:00Z' + (series || ' days')::interval ELSE NULL END,
+  series % 2 = 0,
   timestamp '2099-03-30T23:59:00Z' + (series || ' days')::interval,
-  'club-' || lpad(series::text, 3, '0') || '-owner',
-  'club-' || lpad(series::text, 3, '0') || '-owner'
-FROM generate_series(1, 500) AS generated(series)
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner'
+FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
@@ -376,19 +397,30 @@ DECLARE
   v_user_id varchar(128);
   v_response_id uuid;
 BEGIN
-  FOR team IN 1..500 LOOP
+  FOR team IN 1..1001 LOOP
     v_team_id := ('00000000-0000-7000-8000-' || lpad((10000 + team)::text, 12, '0'))::uuid;
     v_event_id := ('00000000-0000-7000-8000-' || lpad((7000 + team)::text, 12, '0'))::uuid;
     FOR member IN 1..10 LOOP
       v_member_id := ('00000000-0000-7000-8000-' || lpad((20000 + ((team - 1) * 10) + member)::text, 12, '0'))::uuid;
-      v_user_id := 'club-' || lpad(team::text, 3, '0') || '-member-' || lpad(member::text, 2, '0') || '-parent-1';
-      v_response_id := ('00000000-0000-7000-8000-' || lpad((90000 + ((team - 1) * 10) + member)::text, 12, '0'))::uuid;
+      v_user_id := 'club-' || CASE WHEN team >= 1000 THEN team::text ELSE lpad(team::text, 3, '0') END || '-member-' || lpad(member::text, 2, '0') || '-parent-1';
+      v_response_id := ('00000000-0000-7000-8000-' || lpad((900000 + ((team - 1) * 10) + member)::text, 12, '0'))::uuid;
       IF NOT (member = 9 AND team % 5 = 0) THEN
         PERFORM set_config('app.tenant_id', v_team_id::text, true);
         PERFORM set_config('app.user_id', v_user_id, true);
         PERFORM set_config('app.role', 'guardian', true);
         INSERT INTO attendance_responses (id, tenant_id, event_id, user_id, member_id, response)
-        VALUES (v_response_id, v_team_id, v_event_id, v_user_id, v_member_id, 'pending'::attendance_response)
+        VALUES (
+          v_response_id,
+          v_team_id,
+          v_event_id,
+          v_user_id,
+          v_member_id,
+          CASE (team + member) % 3
+            WHEN 0 THEN 'attending'::attendance_response
+            WHEN 1 THEN 'absent'::attendance_response
+            ELSE 'pending'::attendance_response
+          END
+        )
         ON CONFLICT (tenant_id, event_id, user_id, member_id) DO NOTHING;
       END IF;
     END LOOP;
@@ -431,13 +463,13 @@ SELECT
   ('00000000-0000-7000-8000-' || lpad((12000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
   2026,
-  '代表',
-  'admin',
-  'club-' || lpad(series::text, 3, '0') || '-owner',
-  NULL,
-  NULL,
-  'line'
-FROM generate_series(1, 500) AS generated(series)
+  CASE series % 3 WHEN 0 THEN '代表' WHEN 1 THEN '会計' ELSE '連絡係' END,
+  CASE series % 3 WHEN 0 THEN 'admin' WHEN 1 THEN 'staff' ELSE 'member' END,
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
+  CASE series % 4 WHEN 0 THEN 'line://scale-contact-' || series WHEN 1 THEN NULL ELSE 'line://scale-contact-' || series END,
+  CASE series % 4 WHEN 0 THEN NULL WHEN 1 THEN '000-0000-' || lpad(series::text, 4, '0') ELSE '000-0000-' || lpad(series::text, 4, '0') END,
+  CASE series % 4 WHEN 0 THEN 'line' WHEN 1 THEN 'phone' ELSE 'both' END
+FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
@@ -531,12 +563,12 @@ INSERT INTO announcements (id, tenant_id, author_user_id, title, body, status, p
 SELECT
   ('00000000-0000-7000-8000-' || lpad((8000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
-  'club-' || lpad(series::text, 3, '0') || '-owner',
-  'チーム連絡' || lpad(series::text, 3, '0'),
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
+  'チーム連絡' || lpad(series::text, 4, '0'),
   'チーム活動の連絡事項です。',
   'published'::announcement_status,
   timestamp '2026-05-01T09:00:00Z' + (series || ' days')::interval
-FROM generate_series(1, 500) AS generated(series)
+FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
@@ -570,9 +602,9 @@ INSERT INTO announcement_reads (tenant_id, announcement_id, user_id, read_at)
 SELECT
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((8000 + series)::text, 12, '0'))::uuid,
-  'club-' || lpad(series::text, 3, '0') || '-member-01-parent-1',
+  'club-' || lpad(series::text, 4, '0') || '-member-01-parent-1',
   timestamp '2026-05-02T09:00:00Z' + (series || ' days')::interval
-FROM generate_series(1, 500) AS generated(series)
+FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (tenant_id, announcement_id, user_id) DO NOTHING;
 `,
     sql`
@@ -585,11 +617,16 @@ ON CONFLICT (tenant_id) DO NOTHING;
 INSERT INTO line_connections (tenant_id, group_id, status, connected_at, updated_at)
 SELECT
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
-  'Cscale-team-' || lpad(series::text, 3, '0'),
-  'connected'::line_connection_status,
-  '2026-08-25T00:00:00Z',
+  CASE WHEN series = 1001 THEN NULL ELSE 'Cscale-team-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END END,
+  CASE WHEN series = 1001 THEN 'disconnected'::line_connection_status ELSE 'connected'::line_connection_status END,
+  CASE WHEN series = 1001 THEN NULL ELSE '2026-08-25T00:00:00Z'::timestamptz END,
   '2026-08-25T00:00:00Z'
-FROM generate_series(1, 500) AS generated(series)
+FROM generate_series(1, 1001) AS generated(series)
+WHERE series = 1001
+   OR NOT EXISTS (
+     SELECT 1 FROM line_connections existing
+     WHERE existing.group_id = 'Cscale-team-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END
+   )
 ON CONFLICT (tenant_id) DO NOTHING;
 `,
     sql`
@@ -628,20 +665,43 @@ INSERT INTO line_delivery_outbox
 SELECT
   ('00000000-0000-7000-8000-' || lpad((100000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
-  'club-' || lpad(series::text, 3, '0') || '-owner',
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
   'event',
   ('00000000-0000-7000-8000-' || lpad((7000 + series)::text, 12, '0')),
-  'Cscale-team-' || lpad(series::text, 3, '0'),
+  'Cscale-team-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END,
   'チーム活動通知',
   '予定を確認してください。',
   'http://localhost:5173/events/' || ('00000000-0000-7000-8000-' || lpad((7000 + series)::text, 12, '0')),
   'pending',
   0,
   'fixture-scale-line-' || series,
-  encode(digest(concat_ws(E'\\x1f', 'Cscale-team-' || lpad(series::text, 3, '0'), 'チーム活動通知', '予定を確認してください。', 'http://localhost:5173/events/' || ('00000000-0000-7000-8000-' || lpad((7000 + series)::text, 12, '0'))), 'sha256'), 'hex'),
+  encode(digest(concat_ws(E'\\x1f', 'Cscale-team-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END, 'チーム活動通知', '予定を確認してください。', 'http://localhost:5173/events/' || ('00000000-0000-7000-8000-' || lpad((7000 + series)::text, 12, '0'))), 'sha256'), 'hex'),
   '2026-08-25T00:00:00Z'
-FROM generate_series(1, 500) AS generated(series)
+FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+UPDATE line_delivery_outbox
+SET status = 'sending', attempt = 1,
+    attempt_token = ('00000000-0000-7000-8000-' || lpad((410000 + right(id::text, 12)::bigint)::text, 12, '0'))::uuid,
+    lease_expires_at = timestamp '2099-01-01T00:00:00Z'
+WHERE id BETWEEN '00000000-0000-7000-8000-000000100001'::uuid AND '00000000-0000-7000-8000-000000101001'::uuid
+  AND right(id::text, 12)::bigint % 5 IN (1, 2, 3, 4)
+  AND status = 'pending';
+`,
+    sql`
+UPDATE line_delivery_outbox
+SET status = 'sent', provider_message_id = 'provider-scale-' || right(id::text, 4), sent_at = timestamp '2026-08-20T00:00:00Z', lease_expires_at = NULL
+WHERE id BETWEEN '00000000-0000-7000-8000-000000100001'::uuid AND '00000000-0000-7000-8000-000000101001'::uuid
+  AND right(id::text, 12)::bigint % 5 = 1
+  AND status = 'sending';
+`,
+    sql`
+UPDATE line_delivery_outbox
+SET status = 'failed', last_error_code = 'FIXTURE_PROVIDER', next_retry_at = timestamp '2099-01-02T00:00:00Z', lease_expires_at = NULL
+WHERE id BETWEEN '00000000-0000-7000-8000-000000100001'::uuid AND '00000000-0000-7000-8000-000000101001'::uuid
+  AND right(id::text, 12)::bigint % 5 IN (2, 4)
+  AND status = 'sending';
 `,
     sql`
 INSERT INTO ride_plans
@@ -655,21 +715,28 @@ ON CONFLICT (id) DO NOTHING;
     sql`UPDATE ride_plans SET status = 'open' WHERE id IN ('${uuid(1801)}', '${uuid(1802)}') AND status = 'draft';`,
     sql`
 INSERT INTO ride_offers (id, tenant_id, plan_id, driver_user_id, capacity, status)
-VALUES
-  ('${uuid(1811)}', '${tenantC}', '${uuid(1801)}', 'owner-c', 4, 'open'),
-  ('${uuid(1812)}', '${tenantC}', '${uuid(1802)}', 'owner-c', 3, 'open')
+SELECT fixture.id, fixture.tenant_id, fixture.plan_id, fixture.driver_user_id, fixture.capacity, fixture.status
+FROM (VALUES
+  ('${uuid(1811)}'::uuid, '${tenantC}'::uuid, '${uuid(1801)}'::uuid, 'owner-c'::varchar, 4, 'open'::ride_offer_status),
+  ('${uuid(1812)}'::uuid, '${tenantC}'::uuid, '${uuid(1802)}'::uuid, 'owner-c'::varchar, 3, 'open'::ride_offer_status)
+) AS fixture(id, tenant_id, plan_id, driver_user_id, capacity, status)
+WHERE NOT EXISTS (SELECT 1 FROM ride_offers existing WHERE existing.id = fixture.id)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
 INSERT INTO ride_requests (id, tenant_id, plan_id, member_id, requester_user_id, passenger_count, status)
-VALUES
-  ('${uuid(1821)}', '${tenantC}', '${uuid(1801)}', '${uuid(209)}', 'guardian-c', 2, 'pending'),
-  ('${uuid(1822)}', '${tenantC}', '${uuid(1802)}', '${uuid(210)}', 'guardian-c', 1, 'pending')
+SELECT fixture.id, fixture.tenant_id, fixture.plan_id, fixture.member_id, fixture.requester_user_id, fixture.passenger_count, fixture.status
+FROM (VALUES
+  ('${uuid(1821)}'::uuid, '${tenantC}'::uuid, '${uuid(1801)}'::uuid, '${uuid(209)}'::uuid, 'guardian-c'::varchar, 2, 'pending'::ride_request_status),
+  ('${uuid(1822)}'::uuid, '${tenantC}'::uuid, '${uuid(1802)}'::uuid, '${uuid(210)}'::uuid, 'guardian-c'::varchar, 1, 'pending'::ride_request_status)
+) AS fixture(id, tenant_id, plan_id, member_id, requester_user_id, passenger_count, status)
+WHERE NOT EXISTS (SELECT 1 FROM ride_requests existing WHERE existing.id = fixture.id)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
 INSERT INTO ride_assignments (id, tenant_id, plan_id, request_id, offer_id, passenger_count)
-VALUES ('${uuid(1831)}', '${tenantC}', '${uuid(1801)}', '${uuid(1821)}', '${uuid(1811)}', 2)
+SELECT '${uuid(1831)}', '${tenantC}', '${uuid(1801)}', '${uuid(1821)}', '${uuid(1811)}', 2
+WHERE NOT EXISTS (SELECT 1 FROM ride_assignments existing WHERE existing.id = '${uuid(1831)}')
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`UPDATE ride_requests SET status = 'assigned' WHERE id = '${uuid(1821)}' AND status = 'pending';`,
@@ -678,6 +745,534 @@ ON CONFLICT (id) DO NOTHING;
     sql`UPDATE ride_plans SET status = 'closed' WHERE id = '${uuid(1801)}' AND status = 'open';`,
     sql`UPDATE ride_plans SET status = 'finalized' WHERE id = '${uuid(1801)}' AND status = 'closed';`,
   ];
+
+  statements.push(
+    sql`
+INSERT INTO tenant_feature_flags
+  (tenant_id, feature_key, enabled, source, changed_by_user_id, reason, starts_at, ends_at)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  CASE series % 5
+    WHEN 0 THEN 'members'
+    WHEN 1 THEN 'events-attendance'
+    WHEN 2 THEN 'bulletin-board'
+    WHEN 3 THEN 'scale-feature-' || lpad(series::text, 4, '0')
+    ELSE 'line-notifications'
+  END,
+  series % 4 <> 0,
+  CASE series % 3 WHEN 0 THEN 'billing'::feature_flag_source WHEN 1 THEN 'admin'::feature_flag_source ELSE 'operator'::feature_flag_source END,
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
+  CASE series % 3 WHEN 0 THEN '契約プラン由来' WHEN 1 THEN '管理者による有効化' ELSE '運用者による停止' END,
+  timestamp '2026-01-01T00:00:00Z' + (series % 12 || ' months')::interval,
+  CASE WHEN series % 7 = 0 THEN timestamp '2027-01-01T00:00:00Z' ELSE NULL END
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (tenant_id, feature_key) DO NOTHING;
+`,
+    sql`
+INSERT INTO auth_identities (id, user_id, provider, provider_subject, revoked_at)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((300000 + series)::text, 12, '0'))::uuid,
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
+  CASE WHEN series % 2 = 0 THEN 'google'::auth_provider ELSE 'line'::auth_provider END,
+  'scale-provider-' || lpad(series::text, 4, '0'),
+  CASE WHEN series % 7 = 0 THEN timestamp '2026-08-01T00:00:00Z' ELSE NULL END
+FROM generate_series(1, 1001) AS generated(series)
+WHERE NOT EXISTS (
+  SELECT 1 FROM auth_identities existing
+  WHERE existing.id = ('00000000-0000-7000-8000-' || lpad((300000 + series)::text, 12, '0'))::uuid
+     OR (existing.user_id = 'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner'
+         AND existing.provider = CASE WHEN series % 2 = 0 THEN 'google'::auth_provider ELSE 'line'::auth_provider END)
+)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+INSERT INTO auth_invitations
+  (id, tenant_id, member_id, role, relationship, token_hash, invited_by_user_id, status, expires_at, accepted_at, accepted_by_user_id, revoked_at, created_at, updated_at)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((310000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((20000 + ((series - 1) * 10) + 1)::text, 12, '0'))::uuid,
+  'guardian'::role,
+  CASE WHEN series % 2 = 0 THEN '父' ELSE '母' END,
+  lpad(to_hex(series), 64, '0'),
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
+  CASE series % 4 WHEN 0 THEN 'pending'::auth_invitation_status WHEN 1 THEN 'accepted'::auth_invitation_status WHEN 2 THEN 'expired'::auth_invitation_status ELSE 'revoked'::auth_invitation_status END,
+  CASE WHEN series % 4 = 2 THEN timestamp '2026-01-01T00:00:00Z' ELSE timestamp '2099-01-01T00:00:00Z' END,
+  CASE WHEN series % 4 = 1 THEN timestamp '2026-08-02T00:00:00Z' ELSE NULL END,
+  CASE WHEN series % 4 = 1 THEN 'club-' || lpad(series::text, 4, '0') || '-member-01-parent-2' ELSE NULL END,
+  CASE WHEN series % 4 = 3 THEN timestamp '2026-08-02T00:00:00Z' ELSE NULL END,
+  CASE WHEN series % 4 = 2 THEN timestamp '2025-12-01T00:00:00Z' ELSE timestamp '2026-08-01T00:00:00Z' END,
+  CASE WHEN series % 4 = 2 THEN timestamp '2025-12-01T00:00:00Z' ELSE timestamp '2026-08-02T00:00:00Z' END
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+INSERT INTO audit_logs (id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((320000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
+  CASE series % 4 WHEN 0 THEN 'member.created' WHEN 1 THEN 'event.updated' WHEN 2 THEN 'announcement.published' ELSE 'line.delivery.failed' END,
+  CASE series % 4 WHEN 0 THEN 'member' WHEN 1 THEN 'event' WHEN 2 THEN 'announcement' ELSE 'line_delivery' END,
+  CASE series % 4 WHEN 0 THEN ('00000000-0000-7000-8000-' || lpad((20000 + ((series - 1) * 10) + 1)::text, 12, '0'))::uuid WHEN 1 THEN ('00000000-0000-7000-8000-' || lpad((7000 + series)::text, 12, '0'))::uuid WHEN 2 THEN ('00000000-0000-7000-8000-' || lpad((8000 + series)::text, 12, '0'))::uuid ELSE NULL END,
+  jsonb_build_object('fixture', 'scale', 'sequence', series, 'hasSensitiveData', false)
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+INSERT INTO promotion_runs
+  (id, tenant_id, fiscal_year, status, preview_count, actor_user_id, idempotency_key, request_hash, result)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((330000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  2000 + (series % 101),
+  'preview'::promotion_run_status,
+  series % 11,
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
+  'scale-promotion-' || lpad(series::text, 4, '0'),
+  lpad(to_hex(series), 64, '0'),
+  jsonb_build_object('fixture', 'scale', 'candidateCount', series % 11)
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+UPDATE promotion_runs
+SET status = 'failed', result = jsonb_build_object('fixture', 'scale', 'errorCode', 'PROMOTION_GRADE_LIMIT')
+WHERE id BETWEEN '00000000-0000-7000-8000-000000330001'::uuid AND '00000000-0000-7000-8000-000000331001'::uuid
+  AND right(id::text, 12)::bigint % 3 = 1
+  AND status = 'preview';
+`,
+    sql`
+UPDATE promotion_runs
+SET status = 'completed', executed_at = timestamp '2026-08-10T00:00:00Z' + (right(id::text, 12)::bigint % 30 || ' days')::interval
+WHERE id BETWEEN '00000000-0000-7000-8000-000000330001'::uuid AND '00000000-0000-7000-8000-000000331001'::uuid
+  AND right(id::text, 12)::bigint % 3 = 2
+  AND status = 'preview';
+`,
+    sql`
+INSERT INTO attachments
+  (id, tenant_id, owner_user_id, object_key, media_type, byte_size, expires_at)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((340000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
+  'scale/' || series || '/primary-' || series,
+  CASE series % 3 WHEN 0 THEN 'application/pdf' WHEN 1 THEN 'image/png' ELSE 'image/jpeg' END,
+  1024 + (series % 32) * 1024,
+  timestamp '2099-12-31T23:59:00Z'
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+INSERT INTO attachments
+  (id, tenant_id, owner_user_id, object_key, media_type, byte_size, expires_at)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((342000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
+  'scale/' || series || '/secondary-' || series,
+  CASE series % 3 WHEN 0 THEN 'application/pdf' WHEN 1 THEN 'image/png' ELSE 'image/jpeg' END,
+  2048 + (series % 64) * 512,
+  CASE WHEN series % 6 = 0 THEN timestamp '2026-08-20T00:00:00Z' ELSE timestamp '2099-12-31T23:59:00Z' END
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+UPDATE attachments
+SET status = 'available', sha256 = repeat('a', 64), available_at = timestamp '2026-08-20T00:00:00Z' + (right(id::text, 12)::bigint % 30 || ' days')::interval, complete_attempts = 1
+WHERE id BETWEEN '00000000-0000-7000-8000-000000340001'::uuid AND '00000000-0000-7000-8000-000000341001'::uuid
+  AND status = 'uploaded';
+`,
+    sql`
+UPDATE attachments
+SET status = 'rejected', cleanup_attempts = 1
+WHERE id BETWEEN '00000000-0000-7000-8000-000000342001'::uuid AND '00000000-0000-7000-8000-000000343001'::uuid
+  AND right(id::text, 12)::bigint % 4 = 1
+  AND status = 'uploaded';
+`,
+    sql`
+UPDATE attachments
+SET status = 'available', sha256 = repeat('b', 64), available_at = timestamp '2026-08-21T00:00:00Z' + (right(id::text, 12)::bigint % 20 || ' days')::interval, complete_attempts = 1
+WHERE id BETWEEN '00000000-0000-7000-8000-000000342001'::uuid AND '00000000-0000-7000-8000-000000343001'::uuid
+  AND right(id::text, 12)::bigint % 4 IN (2, 3)
+  AND status = 'uploaded';
+`,
+    sql`
+UPDATE attachments
+SET status = 'deleted', deleted_at = timestamp '2026-08-25T00:00:00Z', cleanup_attempts = 2
+WHERE id BETWEEN '00000000-0000-7000-8000-000000342001'::uuid AND '00000000-0000-7000-8000-000000343001'::uuid
+  AND right(id::text, 12)::bigint % 4 = 3
+  AND status = 'available';
+`,
+    sql`
+INSERT INTO purchase_orders (id, tenant_id, title, deadline, status)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((360000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  CASE series % 3 WHEN 0 THEN 'ユニフォーム共同購入' WHEN 1 THEN '大会用備品' ELSE '冬季用品' END || lpad(series::text, 4, '0'),
+  timestamp '2099-06-01T23:59:00Z' + (series || ' days')::interval,
+  'open'::purchase_order_status
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+UPDATE purchase_orders
+SET status = 'closed'
+WHERE id BETWEEN '00000000-0000-7000-8000-000000360001'::uuid AND '00000000-0000-7000-8000-000000361001'::uuid
+  AND right(id::text, 12)::bigint % 3 IN (0, 1)
+  AND status = 'open';
+`,
+    sql`
+UPDATE purchase_orders
+SET status = 'completed'
+WHERE id BETWEEN '00000000-0000-7000-8000-000000360001'::uuid AND '00000000-0000-7000-8000-000000361001'::uuid
+  AND right(id::text, 12)::bigint % 3 = 0
+  AND status = 'closed';
+`,
+    sql`
+INSERT INTO order_products (id, tenant_id, order_id, name, unit_price, options, requires_back_number, requires_back_name)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((370000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((360000 + series)::text, 12, '0'))::uuid,
+  CASE series % 3 WHEN 0 THEN '練習シャツ' WHEN 1 THEN '応援タオル' ELSE 'チームバッグ' END || lpad(series::text, 4, '0'),
+  (1000 + (series % 6) * 250)::bigint,
+  CASE series % 3 WHEN 0 THEN jsonb_build_array(jsonb_build_object('key', 'size', 'values', jsonb_build_array('S', 'M', 'L'))) WHEN 1 THEN '[]'::jsonb ELSE jsonb_build_array(jsonb_build_object('key', 'color', 'values', jsonb_build_array('red', 'blue'))) END,
+  series % 3 = 0,
+  series % 4 = 0
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+WITH source AS (
+  SELECT
+    series,
+    ('00000000-0000-7000-8000-' || lpad((380000 + series)::text, 12, '0'))::uuid AS entry_id,
+    ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid AS tenant_id,
+    ('00000000-0000-7000-8000-' || lpad((360000 + series)::text, 12, '0'))::uuid AS order_id,
+    ('00000000-0000-7000-8000-' || lpad((20000 + ((series - 1) * 10) + 1)::text, 12, '0'))::uuid AS member_id,
+    (1000 + (series % 6) * 250)::bigint AS total_amount
+  FROM generate_series(1, 1001) AS generated(series)
+), inserted_entries AS (
+  INSERT INTO order_entries
+    (id, tenant_id, order_id, orderer_user_id, orderer_name, member_id, total_amount, payment_status, payment_confirmed_at, payment_confirmed_by)
+  SELECT
+    entry_id,
+    tenant_id,
+    order_id,
+    'club-' || lpad(series::text, 4, '0') || '-member-01-parent-1',
+    '大量検証保護者' || lpad(series::text, 4, '0'),
+    member_id,
+    total_amount,
+    CASE WHEN series % 2 = 0 THEN 'paid'::payment_status ELSE 'unpaid'::payment_status END,
+    CASE WHEN series % 2 = 0 THEN timestamp '2026-08-15T00:00:00Z' ELSE NULL END,
+    CASE WHEN series % 2 = 0 THEN 'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner' ELSE NULL END
+  FROM source
+  WHERE NOT EXISTS (SELECT 1 FROM order_entries existing WHERE existing.id = source.entry_id)
+    AND EXISTS (
+      SELECT 1 FROM purchase_orders order_header
+      WHERE order_header.id = source.order_id
+        AND order_header.tenant_id = source.tenant_id
+        AND order_header.status = 'open'
+    )
+  ON CONFLICT (id) DO NOTHING
+  RETURNING id
+)
+INSERT INTO order_lines
+  (id, tenant_id, order_entry_id, product_id, product_name, unit_price, quantity, selected_options, back_number, back_name, amount)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((390000 + source.series)::text, 12, '0'))::uuid,
+  source.tenant_id,
+  source.entry_id,
+  ('00000000-0000-7000-8000-' || lpad((370000 + source.series)::text, 12, '0'))::uuid,
+  CASE source.series % 3 WHEN 0 THEN '練習シャツ' WHEN 1 THEN '応援タオル' ELSE 'チームバッグ' END || lpad(source.series::text, 4, '0'),
+  source.total_amount,
+  1,
+  CASE source.series % 3 WHEN 0 THEN jsonb_build_object('size', 'M') WHEN 1 THEN '{}'::jsonb ELSE jsonb_build_object('color', 'red') END,
+  CASE WHEN source.series % 3 = 0 THEN lpad((source.series % 99 + 1)::text, 2, '0') ELSE NULL END,
+  CASE WHEN source.series % 4 = 0 THEN '大量検証' || source.series ELSE NULL END,
+  source.total_amount
+FROM source
+JOIN inserted_entries inserted ON inserted.id = source.entry_id
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+INSERT INTO order_idempotency_keys
+  (id, tenant_id, actor_user_id, idempotency_key, request_hash, resource_type, resource_id)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((400000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  'club-' || lpad(series::text, 4, '0') || '-member-01-parent-1',
+  'scale-order-' || lpad(series::text, 4, '0'),
+  lpad(to_hex(series), 64, '0'),
+  'order-entry',
+  ('00000000-0000-7000-8000-' || lpad((380000 + series)::text, 12, '0'))::uuid
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (tenant_id, actor_user_id, idempotency_key) DO NOTHING;
+`,
+    sql`
+WITH source AS (
+  SELECT
+    series,
+    ((series - 1) % 334) * 3 + 2 AS order_series,
+    ('00000000-0000-7000-8000-' || lpad((382000 + series)::text, 12, '0'))::uuid AS entry_id
+  FROM generate_series(1, 1001) AS generated(series)
+), inserted_entries AS (
+  INSERT INTO order_entries
+    (id, tenant_id, order_id, orderer_user_id, orderer_name, member_id, total_amount, payment_status, payment_confirmed_at, payment_confirmed_by)
+  SELECT
+    source.entry_id,
+    ('00000000-0000-7000-8000-' || lpad((10000 + source.order_series)::text, 12, '0'))::uuid,
+    ('00000000-0000-7000-8000-' || lpad((360000 + source.order_series)::text, 12, '0'))::uuid,
+    'club-' || CASE WHEN source.order_series >= 1000 THEN source.order_series::text ELSE lpad(source.order_series::text, 3, '0') END || '-member-' || lpad(((source.series % 7) + 1)::text, 2, '0') || '-parent-2',
+    '追加検証保護者' || lpad(source.series::text, 4, '0'),
+    ('00000000-0000-7000-8000-' || lpad((20000 + ((source.order_series - 1) * 10) + ((source.series % 7) + 1))::text, 12, '0'))::uuid,
+    (1000 + (source.order_series % 6) * 250)::bigint,
+    CASE WHEN source.series % 2 = 0 THEN 'paid'::payment_status ELSE 'unpaid'::payment_status END,
+    CASE WHEN source.series % 2 = 0 THEN timestamp '2026-08-16T00:00:00Z' ELSE NULL END,
+    CASE WHEN source.series % 2 = 0 THEN 'club-' || CASE WHEN source.order_series >= 1000 THEN source.order_series::text ELSE lpad(source.order_series::text, 3, '0') END || '-owner' ELSE NULL END
+  FROM source
+  WHERE NOT EXISTS (SELECT 1 FROM order_entries existing WHERE existing.id = source.entry_id)
+    AND EXISTS (
+      SELECT 1 FROM purchase_orders order_header
+      WHERE order_header.id = ('00000000-0000-7000-8000-' || lpad((360000 + source.order_series)::text, 12, '0'))::uuid
+        AND order_header.tenant_id = ('00000000-0000-7000-8000-' || lpad((10000 + source.order_series)::text, 12, '0'))::uuid
+        AND order_header.status = 'open'
+    )
+  ON CONFLICT (id) DO NOTHING
+  RETURNING id
+)
+INSERT INTO order_lines
+  (id, tenant_id, order_entry_id, product_id, product_name, unit_price, quantity, selected_options, back_number, back_name, amount)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((392000 + source.series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + source.order_series)::text, 12, '0'))::uuid,
+  source.entry_id,
+  ('00000000-0000-7000-8000-' || lpad((370000 + source.order_series)::text, 12, '0'))::uuid,
+  CASE source.order_series % 3 WHEN 0 THEN '練習シャツ' WHEN 1 THEN '応援タオル' ELSE 'チームバッグ' END || lpad(source.order_series::text, 4, '0'),
+  (1000 + (source.order_series % 6) * 250)::bigint,
+  1,
+  CASE source.order_series % 3 WHEN 0 THEN jsonb_build_object('size', 'M') WHEN 1 THEN '{}'::jsonb ELSE jsonb_build_object('color', 'red') END,
+  CASE WHEN source.order_series % 3 = 0 THEN lpad((source.series % 99 + 1)::text, 2, '0') ELSE NULL END,
+  CASE WHEN source.order_series % 4 = 0 THEN '追加検証' || source.series ELSE NULL END,
+  (1000 + (source.order_series % 6) * 250)::bigint
+FROM source
+JOIN inserted_entries inserted ON inserted.id = source.entry_id
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+INSERT INTO order_idempotency_keys
+  (id, tenant_id, actor_user_id, idempotency_key, request_hash, resource_type, resource_id)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((402000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + (((series - 1) % 334) * 3 + 2))::text, 12, '0'))::uuid,
+  'club-' || CASE WHEN (((series - 1) % 334) * 3 + 2) >= 1000 THEN (((series - 1) % 334) * 3 + 2)::text ELSE lpad((((series - 1) % 334) * 3 + 2)::text, 3, '0') END || '-member-' || lpad(((series % 7) + 1)::text, 2, '0') || '-parent-2',
+  'scale-additional-order-' || lpad(series::text, 4, '0'),
+  lpad(to_hex(series + 1001), 64, '0'),
+  'order-entry',
+  ('00000000-0000-7000-8000-' || lpad((382000 + series)::text, 12, '0'))::uuid
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (tenant_id, actor_user_id, idempotency_key) DO NOTHING;
+`,
+    sql`
+INSERT INTO announcement_attachments (tenant_id, announcement_id, attachment_id, position, media_type, byte_size)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((8000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((340000 + series)::text, 12, '0'))::uuid,
+  1,
+  CASE series % 3 WHEN 0 THEN 'application/pdf' WHEN 1 THEN 'image/png' ELSE 'image/jpeg' END,
+  1024 + (series % 32) * 1024
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (tenant_id, announcement_id, attachment_id) DO NOTHING;
+`,
+    sql`
+INSERT INTO line_notification_queue
+  (id, tenant_id, group_id, created_by_user_id, source_type, source_id, title, body, deep_link, status, attempts)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((420000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  'Cscale-team-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END,
+  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
+  CASE series % 3 WHEN 0 THEN 'event'::line_notification_source WHEN 1 THEN 'bulletin'::line_notification_source ELSE 'deadline'::line_notification_source END,
+  CASE series % 3 WHEN 0 THEN '00000000-0000-7000-8000-' || lpad((7000 + series)::text, 12, '0') WHEN 1 THEN '00000000-0000-7000-8000-' || lpad((8000 + series)::text, 12, '0') ELSE 'deadline-' || series END,
+  CASE series % 3 WHEN 0 THEN '予定のお知らせ' WHEN 1 THEN '回覧のお知らせ' ELSE '締切のお知らせ' END,
+  CASE series % 3 WHEN 0 THEN '予定の詳細を確認してください。' WHEN 1 THEN '回覧の詳細を確認してください。' ELSE '締切を確認してください。' END,
+  'http://localhost:5173/fixture/' || series,
+  'pending',
+  0
+FROM generate_series(1, 1000) AS generated(series)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+UPDATE line_notification_queue
+SET status = 'sending', attempts = 1
+WHERE id BETWEEN '00000000-0000-7000-8000-000000420001'::uuid AND '00000000-0000-7000-8000-000000421000'::uuid
+  AND right(id::text, 12)::bigint % 5 IN (1, 2, 3, 4)
+  AND status = 'pending';
+`,
+    sql`
+UPDATE line_notification_queue
+SET status = 'sent', provider_message_id = 'provider-scale-' || right(id::text, 4), sent_at = timestamp '2026-08-20T00:00:00Z'
+WHERE id BETWEEN '00000000-0000-7000-8000-000000420001'::uuid AND '00000000-0000-7000-8000-000000421000'::uuid
+  AND right(id::text, 12)::bigint % 5 = 1
+  AND status = 'sending';
+`,
+    sql`
+UPDATE line_notification_queue
+SET status = 'failed', last_error = 'fixture provider failure', next_retry_at = timestamp '2099-01-01T00:00:00Z'
+WHERE id BETWEEN '00000000-0000-7000-8000-000000420001'::uuid AND '00000000-0000-7000-8000-000000421000'::uuid
+  AND right(id::text, 12)::bigint % 5 IN (2, 4)
+  AND status = 'sending';
+`,
+    sql`
+INSERT INTO line_webhook_receipts (tenant_id, group_id, webhook_event_id, received_at)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  'Cscale-team-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END,
+  'scale-webhook-' || lpad(series::text, 4, '0'),
+  timestamp '2026-08-20T00:00:00Z' + (series || ' minutes')::interval
+FROM generate_series(1, 1000) AS generated(series)
+ON CONFLICT (group_id, webhook_event_id) DO NOTHING;
+`,
+    sql`
+INSERT INTO ride_plans
+  (id, tenant_id, title, departure_at, pickup_maps_url, destination_maps_url, status)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((430000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  CASE series % 3 WHEN 0 THEN '試合送迎' WHEN 1 THEN '練習送迎' ELSE '大会送迎' END || lpad(series::text, 4, '0'),
+  timestamp '2099-07-01T07:00:00Z' + (series || ' days')::interval,
+  NULL,
+  NULL,
+  'draft'::ride_plan_status
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+UPDATE ride_plans
+SET status = 'open'
+WHERE id BETWEEN '00000000-0000-7000-8000-000000430001'::uuid AND '00000000-0000-7000-8000-000000431000'::uuid
+  AND status = 'draft';
+`,
+    sql`
+INSERT INTO ride_offers (id, tenant_id, plan_id, driver_user_id, capacity, status)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((440000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((430000 + series)::text, 12, '0'))::uuid,
+  'club-' || lpad(series::text, 4, '0') || '-member-10-parent-1',
+  4 + (series % 5),
+  'open'::ride_offer_status
+FROM generate_series(1, 1000) AS generated(series)
+WHERE NOT EXISTS (
+  SELECT 1 FROM ride_offers existing
+  WHERE existing.id = ('00000000-0000-7000-8000-' || lpad((440000 + series)::text, 12, '0'))::uuid
+)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+INSERT INTO ride_offers (id, tenant_id, plan_id, driver_user_id, capacity, status)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((441000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((430000 + series)::text, 12, '0'))::uuid,
+  'club-' || lpad(series::text, 4, '0') || '-member-10-parent-2',
+  1 + (series % 3),
+  'open'::ride_offer_status
+FROM generate_series(1, 1000) AS generated(series)
+WHERE NOT EXISTS (
+  SELECT 1 FROM ride_offers existing
+  WHERE existing.id = ('00000000-0000-7000-8000-' || lpad((441000 + series)::text, 12, '0'))::uuid
+)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+INSERT INTO ride_requests (id, tenant_id, plan_id, member_id, requester_user_id, passenger_count, status)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((450000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((430000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((20000 + ((series - 1) * 10) + 1)::text, 12, '0'))::uuid,
+  'club-' || lpad(series::text, 4, '0') || '-member-01-parent-1',
+  1 + (series % 3),
+  'pending'::ride_request_status
+FROM generate_series(1, 1000) AS generated(series)
+WHERE NOT EXISTS (
+  SELECT 1 FROM ride_requests existing
+  WHERE existing.id = ('00000000-0000-7000-8000-' || lpad((450000 + series)::text, 12, '0'))::uuid
+)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+INSERT INTO ride_requests (id, tenant_id, plan_id, member_id, requester_user_id, passenger_count, status)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((451000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((430000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((20000 + ((series - 1) * 10) + 2)::text, 12, '0'))::uuid,
+  'club-' || lpad(series::text, 4, '0') || '-member-02-parent-2',
+  1 + (series % 2),
+  'pending'::ride_request_status
+FROM generate_series(1, 1000) AS generated(series)
+WHERE NOT EXISTS (
+  SELECT 1 FROM ride_requests existing
+  WHERE existing.id = ('00000000-0000-7000-8000-' || lpad((451000 + series)::text, 12, '0'))::uuid
+)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+INSERT INTO ride_assignments (id, tenant_id, plan_id, request_id, offer_id, passenger_count)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((460000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((430000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((450000 + series)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((440000 + series)::text, 12, '0'))::uuid,
+  1 + (series % 3)
+FROM generate_series(1, 1000) AS generated(series)
+WHERE NOT EXISTS (
+  SELECT 1 FROM ride_assignments existing
+  WHERE existing.id = ('00000000-0000-7000-8000-' || lpad((460000 + series)::text, 12, '0'))::uuid
+)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+UPDATE ride_requests
+SET status = 'assigned'
+WHERE id BETWEEN '00000000-0000-7000-8000-000000450001'::uuid AND '00000000-0000-7000-8000-000000451000'::uuid
+  AND status = 'pending';
+`,
+    sql`
+UPDATE ride_requests
+SET status = CASE
+  WHEN right(id::text, 12)::bigint % 3 = 0 OR right(id::text, 12)::bigint % 2 = 0 THEN 'cancelled'::ride_request_status
+  ELSE 'unassigned'::ride_request_status
+END
+WHERE id BETWEEN '00000000-0000-7000-8000-000000451001'::uuid AND '00000000-0000-7000-8000-000000452000'::uuid
+  AND status = 'pending';
+`,
+    sql`
+UPDATE ride_offers
+SET status = 'cancelled'
+WHERE id BETWEEN '00000000-0000-7000-8000-000000441001'::uuid AND '00000000-0000-7000-8000-000000442000'::uuid
+  AND status = 'open';
+`,
+    sql`
+UPDATE ride_plans
+SET status = 'closed'
+WHERE id BETWEEN '00000000-0000-7000-8000-000000430001'::uuid AND '00000000-0000-7000-8000-000000431000'::uuid
+  AND right(id::text, 12)::bigint % 3 IN (0, 2)
+  AND status = 'open';
+`,
+    sql`
+UPDATE ride_plans
+SET status = 'finalized'
+WHERE id BETWEEN '00000000-0000-7000-8000-000000430001'::uuid AND '00000000-0000-7000-8000-000000431000'::uuid
+  AND right(id::text, 12)::bigint % 3 = 0
+  AND status = 'closed';
+`,
+  );
 
   if (authUserId) {
     statements.push(sql`
@@ -689,6 +1284,32 @@ SET role = 'owner', status = 'active';
   }
 
   return statements;
+}
+
+export function buildFixtureCountQuery(): string {
+  return fixtureTables
+    .map(
+      (table) =>
+        `SELECT '${table}'::text AS table_name, count(*)::bigint AS row_count FROM ${table}`,
+    )
+    .join('\nUNION ALL\n');
+}
+
+export function assertFixtureCounts(
+  rows: readonly FixtureCountRow[],
+  minimum = scaleFixture.minimumRowsPerTable,
+): void {
+  const counts = new Map(
+    rows.map((row) => [row.table_name, Number(row.row_count)]),
+  );
+  const insufficient = fixtureTables.filter(
+    (table) => (counts.get(table) ?? 0) < minimum,
+  );
+  assert.deepEqual(
+    insufficient,
+    [],
+    `fixtureの件数不足: ${insufficient.join(', ') || 'なし'}`,
+  );
 }
 
 async function main(): Promise<void> {
@@ -716,6 +1337,10 @@ async function main(): Promise<void> {
         );
       }
     }
+    const counts = await client.$queryRawUnsafe<FixtureCountRow[]>(
+      buildFixtureCountQuery(),
+    );
+    assertFixtureCounts(counts);
   });
   console.log('ローカル用テストデータを投入しました。');
 }
