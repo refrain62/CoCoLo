@@ -1,5 +1,5 @@
 import type { TeamOption } from '@cocolo/contracts/auth-team-selection';
-import { AppShell, Badge, Button } from '@cocolo/ui';
+import { AppShell, Badge, Button, CoCoLoLogoMark } from '@cocolo/ui';
 import {
   type MouseEvent,
   type ReactNode,
@@ -159,9 +159,7 @@ export function AdminShell({
       className="admin-shell"
       brand={
         <>
-          <span className="app-brand-mark" aria-hidden="true">
-            C
-          </span>
+          <CoCoLoLogoMark />
           <span>
             CoCoLo <small>Admin</small>
           </span>
