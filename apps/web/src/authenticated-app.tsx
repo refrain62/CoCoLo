@@ -1,6 +1,6 @@
 import type { TeamOption } from '@cocolo/contracts/auth-team-selection';
 import { AppShell } from '@cocolo/ui';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { AdminDashboard } from './admin-dashboard.js';
 import type { AdminRoute } from './admin-routes.js';
 import { AdminShell } from './admin-shell.js';
@@ -43,7 +43,6 @@ import {
 } from './features/orders-payments/index.js';
 import { createRideOperationsApi } from './features/ride-operations/ride-operations-api.js';
 import { RideOperationsPanel } from './features/ride-operations/ride-operations-panel.js';
-import { LandingPage } from './landing-page.js';
 import { createMemberApi } from './member-api.js';
 import { MemberManagementPage } from './member-management-page.js';
 import {
@@ -76,11 +75,7 @@ function DeepLinkState({
   );
 }
 
-export function AuthenticatedApp({
-  publicRoot = false,
-}: {
-  publicRoot?: boolean;
-}) {
+export function AuthenticatedApp({ publicRoot }: { publicRoot?: ReactNode }) {
   // 認証状態が確定するまでLoginPageを表示し、部員APIへ到達できる画面をsession保有者に限定する。
   const { authenticatedFetch, isLoggingOut, logout, session } = useAuth();
   const [pathname, setPathname] = useState(() => window.location.pathname);
@@ -297,7 +292,7 @@ export function AuthenticatedApp({
         token={invitationToken}
       />
     );
-  if (!session) return publicRoot ? <LandingPage /> : <LoginPage />;
+  if (!session) return publicRoot ?? <LoginPage />;
   if (isResolvingTeam)
     return (
       <AppShell>
@@ -580,9 +575,9 @@ export function AuthenticatedApp({
 }
 
 export function AuthenticatedRuntime({
-  publicRoot = false,
+  publicRoot,
 }: {
-  publicRoot?: boolean;
+  publicRoot?: ReactNode;
 }) {
   return (
     <AuthProvider>

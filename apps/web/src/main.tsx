@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { createRoot } from 'react-dom/client';
 import { applyPageMetadata, resolveAppEntry } from './app-route.js';
+import { LandingPage } from './landing-page.js';
 import { UserManualPage } from './user-manual-page.js';
 import './styles.css';
 
@@ -67,7 +68,7 @@ function App() {
     return (
       <AuthenticatedLoadBoundary>
         <Suspense fallback={<AuthenticatedLoading />}>
-          <AuthenticatedRuntime publicRoot />
+          <AuthenticatedRuntime publicRoot={<LandingPage />} />
         </Suspense>
       </AuthenticatedLoadBoundary>
     );
