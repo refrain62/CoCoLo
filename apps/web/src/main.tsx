@@ -1,35 +1,11 @@
 import { AppShell } from '@cocolo/ui';
-import {
-  Component,
-  lazy,
-  type ReactNode,
-  StrictMode,
-  Suspense,
-  useEffect,
-} from 'react';
+import { Component, type ReactNode, StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { applyPageMetadata, resolveAppEntry } from './app-route.js';
+import { AuthRuntime } from './auth-runtime.js';
 import { LandingPage } from './landing-page.js';
 import { UserManualPage } from './user-manual-page.js';
 import './styles.css';
-
-const AuthenticatedRuntime = lazy(() =>
-  import('./authenticated-app.js').then(
-    ({ AuthenticatedRuntime: runtime }) => ({
-      default: runtime,
-    }),
-  ),
-);
-
-function AuthenticatedLoading() {
-  return (
-    <AppShell>
-      <section className="app-state-card" aria-live="polite" role="status">
-        管理画面を準備しています。
-      </section>
-    </AppShell>
-  );
-}
 
 class AuthenticatedLoadBoundary extends Component<
   { children: ReactNode },
@@ -67,9 +43,7 @@ function App() {
   if (entry === 'landing')
     return (
       <AuthenticatedLoadBoundary>
-        <Suspense fallback={<AuthenticatedLoading />}>
-          <AuthenticatedRuntime publicRoot={<LandingPage />} />
-        </Suspense>
+        <AuthRuntime publicRoot={<LandingPage />} />
       </AuthenticatedLoadBoundary>
     );
 
@@ -83,9 +57,7 @@ function App() {
 
   return (
     <AuthenticatedLoadBoundary>
-      <Suspense fallback={<AuthenticatedLoading />}>
-        <AuthenticatedRuntime />
-      </Suspense>
+      <AuthRuntime />
     </AuthenticatedLoadBoundary>
   );
 }

@@ -1,20 +1,15 @@
 import type { TeamOption } from '@cocolo/contracts/auth-team-selection';
 import { AppShell } from '@cocolo/ui';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AdminDashboard } from './admin-dashboard.js';
 import type { AdminRoute } from './admin-routes.js';
 import { AdminShell } from './admin-shell.js';
 
-import { AuthProvider, LoginPage, useAuth } from './auth-context.js';
+import { useAuth } from './auth-context.js';
 import { type AuthRole, createAuthContextApi } from './auth-context-api.js';
 import { createAttachmentApi } from './features/attachments/attachment-api.js';
 import { AttachmentUploader } from './features/attachments/attachment-uploader.js';
 import { createAuthInvitationApi } from './features/auth-invitations/auth-invitation-api.js';
-import {
-  InvitationAcceptPage,
-  isInvitationPath,
-  readInvitationToken,
-} from './features/auth-invitations/auth-invitation-page.js';
 import {
   createTeamSelectionApi,
   TeamSelectionPage,
@@ -76,8 +71,8 @@ function DeepLinkState({
   );
 }
 
-export function AuthenticatedApp({ publicRoot }: { publicRoot?: ReactNode }) {
-  // 認証状態が確定するまでLoginPageを表示し、部員APIへ到達できる画面をsession保有者に限定する。
+export function AuthenticatedApp() {
+  // 認証済みのsessionだけを受け取り、部員APIへ到達できる画面をsession保有者に限定する。
   const { authenticatedFetch, isLoggingOut, logout, session } = useAuth();
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const [selectedTeam, setSelectedTeam] = useState<TeamOption | null>(null);
@@ -88,19 +83,11 @@ export function AuthenticatedApp({ publicRoot }: { publicRoot?: ReactNode }) {
     Array<{ id: string; name: string }>
   >([]);
   const [eventsError, setEventsError] = useState<string | null>(null);
-  const [invitationToken, setInvitationToken] = useState<string | null>(() =>
-    readInvitationToken(),
-  );
   useEffect(() => {
     const handlePopState = () => setPathname(window.location.pathname);
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
-  useEffect(() => {
-    setInvitationToken(
-      isInvitationPath(pathname) ? readInvitationToken(pathname) : null,
-    );
-  }, [pathname]);
   const teamSelectionApi = useMemo(
     () =>
       createTeamSelectionApi({
@@ -266,34 +253,7 @@ export function AuthenticatedApp({ publicRoot }: { publicRoot?: ReactNode }) {
       active = false;
     };
   }, [authContextApi, memberApi, selectedTeam, session]);
-  if (isInvitationPath(pathname))
-    return (
-      <InvitationAcceptPage
-        api={authInvitationApi}
-        onAccepted={(tenantId) => {
-          window.history.replaceState(null, document.title, '/');
-          setInvitationToken(null);
-          setSelectedTeam(null);
-          setTeamError(null);
-          setIsResolvingTeam(true);
-          void teamSelectionApi
-            .list()
-            .then((teams) => {
-              const nextTeam = teams.find((team) => team.tenantId === tenantId);
-              if (nextTeam) {
-                setStoredSelectedTeamId(nextTeam.tenantId);
-                setSelectedTeam(nextTeam);
-              } else {
-                setTeamError('連携したチームを確認できません。');
-              }
-            })
-            .catch(() => setTeamError('利用可能なチームを確認できません。'))
-            .finally(() => setIsResolvingTeam(false));
-        }}
-        token={invitationToken}
-      />
-    );
-  if (!session) return publicRoot ?? <LoginPage />;
+  if (!session) return null;
   if (isResolvingTeam)
     return (
       <AppShell>
@@ -576,17 +536,5 @@ export function AuthenticatedApp({ publicRoot }: { publicRoot?: ReactNode }) {
         )
       }
     </AdminShell>
-  );
-}
-
-export function AuthenticatedRuntime({
-  publicRoot,
-}: {
-  publicRoot?: ReactNode;
-}) {
-  return (
-    <AuthProvider>
-      <AuthenticatedApp publicRoot={publicRoot} />
-    </AuthProvider>
   );
 }
