@@ -338,6 +338,27 @@ export function RideOperationsPanel({
     }
   }
 
+  async function submitDisplayName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalizedName = driverDisplayName.trim();
+    if (!normalizedName || normalizedName.length > 200) {
+      setError('配車表に表示する名前を1〜200文字で入力してください。');
+      return;
+    }
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await api.setDisplayName({ displayName: normalizedName });
+      setDriverDisplayName(result.displayName);
+      setNotice('配車表の表示名を保存しました。');
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activePlanId) return;
@@ -594,6 +615,23 @@ export function RideOperationsPanel({
         >
           状態：{planStatusLabel(snapshot.plan.status)}
         </Badge>
+        <section aria-labelledby="ride-profile-heading">
+          <h2 id="ride-profile-heading">配車表の表示名</h2>
+          <p>自分が運転する車の配車表に表示する名前を設定します。</p>
+          <form onSubmit={submitDisplayName}>
+            <label htmlFor="ride-driver-display-name">表示名</label>
+            <Input
+              id="ride-driver-display-name"
+              maxLength={200}
+              value={driverDisplayName}
+              onChange={(event) => setDriverDisplayName(event.target.value)}
+              placeholder="例：山田 太郎"
+            />
+            <Button type="submit" disabled={isSaving}>
+              表示名を保存
+            </Button>
+          </form>
+        </section>
         {isManager || snapshot.plan.status === 'finalized' ? (
           <p>
             <SafeMapsLink
@@ -624,16 +662,6 @@ export function RideOperationsPanel({
                   type="number"
                   value={capacity}
                   onChange={(event) => setCapacity(event.target.value)}
-                />
-                <label htmlFor="ride-driver-display-name">
-                  配車表に表示する運転者名
-                </label>
-                <Input
-                  id="ride-driver-display-name"
-                  maxLength={200}
-                  value={driverDisplayName}
-                  onChange={(event) => setDriverDisplayName(event.target.value)}
-                  placeholder="例：山田 太郎"
                 />
                 <Button type="submit" disabled={isSaving}>
                   登録する

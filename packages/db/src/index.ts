@@ -787,23 +787,37 @@ export function createMemberRepositories(
             throw new MemberConflictError(
               '退部済みの部員は通常編集できません。',
             );
-          const updated = await tx.member.update({
-            where: {
-              tenantId_id: {
-                tenantId: input.tenantId,
-                id: input.memberId,
+          let updated: Prisma.MemberGetPayload<{
+            select: typeof memberSelect;
+          }>;
+          try {
+            updated = await tx.member.update({
+              where: {
+                tenantId_id: {
+                  tenantId: input.tenantId,
+                  id: input.memberId,
+                },
               },
-            },
-            data: {
-              name: input.member.name,
-              kana: input.member.kana ?? null,
-              category: input.member.category,
-              gradeLevel: input.member.gradeLevel ?? null,
-              ageGroup: input.member.ageGroup ?? null,
-              status: input.member.status,
-            },
-            select: memberSelect,
-          });
+              data: {
+                name: input.member.name,
+                kana: input.member.kana ?? null,
+                category: input.member.category,
+                gradeLevel: input.member.gradeLevel ?? null,
+                ageGroup: input.member.ageGroup ?? null,
+                status: input.member.status,
+              },
+              select: memberSelect,
+            });
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              error.message.includes('確定公開中の部員名')
+            )
+              throw new MemberConflictError(
+                '確定公開中の送迎があるため、部員名を変更できません。予定を再編集に戻してから変更してください。',
+              );
+            throw error;
+          }
           await tx.auditLog.create({
             data: {
               tenantId: input.tenantId,

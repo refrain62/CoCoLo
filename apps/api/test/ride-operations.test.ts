@@ -3,6 +3,7 @@ import test from 'node:test';
 import type {
   RideActor,
   RideAssignmentInput,
+  RideDisplayNameUpdateInput,
   RideOfferCreateInput,
   RidePlanCreateInput,
   RidePlanTransitionInput,
@@ -212,6 +213,9 @@ function createFakeRepository(): TestRepository {
       });
       return offer;
     },
+    async setDisplayName(_actor: RideActor, input: RideDisplayNameUpdateInput) {
+      return input.displayName.trim();
+    },
     async createRequest(
       actor: RideActor,
       planId: string,
@@ -388,6 +392,21 @@ test('未認証の送迎APIは401を返す', async () => {
   });
   const response = await request(app, `/api/v1/ride-plans/${memberId}`);
   assert.equal(response.status, 401);
+});
+
+test('利用者は送迎予定の状態に関係なく自分の配車表示名を更新できる', async () => {
+  const response = await request(
+    createTestApp(guardian).app,
+    '/api/v1/ride-profile/display-name',
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ displayName: ' 山田 太郎 ' }),
+    },
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, {
+    displayName: '山田 太郎',
+  });
 });
 
 test('送迎予定一覧は認証済みtenantの予定だけを返す', async () => {

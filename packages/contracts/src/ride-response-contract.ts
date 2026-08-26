@@ -158,6 +158,12 @@ export const rideOfferResponseEnvelopeSchema = z
   .object({ data: rideOfferResponseSchema })
   .strict();
 
+export const rideDisplayNameResponseEnvelopeSchema = z
+  .object({
+    data: z.object({ displayName: z.string().min(1).max(200) }).strict(),
+  })
+  .strict();
+
 export const rideRequestResponseEnvelopeSchema = z
   .object({ data: rideRequestResponseSchema })
   .strict();

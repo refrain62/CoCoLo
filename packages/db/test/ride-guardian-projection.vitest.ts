@@ -18,5 +18,9 @@ describe('送迎の確定配車projection migration', () => {
     expect(migration).toContain('JOIN tenant_memberships tm');
     expect(migration).toContain('tm.display_name');
     expect(migration).toContain('app_ride_confirmed_assignments');
+    expect(migration).toContain('ride_member_published_name_guard');
+    expect(migration).toContain('ride_membership_published_name_guard');
+    expect(migration).toContain('ride.display_name.update');
+    expect(migration).toContain('jsonb_build_array');
   });
 });

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   rideDispatchResponseEnvelopeSchema,
+  rideDisplayNameResponseEnvelopeSchema,
   rideMatchResponseSchema,
   rideMetricsResponseEnvelopeSchema,
   ridePlanListResponseSchema,
@@ -94,6 +95,21 @@ test('送迎snapshot responseは操作者IDを公開しない', () => {
         confirmedAssignments: [],
         history: [],
       },
+    }).success,
+    false,
+  );
+});
+
+test('配車表示名responseは表示名だけを返す', () => {
+  assert.equal(
+    rideDisplayNameResponseEnvelopeSchema.safeParse({
+      data: { displayName: '山田 太郎' },
+    }).success,
+    true,
+  );
+  assert.equal(
+    rideDisplayNameResponseEnvelopeSchema.safeParse({
+      data: { displayName: '山田 太郎', userId: 'driver-1' },
     }).success,
     false,
   );

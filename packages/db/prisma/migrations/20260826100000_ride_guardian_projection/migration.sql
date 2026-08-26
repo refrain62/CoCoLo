@@ -43,6 +43,64 @@ CREATE TRIGGER ride_plan_driver_display_name_guard
 BEFORE UPDATE ON ride_plans
 FOR EACH ROW EXECUTE FUNCTION app_guard_ride_driver_display_name();
 
+-- 確定公開中はプロフィール名を固定し、再編集開始後にだけ表示名を変更できるようにする。
+CREATE OR REPLACE FUNCTION app_guard_ride_published_profile_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF TG_TABLE_NAME = 'members'
+     AND OLD.name IS DISTINCT FROM NEW.name
+     AND EXISTS (
+       SELECT 1
+         FROM ride_requests rr
+         JOIN ride_assignments a
+           ON a.tenant_id = rr.tenant_id
+          AND a.plan_id = rr.plan_id
+          AND a.request_id = rr.id
+         JOIN ride_plans rp
+           ON rp.tenant_id = a.tenant_id
+          AND rp.id = a.plan_id
+        WHERE rr.tenant_id = NEW.tenant_id
+          AND rr.member_id = NEW.id
+          AND rp.status = 'finalized'::ride_plan_status
+     ) THEN
+    RAISE EXCEPTION '確定公開中の部員名は再編集開始後に変更してください';
+  ELSIF TG_TABLE_NAME = 'tenant_memberships'
+        AND OLD.display_name IS DISTINCT FROM NEW.display_name
+        AND EXISTS (
+          SELECT 1
+            FROM ride_offers ro
+            JOIN ride_assignments a
+              ON a.tenant_id = ro.tenant_id
+             AND a.plan_id = ro.plan_id
+             AND a.offer_id = ro.id
+            JOIN ride_plans rp
+              ON rp.tenant_id = a.tenant_id
+             AND rp.id = a.plan_id
+           WHERE ro.tenant_id = NEW.tenant_id
+             AND ro.driver_user_id = NEW.user_id
+             AND rp.status = 'finalized'::ride_plan_status
+        ) THEN
+    RAISE EXCEPTION '確定公開中の運転者名は再編集開始後に変更してください';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION app_guard_ride_published_profile_mutation() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_guard_ride_published_profile_mutation() TO cocolo_app;
+DROP TRIGGER IF EXISTS ride_member_published_name_guard ON members;
+CREATE TRIGGER ride_member_published_name_guard
+BEFORE UPDATE OF name ON members
+FOR EACH ROW EXECUTE FUNCTION app_guard_ride_published_profile_mutation();
+DROP TRIGGER IF EXISTS ride_membership_published_name_guard ON tenant_memberships;
+CREATE TRIGGER ride_membership_published_name_guard
+BEFORE UPDATE OF display_name ON tenant_memberships
+FOR EACH ROW EXECUTE FUNCTION app_guard_ride_published_profile_mutation();
+
 -- 運転者本人が自分の所属表示名だけを更新できるようにし、user_idをHTTP入力へ出さない。
 CREATE OR REPLACE FUNCTION app_set_ride_display_name(
   target_tenant_id uuid,
@@ -55,6 +113,8 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   normalized_name text := BTRIM(COALESCE(new_display_name, ''));
+  membership_id uuid;
+  previous_name varchar(200);
   updated_name varchar(200);
 BEGIN
   IF NOT app_has_active_membership(target_tenant_id)
@@ -62,14 +122,29 @@ BEGIN
      OR char_length(normalized_name) > 200 THEN
     RAISE EXCEPTION '表示名の入力が不正です';
   END IF;
-  UPDATE tenant_memberships
-     SET display_name = normalized_name
+  SELECT id, display_name
+    INTO membership_id, previous_name
+    FROM tenant_memberships
    WHERE tenant_id = target_tenant_id
      AND user_id = current_setting('app.user_id', true)
      AND status = 'active'::membership_status
-  RETURNING display_name INTO updated_name;
-  IF updated_name IS NULL THEN
+   FOR UPDATE;
+  IF membership_id IS NULL THEN
     RAISE EXCEPTION '表示名を更新できません';
+  END IF;
+  UPDATE tenant_memberships
+     SET display_name = normalized_name
+   WHERE id = membership_id
+  RETURNING display_name INTO updated_name;
+  IF previous_name IS DISTINCT FROM updated_name THEN
+    INSERT INTO audit_logs (
+      id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata
+    ) VALUES (
+      app_uuidv7(), target_tenant_id,
+      current_setting('app.user_id', true),
+      'ride.display_name.update', 'tenant_membership', membership_id,
+      jsonb_build_object('fields', jsonb_build_array('displayName'))
+    );
   END IF;
   RETURN updated_name;
 END;
@@ -120,7 +195,6 @@ AS $$
   JOIN tenant_memberships tm
     ON tm.tenant_id = ro.tenant_id
    AND tm.user_id = ro.driver_user_id
-   AND tm.status = 'active'::membership_status
   WHERE app_has_active_membership(target_tenant_id)
     AND a.tenant_id = target_tenant_id
     AND a.plan_id = target_plan_id

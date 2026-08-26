@@ -200,6 +200,9 @@ function createTestApp({
           createPlan: async () => ({}),
           updatePlan: async () => ({}),
           createOffer: async () => ({}),
+          setDisplayName: async (_actor, input) => ({
+            displayName: input.displayName,
+          }),
           createRequest: async () => ({}),
           getSnapshot: async () => ({
             plan: {},
@@ -485,6 +488,15 @@ test('中央APIへmountした送迎routeは認証前に未認証を拒否する'
   assert.equal(response.status, 401);
 });
 
+test('中央APIへmountした配車表示名routeも認証前に未認証を拒否する', async () => {
+  const response = await createTestApp().request(
+    '/api/v1/ride-profile/display-name',
+    { method: 'PATCH', body: JSON.stringify({ displayName: '運転者' }) },
+  );
+
+  assert.equal(response.status, 401);
+});
+
 test('中央APIへ送迎routeをmountし、公開response契約を適用する', async () => {
   const response = await createTestApp().request('/api/v1/ride-plans', {
     headers: { authorization: `Bearer ${USER_ID}` },
@@ -492,6 +504,23 @@ test('中央APIへ送迎routeをmountし、公開response契約を適用する',
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { data: [] });
+});
+
+test('中央APIへ配車表示名routeをmountし、公開response契約を適用する', async () => {
+  const response = await createTestApp().request(
+    '/api/v1/ride-profile/display-name',
+    {
+      method: 'PATCH',
+      headers: {
+        authorization: `Bearer ${USER_ID}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ displayName: '運転者' }),
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { data: { displayName: '運転者' } });
 });
 
 test('送迎の状態変更routeも中央response契約を通る', async () => {

@@ -53,6 +53,28 @@ describe('送迎Web API', () => {
     );
   });
 
+  it('送迎の配車表示名を専用プロフィールAPIへ送る', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ data: { displayName: '山田 太郎' } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const result = await createRideOperationsApi({
+      getAccessToken: () => 'token',
+      fetcher,
+    }).setDisplayName({ displayName: '山田 太郎' });
+
+    expect(result.displayName).toBe('山田 太郎');
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/v1/ride-profile/display-name',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+      }),
+    );
+  });
+
   it('access tokenなしでは送信せずログインエラーにする', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
