@@ -25,7 +25,7 @@
     "typecheck": "tsc -p tsconfig.scripts.json --noEmit && pnpm -r --if-present typecheck",
     "generate:openapi": "node scripts/generate-openapi.ts",
     "lint:openapi": "node scripts/verify-openapi.ts",
-    "test:contract": "node --test packages/contracts/test/*.test.ts",
+    "test:contract": "pnpm --filter @cocolo/contracts build && node --test packages/contracts/test/*.test.ts",
     "test:release": "node --test scripts/release-artifact.test.ts",
     "verify:workspace-boundaries": "depcruise --config .dependency-cruiser.cjs apps packages --output-type err-long && node scripts/verify-workspace-boundaries.ts",
     "verify:migration-sql": "node scripts/verify-migration-sql.ts",

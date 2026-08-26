@@ -18,7 +18,7 @@
     ".github/workflows/schema-drift.yml": "aca0f57819fd31682fa1112d5144bb2f380eb39edbde9861da41aae69a960e64",
     ".github/workflows/staging-deploy.yml": "473f6469be3b8aebb93b7c14f5fcf0a452c17e1f36a5b3b5f4d986b93d93dc4f",
     "biome.json": "9fe165cbc8d77253da190097b5788bd1de9ad248b7ecb5c8e967f078ca720272",
-    "package.json": "2102467060a932235e89ee80d5821de2de4981def4fcaf0fc2f0c0301bf547eb",
+    "package.json": "8ecac40f2482f62a2466d45112ae856652c7ff748e767bcd7716961fb0ca299f",
     "packages/db/package.json": "05780755dc0c1cbb10ef555168b8913f117ff6acf6067f59450e1281828b8a0b",
     "packages/db/prisma/migrations/20260822090000_phase1_foundation/migration.sql": "f2d8156b3e4c4580ce7cf7e546b44f601fb884a61b0166da11749b9e61f528db",
     "packages/db/prisma/migrations/20260822100000_phase1_member_rls_hardening/migration.sql": "6e03ae514ba0663b6be71bd1f1911eb35c6708cc53fb56ecaeab58de99ed2d3f",
