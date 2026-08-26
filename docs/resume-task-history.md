@@ -19,6 +19,7 @@
 | 購買・送迎 | 注文APIとWeb、CSV・冪等性、送迎API、送迎Web、公開response契約 | `develop`統合済み。実DB・staging受入は継続 |
 | CI・DB | Node.js / pnpm固定、Node 24、local-first quality、migration検査、UUIDv7移行前検査、schema drift検査、PR本文検査 | `develop`統合済み。mainのtrust rootと外部環境は継続 |
 | LOCAL-FIXTURE-001 | 500チーム・5,000部員、部員ごとの父母想定10,000保護者リンク、状態境界、ページャー閾値を含むローカルfixture拡充 | PR #197を`develop`へ統合。敵対的レビューと品質ゲート成功。実負荷試験・staging外部サービス受入は継続 |
+| LOCAL-FIXTURE-002 | 1,001チーム・10,010部員・20,020保護者リンク、全31テーブル1,000件超、状態パターン、RLS付きDB負荷試験 | PR #199を`develop`へ統合。敵対的レビュー、品質ゲート、実DB件数検証、1,000件負荷試験成功 |
 | UI安全性 | 二重送信防止、権限別操作表示、認証レイアウト、主要タップ領域、複数幅ブラウザ受入 | `develop`統合済み。認証済み主要画面のrole別受入は継続 |
 | LP-001 / FS-UI-004 | 未認証ルートの公開LP、課題と機能の訴求、提供状態、ログイン導線、認証済み画面との分離、専用ヒーロー画像 | PR #194を`develop`へ統合。`pnpm test`、`pnpm test:unit`、`pnpm build`、lint、typecheck、390pxから1440pxのブラウザ確認、キーボード操作、コントラスト、品質ゲート成功。敵対的レビューのCriticalとHighは0件。初回バンドル分離はLP-002で継続 |
 | BILLING-001 | 有償・無償feature、チーム単位のplan・flag、effective entitlement、監査境界 | PR #172を`develop`へ統合。CI、`pnpm test`、`pnpm build`、migration・trust検証成功。課金provider接続は外部条件として継続 |
@@ -60,6 +61,18 @@ CriticalとHighが残る実装を完了扱いにしていません。
 - 敵対的レビュー: tenant越境、RLS・projection、個人情報、入力値、状態遷移、ページ境界、再投入、規模を確認し、Critical / Highは0件。RLSテスト側はexpanded fixtureと共存するようavailable添付とprojection権限を明示した。
 - 検証: `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm typecheck`、Biome、fresh local stackのmigration・seed・central RLS test、PR品質ゲートを成功。`pnpm test:integration`のWindows固有Prisma DLL rename EPERMはseed後に発生したため、同じfresh stackでPrisma再生成を省いた手動相当検証を完了した。
 - 統合: 実装PR #197を2026-08-26に`develop`へマージ（merge commit `f700ade11893f79294b778b98b7ed63062717350`）。
+
+## LOCAL-FIXTURE-002 実施記録
+
+- 対象: ローカル開発用DB seedとDBレベル負荷試験。migration、production、staging、公開APIのデータは変更していない。
+- 規模: 1,001チーム、各10部員の10,010部員、部員ごとに父・母を想定した20,020保護者リンクを生成し、ページャー用tenant Cにも1,001部員相当の読み取り負荷を与えられるようにした。
+- 全テーブル保証: `fixtureTables`に含む全31テーブルをseed後に実DBで集計し、最低1,000件を満たさない場合はseedを失敗させる。適用後の最小件数は1,001件だった。
+- 網羅範囲: student/adult、active/suspended/retired、guardianの父母リンク、招待のpending/accepted/expired/revoked、添付のuploaded/available/rejected/deleted、予定・出欠、購買・支払、回覧・既読、LINE接続・配送、送迎のdraft/open/closed/finalizedと割当状態を合成データで再現する。
+- 安全性: tenant・関連IDを同一チーム範囲へ固定し、実在個人情報やsecretは使用しない。seed中だけfixture対象テーブルのRLSを停止し、`finally`で全31テーブルをENABLE/FORCEへ復元する。再投入は既存制約に合わせて冪等化した。
+- 負荷試験: `test:load`で50 worker・各20回、合計1,000件のRLS付きmembers/events/announcements/membershipsページ取得を複数tenantで実行した。1,000/1,000成功、失敗0、p95 546ms、最大568msで、p95閾値1,000ms以内だった。
+- 検証: `pnpm test`、`pnpm test:unit`、`pnpm build`、スクリプト型検査、Biome、trust-root、改行、PR本文、ローカルDB件数、RLS 31/31を成功。fresh test stackのmigration・seedも成功したが、統合assertionはWindowsのPrisma query engine DLL rename EPERMで開始前に停止した。
+- 敵対的レビュー: tenant越境、認可、個人情報、入力値、状態遷移、競合・冪等性、ページ境界、テスト不足を確認し、Critical / Highは0件。
+- 統合: 実装PR #199を2026-08-26に`develop`へマージ（merge commit `751ff6bd15c33985c309c6c70daa1e4fa376ee81`）。
 
 詳細な重大度と次の行動は[レビュー状況](reviews/README.md)と[中断再開タスクリスト](resume-task-list.md)に集約しています。
 
