@@ -98,6 +98,34 @@ test('実DBの予定・出欠repositoryがtenant境界と一意回答を守る',
   assert.equal(summary.attending, 0);
 });
 
+test('予定一覧は開催期間外でも期間内の出欠締切を含める', async () => {
+  const now = new Date();
+  const startsAt = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+  const created = await repository.create({
+    tenantId: TENANT_A,
+    actorUserId: 'owner-a',
+    role: 'owner',
+    title: `締切先行予定-${Date.now()}`,
+    type: 'practice',
+    startsAt,
+    endsAt: new Date(startsAt.getTime() + 2 * 60 * 60 * 1000),
+    fee: 0,
+    transportationRequired: false,
+    attendanceDeadline: new Date(now.getTime() + 12 * 60 * 60 * 1000),
+  });
+  const listed = await repository.list({
+    tenantId: TENANT_A,
+    actorUserId: 'owner-a',
+    role: 'owner',
+    from: new Date(now.getTime() - 60 * 60 * 1000),
+    to: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+  });
+  assert.equal(
+    listed.some((event) => event.id === created.id),
+    true,
+  );
+});
+
 test('実DBは締切後の管理者修正理由を要求する', async () => {
   const created = await repository.create({
     tenantId: TENANT_A,

@@ -39,6 +39,7 @@ import {
 } from './features/orders-payments/index.js';
 import { createRideOperationsApi } from './features/ride-operations/ride-operations-api.js';
 import { RideOperationsPanel } from './features/ride-operations/ride-operations-panel.js';
+import { createGlobalAnnouncementsApi } from './global-announcements-api.js';
 import { createMemberApi } from './member-api.js';
 import { MemberManagementPage } from './member-management-page.js';
 import {
@@ -119,6 +120,15 @@ export function AuthenticatedApp() {
         fetcher: authenticatedFetch,
       }),
     [authenticatedFetch, session?.accessToken],
+  );
+  const globalAnnouncementsApi = useMemo(
+    () =>
+      createGlobalAnnouncementsApi({
+        getAccessToken: () => session?.accessToken ?? null,
+        getSelectedTeamId: () => selectedTeam?.tenantId ?? null,
+        fetcher: authenticatedFetch,
+      }),
+    [authenticatedFetch, selectedTeam?.tenantId, session?.accessToken],
   );
   useEffect(() => {
     if (!systemAdminPath) {
@@ -299,20 +309,27 @@ export function AuthenticatedApp() {
     let active = true;
     setRole(null);
     setEventsError(null);
-    void Promise.all([
+    void Promise.allSettled([
       authContextApi.get(),
       memberApi.listAll({ q: '', category: '', status: 'active' }),
-    ])
-      .then(([context, members]) => {
-        if (!active) return;
-        setRole(context.role);
+    ]).then(([contextResult, membersResult]) => {
+      if (!active) return;
+      if (contextResult.status === 'fulfilled') {
+        setRole(contextResult.value.role);
+      } else {
+        setEventsError('予定画面の利用権限を確認できません。');
+      }
+      if (membersResult.status === 'fulfilled') {
         setEventMembers(
-          members.map((member) => ({ id: member.id, name: member.name })),
+          membersResult.value.map((member) => ({
+            id: member.id,
+            name: member.name,
+          })),
         );
-      })
-      .catch(() => {
-        if (active) setEventsError('予定画面の利用権限を確認できません。');
-      });
+      } else {
+        setEventMembers([]);
+      }
+    });
     return () => {
       active = false;
     };
@@ -605,6 +622,7 @@ export function AuthenticatedApp() {
       <UserDashboard
         eventsApi={eventsApi}
         featureContractApi={featureContractApi}
+        globalAnnouncementsApi={globalAnnouncementsApi}
         onNavigate={navigateInApp}
         ordersApi={ordersApi}
       />

@@ -55,4 +55,20 @@ describe('利用者ダッシュボードの期間と表示項目', () => {
     expect(itemsByDate(items).get('2026-08-27')).toHaveLength(1);
     expect(itemsByDate(items).get('2026-08-28')).toHaveLength(1);
   });
+
+  it('開催期間外でも期間内の出欠締切を表示項目に含める', () => {
+    const range = getDashboardRange(new Date('2026-08-26T00:00:00.000Z'));
+    const lateEvent = {
+      ...event,
+      id: '00000000-0000-7000-8000-000000000003',
+      startsAt: '2026-09-10T00:00:00.000Z',
+      endsAt: '2026-09-10T02:00:00.000Z',
+      attendanceDeadline: '2026-08-28T03:00:00.000Z',
+    } satisfies EventSummary;
+
+    const items = buildDashboardItems([lateEvent], [], range);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe('deadline');
+  });
 });

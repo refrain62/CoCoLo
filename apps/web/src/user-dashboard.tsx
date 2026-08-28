@@ -14,6 +14,7 @@ import type {
   OrdersCampaign,
   OrdersPaymentsApi,
 } from './features/orders-payments/orders-payments-api.js';
+import type { GlobalAnnouncementsApi } from './global-announcements-api.js';
 import {
   buildDashboardItems,
   type DashboardItem,
@@ -56,11 +57,13 @@ function DashboardItemLabel({ item }: { item: DashboardItem }) {
 export function UserDashboard({
   eventsApi,
   featureContractApi,
+  globalAnnouncementsApi,
   onNavigate,
   ordersApi,
 }: {
   eventsApi: EventsApi;
   featureContractApi: FeatureContractApi;
+  globalAnnouncementsApi: GlobalAnnouncementsApi;
   onNavigate: (path: string) => void;
   ordersApi: OrdersPaymentsApi;
 }) {
@@ -70,18 +73,42 @@ export function UserDashboard({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [globalAnnouncements, setGlobalAnnouncements] = useState<
+    Awaited<ReturnType<GlobalAnnouncementsApi['list']>>
+  >([]);
+  const [globalAnnouncementsError, setGlobalAnnouncementsError] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     let active = true;
     setIsLoading(true);
     setError(null);
+    setGlobalAnnouncements([]);
+    setGlobalAnnouncementsError(null);
+    void globalAnnouncementsApi
+      .list()
+      .then((nextAnnouncements) => {
+        if (active) setGlobalAnnouncements(nextAnnouncements);
+      })
+      .catch((requestError: unknown) => {
+        if (active)
+          setGlobalAnnouncementsError(
+            errorMessage(
+              requestError,
+              'システムからのお知らせを取得できません。',
+            ),
+          );
+      });
     void featureContractApi
       .get()
       .then(async (contract) => {
-        const eventsPromise = eventsApi.list(
-          range.from.toISOString(),
-          range.to.toISOString(),
+        const eventsEnabled = contract.features.some(
+          (feature) => feature.key === 'events-attendance' && feature.enabled,
         );
+        const eventsPromise = eventsEnabled
+          ? eventsApi.list(range.from.toISOString(), range.to.toISOString())
+          : Promise.resolve([] as EventSummary[]);
         const ordersPromise = contract.features.some(
           (feature) => feature.key === 'orders-payments' && feature.enabled,
         )
@@ -119,7 +146,7 @@ export function UserDashboard({
     return () => {
       active = false;
     };
-  }, [eventsApi, featureContractApi, ordersApi, range]);
+  }, [eventsApi, featureContractApi, globalAnnouncementsApi, ordersApi, range]);
 
   const items = useMemo(
     () => buildDashboardItems(events, campaigns, range),
@@ -131,6 +158,37 @@ export function UserDashboard({
 
   return (
     <div className="user-dashboard-page">
+      {globalAnnouncementsError ? (
+        <p className="dashboard-inline-warning" role="status">
+          {globalAnnouncementsError}
+        </p>
+      ) : null}
+      {globalAnnouncements.length > 0 ? (
+        <Section
+          eyebrow="System notice"
+          title="システムからのお知らせ"
+          description="CoCoLo運営から、すべてのチームへ向けたお知らせです。"
+        >
+          <div className="dashboard-global-announcements">
+            {globalAnnouncements.map((announcement) => (
+              <article
+                className="dashboard-global-announcement"
+                key={announcement.id}
+              >
+                <header>
+                  <h3>{announcement.title}</h3>
+                  <time dateTime={announcement.publishedAt ?? undefined}>
+                    {announcement.publishedAt
+                      ? formatDashboardDateTime(announcement.publishedAt)
+                      : ''}
+                  </time>
+                </header>
+                <p>{announcement.body}</p>
+              </article>
+            ))}
+          </div>
+        </Section>
+      ) : null}
       <Section
         eyebrow="Dashboard"
         title="これからの予定"
