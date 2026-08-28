@@ -29,6 +29,7 @@
 | LOGIN-LOGO-001 / FS-UI-004 | ログイン画面の旧アイコンを公開LP・認証済み画面と共通のCoCoLoロゴへ統一 | 実装PR #224を`develop`へ統合（merge commit `db8e959ac6afbe7c3305d6e23cb3325ef1a64f32`）。対象Vitest 7件、`pnpm test`、`pnpm build`、`pnpm lint`、`git diff --check`、品質ゲートを成功。実ブラウザのログイン画面受入は認証providerを含むstaging条件として継続 |
 | LOGIN-ENTRY-001 / FS-AUTH-001 / FS-UI-004 | 公開トップからチームログインへ進み、専用URLのシステム管理者ログインを入口表示から分離 | 実装PR #226を作成。対象Vitest 22件、`pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm lint`、`git diff --check`を成功。実ブラウザと実Auth providerを含むstaging受入は継続 |
 | ADMIN-TEAM-001 | `/admin`のシステム管理、`/team`の選択中チーム管理、`/dashboard`の利用者向け予定・締め切り一覧と14日カレンダー | 実装PR #211・#214を`develop`へ統合。docs-onlyの完了記録PRで本履歴を更新。ローカル品質検証は成功し、staging実DB/RLSと実ブラウザ受入は`ADMIN-TEAM-001-ACCEPTANCE`として継続 |
+| ADMIN-TEAM-001 / LOGIN回帰 | LP変更後のログイン後ダッシュボード、チーム導線、全体お知らせ表示の回帰修正 | 実装PR #233を`develop`へ統合。ログイン後E2E、fresh Supabase統合、unit、build、typecheck、lint、trust root、DB integrity、OpenAPI検証を成功。staging実DB/RLSと実ブラウザ受入は継続 |
 | BILLING-001 | 有償・無償feature、チーム単位のplan・flag、effective entitlement、監査境界 | PR #172を`develop`へ統合。CI、`pnpm test`、`pnpm build`、migration・trust検証成功。課金provider接続は外部条件として継続 |
 | BRD-001 / feature契約 | 役員・連絡先の`board-contacts`契約、API fail-closed、Webメニュー制御、無料feature migration | PR #185を`develop`へ統合。`pnpm test` 200件、`pnpm build`、unit、Biome、workspace boundary、migration、trust、品質ゲート成功。個人情報境界、Web閲覧、実DB/RLS受入は継続 |
 | BRD-001 / 年度引き継ぎ | 行ごとのUUIDv7生成、INSERT影響行数による`copiedCount`、APIレスポンスの件数整合 | PR #187を`develop`へ統合。`pnpm test` 200件、`pnpm build`、lint、workspace boundary、品質ゲート成功。実DB/RLSの複数行受入は継続 |
@@ -113,6 +114,18 @@
 - 検証: `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm lint`、`pnpm verify:migration-sql`、`pnpm verify:migration-checksum`、`git diff --check`を成功させた。`DIRECT_URL`未設定のためUUIDv7 migration検査、`APP_ENV`未設定のためschema drift検査は実行していない。
 - 敵対的レビュー: tenant越境、system admin認証、個人情報露出、入力検証、状態遷移、監査ログの改変防止、paid feature条件、二重送信、失敗・未接続表示を確認し、Critical / Highは0件とした。
 - 残課題: Supabaseの`system_admin` claim付与、staging migration、実DBのRLS、実ブラウザの`/admin`・`/team`・`/dashboard`受入は、再開台帳の`ADMIN-TEAM-001-ACCEPTANCE`へ移した。
+
+## ADMIN-TEAM-001 / LOGIN回帰修正 実施記録
+
+- 対象: LP変更後に不安定になったログイン後の認証コンテキスト、`/team/members`導線、利用者ダッシュボードを修正し、全体お知らせを利用者へ安全に表示できるようにした。
+- 原因: 認証コンテキストと部員一覧を一括待機していたため一方の失敗が全体を止めていた。feature停止時も予定APIを呼び出していた。出欠締切だけが期間内にある予定と、全体お知らせの公開状態・件数上限が明確でなかった。
+- 実装: `Promise.allSettled`で認証後の部分失敗を分離し、予定・締切・注文締切をJST基準の14日カレンダーへ集約した。events feature停止時のAPI呼び出しを抑止し、出欠締切を期間検索へ含めた。`/admin`の全体お知らせ・paid feature制御と、active membershipへpublishedだけを返す利用者向けAPIを追加した。
+- 認可・RLS: `/team`の部員変更をowner/adminへ限定し、staffは参照専用とした。公開お知らせはtenant・active membership・published状態をDBで再検証し、draftを除外した。paid feature以外の全体切り替えはAPI・画面で拒否した。
+- 検証: `pnpm test`（API 225件を含む）、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm lint:openapi`、`pnpm verify:trust-root`、`pnpm test:database-integrity`（25件）、`git diff --check`を成功。`pnpm test:integration`はDB 3件成功、API 25件成功・1件skip、失敗0。`E2E_ENV=local node scripts/supabase-local.ts e2e -- -g '部員'`は3件成功・1件skip。
+- 敵対的レビュー: サブエージェントで認証導線、dashboard、system admin API/RLSを分担確認し、tenant越境、認可、個人情報、入力検証、状態遷移、競合、feature境界を再確認した。Medium指摘を修正し、Critical / Highは0件とした。
+- 送迎回帰: staffの監査INSERTがPrismaの`RETURNING`によりRLSで失敗する既存不整合を検証中に発見し、SELECT権限を広げず明示SQL INSERTへ修正した。送迎lock同時登録を含む実DB統合テストも成功した。
+- 反映: 実装PR #233（merge commit `f29929039eb4340bea31f8cdf82cddac3c461dee`）を2026-08-28に`develop`へ統合した。
+- 残課題: Supabaseの`system_admin` claim付与、staging migration、実DB/RLS、実ブラウザの`/admin`・`/team`・`/dashboard`受入は、再開台帳の`ADMIN-TEAM-001-ACCEPTANCE`で継続する。
 
 ## RIDE-002 実施記録
 
