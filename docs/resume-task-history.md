@@ -124,6 +124,17 @@
 - 反映: 実装PR #221を2026-08-27に`develop`へ統合した。CIで判明したdomain build順序も修正し、install script無効化時のunit test再現性を確保した。
 - 残課題: Google Maps設定、Supabase stagingのRLS・競合、manager/guardianの実ブラウザ受入は、再開台帳の`RIDE-002-ACCEPTANCE`へ残す。
 
+## RIDE-002 2-plan同時車登録・実DB回帰検証記録
+
+- 対象: RIDE-002の残課題だった、同一運転者を2つの送迎planへ同時登録する競合経路を実DBで回帰検証した。DB fixtureは本番・stagingと分離した`cocolo-test`のloopback環境に限定した。
+- 実装: `createOffer`のvoid戻り値DB lock関数をPrismaの`$executeRaw`で呼び出すよう修正し、同一運転者・2つのplan・既存割当を含むfixtureで、正規順序の同時`createOffer`を別接続から実行した。戻り値のplanId、plan別登録件数、表示名更新、別tenantへの拒否と越境先データ未変更を検証する。
+- 競合検証: 2接続が第一lock取得後に逆順の第二lockを取得する専用テストを追加し、DBのdeadlock/timeoutで循環待ちが有限時間内に検出されることを確認した。production migrationや既存DB関数の定義は変更していない。
+- 安全性: fixture cleanupは専用UUIDを使い、test stackのloopback URL、`TEST_STACK_PROJECT=cocolo-test`、`TEST_DATABASE_RESET_ALLOWED=true`を同時に満たす場合だけ有効になる。本番・stagingの`DIRECT_URL`を誤って削除対象にできないfail-closed guardを追加した。
+- 検証: `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm test:contract`、`pnpm test:database-integrity`、`pnpm verify:trust-root`、変更ファイルのBiome、`git diff --check`を成功させた。fresh Supabase統合ではDB側3件が成功した一方、API側は現行develop由来のevents 1件とLINE 4件が失敗し、全体終了コードは1だったため、別課題として扱う。
+- 敵対的レビュー: サブエージェントにtenant越境、認可、個人情報、入力検証、状態遷移、競合、fixture cleanup、テストDB誤接続を確認させ、Critical / Highは0件とした。
+- 反映: 実装PR #229（merge commit `2bf744b73f82cc8eb95cff65f9f748e242ddfdf5`）を2026-08-28に`develop`へ統合した。完了記録は本docs-only PRで実装PRと分離して更新する。
+- 残課題: Google Maps設定、Supabase stagingのRLS・競合、manager/guardianの実ブラウザ受入は、引き続き再開台帳の`RIDE-002-ACCEPTANCE`へ残す。現行develop由来のevents/LINE統合5件も本記録の対象外である。
+
 完了した実装は、tenant越境、認可、個人情報、入力検証、状態遷移、競合、外部サービス未接続の表示をレビュー対象にしました。
 
 CriticalとHighが残る実装を完了扱いにしていません。
