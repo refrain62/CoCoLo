@@ -103,6 +103,16 @@
 - 反映: 実装PR #226と分離したdocs-only PRで本記録を追加する。
 - 残課題: 実Supabaseのclaim設定、実DB/RLS、実ブラウザの`/admin`・`/team`・`/dashboard`受入は`ADMIN-TEAM-001-ACCEPTANCE`へ残す。
 
+## LOGIN-ENTRY-001 / チーム画面初期化回帰 実施記録
+
+- 対象: チームログイン後に画面遷移すると、権限確認の失敗を予定画面用として表示し、不要な部員候補取得と共通エラーシェルが見える回帰を修正した。添付画像はこの再現状態の証跡として扱った。
+- 原因: 所属role確認の失敗時にも予定画面向けのエラー文言を表示し、予定・購買・送迎の入力に使う部員候補を全チーム画面で先行取得していた。エラー状態の共通`AppShell`が旧ハッシュリンクを表示するため、`/team/members#ride-operations-heading`へ遷移した状態も発生していた。
+- 実装: 所属role取得を独立させ、部員候補取得を予定・予定詳細・購買・送迎ルートだけへ限定した。部員候補の取得失敗は対象操作の注意に限定し、部員画面は部員画面自身のAPIエラー表示を利用する。読み込み中・権限エラー中の状態画面では旧ナビゲーションを表示しない。
+- セキュリティ: 選択中tenant、active membership、role、API・DB側の認可は変更せず、画面表示の依存関係だけを分離した。tenant越境、認可、個人情報、入力検証、状態遷移、競合を確認し、Critical / Highは0件とした。
+- 検証: ルート判定を含むWeb Vitest 43 files / 159件、`pnpm test`（contracts 52件、domain 18件、DB 10件、API 225件）、`pnpm test:unit`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`git diff --check`を成功させた。
+- 反映: 実装PR #245へ追補し、本記録は実装PRと分離したdocs-only PRで更新する。
+- 残課題: 実Supabaseのclaim設定、実DB/RLS、実ブラウザでの`/admin`・`/team`・`/dashboard`および複数feature停止時の受入は`ADMIN-TEAM-001-ACCEPTANCE`へ残す。
+
 ## LOGIN-LOGO-001 実施記録
 
 - 対象: ログイン画面だけに残っていた旧来の「C」アイコンを、公開LPと認証済み画面で利用する共通ロゴへ置き換えた。
@@ -148,6 +158,18 @@
 - セキュリティ: API、DB、migration、認証契約を変更していない。`/admin`のsystem admin分岐、選択中tenant、既存の認可・個人情報境界を維持した。敵対的レビューのCritical / Highは0件とした。
 - 検証: 対象E2Eは1件成功、全local E2Eは8件成功・1件skip、`pnpm test`（API 225件を含む）、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`git diff --check`、PR本文検証を成功させた。
 - 反映: 実装PR #238（merge commit `205d76a7075d4f69f41445120c8600d858f10cd0`）を2026-08-29に`develop`へ統合した。
+- 残課題: Supabaseの`system_admin` claim付与、staging migration、実DB/RLS、実ブラウザの`/admin`・`/team`・`/dashboard`受入は、再開台帳の`ADMIN-TEAM-001-ACCEPTANCE`で継続する。
+
+## ADMIN-TEAM-001 / チーム画面初期化回帰 実施記録
+
+- 対象: ログイン後はいったんカレンダーを表示できるものの、画面遷移後に部員メニューと異なる左メニューが表示されるチーム画面初期化回帰を修正した。
+- 原因: 認証済み画面の初期化中に認証コンテキストと部員候補を同時取得し、member optionが不要なrouteでも部員取得エラーが全体状態を上書きしていた。中間状態にもシェルを表示していたため、深い緑とLINEカラーのナビゲーションが混在していた。
+- 実装: member optionが必要なevents、event detail、orders、ride routeだけで部員候補を取得し、認証エラーと部員候補エラーを分離した。非同期結果はunmount・route変更後に反映しないようにした。
+- ナビゲーション: 初期化中、認証エラー、チーム選択、role選択の中間状態では`AppShell`のnavを非表示にし、確定した画面だけが統一シェルを表示するようにした。
+- テスト: member option route判定と、member option不要routeで不要な取得を要求しない境界を追加テストした。既存の予定・締め切り・カレンダーとチームダッシュボード統合は維持した。
+- セキュリティ: 認証コンテキストのtenant選択、既存の認可・個人情報境界、`/admin`と`/team`の分離を変更していない。敵対的レビューでCritical / Highは0件とした。
+- 検証: `pnpm test:unit`（unit 27件、Vitest 43ファイル159件）、`pnpm test`（API 225件）、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`git diff --check`を成功させた。PR #256の品質ゲートとtrust gateも成功した。
+- 反映: 実装PR #256（merge commit `85eed15732c2f9239f399ebf30874b6743d1056c`）を2026-08-29に`develop`へ統合した。
 - 残課題: Supabaseの`system_admin` claim付与、staging migration、実DB/RLS、実ブラウザの`/admin`・`/team`・`/dashboard`受入は、再開台帳の`ADMIN-TEAM-001-ACCEPTANCE`で継続する。
 
 ## RIDE-002 実施記録
