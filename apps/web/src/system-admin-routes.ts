@@ -1,4 +1,4 @@
-import { isLegacyTeamPath } from './admin-routes.js';
+import { isLegacyTeamPath, normalizeRoutePath } from './admin-routes.js';
 
 export type SystemAdminRoute = 'dashboard' | 'notices' | 'entitlements';
 
@@ -31,15 +31,17 @@ export const systemAdminNavigation: readonly SystemAdminNavigationItem[] = [
 ];
 
 export function isSystemAdminPath(pathname: string) {
+  const normalizedPath = normalizeRoutePath(pathname);
   return (
-    pathname === '/admin' ||
-    (pathname.startsWith('/admin/') && !isLegacyTeamPath(pathname))
+    normalizedPath === '/admin' ||
+    (normalizedPath.startsWith('/admin/') && !isLegacyTeamPath(normalizedPath))
   );
 }
 
 export function resolveSystemAdminRoute(pathname: string): SystemAdminRoute {
+  const normalizedPath = normalizeRoutePath(pathname);
   return (
-    systemAdminNavigation.find((item) => item.href === pathname)?.route ??
+    systemAdminNavigation.find((item) => item.href === normalizedPath)?.route ??
     'dashboard'
   );
 }

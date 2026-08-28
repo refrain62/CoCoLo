@@ -2,7 +2,7 @@ import type { TeamOption } from '@cocolo/contracts/auth-team-selection';
 import { AppShell } from '@cocolo/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { AdminDashboard } from './admin-dashboard.js';
-import type { AdminRoute } from './admin-routes.js';
+import { type AdminRoute, normalizeRoutePath } from './admin-routes.js';
 import { AdminShell } from './admin-shell.js';
 import { navigateInApp, replaceInApp } from './app-navigation.js';
 import { applyPageMetadata } from './app-route.js';
@@ -146,7 +146,11 @@ export function AuthenticatedApp() {
     }
   }, [isSystemAdmin, systemAdminPath]);
   useEffect(() => {
-    if (!systemAdminPath && (pathname === '/' || pathname === '/login')) {
+    const normalizedPath = normalizeRoutePath(pathname);
+    if (
+      !systemAdminPath &&
+      (normalizedPath === '/' || normalizedPath === '/login')
+    ) {
       replaceInApp('/dashboard');
       setPathname('/dashboard');
     }

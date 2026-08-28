@@ -1,6 +1,7 @@
 import { AppShell, Badge, Button, CoCoLoLogoMark } from '@cocolo/ui';
 import { type MouseEvent, type ReactNode, useEffect, useState } from 'react';
-import { navigateInApp } from './app-navigation.js';
+import { normalizeRoutePath } from './admin-routes.js';
+import { navigateInApp, replaceInApp } from './app-navigation.js';
 import { applyPageMetadata } from './app-route.js';
 import {
   resolveSystemAdminRoute,
@@ -21,7 +22,10 @@ export function SystemAdminShell({
   const [pathname, setPathname] = useState(() => window.location.pathname);
 
   useEffect(() => {
-    applyPageMetadata(window.location.pathname);
+    const canonicalPath = normalizeRoutePath(window.location.pathname);
+    if (canonicalPath !== window.location.pathname) replaceInApp(canonicalPath);
+    applyPageMetadata(canonicalPath);
+    setPathname(canonicalPath);
     const handlePopState = () => setPathname(window.location.pathname);
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);

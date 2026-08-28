@@ -4,6 +4,7 @@ import {
   canonicalAdminPath,
   isAdminNavigationVisible,
   isAdminRouteVisible,
+  normalizeRoutePath,
   resolveAdminRoute,
 } from './admin-routes.js';
 
@@ -16,12 +17,15 @@ describe('管理画面ルート', () => {
     expect(canonicalAdminPath('/admin/events/detail')).toBe(
       '/team/events/detail',
     );
+    expect(canonicalAdminPath('/admin/members/')).toBe('/team/members');
+    expect(normalizeRoutePath('/team/events/')).toBe('/team/events');
   });
 
   it('パスを専用画面へ解決する', () => {
     expect(resolveAdminRoute('/admin')).toBe('dashboard');
     expect(resolveAdminRoute('/team')).toBe('dashboard');
     expect(resolveAdminRoute('/team/members')).toBe('members');
+    expect(resolveAdminRoute('/team/members/')).toBe('members');
     expect(resolveAdminRoute('/admin/board-contacts')).toBe('board-contacts');
     expect(resolveAdminRoute('/admin/features')).toBe('features');
     expect(

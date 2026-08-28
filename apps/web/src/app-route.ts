@@ -1,6 +1,6 @@
 export type AppEntry = 'landing' | 'manual' | 'authenticated';
 
-import { isLegacyTeamPath } from './admin-routes.js';
+import { isLegacyTeamPath, normalizeRoutePath } from './admin-routes.js';
 
 export type PageMetadata = {
   title: string;
@@ -9,42 +9,47 @@ export type PageMetadata = {
 
 /** 公開LPと、既存の認証・deep link経路の境界を一か所で判定します。 */
 export function resolveAppEntry(pathname: string): AppEntry {
-  if (pathname === '/') return 'landing';
-  if (pathname === '/manual') return 'manual';
+  const normalizedPath = normalizeRoutePath(pathname);
+  if (normalizedPath === '/') return 'landing';
+  if (normalizedPath === '/manual') return 'manual';
   return 'authenticated';
 }
 
 export function resolvePageMetadata(pathname: string): PageMetadata {
-  if (pathname === '/')
+  const normalizedPath = normalizeRoutePath(pathname);
+  if (normalizedPath === '/')
     return {
       title: 'CoCoLo | 部活・クラブの連絡と運営をひとつに',
       description:
         'CoCoLoは、部活・クラブで散らばりがちな予定や連絡を目的ごとに整理し、チャットに埋もれた情報を探す手間を減らすチーム運営ツールです。',
     };
-  if (pathname === '/manual')
+  if (normalizedPath === '/manual')
     return {
       title: 'CoCoLo 操作マニュアル',
       description: 'CoCoLoの基本操作と安全な利用方法を確認できます。',
     };
-  if (pathname === '/login')
+  if (normalizedPath === '/login')
     return {
       title: 'CoCoLo | チームログイン',
       description: 'CoCoLoを利用中のチームメンバー向けログインページです。',
     };
   if (
-    pathname === '/admin' ||
-    (pathname.startsWith('/admin/') && !isLegacyTeamPath(pathname))
+    normalizedPath === '/admin' ||
+    (normalizedPath.startsWith('/admin/') && !isLegacyTeamPath(normalizedPath))
   )
     return {
       title: 'CoCoLo | システム管理',
       description: 'CoCoLo全体のお知らせと有償機能を管理する画面です。',
     };
-  if (pathname === '/dashboard' || pathname.startsWith('/dashboard/'))
+  if (
+    normalizedPath === '/dashboard' ||
+    normalizedPath.startsWith('/dashboard/')
+  )
     return {
       title: 'CoCoLo | ダッシュボード',
       description: '直近2週間の予定と締め切りを確認できます。',
     };
-  if (pathname === '/team' || pathname.startsWith('/team/'))
+  if (normalizedPath === '/team' || normalizedPath.startsWith('/team/'))
     return {
       title: 'CoCoLo | チーム管理',
       description: '選択中チームの管理画面です。',
