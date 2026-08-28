@@ -137,6 +137,15 @@ export function resolveAdminRoute(pathname: string): AdminRoute {
   return item?.route ?? legacyAdminPaths[pathname] ?? 'dashboard';
 }
 
+export function isMemberOptionRoute(route: AdminRoute) {
+  return (
+    route === 'events' ||
+    route === 'event-detail' ||
+    route === 'orders' ||
+    route === 'ride'
+  );
+}
+
 export function canonicalAdminPath(pathname: string) {
   if (pathname === '/' || pathname === '/login' || pathname === '/admin')
     return '/team';

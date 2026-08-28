@@ -2,7 +2,11 @@ import type { TeamOption } from '@cocolo/contracts/auth-team-selection';
 import { AppShell } from '@cocolo/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { AdminDashboard } from './admin-dashboard.js';
-import type { AdminRoute } from './admin-routes.js';
+import {
+  type AdminRoute,
+  isMemberOptionRoute,
+  resolveAdminRoute,
+} from './admin-routes.js';
 import { AdminShell } from './admin-shell.js';
 
 import { useAuth } from './auth-context.js';
@@ -91,7 +95,10 @@ export function AuthenticatedApp() {
   const [eventMembers, setEventMembers] = useState<
     Array<{ id: string; name: string }>
   >([]);
-  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
+  const [memberOptionsError, setMemberOptionsError] = useState<string | null>(
+    null,
+  );
   useEffect(() => {
     const handlePopState = () => setPathname(window.location.pathname);
     window.addEventListener('popstate', handlePopState);
@@ -292,33 +299,62 @@ export function AuthenticatedApp() {
     [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
   useEffect(() => {
-    if (!session || !selectedTeam || systemAdminPath) return;
+    if (!session || !selectedTeam || systemAdminPath) {
+      setRole(null);
+      setRoleError(null);
+      setEventMembers([]);
+      setMemberOptionsError(null);
+      return;
+    }
     let active = true;
     setRole(null);
-    setEventsError(null);
-    void Promise.all([
-      authContextApi.get(),
-      memberApi.listAll({ q: '', category: '', status: 'active' }),
-    ])
-      .then(([context, members]) => {
+    setRoleError(null);
+    setEventMembers([]);
+    setMemberOptionsError(null);
+    void authContextApi
+      .get()
+      .then((context) => {
         if (!active) return;
         setRole(context.role);
+      })
+      .catch(() => {
+        if (active) setRoleError('チームの権限を確認できません。');
+      });
+    if (!isMemberOptionRoute(resolveAdminRoute(pathname)))
+      return () => {
+        active = false;
+      };
+    void memberApi
+      .listAll({ q: '', category: '', status: 'active' })
+      .then((members) => {
+        if (!active) return;
         setEventMembers(
           members.map((member) => ({ id: member.id, name: member.name })),
         );
       })
       .catch(() => {
-        if (active) setEventsError('予定画面の利用権限を確認できません。');
+        if (active) {
+          setMemberOptionsError(
+            '対象メンバーを確認できないため、メンバーを選ぶ操作を利用できません。',
+          );
+        }
       });
     return () => {
       active = false;
     };
-  }, [authContextApi, memberApi, selectedTeam, session, systemAdminPath]);
+  }, [
+    authContextApi,
+    memberApi,
+    pathname,
+    selectedTeam,
+    session,
+    systemAdminPath,
+  ]);
   if (!session) return null;
   if (systemAdminPath) {
     if (isSystemAdmin === null)
       return (
-        <AppShell>
+        <AppShell nav={null}>
           <section className="app-state-card" role="status">
             システム管理者権限を確認しています。
           </section>
@@ -342,7 +378,7 @@ export function AuthenticatedApp() {
   }
   if (isResolvingTeam)
     return (
-      <AppShell>
+      <AppShell nav={null}>
         <section className="app-state-card" aria-live="polite" role="status">
           チーム情報を確認しています。
         </section>
@@ -350,7 +386,7 @@ export function AuthenticatedApp() {
     );
   if (teamError)
     return (
-      <AppShell>
+      <AppShell nav={null}>
         <section className="app-state-card" role="alert">
           {teamError}
         </section>
@@ -358,7 +394,7 @@ export function AuthenticatedApp() {
     );
   if (!selectedTeam)
     return (
-      <AppShell>
+      <AppShell nav={null}>
         <TeamSelectionPage
           api={teamSelectionApi}
           onSelected={(team) => {
@@ -371,12 +407,12 @@ export function AuthenticatedApp() {
 
   if (!role)
     return (
-      <AppShell>
+      <AppShell nav={null}>
         <section
           className="app-state-card"
-          role={eventsError ? 'alert' : 'status'}
+          role={roleError ? 'alert' : 'status'}
         >
-          {eventsError ?? 'チームの権限を確認しています。'}
+          {roleError ?? 'チームの権限を確認しています。'}
         </section>
       </AppShell>
     );
@@ -389,7 +425,9 @@ export function AuthenticatedApp() {
     clearStoredSelectedTeamId();
     setSelectedTeam(null);
     setRole(null);
-    setEventsError(null);
+    setRoleError(null);
+    setEventMembers([]);
+    setMemberOptionsError(null);
   }
 
   function renderAdminPage(
@@ -402,6 +440,11 @@ export function AuthenticatedApp() {
         (feature) => feature.key === key && feature.enabled,
       );
     const notificationTarget = parseNotificationDeepLink(pathname);
+    const memberOptionsNotice = memberOptionsError ? (
+      <p className="app-permission-note" role="alert">
+        {memberOptionsError}
+      </p>
+    ) : null;
     const intro = {
       members: [
         'Members',
@@ -474,6 +517,7 @@ export function AuthenticatedApp() {
         );
       return (
         <div className="admin-page-stack">
+          {memberOptionsNotice}
           <EventsPage
             key={`notification-event-${notificationTarget.id}`}
             api={eventsApi}
@@ -531,21 +575,27 @@ export function AuthenticatedApp() {
           <MemberManagementPage api={memberApi} role={currentRole} />
         ) : null}
         {route === 'events' ? (
-          <EventsPage
-            api={eventsApi}
-            role={currentRole}
-            memberOptions={eventMembers}
-            selectionStorageKey={subjectMemberStorageKey}
-          />
+          <>
+            {memberOptionsNotice}
+            <EventsPage
+              api={eventsApi}
+              role={currentRole}
+              memberOptions={eventMembers}
+              selectionStorageKey={subjectMemberStorageKey}
+            />
+          </>
         ) : null}
         {route === 'orders' ? (
-          <OrdersPaymentsPage
-            key={selectedTeamId}
-            api={ordersApi}
-            role={currentRole}
-            members={eventMembers}
-            selectionStorageKey={subjectMemberStorageKey}
-          />
+          <>
+            {memberOptionsNotice}
+            <OrdersPaymentsPage
+              key={selectedTeamId}
+              api={ordersApi}
+              role={currentRole}
+              members={eventMembers}
+              selectionStorageKey={subjectMemberStorageKey}
+            />
+          </>
         ) : null}
         {route === 'announcements' ? (
           <>
@@ -564,19 +614,22 @@ export function AuthenticatedApp() {
           <LineNotificationPanel api={lineNotificationApi} role={currentRole} />
         ) : null}
         {route === 'ride' ? (
-          <RideOperationsPanel
-            api={rideApi}
-            isManager={
-              currentRole === 'owner' ||
-              currentRole === 'admin' ||
-              currentRole === 'staff'
-            }
-            members={eventMembers.map((member) => ({
-              id: member.id,
-              label: member.name,
-            }))}
-            selectionStorageKey={subjectMemberStorageKey}
-          />
+          <>
+            {memberOptionsNotice}
+            <RideOperationsPanel
+              api={rideApi}
+              isManager={
+                currentRole === 'owner' ||
+                currentRole === 'admin' ||
+                currentRole === 'staff'
+              }
+              members={eventMembers.map((member) => ({
+                id: member.id,
+                label: member.name,
+              }))}
+              selectionStorageKey={subjectMemberStorageKey}
+            />
+          </>
         ) : null}
         {route === 'settings' ? (
           <TeamSettingsPage
