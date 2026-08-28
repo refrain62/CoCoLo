@@ -28,7 +28,21 @@ const assignmentB = '00000000-0000-7000-8000-000000009042';
 
 const appUrl = process.env.DATABASE_URL;
 const directUrl = process.env.DIRECT_URL;
-const enabled = Boolean(appUrl && directUrl);
+function isLoopbackDatabaseUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+const testDatabaseGuard =
+  process.env.TEST_DATABASE_RESET_ALLOWED === 'true' &&
+  process.env.TEST_STACK_PROJECT === 'cocolo-test' &&
+  isLoopbackDatabaseUrl(appUrl) &&
+  isLoopbackDatabaseUrl(directUrl);
+const enabled = Boolean(appUrl && directUrl && testDatabaseGuard);
 const preparedIntegration = process.env.COCOLO_INTEGRATION_PREPARED === 'true';
 const actor: RideActor = {
   tenantId,
@@ -70,15 +84,85 @@ function withDatabaseTimeouts(url: string): string {
   return parsed.toString();
 }
 
-function pauseAfterFirstPlanLock(definition: string): string {
-  const marker = `    PERFORM pg_advisory_xact_lock(hashtextextended(\n      plan_row.tenant_id::text || ':' || plan_row.plan_id::text, 0\n    ));\n`;
-  const paused = definition.replace(
-    marker,
-    `${marker}    PERFORM pg_sleep(0.5);\n`,
-  );
-  if (paused === definition)
-    throw new Error('lock関数へテスト用pauseを注入できません。');
-  return paused;
+function createGate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+async function acquireInvertedPlanLocks(
+  client: PrismaClient,
+  firstPlanId: string,
+  secondPlanId: string,
+  ready: ReturnType<typeof createGate>,
+  barrier: Promise<void>,
+): Promise<void> {
+  await client.$transaction(async (transaction) => {
+    await transaction.$executeRaw`
+      SELECT set_config('lock_timeout', '500ms', true),
+             set_config('statement_timeout', '3000ms', true)
+    `;
+    await transaction.$executeRaw`
+      SELECT pg_advisory_xact_lock(
+        hashtextextended(${`${tenantId}:${firstPlanId}`}, 0)
+      )
+    `;
+    ready.resolve();
+    await barrier;
+    await transaction.$executeRaw`
+      SELECT pg_advisory_xact_lock(
+        hashtextextended(${`${tenantId}:${secondPlanId}`}, 0)
+      )
+    `;
+  });
+}
+
+async function verifyInvertedPlanLocksAreBounded(url: string): Promise<void> {
+  const first = new PrismaClient({
+    datasources: { db: { url: withDatabaseTimeouts(url) } },
+  });
+  const second = new PrismaClient({
+    datasources: { db: { url: withDatabaseTimeouts(url) } },
+  });
+  const firstReady = createGate();
+  const secondReady = createGate();
+  let reachedBarrier = false;
+  let barrierTimer: ReturnType<typeof setTimeout> | undefined;
+  const barrier = Promise.race([
+    Promise.all([firstReady.promise, secondReady.promise]).then(() => {
+      reachedBarrier = true;
+    }),
+    new Promise<never>((_, reject) => {
+      barrierTimer = setTimeout(
+        () => reject(new Error('2つの第一plan lockを確認できません。')),
+        2000,
+      );
+    }),
+  ]);
+  try {
+    const outcomes = await Promise.allSettled([
+      acquireInvertedPlanLocks(first, planA, planB, firstReady, barrier),
+      acquireInvertedPlanLocks(second, planB, planA, secondReady, barrier),
+    ]);
+    assert.equal(reachedBarrier, true);
+    const errors = outcomes
+      .filter(
+        (outcome): outcome is PromiseRejectedResult =>
+          outcome.status === 'rejected',
+      )
+      .map((outcome) => String(outcome.reason));
+    assert.ok(
+      errors.length > 0,
+      '逆順plan lockがtimeoutまたはdeadlockとして検出されませんでした。',
+    );
+    assert.match(errors.join(' / '), /deadlock|timeout/i);
+  } finally {
+    if (barrierTimer) clearTimeout(barrierTimer);
+    await first.$disconnect();
+    await second.$disconnect();
+  }
 }
 
 async function cleanupFixture(client: PrismaClient): Promise<void> {
@@ -259,13 +343,24 @@ async function seedFixture(client: PrismaClient): Promise<void> {
   );
 }
 
+test('RIDE-002の逆順plan lockはDB timeoutで循環待ちを検出できる', {
+  skip: !preparedIntegration && !testDatabaseGuard,
+  concurrency: false,
+}, async () => {
+  if (!directUrl || !testDatabaseGuard)
+    throw new Error(
+      'RIDE-002のlock競合テストにはcocolo-testのloopback DB接続とリセット許可が必要です。',
+    );
+  await verifyInvertedPlanLocksAreBounded(directUrl);
+});
+
 test('同一運転者の2つのplanへの同時車登録はplan lockの循環待ちを起こさない', {
   skip: !preparedIntegration && !enabled,
   concurrency: false,
 }, async () => {
-  if (!appUrl || !directUrl)
+  if (!appUrl || !directUrl || !testDatabaseGuard)
     throw new Error(
-      'RIDE-002の実DB統合テストにはDATABASE_URLとDIRECT_URLが必要です。',
+      'RIDE-002の実DB統合テストにはcocolo-testのloopback DB接続とリセット許可が必要です。',
     );
   const appTestUrl = withDatabaseTimeouts(appUrl);
   const first = new PrismaClient({ datasources: { db: { url: appTestUrl } } });
@@ -280,7 +375,6 @@ test('同一運転者の2つのplanへの同時車登録はplan lockの循環待
   let concurrentRegistrations:
     | Promise<PromiseSettledResult<unknown>[]>
     | undefined;
-  let originalTwoArgLockDefinition: string | undefined;
   try {
     await cleanupFixture(migration);
     await seedFixture(migration);
@@ -301,15 +395,7 @@ test('同一運転者の2つのplanへの同時車登録はplan lockの循環待
         lockFunction.signature,
       );
       assert.match(definitions[0]?.definition ?? '', lockFunction.order);
-      if (lockFunction.signature === 'app_lock_ride_driver_plans(uuid,uuid)')
-        originalTwoArgLockDefinition = definitions[0]?.definition;
     }
-    if (!originalTwoArgLockDefinition)
-      throw new Error('2引数lock関数の定義を取得できません。');
-    await execute(
-      migration,
-      pauseAfterFirstPlanLock(originalTwoArgLockDefinition),
-    );
     const firstRepository = createRideRepository(first);
     const secondRepository = createRideRepository(second);
     await assert.rejects(() =>
@@ -416,8 +502,6 @@ test('同一運転者の2つのplanへの同時車登録はplan lockの循環待
   } finally {
     if (timeout) clearTimeout(timeout);
     await concurrentRegistrations;
-    if (originalTwoArgLockDefinition)
-      await execute(migration, originalTwoArgLockDefinition);
     await cleanupFixture(migration);
   }
 });
