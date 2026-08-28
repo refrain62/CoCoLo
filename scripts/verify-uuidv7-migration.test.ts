@@ -34,6 +34,7 @@ test('UUIDv7検査SQLはversion nibble以外を許可しない', () => {
   assert.match(query, /FROM "audit_logs"/);
   assert.match(query, /"id"::text/);
   assert.match(query, /substring\("id"::text, 15, 1\) <> '7'/);
+  assert.match(query, /\(get_byte\(uuid_send\("id"\), 8\) & 192\) <> 128/);
   assert.match(query, /count\(\*\)::integer/);
 });
 
