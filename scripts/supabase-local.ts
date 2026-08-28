@@ -397,9 +397,13 @@ async function runIntegration(): Promise<void> {
   const stack = stacks.test;
   try {
     const prepared = await prepareStack(stack, { forceFresh: true });
-    const result = runPnpm(['test:integration:raw'], prepared.env, {
-      allowFailure: true,
-    });
+    const result = runPnpm(
+      ['test:integration:raw'],
+      { ...prepared.env, COCOLO_INTEGRATION_PREPARED: 'true' },
+      {
+        allowFailure: true,
+      },
+    );
     assert.equal(
       result.status,
       0,
