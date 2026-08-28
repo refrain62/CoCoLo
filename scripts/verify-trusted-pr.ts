@@ -7,14 +7,18 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertTrustRootReady, readTrustRoot } from './trust-root.ts';
 import { assertPullRequestDescription } from './verify-pr-description.ts';
 
-type PullRequestFile = { filename?: string; status?: string };
+export type PullRequestFile = {
+  filename?: string;
+  previous_filename?: string;
+  status?: string;
+};
 type PullRequestMetadata = { changed_files?: number; body?: string | null };
 type ContentsResponse = { content?: string; encoding?: string };
 type TrustedManifest = {
   protected_paths?: string[];
   files?: Record<string, string>;
 };
-type BootstrapExtension = {
+export type BootstrapExtension = {
   schema: 1;
   mode: 'owner-only-one-time';
   owner: '@refrain62';
@@ -62,6 +66,55 @@ export function isProtectedPath(filename: string): boolean {
     filename.startsWith('packages/db/prisma/migrations/') ||
     filename === 'packages/db/prisma/migrations.sha256' ||
     filename.startsWith('scripts/')
+  );
+}
+
+export function assertNoProtectedPathRename(
+  filename: string,
+  previousFilename?: string,
+): void {
+  if (previousFilename === undefined) return;
+  assert.ok(
+    !isProtectedPath(filename) && !isProtectedPath(previousFilename),
+    `${filename}: protected pathのrenameは拒否します。`,
+  );
+}
+
+// one-time拡張は保護対象差分のowner先行登録にだけ適用し、後続の非保護差分を塞がない。
+export function assertBootstrapExtensionForChange(
+  extension: BootstrapExtension,
+  headSha: string,
+  protectedChangedNames: readonly string[],
+): void {
+  if (protectedChangedNames.length === 0) return;
+  assert.equal(extension.schema, 1, 'bootstrap extensionのschemaが不正です。');
+  assert.equal(extension.mode, 'owner-only-one-time');
+  assert.equal(extension.owner, '@refrain62');
+  assert.match(
+    extension.head_sha,
+    /^[0-9a-f]{40}$/,
+    'bootstrap extensionのhead SHAが不正です。',
+  );
+  assert.ok(
+    Object.keys(extension.files).length > 0,
+    'bootstrap extensionの対象ファイルが空です。',
+  );
+  for (const [filename, expectedHash] of Object.entries(extension.files)) {
+    assert.ok(
+      isProtectedPath(filename),
+      `${filename}: extension対象が保護範囲外です。`,
+    );
+    assert.match(
+      expectedHash,
+      /^[0-9a-f]{64}$/,
+      `${filename}: extension hashが不正です。`,
+    );
+  }
+  assert.equal(extension.head_sha, headSha);
+  assert.deepEqual(
+    Object.keys(extension.files).sort(),
+    [...protectedChangedNames].sort(),
+    'bootstrap extensionはPRの全保護対象ファイルを過不足なく固定してください。',
   );
 }
 
@@ -154,6 +207,15 @@ async function main(): Promise<void> {
     changed.every((file) => typeof file.filename === 'string'),
     'PR files APIにfilenameがない差分があります。',
   );
+  assert.ok(
+    changed.every(
+      (file) =>
+        file.previous_filename === undefined ||
+        (typeof file.previous_filename === 'string' &&
+          file.previous_filename.length > 0),
+    ),
+    'PR files APIのprevious_filenameが不正です。',
+  );
   const changedNames = changed.map((file) => file.filename as string);
   assert.equal(
     new Set(changedNames).size,
@@ -222,43 +284,21 @@ async function main(): Promise<void> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
+  const protectedChangedNames = changed
+    .filter((file) => file.filename && isProtectedPath(file.filename))
+    .map((file) => file.filename as string)
+    .sort();
   if (extension) {
-    assert.equal(
-      extension.schema,
-      1,
-      'bootstrap extensionのschemaが不正です。',
-    );
-    assert.equal(extension.mode, 'owner-only-one-time');
-    assert.equal(extension.owner, '@refrain62');
-    assert.equal(extension.head_sha, headSha);
-    assert.ok(
-      Object.keys(extension.files).length > 0,
-      'bootstrap extensionの対象ファイルが空です。',
-    );
-    for (const [filename, expectedHash] of Object.entries(extension.files)) {
-      assert.ok(
-        isProtectedPath(filename),
-        `${filename}: extension対象が保護範囲外です。`,
-      );
-      assert.match(
-        expectedHash,
-        /^[0-9a-f]{64}$/,
-        `${filename}: extension hashが不正です。`,
-      );
-    }
-    const protectedChangedNames = changed
-      .filter((file) => file.filename && isProtectedPath(file.filename))
-      .map((file) => file.filename as string)
-      .sort();
-    assert.deepEqual(
-      Object.keys(extension.files).sort(),
+    assertBootstrapExtensionForChange(
+      extension,
+      headSha,
       protectedChangedNames,
-      'bootstrap extensionはPRの全保護対象ファイルを過不足なく固定してください。',
     );
   }
 
   for (const file of changed) {
     const filename = file.filename as string;
+    assertNoProtectedPathRename(filename, file.previous_filename);
     if (!isProtectedPath(filename)) continue;
     if (extension?.files[filename] !== undefined) {
       assert.ok(
