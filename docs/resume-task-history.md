@@ -263,6 +263,18 @@ CriticalとHighが残る実装を完了扱いにしていません。
 - 敵対的レビュー: tenant越境、認可・個人情報、入力検証、状態遷移、競合、テスト不足、仕様不整合を確認し、Critical / Highは0件と判定した。
 - 残課題: scanner初回導入、rename・削除fail-closed、branch protection、staging実DB/RLS、同一SHAのrelease証跡は`resume-task-list.md`のT014-ROOT / T014-SCAN / T014-PR、T014-E2E、T014-RELEASE、OPS-001〜007へ残す。
 
+## T014 / owner-only extension適用境界 実施記録
+
+- 対象: `bootstrap-extension.json`が存在すると、protected path変更のない通常PRにもowner-only extensionの`head_sha`とchanged path集合の検証が適用され、apps/webだけを変更するPR #252を拒否していた。
+- 実装: protected pathの変更集合を先に確定し、変更がない場合はowner-only extensionの検証を適用しないようにした。protected pathの変更がある場合は、extensionのschema、mode、owner、head SHA、対象ファイル集合、各hashを従来どおり厳格に検証する。
+- 境界: `previous_filename`を含むrenameの旧パスと新パスのいずれかがprotected pathなら拒否する。これによりprotected pathから通常パスへのrenameで保護対象を抜ける経路をfail-closedにした。
+- テスト: 通常PRでのstaleまたは不正なextension情報の無視、protected pathを含むrenameの拒否、通常パス同士のrenameの許可、protected変更時のhead SHA不一致とfile set不一致の拒否、protected変更判定の真偽を追加テストで確認した。
+- 信頼境界: owner-only登録PR #259で実装head `e57789e82861368646549cc958f14742a59322e9`とtrusted file manifestのhash集合を登録し、merge commit `957ee464`で`develop`へ統合した。最新develop起点で再構成した実装PR #260はmerge commit `0f21ac9c`で2026-08-28に統合した。先行PR #258は再構成によりsupersededとしてクローズした。
+- 敵対的レビュー: サブエージェントがowner-only登録の先行条件、rename経由の境界逸脱、protected変更時のfail-closed、テストの不足を確認した。rename検査と回帰テストを追加した後、Critical / Highは0件と判定した。変更対象はtrust gateとその契約テストであり、tenantデータ、認可済みデータ、個人情報の読み書き経路は変更していない。
+- 検証: `node --test scripts/verify-trusted-pr.test.ts`、`pnpm test:unit`、`pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm verify:trust-root`、`git diff --check`を成功させた。PR #260のGitHub `trusted-validation`と`quality`も成功した。
+- 制約: ローカルの`pnpm ci:fast`は、Windows上の`pnpm.cmd`解決が要求版10.26.0ではなく11.19.0となる既存toolchain制約で停止した。CIの品質ゲートは成功しており、コード起因の失敗とは判定していない。
+- 残課題: scanner初回導入、rename・削除経路の実行確認、branch protection、staging実DB/RLS、同一SHAのrelease証跡は、`resume-task-list.md`のT014-ROOT / T014-SCAN / T014-PR、T014-E2E、T014-RELEASE、OPS-001〜007に残す。
+
 詳細な重大度と次の行動は[レビュー状況](reviews/README.md)と[中断再開タスクリスト](resume-task-list.md)に集約しています。
 
 ## 履歴の更新規則

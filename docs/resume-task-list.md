@@ -14,7 +14,7 @@
 
 | 状態 | ID | 次に確認すること |
 | --- | --- | --- |
-| `[!]` | T014-ROOT / T014-SCAN / T014-PR | mainのowner-only bootstrapとUUIDv7検査のowner-only拡張・実装PR（#51・#247・#249・#250）は統合済み。scanner初回導入、rename・削除のfail-closed検査、branch protectionを同一rootで確認する |
+| `[!]` | T014-ROOT / T014-SCAN / T014-PR | `main`のowner-only bootstrapはPR #51、UUIDv7検査のowner-only拡張はPR #247・#249・#250、trusted PRのowner-only extension適用境界はPR #259・#260で`develop`へ統合済み。protected path renameのfail-closed実装も完了したが、scanner初回導入、rename・削除経路の実行確認、branch protectionを同一rootで確認する |
 | `[ ]` | T014-E2E | PostgreSQL付きperiodic E2Eの定期・手動実行、固定レポート、失敗Issue同期を実行する |
 | `[ ]` | T014-RATE | 実Redis相当、原子的consume、TTL、複数API instance、障害時503をstagingで確認する |
 | `[ ]` | T014-RELEASE | T-014各検査が同じ最新SHAで成功した証跡をまとめる |
