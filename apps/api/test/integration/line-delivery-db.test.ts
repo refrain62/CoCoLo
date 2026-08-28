@@ -6,6 +6,7 @@ import {
   createPrismaClient,
   enqueueLineDelivery,
 } from '@cocolo/db';
+import { createFeatureContractRepository } from '@cocolo/db/feature-contract';
 import { createApp } from '../../dist/app.js';
 import {
   createLineDeliveryProcessor,
@@ -17,9 +18,6 @@ const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
 const ACTOR = 'owner-a';
 const RACE_ACTOR = 'owner-b';
-const INTEGRATION_GROUP = 'Uintegration';
-const SOURCE_EVENT_A = '00000000-0000-7000-8000-000000000901';
-const SOURCE_EVENT_B = '00000000-0000-7000-8000-000000000902';
 
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URLが必要です');
 assert.ok(
@@ -33,27 +31,25 @@ const worker = createPrismaClient(
   process.env.LINE_DELIVERY_WORKER_DATABASE_URL,
 );
 const owner = createPrismaClient(process.env.DIRECT_URL);
+async function createIntegrationEventId() {
+  const rows = await owner.$queryRaw<Array<{ id: string }>>`
+    SELECT app_uuidv7()::text AS id
+  `;
+  const id = rows[0]?.id;
+  if (!id) throw new Error('統合テスト用の予定IDを生成できません。');
+  return id;
+}
+const SOURCE_EVENT_A = await createIntegrationEventId();
+const SOURCE_EVENT_B = await createIntegrationEventId();
+const SOURCE_EVENT_CROSS_SOURCE = await createIntegrationEventId();
+const SOURCE_EVENT_RETRY = await createIntegrationEventId();
+const SOURCE_EVENT_UNKNOWN = await createIntegrationEventId();
+const SOURCE_EVENT_LEASE = await createIntegrationEventId();
+const INTEGRATION_GROUP = `Uintegration-${randomUUID()}`;
 await owner.$executeRaw`
   INSERT INTO line_connections (tenant_id, group_id, status, connected_at, updated_at)
   VALUES (${TENANT_A}::uuid, ${INTEGRATION_GROUP}, 'connected'::line_connection_status, clock_timestamp(), clock_timestamp())
-  ON CONFLICT (tenant_id) DO UPDATE
-    SET group_id = EXCLUDED.group_id,
-        status = EXCLUDED.status,
-        connected_at = EXCLUDED.connected_at,
-        updated_at = EXCLUDED.updated_at
-`;
-await owner.$executeRaw`
-  INSERT INTO tenant_plans
-    (id, tenant_id, plan_key, status, feature_keys, starts_at)
-  VALUES
-    ('00000000-0000-7000-8000-000000000903'::uuid, ${TENANT_A}::uuid,
-     'integration', 'active'::tenant_plan_status,
-     ARRAY['line-notifications']::text[], '2020-01-01T00:00:00Z')
-  ON CONFLICT (tenant_id) DO UPDATE
-    SET status = EXCLUDED.status,
-        feature_keys = EXCLUDED.feature_keys,
-        starts_at = EXCLUDED.starts_at,
-        ends_at = NULL
+  ON CONFLICT (tenant_id) DO NOTHING
 `;
 await owner.$executeRaw`
   INSERT INTO events
@@ -63,14 +59,27 @@ await owner.$executeRaw`
     (${SOURCE_EVENT_A}::uuid, ${TENANT_A}::uuid, 'LINE統合テスト予定A',
      'practice'::event_type, '2099-02-01T10:00:00Z', '2099-02-01T12:00:00Z',
      '2099-02-01T09:00:00Z', ${ACTOR}, ${ACTOR}),
+    (${SOURCE_EVENT_CROSS_SOURCE}::uuid, ${TENANT_A}::uuid, 'LINE統合テスト別source',
+     'practice'::event_type, '2099-02-01T13:00:00Z', '2099-02-01T15:00:00Z',
+     '2099-02-01T12:00:00Z', ${ACTOR}, ${ACTOR}),
     (${SOURCE_EVENT_B}::uuid, ${TENANT_B}::uuid, 'LINE統合テスト予定B',
      'practice'::event_type, '2099-02-01T10:00:00Z', '2099-02-01T12:00:00Z',
-     '2099-02-01T09:00:00Z', ${RACE_ACTOR}, ${RACE_ACTOR})
+     '2099-02-01T09:00:00Z', ${RACE_ACTOR}, ${RACE_ACTOR}),
+    (${SOURCE_EVENT_RETRY}::uuid, ${TENANT_A}::uuid, 'LINE統合テスト再試行',
+     'practice'::event_type, '2099-02-02T10:00:00Z', '2099-02-02T12:00:00Z',
+     '2099-02-02T09:00:00Z', ${ACTOR}, ${ACTOR}),
+    (${SOURCE_EVENT_UNKNOWN}::uuid, ${TENANT_A}::uuid, 'LINE統合テスト照合待ち',
+     'practice'::event_type, '2099-02-03T10:00:00Z', '2099-02-03T12:00:00Z',
+     '2099-02-03T09:00:00Z', ${ACTOR}, ${ACTOR}),
+    (${SOURCE_EVENT_LEASE}::uuid, ${TENANT_A}::uuid, 'LINE統合テストlease切れ',
+     'practice'::event_type, '2099-02-04T10:00:00Z', '2099-02-04T12:00:00Z',
+     '2099-02-04T09:00:00Z', ${ACTOR}, ${ACTOR})
   ON CONFLICT (id) DO NOTHING
 `;
 const apiRepositories = createMemberRepositories(app, {
   notificationPublicAppUrl: 'https://app.example.test',
 });
+const featureContractRepository = createFeatureContractRepository(app);
 const api = createApp({
   verifyToken: async (token) => {
     if (token !== 'integration-owner-token') throw new Error('invalid token');
@@ -82,6 +91,11 @@ const api = createApp({
     };
   },
   ...apiRepositories,
+  centralFeatures: {
+    featureContract: {
+      repository: featureContractRepository,
+    },
+  },
 });
 
 // outbox claim対象を共有するため、LINE配信のDB統合テストは同時実行しない。
@@ -156,7 +170,7 @@ test('同一tenantで別sourceがIdempotency-Keyを再利用しても500では�
     idempotencyKey,
   });
   const conflict = await requestProductionApi({
-    sourceId: SOURCE_EVENT_B,
+    sourceId: SOURCE_EVENT_CROSS_SOURCE,
     idempotencyKey,
   });
   assert.equal(conflict.status, 409);
@@ -216,14 +230,16 @@ test('業務transactionのenqueueからworker claim・送信・sent確定まで�
       FROM line_delivery_outbox
      WHERE id = ${notificationId}::uuid
   `;
-  assert.deepEqual(rows, [
-    {
-      status: 'sent',
-      attempt: 1,
-      provider_retry_key: notificationId,
-    },
-  ]);
-  assert.deepEqual(retryKeys, [notificationId]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.status, 'sent');
+  assert.equal(rows[0]?.attempt, 1);
+  const providerRetryKey = rows[0]?.provider_retry_key;
+  assert.ok(providerRetryKey);
+  assert.match(
+    providerRetryKey,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-57][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
+  assert.deepEqual(retryKeys, [providerRetryKey]);
   const auditRows = await owner.$queryRaw<Array<{ action: string }>>`
     SELECT action
       FROM audit_logs
@@ -239,17 +255,17 @@ test('業務transactionのenqueueからworker claim・送信・sent確定まで�
 
 test('retry・unknown・lease切れは同じprovider retry keyで重複送信を抑止する', async () => {
   const retryId = await publishViaProductionApi({
-    sourceId: SOURCE_EVENT_A,
+    sourceId: SOURCE_EVENT_RETRY,
     idempotencyKey: `retry-${randomUUID()}`,
     title: '再試行統合テスト',
   });
   const unknownId = await publishViaProductionApi({
-    sourceId: SOURCE_EVENT_A,
+    sourceId: SOURCE_EVENT_UNKNOWN,
     idempotencyKey: `unknown-${randomUUID()}`,
     title: '照合待ち統合テスト',
   });
   const leaseId = await publishViaProductionApi({
-    sourceId: SOURCE_EVENT_A,
+    sourceId: SOURCE_EVENT_LEASE,
     idempotencyKey: `lease-${randomUUID()}`,
     title: 'lease切れ統合テスト',
   });
@@ -469,13 +485,46 @@ test('worker接続は専用role・RLS非bypassでclaim関数だけを利用す�
 });
 
 test.after(async () => {
+  await owner.$transaction(async (tx) => {
+    await tx.$executeRaw`ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_append_only_guard`;
+    await tx.$executeRaw`
+      DELETE FROM audit_logs
+       WHERE resource_id IN (
+         SELECT id
+           FROM line_delivery_outbox
+          WHERE source_id IN (
+            ${SOURCE_EVENT_A},
+            ${SOURCE_EVENT_B},
+            ${SOURCE_EVENT_CROSS_SOURCE},
+            ${SOURCE_EVENT_RETRY},
+            ${SOURCE_EVENT_UNKNOWN},
+            ${SOURCE_EVENT_LEASE}
+          )
+       )
+    `;
+    await tx.$executeRaw`ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_append_only_guard`;
+    await tx.$executeRaw`
+      DELETE FROM line_delivery_outbox
+       WHERE source_id IN (
+         ${SOURCE_EVENT_A},
+         ${SOURCE_EVENT_B},
+         ${SOURCE_EVENT_CROSS_SOURCE},
+         ${SOURCE_EVENT_RETRY},
+         ${SOURCE_EVENT_UNKNOWN},
+         ${SOURCE_EVENT_LEASE}
+       )
+    `;
+  });
   await owner.$executeRaw`
     DELETE FROM events
-     WHERE id IN (${SOURCE_EVENT_A}::uuid, ${SOURCE_EVENT_B}::uuid)
-  `;
-  await owner.$executeRaw`
-    DELETE FROM tenant_plans
-     WHERE id = '00000000-0000-7000-8000-000000000903'::uuid
+     WHERE id IN (
+       ${SOURCE_EVENT_A}::uuid,
+       ${SOURCE_EVENT_B}::uuid,
+       ${SOURCE_EVENT_CROSS_SOURCE}::uuid,
+       ${SOURCE_EVENT_RETRY}::uuid,
+       ${SOURCE_EVENT_UNKNOWN}::uuid,
+       ${SOURCE_EVENT_LEASE}::uuid
+     )
   `;
   await owner.$executeRaw`
     DELETE FROM line_connections

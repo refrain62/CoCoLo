@@ -79,6 +79,15 @@ function baseEnvironment(): NodeJS.ProcessEnv {
   return { ...loadDotEnv(), ...process.env };
 }
 
+function supabaseCliEnvironment(): NodeJS.ProcessEnv {
+  // ローカル統合テストはグローバルなCLI状態へテレメトリを書き込まず、worktree間で共有しない。
+  return {
+    ...baseEnvironment(),
+    DO_NOT_TRACK: '1',
+    SUPABASE_TELEMETRY_DISABLED: '1',
+  };
+}
+
 function run(
   command: string,
   args: string[],
@@ -144,7 +153,7 @@ function runSupabase(
 ) {
   return runPnpm(
     ['exec', 'supabase', '--workdir', stack.directory, ...args],
-    baseEnvironment(),
+    supabaseCliEnvironment(),
     {
       ...options,
       // CLIのworking directoryがproject_idとvolumeを決めるため、stackごとに固定する。
