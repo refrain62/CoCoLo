@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { SystemAdminRepositoryError } from '@cocolo/db';
 import { createApp } from '../dist/app.js';
 
 const announcement = {
@@ -33,6 +34,10 @@ function createTestApp(calls: string[] = []) {
         calls.push(`listAnnouncements:${actorUserId}`);
         return [announcement];
       },
+      listPublishedAnnouncements: async ({ tenantId, userId, role }) => {
+        calls.push(`listPublishedAnnouncements:${tenantId}:${userId}:${role}`);
+        return [announcement];
+      },
       createAnnouncement: async ({ actorUserId, title, body, status }) => {
         calls.push(`createAnnouncement:${actorUserId}`);
         return { ...announcement, title, body, status };
@@ -46,9 +51,24 @@ function createTestApp(calls: string[] = []) {
         return [feature];
       },
       setFeatureEnabled: async ({ actorUserId, featureKey, enabled }) => {
+        if (featureKey === 'members')
+          throw new SystemAdminRepositoryError(
+            'FORBIDDEN',
+            'システム管理画面から変更できるのは有償機能だけです。',
+            403,
+          );
         calls.push(`setFeatureEnabled:${actorUserId}:${featureKey}`);
         return { ...feature, key: featureKey, systemEnabled: enabled };
       },
+    },
+    membershipRepository: {
+      findActiveByUserId: async (userId) =>
+        userId === 'tenant-user'
+          ? {
+              tenantId: '0198b5a8-0000-7000-8000-000000000099',
+              role: 'owner',
+            }
+          : null,
     },
   });
 }
@@ -95,6 +115,24 @@ test('system adminは全体お知らせと機能提供状態を操作できる',
   ]);
 });
 
+test('公開済みの全体お知らせはactive membershipの利用者へ届く', async () => {
+  const calls: string[] = [];
+  const response = await createTestApp(calls).request(
+    '/api/v1/global-announcements',
+    {
+      headers: {
+        authorization: 'Bearer tenant-user',
+        'X-CoCoLo-Team-Id': '0198b5a8-0000-7000-8000-000000000099',
+      },
+    },
+  );
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data[0].title, announcement.title);
+  assert.deepEqual(calls, [
+    'listPublishedAnnouncements:0198b5a8-0000-7000-8000-000000000099:tenant-user:owner',
+  ]);
+});
+
 test('system admin APIはtenant headerを権限判定に使わず、一般利用者を拒否する', async () => {
   const calls: string[] = [];
   const response = await createTestApp(calls).request(
@@ -108,6 +146,21 @@ test('system admin APIはtenant headerを権限判定に使わず、一般利用
   );
   assert.equal(response.status, 403);
   assert.equal(calls.length, 0);
+});
+
+test('system admin APIは無償featureの全体切り替えを拒否する', async () => {
+  const response = await createTestApp().request(
+    '/api/v1/system/features/members',
+    {
+      method: 'PATCH',
+      headers: {
+        authorization: 'Bearer system-admin',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ enabled: false, reason: '停止理由' }),
+    },
+  );
+  assert.equal(response.status, 403);
 });
 
 test('system admin repositoryが未設定なら認証後に503を返す', async () => {

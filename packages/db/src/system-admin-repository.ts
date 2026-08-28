@@ -1,6 +1,11 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 export type SystemAnnouncementStatus = 'draft' | 'published' | 'archived';
+export type SystemAnnouncementViewerRole =
+  | 'owner'
+  | 'admin'
+  | 'staff'
+  | 'guardian';
 
 export type SystemAnnouncementRecord = {
   id: string;
@@ -21,6 +26,11 @@ export type SystemFeatureRecord = {
 
 export type SystemAdminRepository = {
   listAnnouncements(actorUserId: string): Promise<SystemAnnouncementRecord[]>;
+  listPublishedAnnouncements(input: {
+    tenantId: string;
+    userId: string;
+    role: SystemAnnouncementViewerRole;
+  }): Promise<SystemAnnouncementRecord[]>;
   createAnnouncement(input: {
     actorUserId: string;
     title: string;
@@ -71,11 +81,40 @@ function setSystemAdminContext(
   `;
 }
 
+function setSystemAnnouncementViewerContext(
+  client: Prisma.TransactionClient,
+  input: {
+    tenantId: string;
+    userId: string;
+    role: SystemAnnouncementViewerRole;
+  },
+) {
+  return client.$queryRaw`
+    SELECT
+      set_config('app.tenant_id', ${input.tenantId}, true),
+      set_config('app.user_id', ${input.userId}, true),
+      set_config('app.role', ${input.role}, true)
+  `;
+}
+
 function assertActorUserId(actorUserId: string) {
   if (!actorUserId.trim())
     throw new SystemAdminRepositoryError(
       'FORBIDDEN',
       'system adminの利用者IDが必要です。',
+      403,
+    );
+}
+
+function assertAnnouncementViewer(input: {
+  tenantId: string;
+  userId: string;
+  role: SystemAnnouncementViewerRole;
+}) {
+  if (!input.tenantId.trim() || !input.userId.trim())
+    throw new SystemAdminRepositoryError(
+      'FORBIDDEN',
+      '全体お知らせの閲覧コンテキストが不正です。',
       403,
     );
 }
@@ -175,10 +214,22 @@ export function createSystemAdminRepository(
         return rows.map(toAnnouncementRecord);
       });
     },
+    listPublishedAnnouncements: async (input) => {
+      assertAnnouncementViewer(input);
+      return client.$transaction(async (tx) => {
+        await setSystemAnnouncementViewerContext(tx, input);
+        const rows = await tx.systemAnnouncement.findMany({
+          where: { status: 'published' },
+          orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+          take: 500,
+        });
+        return rows.map(toAnnouncementRecord);
+      });
+    },
     createAnnouncement: async (input) => {
       assertActorUserId(input.actorUserId);
       assertAnnouncementText(input.title, 'タイトル', 200);
-      assertAnnouncementText(input.body, '本文');
+      assertAnnouncementText(input.body, '本文', 5000);
       assertAnnouncementStatus(input.status);
       return client.$transaction(async (tx) => {
         await setSystemAdminContext(tx, input.actorUserId);
@@ -224,8 +275,9 @@ export function createSystemAdminRepository(
         if (input.title !== undefined) data.title = input.title;
         if (input.body !== undefined) data.body = input.body;
         if (input.status !== undefined) data.status = input.status;
-        if (nextStatus === 'published' && existing.publishedAt === null)
+        if (nextStatus === 'published' && existing.status !== 'published')
           data.publishedAt = new Date();
+        else if (input.status !== undefined) data.publishedAt = null;
         const row = await tx.systemAnnouncement.update({
           where: { id: input.announcementId },
           data,
@@ -285,6 +337,12 @@ export function createSystemAdminRepository(
             'NOT_FOUND',
             '指定されたfeatureが見つかりません。',
             404,
+          );
+        if (existing.billingType !== 'paid')
+          throw new SystemAdminRepositoryError(
+            'FORBIDDEN',
+            'システム管理画面から変更できるのは有償機能だけです。',
+            403,
           );
         const row = await tx.featureDefinition.update({
           where: { key: input.featureKey },

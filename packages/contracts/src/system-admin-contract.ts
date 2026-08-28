@@ -23,6 +23,22 @@ export const systemAnnouncementListResponseSchema = z
   .object({ data: z.array(systemAnnouncementItemSchema).max(500) })
   .strict();
 
+const globalAnnouncementItemSchema = z
+  .object({
+    id: uuidv7Schema,
+    title: z.string().min(1).max(200),
+    body: z.string().min(1).max(5000),
+    status: z.literal('published'),
+    publishedAt: z.string().datetime({ offset: true }),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
+export const globalAnnouncementListResponseSchema = z
+  .object({ data: z.array(globalAnnouncementItemSchema).max(500) })
+  .strict();
+
 export const systemAnnouncementResponseSchema = z
   .object({ data: systemAnnouncementItemSchema })
   .strict();

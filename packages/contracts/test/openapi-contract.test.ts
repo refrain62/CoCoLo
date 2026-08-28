@@ -7,6 +7,24 @@ test('OpenAPIはZod契約のupload上限とREST pathを公開する', () => {
   assert.ok(openapiDocument.paths['/uploads']);
   assert.ok(openapiDocument.paths['/uploads/{id}/complete']);
   assert.ok(openapiDocument.paths['/members/promote']);
+  assert.ok(openapiDocument.paths['/global-announcements']?.get);
+  assert.equal(
+    openapiDocument.paths['/global-announcements'].get.operationId,
+    'listGlobalAnnouncements',
+  );
+  assert.equal(
+    openapiDocument.components.schemas.GlobalAnnouncementItem.properties.status
+      .const,
+    'published',
+  );
+  assert.ok(openapiDocument.paths['/system/context']?.get);
+  assert.ok(openapiDocument.paths['/system/announcements']?.get);
+  assert.ok(openapiDocument.paths['/system/announcements']?.post);
+  assert.ok(
+    openapiDocument.paths['/system/announcements/{announcementId}']?.patch,
+  );
+  assert.ok(openapiDocument.paths['/system/features']?.get);
+  assert.ok(openapiDocument.paths['/system/features/{featureKey}']?.patch);
   const promotionPath = openapiDocument.paths['/members/promote'];
   assert.ok(promotionPath);
   const idempotencyParameter = promotionPath.post.parameters[0];
