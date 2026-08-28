@@ -102,7 +102,9 @@ pnpm dev:local
 - チームCのowner: `owner-c@example.test` / `owner-c-password`
 - システム管理者: `system-admin@example.test` / `system-admin-password`
 
-ログイン後、チーム管理は `/team`、システム管理は `/admin` を開きます。これらのAuth fixtureはloopbackのlocal / test stack専用です。
+チームログイン後は利用者ダッシュボード `/dashboard` を開きます。
+チーム管理は `/team`、システム管理者ログイン後の管理画面は `/admin` を開きます。
+これらのAuth fixtureはloopbackのlocal / test stack専用です。
 
 `Ctrl+C` はAPIとWebを停止し、Supabaseのvolumeを保持します。状態確認は `pnpm local:status`、Supabase停止は `pnpm local:stop` です。
 

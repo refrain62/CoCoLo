@@ -1,6 +1,7 @@
 import type { TeamOption } from '@cocolo/contracts/auth-team-selection';
 import { AppShell, Badge, Button, CoCoLoLogoMark } from '@cocolo/ui';
 import type { ReactNode } from 'react';
+import { handleInAppLinkClick } from './app-navigation.js';
 import type { AuthRole } from './auth-context-api.js';
 import { currentEnvironment } from './web-environment.js';
 
@@ -37,14 +38,21 @@ export function UserShell({
       }
       sidebar={
         <>
-          <a href="/dashboard" aria-current="page">
+          <a
+            href="/dashboard"
+            aria-current="page"
+            onClick={(event) => handleInAppLinkClick(event, '/dashboard')}
+          >
             <span className="admin-nav-dot" aria-hidden="true" />
             <span>
               <strong>ダッシュボード</strong>
               <small>予定と締め切りを確認</small>
             </span>
           </a>
-          <a href="/team">
+          <a
+            href="/team"
+            onClick={(event) => handleInAppLinkClick(event, '/team')}
+          >
             <span className="admin-nav-dot" aria-hidden="true" />
             <span>
               <strong>チーム管理</strong>
@@ -61,7 +69,12 @@ export function UserShell({
           </div>
           <div className="admin-topbar-actions">
             <Badge variant="outline">{currentEnvironment()}</Badge>
-            <a className="admin-help-link" href="/manual">
+            <a
+              className="admin-help-link"
+              href="/manual"
+              rel="noreferrer"
+              target="_blank"
+            >
               ヘルプ
             </a>
             <Button

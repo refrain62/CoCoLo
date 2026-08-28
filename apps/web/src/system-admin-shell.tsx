@@ -1,5 +1,7 @@
 import { AppShell, Badge, Button, CoCoLoLogoMark } from '@cocolo/ui';
 import { type MouseEvent, type ReactNode, useEffect, useState } from 'react';
+import { normalizeRoutePath } from './admin-routes.js';
+import { navigateInApp, replaceInApp } from './app-navigation.js';
 import { applyPageMetadata } from './app-route.js';
 import {
   resolveSystemAdminRoute,
@@ -20,7 +22,10 @@ export function SystemAdminShell({
   const [pathname, setPathname] = useState(() => window.location.pathname);
 
   useEffect(() => {
-    applyPageMetadata(window.location.pathname);
+    const canonicalPath = normalizeRoutePath(window.location.pathname);
+    if (canonicalPath !== window.location.pathname) replaceInApp(canonicalPath);
+    applyPageMetadata(canonicalPath);
+    setPathname(canonicalPath);
     const handlePopState = () => setPathname(window.location.pathname);
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -28,7 +33,7 @@ export function SystemAdminShell({
 
   function navigate(path: string) {
     if (path === window.location.pathname) return;
-    window.history.pushState({}, '', path);
+    navigateInApp(path);
     setPathname(path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -79,9 +84,6 @@ export function SystemAdminShell({
           </div>
           <div className="admin-topbar-actions">
             <Badge variant="outline">{currentEnvironment()}</Badge>
-            <a className="admin-help-link" href="/dashboard">
-              利用者画面
-            </a>
             <Button
               size="sm"
               variant="ghost"

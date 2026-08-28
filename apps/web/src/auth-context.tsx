@@ -21,6 +21,8 @@ import {
 
 type OAuthSignInOptions = { invitationToken?: string };
 
+export type LoginMode = 'team' | 'system';
+
 type AuthContextValue = {
   session: AuthSession | null;
   oauthProvider: OAuthProvider | null;
@@ -679,8 +681,9 @@ export function useAuth() {
 }
 
 // 入力値をtrimしてAuth clientへ渡し、認証情報そのものは画面へ表示しない。
-export function LoginPage() {
+export function LoginPage({ mode = 'team' }: { mode?: LoginMode }) {
   const { error, isSigningIn, signIn, signInWithOAuth } = useAuth();
+  const isSystemAdmin = mode === 'system';
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -692,16 +695,25 @@ export function LoginPage() {
   }
 
   return (
-    <AppShell className="auth-shell" nav={null}>
+    <AppShell
+      className={isSystemAdmin ? 'auth-shell system-auth-shell' : 'auth-shell'}
+      nav={null}
+    >
       <section className="auth-card" aria-labelledby="auth-heading">
         <div className="auth-card-brand" aria-hidden="true">
           <CoCoLoLogoMark />
           <span>CoCoLo</span>
         </div>
-        <p className="auth-eyebrow">TEAM OPERATIONS</p>
-        <h1 id="auth-heading">CoCoLoへログイン</h1>
+        <p className="auth-eyebrow">
+          {isSystemAdmin ? 'SYSTEM ADMIN' : 'TEAM LOGIN'}
+        </p>
+        <h1 id="auth-heading">
+          {isSystemAdmin ? 'システム管理者ログイン' : 'チームログイン'}
+        </h1>
         <p className="auth-lead">
-          予定、出欠、連絡、チーム運営をひとつの場所で確認できます。
+          {isSystemAdmin
+            ? 'CoCoLo全体のお知らせと提供機能を管理します。'
+            : '予定、出欠、連絡、チーム運営をひとつの場所で確認できます。'}
         </p>
         <form onSubmit={submit}>
           <div>
@@ -732,7 +744,15 @@ export function LoginPage() {
           </button>
         </fieldset>
         <p className="auth-help">
-          <a href="/manual">操作マニュアルを確認</a>
+          {isSystemAdmin ? (
+            <>
+              この入口はシステム管理者専用です。
+              <br />
+              <a href="/login">チームログインはこちら</a>
+            </>
+          ) : (
+            <a href="/manual">操作マニュアルを確認</a>
+          )}
         </p>
       </section>
     </AppShell>

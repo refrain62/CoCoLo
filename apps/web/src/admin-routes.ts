@@ -49,8 +49,21 @@ const legacyAdminPaths: Readonly<Record<string, AdminRoute>> = {
   '/features': 'features',
 };
 
+export function normalizeRoutePath(pathname: string) {
+  return pathname.length > 1 ? pathname.replace(/\/+$/u, '') : pathname;
+}
+
+function findLegacyTeamPath(pathname: string) {
+  return Object.keys(legacyAdminPaths).find(
+    (legacyPath) =>
+      pathname === legacyPath ||
+      (legacyPath.startsWith('/admin/') &&
+        pathname.startsWith(`${legacyPath}/`)),
+  );
+}
+
 export function isLegacyTeamPath(pathname: string) {
-  return pathname in legacyAdminPaths;
+  return findLegacyTeamPath(normalizeRoutePath(pathname)) !== undefined;
 }
 
 export const adminNavigation: readonly AdminNavigationItem[] = [
@@ -133,17 +146,26 @@ export function resolveAdminRoute(pathname: string): AdminRoute {
   const deepLink = parseNotificationDeepLink(pathname);
   if (deepLink?.kind === 'event') return 'event-detail';
   if (deepLink?.kind === 'bulletin') return 'bulletin-detail';
-  const item = adminNavigation.find((candidate) => candidate.href === pathname);
-  return item?.route ?? legacyAdminPaths[pathname] ?? 'dashboard';
+  const normalizedPath = normalizeRoutePath(pathname);
+  const item = adminNavigation.find(
+    (candidate) => candidate.href === normalizedPath,
+  );
+  return item?.route ?? legacyAdminPaths[normalizedPath] ?? 'dashboard';
 }
 
 export function canonicalAdminPath(pathname: string) {
-  if (pathname === '/' || pathname === '/login' || pathname === '/admin')
-    return '/team';
-  const route = legacyAdminPaths[pathname];
-  return route
-    ? (adminNavigation.find((item) => item.route === route)?.href ?? pathname)
-    : pathname;
+  const normalizedPath = normalizeRoutePath(pathname);
+  if (normalizedPath === '/' || normalizedPath === '/login') return '/team';
+  const legacyPath = findLegacyTeamPath(normalizedPath);
+  if (!legacyPath) return normalizedPath;
+  const route = legacyAdminPaths[legacyPath];
+  const canonicalPath = route
+    ? (adminNavigation.find((item) => item.route === route)?.href ??
+      normalizedPath)
+    : normalizedPath;
+  return normalizedPath.startsWith(`${legacyPath}/`)
+    ? `${canonicalPath}${normalizedPath.slice(legacyPath.length)}`
+    : canonicalPath;
 }
 
 export const canonicalTeamPath = canonicalAdminPath;

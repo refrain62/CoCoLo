@@ -213,7 +213,7 @@ function Header() {
           <a href="#faq">よくある質問</a>
           <div className="mobile-nav-actions">
             <a href="/login" className="btn btn-ghost">
-              ログイン
+              チームログイン
             </a>
             <a href="#contact" className="btn btn-primary">
               無料ではじめる <Icon name="arrow" size={17} />
@@ -222,7 +222,7 @@ function Header() {
         </nav>
         <div className="nav-actions">
           <a href="/login" className="login-link">
-            ログイン
+            チームログイン
           </a>
           <a href="#contact" className="btn btn-primary btn-small">
             無料ではじめる <Icon name="arrow" size={16} />

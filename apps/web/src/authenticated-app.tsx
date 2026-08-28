@@ -2,9 +2,10 @@ import type { TeamOption } from '@cocolo/contracts/auth-team-selection';
 import { AppShell } from '@cocolo/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { AdminDashboard } from './admin-dashboard.js';
-import type { AdminRoute } from './admin-routes.js';
+import { type AdminRoute, normalizeRoutePath } from './admin-routes.js';
 import { AdminShell } from './admin-shell.js';
-
+import { navigateInApp, replaceInApp } from './app-navigation.js';
+import { applyPageMetadata } from './app-route.js';
 import { useAuth } from './auth-context.js';
 import { type AuthRole, createAuthContextApi } from './auth-context-api.js';
 import { createAttachmentApi } from './features/attachments/attachment-api.js';
@@ -53,11 +54,6 @@ import { TeamSettingsPage } from './team-settings-page.js';
 import { UserDashboard } from './user-dashboard.js';
 import { UserShell } from './user-shell.js';
 
-function navigateInApp(path: string) {
-  window.history.pushState({}, '', path);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-}
-
 function DeepLinkState({
   message,
   onBack,
@@ -97,6 +93,9 @@ export function AuthenticatedApp() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+  useEffect(() => {
+    if (typeof document !== 'undefined') applyPageMetadata(pathname);
+  }, [pathname]);
   const teamSelectionApi = useMemo(
     () =>
       createTeamSelectionApi({
@@ -142,13 +141,17 @@ export function AuthenticatedApp() {
   }, [systemAdminPath, systemContextApi]);
   useEffect(() => {
     if (systemAdminPath && isSystemAdmin === false) {
-      window.history.replaceState({}, '', '/team');
+      replaceInApp('/team');
       setPathname('/team');
     }
   }, [isSystemAdmin, systemAdminPath]);
   useEffect(() => {
-    if (!systemAdminPath && (pathname === '/' || pathname === '/login')) {
-      window.history.replaceState({}, '', '/dashboard');
+    const normalizedPath = normalizeRoutePath(pathname);
+    if (
+      !systemAdminPath &&
+      (normalizedPath === '/' || normalizedPath === '/login')
+    ) {
+      replaceInApp('/dashboard');
       setPathname('/dashboard');
     }
   }, [pathname, systemAdminPath]);
@@ -440,10 +443,7 @@ export function AuthenticatedApp() {
       return (
         <AdminDashboard
           contract={contract}
-          onNavigate={(path) => {
-            window.history.pushState({}, '', path);
-            window.dispatchEvent(new PopStateEvent('popstate'));
-          }}
+          onNavigate={navigateInApp}
           role={currentRole}
           team={currentTeam}
         />

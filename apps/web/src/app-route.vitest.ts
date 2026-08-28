@@ -8,6 +8,7 @@ describe('Webエントリのルート境界', () => {
 
   it('マニュアルを認証処理から分離する', () => {
     expect(resolveAppEntry('/manual')).toBe('manual');
+    expect(resolveAppEntry('/manual/')).toBe('manual');
   });
 
   it.each([
@@ -25,10 +26,14 @@ describe('ページメタデータ', () => {
   it.each([
     ['/', 'CoCoLo | 部活・クラブの連絡と運営をひとつに'],
     ['/manual', 'CoCoLo 操作マニュアル'],
-    ['/login', 'CoCoLoへログイン'],
+    ['/login', 'CoCoLo | チームログイン'],
+    ['/admin', 'CoCoLo | システム管理'],
+    ['/admin/notices', 'CoCoLo | システム管理'],
     ['/admin/events', 'CoCoLo | チーム管理'],
+    ['/admin/events/detail', 'CoCoLo | チーム管理'],
     ['/team/events', 'CoCoLo | チーム管理'],
     ['/dashboard', 'CoCoLo | ダッシュボード'],
+    ['/team/events/', 'CoCoLo | チーム管理'],
   ])('%sの用途に合うtitleを返す', (pathname, title) => {
     expect(resolvePageMetadata(pathname).title).toBe(title);
     expect(resolvePageMetadata(pathname).description).not.toBe('');
