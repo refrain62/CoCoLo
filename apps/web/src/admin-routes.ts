@@ -71,7 +71,7 @@ export const adminNavigation: readonly AdminNavigationItem[] = [
     route: 'dashboard',
     href: '/team',
     label: 'ダッシュボード',
-    description: 'チームの状況を確認',
+    description: '予定と運営状況を確認',
   },
   {
     route: 'members',
@@ -156,6 +156,7 @@ export function resolveAdminRoute(pathname: string): AdminRoute {
 export function canonicalAdminPath(pathname: string) {
   const normalizedPath = normalizeRoutePath(pathname);
   if (normalizedPath === '/' || normalizedPath === '/login') return '/team';
+  if (normalizedPath === '/dashboard') return '/team';
   const legacyPath = findLegacyTeamPath(normalizedPath);
   if (!legacyPath) return normalizedPath;
   const route = legacyAdminPaths[legacyPath];

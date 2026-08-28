@@ -13,6 +13,7 @@ describe('管理画面ルート', () => {
     expect(canonicalAdminPath('/')).toBe('/team');
     expect(canonicalAdminPath('/login')).toBe('/team');
     expect(canonicalAdminPath('/admin')).toBe('/admin');
+    expect(canonicalAdminPath('/dashboard')).toBe('/team');
     expect(canonicalAdminPath('/admin/members')).toBe('/team/members');
     expect(canonicalAdminPath('/admin/events/detail')).toBe(
       '/team/events/detail',
