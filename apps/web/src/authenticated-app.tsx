@@ -298,6 +298,7 @@ export function AuthenticatedApp() {
       }),
     [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
+  // 所属roleは全チーム画面の表示条件、部員候補は一部操作の入力データとして独立取得する。
   useEffect(() => {
     if (!session || !selectedTeam || systemAdminPath) {
       setRole(null);
@@ -440,11 +441,12 @@ export function AuthenticatedApp() {
         (feature) => feature.key === key && feature.enabled,
       );
     const notificationTarget = parseNotificationDeepLink(pathname);
-    const memberOptionsNotice = memberOptionsError ? (
-      <p className="app-permission-note" role="alert">
-        {memberOptionsError}
-      </p>
-    ) : null;
+    const memberOptionsNotice =
+      memberOptionsError && isMemberOptionRoute(route) ? (
+        <p className="app-permission-note" role="alert">
+          {memberOptionsError}
+        </p>
+      ) : null;
     const intro = {
       members: [
         'Members',
