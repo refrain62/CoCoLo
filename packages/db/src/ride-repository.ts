@@ -692,7 +692,7 @@ export function createRideRepository(client: PrismaClient): RideRepository {
       return runInRideTransaction(client, actor, async (tx) => {
         if (driverDisplayName !== undefined) {
           // 表示名更新が取得する全plan lockを、plan lockより先に揃える。
-          await tx.$queryRaw`
+          await tx.$executeRaw`
             SELECT app_lock_ride_driver_plans(
               ${actor.tenantId}::uuid,
               ${planId}::uuid

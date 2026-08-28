@@ -39,7 +39,9 @@
     "test:unit": "pnpm build && node --test test/*.test.ts",
     "lint": "node ../../scripts/prisma-validate.ts",
     "typecheck": "node ../../scripts/prisma-validate.ts",
-    "test:integration": "prisma generate && node --test test/central-feature-rls.test.ts",
+    "build:prepared": "tsc -p tsconfig.json",
+    "test:integration": "prisma generate && pnpm build:prepared && node --test test/central-feature-rls.test.ts test/ride-two-plan-lock.test.ts",
+    "test:integration:prepared": "pnpm build:prepared && node --test test/central-feature-rls.test.ts test/ride-two-plan-lock.test.ts",
     "prisma:validate": "prisma validate",
     "migrate:deploy": "prisma migrate deploy"
   },

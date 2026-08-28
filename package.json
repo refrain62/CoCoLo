@@ -11,7 +11,7 @@
     "test:contracts": "node --test packages/contracts/test/*.test.ts",
     "test:unit": "node --test scripts/db-seed-test.test.ts scripts/db-load-test.test.ts scripts/verify-pr-description.test.ts scripts/verify-uuidv7-migration.test.ts scripts/verify-toolchain.test.ts scripts/line-ending-policy.test.ts scripts/measure-lp.test.ts && pnpm --filter @cocolo/domain build && vitest run && pnpm -r --if-present test:unit",
     "test:integration": "node scripts/supabase-local.ts integration",
-    "test:integration:raw": "pnpm -r --workspace-concurrency=1 --if-present test:integration",
+    "test:integration:raw": "pnpm -r --workspace-concurrency=1 --if-present test:integration:prepared",
     "test:e2e:local": "node scripts/run-e2e.ts local",
     "test:e2e:staging": "node scripts/run-e2e.ts staging",
     "test:e2e:periodic": "node scripts/run-periodic-e2e.ts",
