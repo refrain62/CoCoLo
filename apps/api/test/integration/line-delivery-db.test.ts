@@ -21,6 +21,7 @@ const RACE_ACTOR = 'owner-b';
 const INTEGRATION_GROUP = 'Uintegration';
 const SOURCE_EVENT_A = '00000000-0000-7000-8000-000000000901';
 const SOURCE_EVENT_B = '00000000-0000-7000-8000-000000000902';
+const SOURCE_EVENT_CROSS_SOURCE = '00000000-0000-7000-8000-000000000903';
 const SOURCE_EVENT_RETRY = '00000000-0000-7000-8000-000000000904';
 const SOURCE_EVENT_UNKNOWN = '00000000-0000-7000-8000-000000000905';
 const SOURCE_EVENT_LEASE = '00000000-0000-7000-8000-000000000906';
@@ -67,6 +68,9 @@ await owner.$executeRaw`
     (${SOURCE_EVENT_A}::uuid, ${TENANT_A}::uuid, 'LINE統合テスト予定A',
      'practice'::event_type, '2099-02-01T10:00:00Z', '2099-02-01T12:00:00Z',
      '2099-02-01T09:00:00Z', ${ACTOR}, ${ACTOR}),
+    (${SOURCE_EVENT_CROSS_SOURCE}::uuid, ${TENANT_A}::uuid, 'LINE統合テスト別source',
+     'practice'::event_type, '2099-02-01T13:00:00Z', '2099-02-01T15:00:00Z',
+     '2099-02-01T12:00:00Z', ${ACTOR}, ${ACTOR}),
     (${SOURCE_EVENT_B}::uuid, ${TENANT_B}::uuid, 'LINE統合テスト予定B',
      'practice'::event_type, '2099-02-01T10:00:00Z', '2099-02-01T12:00:00Z',
      '2099-02-01T09:00:00Z', ${RACE_ACTOR}, ${RACE_ACTOR}),
@@ -182,7 +186,7 @@ test('同一tenantで別sourceがIdempotency-Keyを再利用しても500では�
     idempotencyKey,
   });
   const conflict = await requestProductionApi({
-    sourceId: SOURCE_EVENT_B,
+    sourceId: SOURCE_EVENT_CROSS_SOURCE,
     idempotencyKey,
   });
   assert.equal(conflict.status, 409);
@@ -497,9 +501,46 @@ test('worker接続は専用role・RLS非bypassでclaim関数だけを利用す�
 });
 
 test.after(async () => {
+  await owner.$transaction(async (tx) => {
+    await tx.$executeRaw`ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_append_only_guard`;
+    await tx.$executeRaw`
+      DELETE FROM audit_logs
+       WHERE resource_id IN (
+         SELECT id
+           FROM line_delivery_outbox
+          WHERE source_id IN (
+            ${SOURCE_EVENT_A},
+            ${SOURCE_EVENT_B},
+            ${SOURCE_EVENT_CROSS_SOURCE},
+            ${SOURCE_EVENT_RETRY},
+            ${SOURCE_EVENT_UNKNOWN},
+            ${SOURCE_EVENT_LEASE}
+          )
+       )
+    `;
+    await tx.$executeRaw`ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_append_only_guard`;
+    await tx.$executeRaw`
+      DELETE FROM line_delivery_outbox
+       WHERE source_id IN (
+         ${SOURCE_EVENT_A},
+         ${SOURCE_EVENT_B},
+         ${SOURCE_EVENT_CROSS_SOURCE},
+         ${SOURCE_EVENT_RETRY},
+         ${SOURCE_EVENT_UNKNOWN},
+         ${SOURCE_EVENT_LEASE}
+       )
+    `;
+  });
   await owner.$executeRaw`
     DELETE FROM events
-     WHERE id IN (${SOURCE_EVENT_A}::uuid, ${SOURCE_EVENT_B}::uuid)
+     WHERE id IN (
+       ${SOURCE_EVENT_A}::uuid,
+       ${SOURCE_EVENT_B}::uuid,
+       ${SOURCE_EVENT_CROSS_SOURCE}::uuid,
+       ${SOURCE_EVENT_RETRY}::uuid,
+       ${SOURCE_EVENT_UNKNOWN}::uuid,
+       ${SOURCE_EVENT_LEASE}::uuid
+     )
   `;
   await owner.$executeRaw`
     DELETE FROM tenant_plans
