@@ -20,6 +20,10 @@ describe('認証ランタイムの公開境界', () => {
     const html = renderToStaticMarkup(createElement(AuthRuntime));
 
     expect(html).toContain('CoCoLoへログイン');
+    expect(html).toContain('class="auth-card-brand"');
+    expect(html).toContain('class="app-brand-mark"');
+    expect(html).toContain('>CoCoLo</span>');
+    expect(html).not.toContain('class="auth-card-icon"');
     expect(html).toContain('name="email"');
     expect(html).not.toContain('管理画面を準備しています');
   });

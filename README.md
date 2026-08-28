@@ -96,7 +96,13 @@ API key、token、password、password hashなどは検出時にコミットを�
 pnpm dev:local
 ~~~
 
-初回の空DBだけ、`owner-a@example.test` と匿名fixtureを投入します。2回目以降は既存データを保持し、Prismaの `migrate deploy` が未適用migrationだけを適用します。
+初回の空DBだけ、次のローカルAuth fixtureと匿名fixtureを投入します。2回目以降は既存データを保持し、Prismaの `migrate deploy` が未適用migrationだけを適用します。
+
+- チームAのowner: `owner-a@example.test` / `owner-password`
+- チームCのowner: `owner-c@example.test` / `owner-c-password`
+- システム管理者: `system-admin@example.test` / `system-admin-password`
+
+ログイン後、チーム管理は `/team`、システム管理は `/admin` を開きます。これらのAuth fixtureはloopbackのlocal / test stack専用です。
 
 `Ctrl+C` はAPIとWebを停止し、Supabaseのvolumeを保持します。状態確認は `pnpm local:status`、Supabase停止は `pnpm local:stop` です。
 

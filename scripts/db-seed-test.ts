@@ -78,6 +78,7 @@ function assertAuthUserId(value: string | undefined): string | undefined {
 // 既存のlocal E2E固定IDを維持し、状態境界とページャー閾値を同じDBで再現する。
 export function buildTestDataStatements(
   authUserId?: string,
+  authTeamCUserId?: string,
 ): readonly string[] {
   const { tenantA, tenantB, tenantC } = testTenantIds;
   const statements: string[] = [
@@ -1410,6 +1411,15 @@ SET role = 'owner', status = 'active';
 `);
   }
 
+  if (authTeamCUserId) {
+    statements.push(sql`
+INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status)
+VALUES ('${uuid(112)}', '${tenantC}', '${authTeamCUserId}', 'owner', 'active')
+ON CONFLICT (tenant_id, user_id) DO UPDATE
+SET role = 'owner', status = 'active';
+`);
+  }
+
   return statements;
 }
 
@@ -1443,7 +1453,10 @@ async function main(): Promise<void> {
   assertTestDatabaseTarget();
   assert.ok(process.env.DIRECT_URL, 'DIRECT_URLが必要です。');
   const authUserId = assertAuthUserId(process.env.TEST_AUTH_USER_ID);
-  const statements = buildTestDataStatements(authUserId);
+  const authTeamCUserId = assertAuthUserId(
+    process.env.TEST_AUTH_TEAM_C_USER_ID,
+  );
+  const statements = buildTestDataStatements(authUserId, authTeamCUserId);
 
   await withPostgresClient(process.env.DIRECT_URL, async (client) => {
     // FORCE RLSは本番の越境防止に必要なため、test専用fixture投入の間だけowner権限で停止する。
