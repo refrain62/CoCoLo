@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AdminDashboard } from './admin-dashboard.js';
 import type { AdminRoute } from './admin-routes.js';
 import { AdminShell } from './admin-shell.js';
-import { navigateInApp } from './app-navigation.js';
+import { navigateInApp, replaceInApp } from './app-navigation.js';
 import { applyPageMetadata } from './app-route.js';
 import { useAuth } from './auth-context.js';
 import { type AuthRole, createAuthContextApi } from './auth-context-api.js';
@@ -141,13 +141,13 @@ export function AuthenticatedApp() {
   }, [systemAdminPath, systemContextApi]);
   useEffect(() => {
     if (systemAdminPath && isSystemAdmin === false) {
-      window.history.replaceState({}, '', '/team');
+      replaceInApp('/team');
       setPathname('/team');
     }
   }, [isSystemAdmin, systemAdminPath]);
   useEffect(() => {
     if (!systemAdminPath && (pathname === '/' || pathname === '/login')) {
-      window.history.replaceState({}, '', '/dashboard');
+      replaceInApp('/dashboard');
       setPathname('/dashboard');
     }
   }, [pathname, systemAdminPath]);

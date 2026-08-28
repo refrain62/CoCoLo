@@ -80,13 +80,6 @@ export function SystemAdminShell({
           </div>
           <div className="admin-topbar-actions">
             <Badge variant="outline">{currentEnvironment()}</Badge>
-            <a
-              className="admin-help-link"
-              href="/dashboard"
-              onClick={(event) => navigateFromClick(event, '/dashboard')}
-            >
-              利用者画面
-            </a>
             <Button
               size="sm"
               variant="ghost"

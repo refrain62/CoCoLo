@@ -10,6 +10,14 @@ export function navigateInApp(path: string) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+/** 正規化や認証後の既存履歴を置き換え、親ルーターにも現在のパスを通知します。 */
+export function replaceInApp(path: string) {
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname === path) return;
+  window.history.replaceState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
 export function handleInAppLinkClick(
   event: MouseEvent<HTMLAnchorElement>,
   path: string,

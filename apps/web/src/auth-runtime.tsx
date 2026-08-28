@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from 'react';
+import { replaceInApp } from './app-navigation.js';
 import {
   AuthProvider,
   type LoginMode,
@@ -77,7 +78,7 @@ function AuthBoundary({ publicRoot }: { publicRoot?: ReactNode }) {
         api={invitationApi}
         onAccepted={(tenantId) => {
           setStoredSelectedTeamId(tenantId);
-          window.history.replaceState(null, document.title, '/dashboard');
+          replaceInApp('/dashboard');
           setPathname('/dashboard');
         }}
         token={invitationToken}

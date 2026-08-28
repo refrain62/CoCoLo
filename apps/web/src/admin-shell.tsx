@@ -14,7 +14,7 @@ import {
   isAdminNavigationVisible,
   resolveAdminRoute,
 } from './admin-routes.js';
-import { navigateInApp } from './app-navigation.js';
+import { navigateInApp, replaceInApp } from './app-navigation.js';
 import { applyPageMetadata } from './app-route.js';
 import type { AuthRole } from './auth-context-api.js';
 import type {
@@ -66,8 +66,7 @@ export function AdminShell({
 
   useEffect(() => {
     const canonicalPath = canonicalTeamPath(window.location.pathname);
-    if (canonicalPath !== window.location.pathname)
-      window.history.replaceState({}, '', canonicalPath);
+    if (canonicalPath !== window.location.pathname) replaceInApp(canonicalPath);
     applyPageMetadata(canonicalPath);
     setPathname(canonicalPath);
   }, []);
@@ -114,7 +113,7 @@ export function AdminShell({
     if (isAdminNavigationVisible(requestedItem, role, features)) return;
     const dashboardPath = canonicalTeamPath('/team');
     if (pathname === dashboardPath) return;
-    window.history.replaceState({}, '', dashboardPath);
+    replaceInApp(dashboardPath);
     setPathname(dashboardPath);
   }, [contract, pathname, role]);
 
@@ -200,7 +199,12 @@ export function AdminShell({
             >
               ダッシュボード
             </a>
-            <a className="admin-help-link" href="/manual">
+            <a
+              className="admin-help-link"
+              href="/manual"
+              rel="noreferrer"
+              target="_blank"
+            >
               ヘルプ
             </a>
             <Button

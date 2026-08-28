@@ -1,6 +1,10 @@
 import type { MouseEvent } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { handleInAppLinkClick, navigateInApp } from './app-navigation.js';
+import {
+  handleInAppLinkClick,
+  navigateInApp,
+  replaceInApp,
+} from './app-navigation.js';
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 const originalPopStateEvent = Object.getOwnPropertyDescriptor(
@@ -48,6 +52,18 @@ describe('認証済み画面のSPA遷移', () => {
     expect(dispatchEvent.mock.calls[0]?.[0]).toMatchObject({
       type: 'popstate',
     });
+  });
+
+  it('正規化したパスを履歴置換し、親ルーターへ通知する', () => {
+    const { dispatchEvent, pushState } = mockWindow();
+    const replaceState = vi.fn();
+    window.history.replaceState = replaceState;
+
+    replaceInApp('/team/members');
+
+    expect(replaceState).toHaveBeenCalledWith({}, '', '/team/members');
+    expect(pushState).not.toHaveBeenCalled();
+    expect(dispatchEvent).toHaveBeenCalledOnce();
   });
 
   it('修飾キー付きクリックはブラウザのリンク動作を維持する', () => {

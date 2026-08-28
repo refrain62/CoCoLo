@@ -69,7 +69,12 @@ export function UserShell({
           </div>
           <div className="admin-topbar-actions">
             <Badge variant="outline">{currentEnvironment()}</Badge>
-            <a className="admin-help-link" href="/manual">
+            <a
+              className="admin-help-link"
+              href="/manual"
+              rel="noreferrer"
+              target="_blank"
+            >
               ヘルプ
             </a>
             <Button
