@@ -150,6 +150,18 @@
 - 反映: 実装PR #238（merge commit `205d76a7075d4f69f41445120c8600d858f10cd0`）を2026-08-29に`develop`へ統合した。
 - 残課題: Supabaseの`system_admin` claim付与、staging migration、実DB/RLS、実ブラウザの`/admin`・`/team`・`/dashboard`受入は、再開台帳の`ADMIN-TEAM-001-ACCEPTANCE`で継続する。
 
+## ADMIN-TEAM-001 / チーム画面初期化回帰 実施記録
+
+- 対象: ログイン後はいったんカレンダーを表示できるものの、画面遷移後に部員メニューと異なる左メニューが表示されるチーム画面初期化回帰を修正した。
+- 原因: 認証済み画面の初期化中に認証コンテキストと部員候補を同時取得し、member optionが不要なrouteでも部員取得エラーが全体状態を上書きしていた。中間状態にもシェルを表示していたため、深い緑とLINEカラーのナビゲーションが混在していた。
+- 実装: member optionが必要なevents、event detail、orders、ride routeだけで部員候補を取得し、認証エラーと部員候補エラーを分離した。非同期結果はunmount・route変更後に反映しないようにした。
+- ナビゲーション: 初期化中、認証エラー、チーム選択、role選択の中間状態では`AppShell`のnavを非表示にし、確定した画面だけが統一シェルを表示するようにした。
+- テスト: member option route判定と、member option不要routeで不要な取得を要求しない境界を追加テストした。既存の予定・締め切り・カレンダーとチームダッシュボード統合は維持した。
+- セキュリティ: 認証コンテキストのtenant選択、既存の認可・個人情報境界、`/admin`と`/team`の分離を変更していない。敵対的レビューでCritical / Highは0件とした。
+- 検証: `pnpm test:unit`（unit 27件、Vitest 43ファイル159件）、`pnpm test`（API 225件）、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`git diff --check`を成功させた。PR #256の品質ゲートとtrust gateも成功した。
+- 反映: 実装PR #256（merge commit `85eed15732c2f9239f399ebf30874b6743d1056c`）を2026-08-29に`develop`へ統合した。
+- 残課題: Supabaseの`system_admin` claim付与、staging migration、実DB/RLS、実ブラウザの`/admin`・`/team`・`/dashboard`受入は、再開台帳の`ADMIN-TEAM-001-ACCEPTANCE`で継続する。
+
 ## RIDE-002 実施記録
 
 - 対象: 確定した送迎予定を、許可された利用者へ部員名・運転者表示名・乗車人数付きで安全に投影し、ログイン後の送迎操作から配車表示名を設定できるようにした。

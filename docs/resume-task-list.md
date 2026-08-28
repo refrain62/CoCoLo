@@ -32,7 +32,7 @@
 | `[!]` | OPS-001〜007 | Auth、PostgreSQL、R2、LINE、rate limit、GitHub保護、production昇格、公開LPの性能基準とstaging再計測の外部条件を満たす |
 | `[ ]` | ORIG-REQ-001 | 当初要求の未実装分を機能単位に分解し、仕様・コード・実DB・staging受入まで完了する |
 | `[~]` | UI-001〜003 | role別主要画面、保存APIの冪等性、未接続・失敗・権限不足の表示を受入する |
-| `[!]` | ADMIN-TEAM-001-ACCEPTANCE | ログイン後回帰修正とチーム画面のシェル・ダッシュボード統合はPR #233・#238で`develop`統合済み。stagingでSupabaseの`system_admin` claim付与、migration適用、実DBのRLS（公開publishedのみ・tenant越境不可）、実ブラウザの`/admin`・`/team`・`/dashboard`受入を確認する（実装履歴は[完了履歴](resume-task-history.md)） |
+| `[!]` | ADMIN-TEAM-001-ACCEPTANCE | ログイン後回帰修正とチーム画面のシェル・ダッシュボード統合はPR #233・#238・#256で`develop`統合済み。stagingでSupabaseの`system_admin` claim付与、migration適用、実DBのRLS（公開publishedのみ・tenant越境不可）、実ブラウザの`/admin`・`/team`・`/dashboard`受入を確認する（実装履歴は[完了履歴](resume-task-history.md)） |
 
 各IDの詳細な仕様は[機能仕様書](functional-specification.md)と[統合契約](integration/)を参照します。
 
