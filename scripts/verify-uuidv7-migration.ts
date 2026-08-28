@@ -32,12 +32,15 @@ function quoteIdentifier(identifier: string): string {
 }
 
 export function buildInvalidUuidV7Query(column: UuidColumn): string {
-  const tableName = quoteIdentifier(column.tableName);
+  const tableName = `"public".${quoteIdentifier(column.tableName)}`;
   const columnName = quoteIdentifier(column.columnName);
   return `SELECT count(*)::integer AS "invalidCount"
     FROM ${tableName}
    WHERE ${columnName} IS NOT NULL
-     AND substring(${columnName}::text, 15, 1) <> '7'`;
+     AND (
+       substring(${columnName}::text, 15, 1) <> '7'
+       OR (get_byte(uuid_send(${columnName}), 8) & 192) <> 128
+     )`;
 }
 
 type ColumnRow = Readonly<{
