@@ -65,6 +65,10 @@ export function isProtectedPath(filename: string): boolean {
   );
 }
 
+export function hasProtectedChanges(filenames: readonly string[]): boolean {
+  return filenames.some(isProtectedPath);
+}
+
 async function main(): Promise<void> {
   const eventPath = process.env.GITHUB_EVENT_PATH;
   const token = process.env.GH_TOKEN;
@@ -211,6 +215,11 @@ async function main(): Promise<void> {
     );
   }
 
+  const protectedChangedNames = changed
+    .filter((file) => file.filename && isProtectedPath(file.filename))
+    .map((file) => file.filename as string)
+    .sort();
+
   let extension: BootstrapExtension | undefined;
   try {
     extension = JSON.parse(
@@ -222,7 +231,7 @@ async function main(): Promise<void> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
-  if (extension) {
+  if (extension && hasProtectedChanges(protectedChangedNames)) {
     assert.equal(
       extension.schema,
       1,
@@ -246,10 +255,6 @@ async function main(): Promise<void> {
         `${filename}: extension hashが不正です。`,
       );
     }
-    const protectedChangedNames = changed
-      .filter((file) => file.filename && isProtectedPath(file.filename))
-      .map((file) => file.filename as string)
-      .sort();
     assert.deepEqual(
       Object.keys(extension.files).sort(),
       protectedChangedNames,
