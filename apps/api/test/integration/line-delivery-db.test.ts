@@ -6,6 +6,7 @@ import {
   createPrismaClient,
   enqueueLineDelivery,
 } from '@cocolo/db';
+import { createFeatureContractRepository } from '@cocolo/db/feature-contract';
 import { createApp } from '../../dist/app.js';
 import {
   createLineDeliveryProcessor,
@@ -20,6 +21,9 @@ const RACE_ACTOR = 'owner-b';
 const INTEGRATION_GROUP = 'Uintegration';
 const SOURCE_EVENT_A = '00000000-0000-7000-8000-000000000901';
 const SOURCE_EVENT_B = '00000000-0000-7000-8000-000000000902';
+const SOURCE_EVENT_RETRY = '00000000-0000-7000-8000-000000000904';
+const SOURCE_EVENT_UNKNOWN = '00000000-0000-7000-8000-000000000905';
+const SOURCE_EVENT_LEASE = '00000000-0000-7000-8000-000000000906';
 
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URLが必要です');
 assert.ok(
@@ -65,12 +69,29 @@ await owner.$executeRaw`
      '2099-02-01T09:00:00Z', ${ACTOR}, ${ACTOR}),
     (${SOURCE_EVENT_B}::uuid, ${TENANT_B}::uuid, 'LINE統合テスト予定B',
      'practice'::event_type, '2099-02-01T10:00:00Z', '2099-02-01T12:00:00Z',
-     '2099-02-01T09:00:00Z', ${RACE_ACTOR}, ${RACE_ACTOR})
+     '2099-02-01T09:00:00Z', ${RACE_ACTOR}, ${RACE_ACTOR}),
+    (${SOURCE_EVENT_RETRY}::uuid, ${TENANT_A}::uuid, 'LINE統合テスト再試行',
+     'practice'::event_type, '2099-02-02T10:00:00Z', '2099-02-02T12:00:00Z',
+     '2099-02-02T09:00:00Z', ${ACTOR}, ${ACTOR}),
+    (${SOURCE_EVENT_UNKNOWN}::uuid, ${TENANT_A}::uuid, 'LINE統合テスト照合待ち',
+     'practice'::event_type, '2099-02-03T10:00:00Z', '2099-02-03T12:00:00Z',
+     '2099-02-03T09:00:00Z', ${ACTOR}, ${ACTOR}),
+    (${SOURCE_EVENT_LEASE}::uuid, ${TENANT_A}::uuid, 'LINE統合テストlease切れ',
+     'practice'::event_type, '2099-02-04T10:00:00Z', '2099-02-04T12:00:00Z',
+     '2099-02-04T09:00:00Z', ${ACTOR}, ${ACTOR})
   ON CONFLICT (id) DO NOTHING
+`;
+// 大量fixtureのpending行は配信対象ではなく、同一DB上のprocessor統合テストへ混入させない。
+await owner.$executeRaw`
+  UPDATE line_delivery_outbox
+     SET next_retry_at = '2099-01-01T00:00:00Z'
+   WHERE destination LIKE 'Cscale-team-%'
+     AND status IN ('pending', 'failed')
 `;
 const apiRepositories = createMemberRepositories(app, {
   notificationPublicAppUrl: 'https://app.example.test',
 });
+const featureContractRepository = createFeatureContractRepository(app);
 const api = createApp({
   verifyToken: async (token) => {
     if (token !== 'integration-owner-token') throw new Error('invalid token');
@@ -82,6 +103,11 @@ const api = createApp({
     };
   },
   ...apiRepositories,
+  centralFeatures: {
+    featureContract: {
+      repository: featureContractRepository,
+    },
+  },
 });
 
 // outbox claim対象を共有するため、LINE配信のDB統合テストは同時実行しない。
@@ -216,14 +242,16 @@ test('業務transactionのenqueueからworker claim・送信・sent確定まで�
       FROM line_delivery_outbox
      WHERE id = ${notificationId}::uuid
   `;
-  assert.deepEqual(rows, [
-    {
-      status: 'sent',
-      attempt: 1,
-      provider_retry_key: notificationId,
-    },
-  ]);
-  assert.deepEqual(retryKeys, [notificationId]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.status, 'sent');
+  assert.equal(rows[0]?.attempt, 1);
+  const providerRetryKey = rows[0]?.provider_retry_key;
+  assert.ok(providerRetryKey);
+  assert.match(
+    providerRetryKey,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-57][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
+  assert.deepEqual(retryKeys, [providerRetryKey]);
   const auditRows = await owner.$queryRaw<Array<{ action: string }>>`
     SELECT action
       FROM audit_logs
@@ -239,17 +267,17 @@ test('業務transactionのenqueueからworker claim・送信・sent確定まで�
 
 test('retry・unknown・lease切れは同じprovider retry keyで重複送信を抑止する', async () => {
   const retryId = await publishViaProductionApi({
-    sourceId: SOURCE_EVENT_A,
+    sourceId: SOURCE_EVENT_RETRY,
     idempotencyKey: `retry-${randomUUID()}`,
     title: '再試行統合テスト',
   });
   const unknownId = await publishViaProductionApi({
-    sourceId: SOURCE_EVENT_A,
+    sourceId: SOURCE_EVENT_UNKNOWN,
     idempotencyKey: `unknown-${randomUUID()}`,
     title: '照合待ち統合テスト',
   });
   const leaseId = await publishViaProductionApi({
-    sourceId: SOURCE_EVENT_A,
+    sourceId: SOURCE_EVENT_LEASE,
     idempotencyKey: `lease-${randomUUID()}`,
     title: 'lease切れ統合テスト',
   });
