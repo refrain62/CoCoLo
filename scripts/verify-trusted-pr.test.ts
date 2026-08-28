@@ -3,9 +3,9 @@ import test from 'node:test';
 import {
   assertBootstrapExtensionForChange,
   assertNoProtectedPathRename,
+  type BootstrapExtension,
   hasProtectedChanges,
   isProtectedPath,
-  type BootstrapExtension,
 } from './verify-trusted-pr.ts';
 
 const extension: BootstrapExtension = {

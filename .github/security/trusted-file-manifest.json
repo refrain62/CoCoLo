@@ -130,7 +130,7 @@
     "scripts/verify-uuidv7-migration.ts": "0963d275e71211939bcdc98022ccc1beeda863ad39e0cd05bbb60055d026d07d",
     "scripts/verify-toolchain.test.ts": "665f98049589f91ccab291ecf5abf1bf1fabb5cfd278f1d1f5858fb8eb1eda79",
     "scripts/verify-toolchain.ts": "04a8e781a889b247ec0ec39826618d34992104e118d70490be99b2896ba4df9a",
-    "scripts/verify-trusted-pr.test.ts": "dea8e88d8b16f5c5aa65864a6d2bccd96e0c452b6f7c941fbe7dfdcfd2a1827f",
+    "scripts/verify-trusted-pr.test.ts": "e492877411b0e26e85e48cb2c2db6ecce4e3a5c5e2fb074e7e06f017f834c647",
     "scripts/verify-trusted-pr.ts": "d76b19c0c50a6dff212fdb84c2a32324e44f135ce4dfd2c7653d70e72260c1da",
     "scripts/verify-workflows.ts": "250d1d2c6b956f9ab347948dce20d90e8eadcb19153427593f352a5d4beb9293",
     "scripts/verify-workspace-boundaries.ts": "142ae19436873fc254f91c6351b9c3354a1675f392fc5183a4c669febc0efa74",
