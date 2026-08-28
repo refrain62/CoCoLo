@@ -70,6 +70,17 @@ function withDatabaseTimeouts(url: string): string {
   return parsed.toString();
 }
 
+function pauseAfterFirstPlanLock(definition: string): string {
+  const marker = `    PERFORM pg_advisory_xact_lock(hashtextextended(\n      plan_row.tenant_id::text || ':' || plan_row.plan_id::text, 0\n    ));\n`;
+  const paused = definition.replace(
+    marker,
+    `${marker}    PERFORM pg_sleep(0.5);\n`,
+  );
+  if (paused === definition)
+    throw new Error('lock関数へテスト用pauseを注入できません。');
+  return paused;
+}
+
 async function cleanupFixture(client: PrismaClient): Promise<void> {
   await client.$transaction(async (transaction) => {
     const tx = transaction as unknown as PrismaClient;
@@ -269,6 +280,7 @@ test('同一運転者の2つのplanへの同時車登録はplan lockの循環待
   let concurrentRegistrations:
     | Promise<PromiseSettledResult<unknown>[]>
     | undefined;
+  let originalTwoArgLockDefinition: string | undefined;
   try {
     await cleanupFixture(migration);
     await seedFixture(migration);
@@ -289,7 +301,15 @@ test('同一運転者の2つのplanへの同時車登録はplan lockの循環待
         lockFunction.signature,
       );
       assert.match(definitions[0]?.definition ?? '', lockFunction.order);
+      if (lockFunction.signature === 'app_lock_ride_driver_plans(uuid,uuid)')
+        originalTwoArgLockDefinition = definitions[0]?.definition;
     }
+    if (!originalTwoArgLockDefinition)
+      throw new Error('2引数lock関数の定義を取得できません。');
+    await execute(
+      migration,
+      pauseAfterFirstPlanLock(originalTwoArgLockDefinition),
+    );
     const firstRepository = createRideRepository(first);
     const secondRepository = createRideRepository(second);
     await assert.rejects(() =>
@@ -396,6 +416,8 @@ test('同一運転者の2つのplanへの同時車登録はplan lockの循環待
   } finally {
     if (timeout) clearTimeout(timeout);
     await concurrentRegistrations;
+    if (originalTwoArgLockDefinition)
+      await execute(migration, originalTwoArgLockDefinition);
     await cleanupFixture(migration);
   }
 });
