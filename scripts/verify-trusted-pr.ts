@@ -324,12 +324,13 @@ async function main(): Promise<void> {
     const filename = file.filename as string;
     assertNoProtectedPathRename(filename, file.previous_filename);
     if (!isProtectedPath(filename)) continue;
-    const isExtensionFile = extension?.files[filename] !== undefined;
+    const extensionHash = extension?.files[filename];
+    const isExtensionFile = extensionHash !== undefined;
     assertProtectedPathStatus(filename, file.status, isExtensionFile);
     if (isExtensionFile) {
       assert.equal(
         sha256(await headFile(filename)),
-        extension.files[filename],
+        extensionHash,
         `${filename}: owner-only extensionの固定hashとPR headが一致しません。`,
       );
       continue;
