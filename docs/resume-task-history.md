@@ -137,6 +137,19 @@
 - 反映: 実装PR #233（merge commit `f29929039eb4340bea31f8cdf82cddac3c461dee`）を2026-08-28に`develop`へ統合した。
 - 残課題: Supabaseの`system_admin` claim付与、staging migration、実DB/RLS、実ブラウザの`/admin`・`/team`・`/dashboard`受入は、再開台帳の`ADMIN-TEAM-001-ACCEPTANCE`で継続する。
 
+## ADMIN-TEAM-001 / チーム画面シェル統合 実施記録
+
+- 対象: チームログイン後にカレンダー中心の利用者シェルから部員管理中心のチームシェルへ切り替わり、左メニューとダッシュボードが不統一になる回帰を修正した。
+- 原因: 認証済み画面が`/dashboard`だけ`UserShell`、`/team`と管理画面が`AdminShell`で描画されていたため、ログイン直後とチーム管理画面で異なるナビゲーションが表示されていた。
+- 実装: `/team`を正規のチームダッシュボードとし、ログイン直後・招待受諾後の遷移先を`/team`へ統一した。既存の`/dashboard`は`/team`へ正規化する互換経路とし、`/team`配下は常に`AdminShell`で描画するようにした。
+- ダッシュボード: `UserDashboard`の直近14日予定・締め切り・カレンダーと`AdminDashboard`のチーム運営状況を`/team`へ統合した。`AdminShell`取得済みのfeature contractを再利用し、同一画面での重複取得を防いだ。
+- ナビゲーション: サイドバーの`/team`・`/team/members`のactive状態を同一シェルで管理し、上部バーの重複ダッシュボードリンクを削除した。
+- テスト: `e2e/team-shell-dashboard.spec.ts`でログイン直後の`/team`、部員画面とのシェル共有、ダッシュボード復帰、予定とチーム概要の同時表示を固定した。`/dashboard`の互換正規化はルート単体テストで確認した。
+- セキュリティ: API、DB、migration、認証契約を変更していない。`/admin`のsystem admin分岐、選択中tenant、既存の認可・個人情報境界を維持した。敵対的レビューのCritical / Highは0件とした。
+- 検証: 対象E2Eは1件成功、全local E2Eは8件成功・1件skip、`pnpm test`（API 225件を含む）、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`git diff --check`、PR本文検証を成功させた。
+- 反映: 実装PR #238（merge commit `205d76a7075d4f69f41445120c8600d858f10cd0`）を2026-08-29に`develop`へ統合した。
+- 残課題: Supabaseの`system_admin` claim付与、staging migration、実DB/RLS、実ブラウザの`/admin`・`/team`・`/dashboard`受入は、再開台帳の`ADMIN-TEAM-001-ACCEPTANCE`で継続する。
+
 ## RIDE-002 実施記録
 
 - 対象: 確定した送迎予定を、許可された利用者へ部員名・運転者表示名・乗車人数付きで安全に投影し、ログイン後の送迎操作から配車表示名を設定できるようにした。
