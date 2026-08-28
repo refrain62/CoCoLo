@@ -1,0 +1,14 @@
+{
+  "protected_paths": [
+    ".gitleaks.toml",
+    ".semgrep/ci.yml",
+    ".trivy-secret.yaml"
+  ],
+  "files": {
+    ".github/CODEOWNERS": "d315e4b4dc32a8433d02431b32b2856ab92dc90bfa42b044bb78880a59c9edf8",
+    ".github/security/trust-root.json": "57b66d21d9558a4ecc423259ef97a3e31b6b57b5db25def01db363e94729a918",
+    ".github/workflows/pr-trust-gate.yml": "2ceac57c4586f633f02cc1363821b1218c2b94e9b15775422807907839870e3c",
+    "scripts/trust-root.ts": "7e7e79ba79a1d9d162c231b771f20162fe5890cb4f255fc71be2568b94e0c214",
+    "scripts/verify-trusted-pr.ts": "5a8491a37c5a3366435d007d2dddde339c8e7360a39ac7378f9ae53091049962"
+  }
+}

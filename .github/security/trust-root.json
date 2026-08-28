@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "status": "bootstrapped",
+  "owner": "@refrain62",
+  "bootstrap_mode": "owner-only-minimal",
+  "protected_branches": ["develop", "main"],
+  "bootstrap_commit": "d4834fd0777303eff77015a658c1a6ec52167096"
+}
