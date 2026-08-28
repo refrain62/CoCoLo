@@ -18,9 +18,9 @@
 | `[ ]` | T014-E2E | PostgreSQL付きperiodic E2Eの定期・手動実行、固定レポート、失敗Issue同期を実行する |
 | `[ ]` | T014-RATE | 実Redis相当、原子的consume、TTL、複数API instance、障害時503をstagingで確認する |
 | `[ ]` | T014-RELEASE | T-014各検査が同じ最新SHAで成功した証跡をまとめる |
-| `[~]` | LINE-DELIVERY-001 | 実DB、LINE provider、unknown照合、Windows改行差分を確認する |
+| `[~]` | LINE-DELIVERY-001 | 実DB、unknown照合、Windows改行差分はPR #231で確認済み。LINE provider、staging送信・再送・Webhook受入を確認する |
 | `[ ]` | LINE-DELIVERY-002 | unknownの照合、保持期間、再送、監査、担当者を運用仕様に確定する |
-| `[~]` | API-001 / DB-002 | 分散rate limitの本番条件、UUIDv7移行前検査、共通RLS残課題を解消する |
+| `[~]` | API-001 / DB-002 | events/LINEのlocal統合回帰はPR #231で解消済み。分散rate limitの本番条件、UUIDv7移行前検査、共通RLS残課題を解消する |
 | `[ ]` | RELEASE-001 | stagingとproductionのsecret、bucket、JWT、artifact、migration境界を分離する |
 | `[~]` | BRD-001 | feature契約ゲートはPR #185、年度引き継ぎUUIDとcopiedCountはPR #187、staff/guardianの閲覧専用WebはPR #189、DB PII境界はPR #191で統合済み。OpenAPI、staging実DB/RLS受入を完了する |
 | `[~]` | ORD-001 | 注文・集金のrepository、RLS、状態遷移、同時実行、staging E2Eを確認する |
