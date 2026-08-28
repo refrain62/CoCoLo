@@ -53,7 +53,6 @@ import { SystemAdminShell } from './system-admin-shell.js';
 import { createSystemContextApi } from './system-context-api.js';
 import { TeamSettingsPage } from './team-settings-page.js';
 import { UserDashboard } from './user-dashboard.js';
-import { UserShell } from './user-shell.js';
 
 function DeepLinkState({
   message,
@@ -161,8 +160,8 @@ export function AuthenticatedApp() {
       !systemAdminPath &&
       (normalizedPath === '/' || normalizedPath === '/login')
     ) {
-      replaceInApp('/dashboard');
-      setPathname('/dashboard');
+      replaceInApp('/team');
+      setPathname('/team');
     }
   }, [pathname, systemAdminPath]);
   useEffect(() => {
@@ -458,12 +457,22 @@ export function AuthenticatedApp() {
     } as const;
     if (route === 'dashboard')
       return (
-        <AdminDashboard
-          contract={contract}
-          onNavigate={navigateInApp}
-          role={currentRole}
-          team={currentTeam}
-        />
+        <div className="admin-page-stack">
+          <UserDashboard
+            eventsApi={eventsApi}
+            featureContract={contract}
+            featureContractApi={featureContractApi}
+            globalAnnouncementsApi={globalAnnouncementsApi}
+            onNavigate={navigateInApp}
+            ordersApi={ordersApi}
+          />
+          <AdminDashboard
+            contract={contract}
+            onNavigate={navigateInApp}
+            role={currentRole}
+            team={currentTeam}
+          />
+        </div>
       );
     if (route === 'features')
       return (
@@ -612,22 +621,7 @@ export function AuthenticatedApp() {
     );
   }
 
-  return pathname === '/dashboard' || pathname.startsWith('/dashboard/') ? (
-    <UserShell
-      isLoggingOut={isLoggingOut}
-      onLogout={() => void logout()}
-      role={currentRole}
-      team={currentTeam}
-    >
-      <UserDashboard
-        eventsApi={eventsApi}
-        featureContractApi={featureContractApi}
-        globalAnnouncementsApi={globalAnnouncementsApi}
-        onNavigate={navigateInApp}
-        ordersApi={ordersApi}
-      />
-    </UserShell>
-  ) : (
+  return (
     <AdminShell
       featureContractApi={featureContractApi}
       isLoggingOut={isLoggingOut}

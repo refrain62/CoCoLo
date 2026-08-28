@@ -194,13 +194,6 @@ export function AdminShell({
             <Badge variant="outline">{currentEnvironment()}</Badge>
             <a
               className="admin-help-link"
-              href="/dashboard"
-              onClick={(event) => navigateFromClick(event, '/dashboard')}
-            >
-              ダッシュボード
-            </a>
-            <a
-              className="admin-help-link"
               href="/manual"
               rel="noreferrer"
               target="_blank"

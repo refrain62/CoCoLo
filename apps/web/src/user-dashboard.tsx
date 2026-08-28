@@ -9,7 +9,10 @@ import {
 } from '@cocolo/ui';
 import { useEffect, useMemo, useState } from 'react';
 import type { EventSummary, EventsApi } from './features/events/events-api.js';
-import type { FeatureContractApi } from './features/feature-contract/feature-contract-api.js';
+import type {
+  FeatureContractApi,
+  FeatureContractSnapshot,
+} from './features/feature-contract/feature-contract-api.js';
 import type {
   OrdersCampaign,
   OrdersPaymentsApi,
@@ -56,12 +59,14 @@ function DashboardItemLabel({ item }: { item: DashboardItem }) {
 
 export function UserDashboard({
   eventsApi,
+  featureContract,
   featureContractApi,
   globalAnnouncementsApi,
   onNavigate,
   ordersApi,
 }: {
   eventsApi: EventsApi;
+  featureContract?: FeatureContractSnapshot;
   featureContractApi: FeatureContractApi;
   globalAnnouncementsApi: GlobalAnnouncementsApi;
   onNavigate: (path: string) => void;
@@ -100,8 +105,11 @@ export function UserDashboard({
             ),
           );
       });
-    void featureContractApi
-      .get()
+    void (
+      featureContract
+        ? Promise.resolve(featureContract)
+        : featureContractApi.get()
+    )
       .then(async (contract) => {
         const eventsEnabled = contract.features.some(
           (feature) => feature.key === 'events-attendance' && feature.enabled,
@@ -146,7 +154,14 @@ export function UserDashboard({
     return () => {
       active = false;
     };
-  }, [eventsApi, featureContractApi, globalAnnouncementsApi, ordersApi, range]);
+  }, [
+    eventsApi,
+    featureContract,
+    featureContractApi,
+    globalAnnouncementsApi,
+    ordersApi,
+    range,
+  ]);
 
   const items = useMemo(
     () => buildDashboardItems(events, campaigns, range),

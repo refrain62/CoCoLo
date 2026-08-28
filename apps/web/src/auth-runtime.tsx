@@ -78,8 +78,8 @@ function AuthBoundary({ publicRoot }: { publicRoot?: ReactNode }) {
         api={invitationApi}
         onAccepted={(tenantId) => {
           setStoredSelectedTeamId(tenantId);
-          replaceInApp('/dashboard');
-          setPathname('/dashboard');
+          replaceInApp('/team');
+          setPathname('/team');
         }}
         token={invitationToken}
       />
