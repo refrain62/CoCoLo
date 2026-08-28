@@ -42,6 +42,16 @@
 | NOT-001 / 回覧producer | 回覧掲載時のLINE通知outbox登録、feature flag fail-closed、同一transaction、tenant接続group、server生成deep link、staffのDB enqueue権限境界 | PR #183を`develop`へ統合。`pnpm test`、`pnpm build`、Biome、workspace boundary、migration SQL、trust-root、品質ゲート成功。未払いproducer、staffの手動通知権限仕様、実LINE受入は継続 |
 | FS-NOT-002 | 通知deep linkの予定・回覧画面、OAuth復帰、複数チーム時の選択、403/404時の安全な再選択画面、拒否時の旧state残留防止 | PR #179/#181を`develop`へ統合。`pnpm test`、`pnpm build`、Web typecheck、対象Vitest 16件、品質ゲート成功。stagingのLIFF不可端末、通常ブラウザ、実LINE受入は継続 |
 
+## API-001 / DB-002 共通RLS再検証 実施記録
+
+- 対象: Phase 1の`tenants`、`tenant_memberships`、`members`、`guardian_members`、`audit_logs`、`promotion_runs`のRLSがtransaction-localなcontextだけを信頼しないようにした。
+- 実装: `app_is_active_member`と`app_is_active_member_with_role`でDB上のactive membership・roleを再検証し、guardianはactive担当linkに限定した。operatorはmembershipを持たない既存の課金監査経路を維持した。
+- テスト: role偽装adminの部員参照・登録拒否、suspended membershipのtenant・部員参照拒否をcentral実DBテストへ追加し、migration policyの静的検査を追加した。
+- レビュー: Russellが現行branch・履歴、Hubbleが仕様・実装差分、Meitnerが敵対的観点を確認した。初回レビューでoperator監査INSERTを消すHigh指摘があり、operator分岐を復元して再レビュー・再検証した。最終判定はCritical 0 / High 0。
+- 検証: `pnpm test`、`pnpm test:unit`、`pnpm build`、`pnpm ci:fast`、`pnpm test:integration`（DB 3件、API 25件成功、既存条件のskip 1件）、`pnpm test:database-integrity`（25件）、migration SQL/checksum、trust-root、Biome、workspace境界、production bundleを成功させた。
+- 統合: 実装PR #235（merge commit `bcb85663ade471214e3430d89a967bdf15503109`）を2026-08-28に`develop`へ統合した。実装PRはmigration、checksum、trusted manifest、テストだけを含む。
+- 残課題: 分散rate limitの本番条件、UUIDv7移行前検査、staging実DB/RLS・外部provider受入、productionとstagingの同一SHA証跡は`API-001 / DB-002`、`T014`、`OPS-001〜007`の停止条件として継続する。production/staging workflowのtrust-root順序問題は別featureで扱う。
+
 ## API・LINE統合回帰修正 実施記録
 
 - 対象: 現行`develop`のfresh Supabase統合で発生した、events統合テストの管理者出欠修正RLS違反と、LINE統合テストのfeature contract未設定・fixture干渉を解消した。
