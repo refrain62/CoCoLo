@@ -4,6 +4,7 @@ import {
   canonicalAdminPath,
   isAdminNavigationVisible,
   isAdminRouteVisible,
+  isMemberOptionRoute,
   normalizeRoutePath,
   resolveAdminRoute,
 } from './admin-routes.js';
@@ -98,5 +99,14 @@ describe('管理画面ルート', () => {
     const features = [{ key: 'ride-operations', enabled: true }];
     expect(isAdminRouteVisible('ride', 'owner', features)).toBe(true);
     expect(isAdminRouteVisible('ride', 'guardian', features)).toBe(true);
+  });
+
+  it('部員候補を必要とする画面だけを判定する', () => {
+    expect(isMemberOptionRoute('events')).toBe(true);
+    expect(isMemberOptionRoute('event-detail')).toBe(true);
+    expect(isMemberOptionRoute('orders')).toBe(true);
+    expect(isMemberOptionRoute('ride')).toBe(true);
+    expect(isMemberOptionRoute('members')).toBe(false);
+    expect(isMemberOptionRoute('announcements')).toBe(false);
   });
 });
