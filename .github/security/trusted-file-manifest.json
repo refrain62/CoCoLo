@@ -71,7 +71,7 @@
     "scripts/db-prepare-test.ts": "809727bdc0c7fc766406a7e40184be80adeaf5a5c9e1c47dfb1cbc5e29abc216",
     "scripts/db-load-test.test.ts": "24992b14e4c84eeb64c234dd62faa5e53b3ee92c0f252d9c6651f63c765ced6e",
     "scripts/db-load-test.ts": "c0bfe4f9a703c3b89ac9d4e4c7faf00d2bfd1812121da94e49a50796ed0a35b9",
-    "scripts/db-seed-test.ts": "bad4b8c716d66f60f86dd32136a5f3d699c22677f2004acc133d4f6e66e64914",
+    "scripts/db-seed-test.ts": "09080747e164d0b61b6adffaeacf1f2f2e4288fa6a479b60d4435fabea286f4d",
     "scripts/db-seed-test.test.ts": "74ccfc7a0634653203a8359ad29faa53c9b875e0ca87b39696c01f93db7e7ed8",
     "scripts/database-security.test.ts": "b99fd0450dcd5c4bc519fac0308fa95c1162023018e55853b39e619cbff93bce",
     "scripts/database-security.ts": "5ece07a981a7fbfe730c311b91c0c70ad7a12a0ecece0d11526459f30deca54a",

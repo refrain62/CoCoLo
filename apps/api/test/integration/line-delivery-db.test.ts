@@ -18,13 +18,6 @@ const TENANT_A = '00000000-0000-7000-8000-000000000001';
 const TENANT_B = '00000000-0000-7000-8000-000000000002';
 const ACTOR = 'owner-a';
 const RACE_ACTOR = 'owner-b';
-const INTEGRATION_GROUP = 'Uintegration';
-const SOURCE_EVENT_A = '00000000-0000-7000-8000-000000000901';
-const SOURCE_EVENT_B = '00000000-0000-7000-8000-000000000902';
-const SOURCE_EVENT_CROSS_SOURCE = '00000000-0000-7000-8000-000000000903';
-const SOURCE_EVENT_RETRY = '00000000-0000-7000-8000-000000000904';
-const SOURCE_EVENT_UNKNOWN = '00000000-0000-7000-8000-000000000905';
-const SOURCE_EVENT_LEASE = '00000000-0000-7000-8000-000000000906';
 
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URLが必要です');
 assert.ok(
@@ -38,27 +31,25 @@ const worker = createPrismaClient(
   process.env.LINE_DELIVERY_WORKER_DATABASE_URL,
 );
 const owner = createPrismaClient(process.env.DIRECT_URL);
+async function createIntegrationEventId() {
+  const rows = await owner.$queryRaw<Array<{ id: string }>>`
+    SELECT app_uuidv7()::text AS id
+  `;
+  const id = rows[0]?.id;
+  if (!id) throw new Error('統合テスト用の予定IDを生成できません。');
+  return id;
+}
+const SOURCE_EVENT_A = await createIntegrationEventId();
+const SOURCE_EVENT_B = await createIntegrationEventId();
+const SOURCE_EVENT_CROSS_SOURCE = await createIntegrationEventId();
+const SOURCE_EVENT_RETRY = await createIntegrationEventId();
+const SOURCE_EVENT_UNKNOWN = await createIntegrationEventId();
+const SOURCE_EVENT_LEASE = await createIntegrationEventId();
+const INTEGRATION_GROUP = `Uintegration-${randomUUID()}`;
 await owner.$executeRaw`
   INSERT INTO line_connections (tenant_id, group_id, status, connected_at, updated_at)
   VALUES (${TENANT_A}::uuid, ${INTEGRATION_GROUP}, 'connected'::line_connection_status, clock_timestamp(), clock_timestamp())
-  ON CONFLICT (tenant_id) DO UPDATE
-    SET group_id = EXCLUDED.group_id,
-        status = EXCLUDED.status,
-        connected_at = EXCLUDED.connected_at,
-        updated_at = EXCLUDED.updated_at
-`;
-await owner.$executeRaw`
-  INSERT INTO tenant_plans
-    (id, tenant_id, plan_key, status, feature_keys, starts_at)
-  VALUES
-    ('00000000-0000-7000-8000-000000000903'::uuid, ${TENANT_A}::uuid,
-     'integration', 'active'::tenant_plan_status,
-     ARRAY['line-notifications']::text[], '2020-01-01T00:00:00Z')
-  ON CONFLICT (tenant_id) DO UPDATE
-    SET status = EXCLUDED.status,
-        feature_keys = EXCLUDED.feature_keys,
-        starts_at = EXCLUDED.starts_at,
-        ends_at = NULL
+  ON CONFLICT (tenant_id) DO NOTHING
 `;
 await owner.$executeRaw`
   INSERT INTO events
@@ -84,13 +75,6 @@ await owner.$executeRaw`
      'practice'::event_type, '2099-02-04T10:00:00Z', '2099-02-04T12:00:00Z',
      '2099-02-04T09:00:00Z', ${ACTOR}, ${ACTOR})
   ON CONFLICT (id) DO NOTHING
-`;
-// 大量fixtureのpending行は配信対象ではなく、同一DB上のprocessor統合テストへ混入させない。
-await owner.$executeRaw`
-  UPDATE line_delivery_outbox
-     SET next_retry_at = '2099-01-01T00:00:00Z'
-   WHERE destination LIKE 'Cscale-team-%'
-     AND status IN ('pending', 'failed')
 `;
 const apiRepositories = createMemberRepositories(app, {
   notificationPublicAppUrl: 'https://app.example.test',
@@ -541,10 +525,6 @@ test.after(async () => {
        ${SOURCE_EVENT_UNKNOWN}::uuid,
        ${SOURCE_EVENT_LEASE}::uuid
      )
-  `;
-  await owner.$executeRaw`
-    DELETE FROM tenant_plans
-     WHERE id = '00000000-0000-7000-8000-000000000903'::uuid
   `;
   await owner.$executeRaw`
     DELETE FROM line_connections

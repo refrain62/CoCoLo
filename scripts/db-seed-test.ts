@@ -662,7 +662,7 @@ ON CONFLICT (id) DO NOTHING;
 `,
     sql`
 INSERT INTO line_delivery_outbox
-  (id, tenant_id, actor_user_id, source_type, source_id, destination, title, body, deep_link, status, attempt, idempotency_key, payload_hash, connection_connected_at)
+  (id, tenant_id, actor_user_id, source_type, source_id, destination, title, body, deep_link, status, attempt, next_retry_at, idempotency_key, payload_hash, connection_connected_at)
 SELECT
   ('00000000-0000-7000-8000-' || lpad((100000 + series)::text, 12, '0'))::uuid,
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
@@ -675,6 +675,7 @@ SELECT
   'http://localhost:5173/events/' || ('00000000-0000-7000-8000-' || lpad((7000 + series)::text, 12, '0')),
   'pending',
   0,
+  '2099-01-01T00:00:00Z',
   'fixture-scale-line-' || series,
   encode(digest(concat_ws(E'\\x1f', 'Cscale-team-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END, 'チーム活動通知', '予定を確認してください。', 'http://localhost:5173/events/' || ('00000000-0000-7000-8000-' || lpad((7000 + series)::text, 12, '0'))), 'sha256'), 'hex'),
   '2026-08-25T00:00:00Z'
