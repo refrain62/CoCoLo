@@ -221,6 +221,17 @@ CriticalとHighが残る実装を完了扱いにしていません。
 - 敵対的レビュー: tenant越境、認可、個人情報、入力値、状態遷移、競合・冪等性、ページ境界、テスト不足を確認し、Critical / Highは0件。
 - 統合: 実装PR #199を2026-08-26に`develop`へマージ（merge commit `751ff6bd15c33985c309c6c70daa1e4fa376ee81`）。
 
+## LOCAL-FIXTURE-003 実施記録
+
+- 対象: ユーザー操作で蓄積するトランザクション中心のローカルDB seedとDB負荷試験。migration、production、staging、公開APIのデータは変更していない。
+- 機能定義: 旧fixtureが生成していた「大量検証機能」を削除し、現行8機能の定義とtenant feature flagだけをseedする。再seed時も旧仮想機能の関連flagを先に削除する。
+- 規模: 負荷用tenant Cへユーザー操作相当の部員1,001件、保護者所属・リンク各2,002件、予定1,001件、予定ごとの出欠回答1,002,001件、公開回覧1,001件、既読1,001件を生成する。
+- 負荷試験: 出欠回答を予定単位のページ取得として負荷計画へ追加し、tenant_idとevent_idを固定したRLS付きクエリを実行する。デフォルト50 worker・各20回の1,000リクエストで1,000/1,000成功、失敗0、p95 599msだった。
+- 安全性: 生成IDはUUIDv7形式、ユーザー・表示名は合成値のみ、seedは再実行可能なON CONFLICTを使用する。出欠回答はDBトリガーの回答者制約に合わせてowner-cの管理者操作として登録する。
+- 検証: `pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、trust root、ローカルtest DBの42 migration確認・seed・負荷試験、`git diff --check`を成功させた。
+- 敵対的レビュー: tenant越境、認可、個人情報、入力値、状態遷移、冪等性、ページ境界、現行機能限定を確認し、Critical / Highは0件。
+- 統合: 実装PR #240（merge commit `533000f9d08be68b86f5a1ea0982065643253dca`）を2026-08-29に`develop`へマージした。本記録は実装PRと分離したdocs-only PRで更新する。
+
 詳細な重大度と次の行動は[レビュー状況](reviews/README.md)と[中断再開タスクリスト](resume-task-list.md)に集約しています。
 
 ## 履歴の更新規則
