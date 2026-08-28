@@ -21,6 +21,7 @@ export type {
   SystemAdminRepository,
   SystemAnnouncementRecord,
   SystemAnnouncementStatus,
+  SystemAnnouncementViewerRole,
   SystemFeatureRecord,
 } from './system-admin-repository.js';
 export {

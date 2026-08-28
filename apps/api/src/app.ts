@@ -82,6 +82,7 @@ import {
   systemContextResponseSchema,
 } from '@cocolo/contracts/runtime-response';
 import {
+  globalAnnouncementListResponseSchema,
   systemAnnouncementListResponseSchema,
   systemAnnouncementResponseSchema,
   systemFeatureListResponseSchema,
@@ -368,6 +369,12 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
       path: /^\/api\/v1\/system\/announcements$/,
       status: 200,
       schema: systemAnnouncementListResponseSchema,
+    },
+    {
+      method: 'GET',
+      path: /^\/api\/v1\/global-announcements$/,
+      status: 200,
+      schema: globalAnnouncementListResponseSchema,
     },
     {
       method: 'POST',
@@ -1011,6 +1018,7 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   app.use('/api/v1/notifications/line', authenticate);
   app.use('/api/v1/notifications/line/:notificationId/retry', authenticate);
   app.use('/api/v1/auth/context', authenticate);
+  app.use('/api/v1/global-announcements', authenticate);
   app.use('/api/v1/system/context', authenticateSystemAdmin);
   app.use('/api/v1/system/announcements', authenticateSystemAdmin);
   app.use('/api/v1/system/announcements/*', authenticateSystemAdmin);
@@ -1194,6 +1202,7 @@ export function createApp(options: AppOptions = {}): Hono<ApiEnv> {
   });
   app.use('/api/v1/system/announcements', systemAdminRateLimit);
   app.use('/api/v1/system/announcements/*', systemAdminRateLimit);
+  app.use('/api/v1/global-announcements', authenticatedRateLimit);
   app.use('/api/v1/system/features', systemAdminRateLimit);
   app.use('/api/v1/system/features/*', systemAdminRateLimit);
   if (options.centralFeatures?.authInvitations) {

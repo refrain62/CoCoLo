@@ -27,8 +27,14 @@ test('管理者はログイン後に部員を登録でき、APIへBearer token�
   await page.goto('/login');
   await page.getByLabel('メールアドレス').fill(email);
   await page.getByLabel('パスワード').fill(password);
-  await page.getByRole('button', { name: 'ログイン' }).click();
+  await page.getByRole('button', { name: 'ログイン', exact: true }).click();
 
+  await expect(
+    page.getByRole('heading', { name: 'これからの予定', exact: true }),
+  ).toBeVisible();
+
+  await page.locator('a[href="/team"]').click();
+  await page.locator('a[href="/team/members"]').click();
   await expect(
     page.getByRole('heading', { name: '部員一覧', exact: true }),
   ).toBeVisible();

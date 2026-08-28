@@ -33,7 +33,7 @@ const defaultMemberApi = createMemberApi();
 type MemberRole = 'owner' | 'admin' | 'staff' | 'guardian';
 
 function canManageMembers(role: MemberRole | null | undefined) {
-  return role === 'owner' || role === 'admin' || role === 'staff';
+  return role === 'owner' || role === 'admin';
 }
 
 type MemberFormState = {

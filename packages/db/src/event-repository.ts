@@ -392,8 +392,13 @@ export function createEventRepository(
                  attendance_deadline, created_at, updated_at
           FROM events
           WHERE tenant_id = ${input.tenantId}::uuid
-            AND starts_at < ${input.to}
-            AND ends_at > ${input.from}
+            AND (
+              (starts_at < ${input.to} AND ends_at > ${input.from})
+              OR (
+                attendance_deadline >= ${input.from}
+                AND attendance_deadline < ${input.to}
+              )
+            )
           ORDER BY starts_at ASC, id ASC
           LIMIT 501
         `;

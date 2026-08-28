@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import type { PrismaClient as PrismaClientType } from '@prisma/client';
 import prismaClientPackage from '@prisma/client';
+import { createSystemAdminRepository } from '../dist/system-admin-repository.js';
 
 const { PrismaClient } = prismaClientPackage;
 type PrismaClient = PrismaClientType;
 
 const tenantA = '00000000-0000-7000-8000-000000000001';
 const tenantB = '00000000-0000-7000-8000-000000000002';
+const tenantC = '00000000-0000-7000-8000-000000000003';
 const memberA = '00000000-0000-7000-8000-000000000201';
 const memberA2 = '00000000-0000-7000-8000-000000000202';
 const eventA = '00000000-0000-7000-8000-000000000401';
@@ -29,6 +31,8 @@ const rideOfferA = '00000000-0000-7000-8000-000000001002';
 const rideRequestA = '00000000-0000-7000-8000-000000001003';
 const rideAssignmentA = '00000000-0000-7000-8000-000000001004';
 const auditA = '00000000-0000-7000-8000-000000001101';
+const systemPublishedAnnouncement = '00000000-0000-7000-8000-000000009001';
+const systemDraftAnnouncement = '00000000-0000-7000-8000-000000009002';
 
 const appUrl = process.env.DATABASE_URL;
 const directUrl = process.env.DIRECT_URL;
@@ -997,6 +1001,77 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
     ]);
   });
   assert.deepEqual(noContext, [0, 0]);
+
+  const systemRepository = createSystemAdminRepository(app);
+  await execute(
+    direct,
+    `DELETE FROM system_announcements
+      WHERE id IN ($1::uuid, $2::uuid)`,
+    systemPublishedAnnouncement,
+    systemDraftAnnouncement,
+  );
+  await execute(
+    direct,
+    `INSERT INTO system_announcements
+      (id, title, body, status, published_at, created_by_user_id)
+     VALUES
+       ($1::uuid, '公開告知', '本文', 'published', now(), 'system-admin'),
+       ($2::uuid, '下書き', '本文', 'draft', NULL, 'system-admin')`,
+    systemPublishedAnnouncement,
+    systemDraftAnnouncement,
+  );
+  try {
+    assert.deepEqual(
+      (
+        await systemRepository.listPublishedAnnouncements({
+          tenantId: tenantA,
+          userId: 'owner-a',
+          role: 'owner',
+        })
+      ).map((item) => item.id),
+      [systemPublishedAnnouncement],
+    );
+    assert.deepEqual(
+      (
+        await systemRepository.listPublishedAnnouncements({
+          tenantId: tenantB,
+          userId: 'owner-b',
+          role: 'owner',
+        })
+      ).map((item) => item.id),
+      [systemPublishedAnnouncement],
+    );
+    await execute(
+      direct,
+      `UPDATE tenant_memberships
+          SET status = 'suspended'::membership_status
+        WHERE tenant_id = $1::uuid AND user_id = 'owner-c'`,
+      tenantC,
+    );
+    assert.deepEqual(
+      await systemRepository.listPublishedAnnouncements({
+        tenantId: tenantC,
+        userId: 'owner-c',
+        role: 'owner',
+      }),
+      [],
+    );
+  } finally {
+    await execute(
+      direct,
+      `UPDATE tenant_memberships
+          SET status = 'active'::membership_status
+        WHERE tenant_id = $1::uuid AND user_id = 'owner-c'`,
+      tenantC,
+    );
+    await execute(
+      direct,
+      `DELETE FROM system_announcements
+        WHERE id IN ($1::uuid, $2::uuid)`,
+      systemPublishedAnnouncement,
+      systemDraftAnnouncement,
+    );
+  }
 });
 
 after(async () => {

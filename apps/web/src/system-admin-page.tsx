@@ -350,7 +350,7 @@ function SystemFeaturesPage({ api }: { api: SystemAdminApi }) {
   }, [load]);
 
   async function toggleFeature(feature: SystemFeature) {
-    if (!reason.trim()) return;
+    if (feature.billingType !== 'paid' || !reason.trim()) return;
     setUpdatingKey(feature.key);
     setError(null);
     try {
@@ -452,15 +452,21 @@ function SystemFeaturesPage({ api }: { api: SystemAdminApi }) {
                   <Button
                     className="feature-toggle"
                     variant={feature.systemEnabled ? 'outline' : 'secondary'}
-                    disabled={updatingKey === feature.key || !reason.trim()}
+                    disabled={
+                      feature.billingType !== 'paid' ||
+                      updatingKey === feature.key ||
+                      !reason.trim()
+                    }
                     aria-pressed={feature.systemEnabled}
                     onClick={() => void toggleFeature(feature)}
                   >
-                    {updatingKey === feature.key
-                      ? '保存中…'
-                      : feature.systemEnabled
-                        ? '全体提供を停止'
-                        : '全体提供を再開'}
+                    {feature.billingType !== 'paid'
+                      ? '無償機能は対象外'
+                      : updatingKey === feature.key
+                        ? '保存中…'
+                        : feature.systemEnabled
+                          ? '全体提供を停止'
+                          : '全体提供を再開'}
                   </Button>
                 </CardContent>
               </Card>

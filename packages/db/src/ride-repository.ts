@@ -513,16 +513,14 @@ async function appendAudit(
     metadata: Prisma.InputJsonValue;
   },
 ) {
-  await client.auditLog.create({
-    data: {
-      tenantId: actor.tenantId,
-      actorUserId: actor.userId,
-      action: input.action,
-      resourceType: 'ride_plan',
-      resourceId: input.resourceId,
-      metadata: input.metadata,
-    },
-  });
+  // audit_logsはstaffのSELECTを許可していないため、RETURNINGを発生させるPrisma createを使わない。
+  await client.$executeRaw`
+    INSERT INTO audit_logs
+      (id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata)
+    VALUES
+      (app_uuidv7(), ${actor.tenantId}::uuid, ${actor.userId}, ${input.action},
+       'ride_plan', ${input.resourceId}::uuid, ${input.metadata})
+  `;
 }
 
 // 送迎の書き込みをRLS context・行ロック・監査INSERTと同じtransactionへ閉じ込める。

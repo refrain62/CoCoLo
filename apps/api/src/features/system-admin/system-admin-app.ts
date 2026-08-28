@@ -14,7 +14,7 @@ import type { ApiEnv } from '../../app.js';
 
 function errorResponse(
   c: Context<ApiEnv>,
-  status: 400 | 403 | 404 | 409 | 500 | 503,
+  status: 400 | 401 | 403 | 404 | 409 | 500 | 503,
   code: string,
   message: string,
   details: unknown = {},
@@ -85,6 +85,21 @@ export function createSystemAdminApp({
     const store = requireRepository(c);
     if (store instanceof Response) return store;
     const records = await store.listAnnouncements(actorUserId(c));
+    return c.json({ data: records.map(projectAnnouncement) });
+  });
+
+  // system adminが公開した全体お知らせを、選択中チームのactive membershipへ限定して返す。
+  app.get('/api/v1/global-announcements', async (c) => {
+    const store = requireRepository(c);
+    if (store instanceof Response) return store;
+    const auth = c.get('auth');
+    if (!auth)
+      return errorResponse(c, 401, 'UNAUTHENTICATED', '認証が必要です。');
+    const records = await store.listPublishedAnnouncements({
+      tenantId: auth.membership.tenantId,
+      userId: auth.userId,
+      role: auth.membership.role,
+    });
     return c.json({ data: records.map(projectAnnouncement) });
   });
 

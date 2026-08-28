@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { navigateToTeamMembers, signInWithMockedAuth } from './mock-auth.js';
 
 const member = {
   id: '00000000-0000-7000-8000-000000000201',
@@ -11,12 +12,6 @@ const member = {
   phoneNumber: '090-0000-0000',
   note: '画面に表示してはいけない情報',
 };
-
-async function setAccessToken(page) {
-  await page.addInitScript(() => {
-    window.localStorage.setItem('cocolo.accessToken', 'test-access-token');
-  });
-}
 
 test('部員一覧は検索条件を送り、公開項目だけを表示する', async ({ page }) => {
   const requests = [];
@@ -31,15 +26,14 @@ test('部員一覧は検索条件を送り、公開項目だけを表示する',
       body: JSON.stringify({ data: [member], page: 1, pageSize: 50 }),
     });
   });
-  await setAccessToken(page);
-
-  await page.goto('/members');
+  await signInWithMockedAuth(page);
+  await navigateToTeamMembers(page);
 
   await expect(
     page.getByRole('heading', { name: '部員一覧', exact: true }),
   ).toBeVisible();
-  await expect(page.getByText('山田太郎')).toBeVisible();
-  await expect(page.getByText('小4')).toBeVisible();
+  await expect(page.getByRole('cell', { name: '山田太郎' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '小4' })).toBeVisible();
   await expect(page.getByText('090-0000-0000')).toHaveCount(0);
   await expect(page.getByText('画面に表示してはいけない情報')).toHaveCount(0);
 
@@ -57,7 +51,7 @@ test('部員登録は学生の必須項目を検証し、テナント情報を�
   page,
 }) => {
   let postBody: Record<string, unknown> | undefined;
-  await page.route('**/api/v1/members', async (route) => {
+  await page.route('**/api/v1/members*', async (route) => {
     if (route.request().method() === 'POST') {
       postBody = route.request().postDataJSON();
       await route.fulfill({
@@ -72,9 +66,8 @@ test('部員登録は学生の必須項目を検証し、テナント情報を�
       body: JSON.stringify({ data: [], page: 1, pageSize: 50 }),
     });
   });
-  await setAccessToken(page);
-
-  await page.goto('/members');
+  await signInWithMockedAuth(page);
+  await navigateToTeamMembers(page);
   const registration = page.getByRole('region', { name: '部員登録操作' });
   await page.getByRole('button', { name: '部員を登録' }).click();
   await registration.getByLabel('氏名').fill('佐藤花子');
@@ -113,9 +106,8 @@ test('登録権限がないAPI応答を権限エラーとして表示する', as
       body: JSON.stringify({ data: [], page: 1, pageSize: 50 }),
     });
   });
-  await setAccessToken(page);
-
-  await page.goto('/members');
+  await signInWithMockedAuth(page);
+  await navigateToTeamMembers(page);
   const registration = page.getByRole('region', { name: '部員登録操作' });
   await page.getByRole('button', { name: '部員を登録' }).click();
   await registration.getByLabel('氏名').fill('権限外登録');
