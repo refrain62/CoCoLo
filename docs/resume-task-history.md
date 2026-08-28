@@ -1,6 +1,6 @@
 # 完了タスクと実施履歴
 
-更新日：2026-08-28
+更新日：2026-08-29
 
 この文書は、完了済み作業の結果だけを短く残す履歴です。
 
@@ -241,6 +241,15 @@ CriticalとHighが残る実装を完了扱いにしていません。
 - 検証: `pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、trust root、ローカルtest DBの42 migration確認・seed・負荷試験、`git diff --check`を成功させた。
 - 敵対的レビュー: tenant越境、認可、個人情報、入力値、状態遷移、冪等性、ページ境界、現行機能限定を確認し、Critical / Highは0件。
 - 統合: 実装PR #240（merge commit `533000f9d08be68b86f5a1ea0982065643253dca`）を2026-08-29に`develop`へマージした。本記録は実装PRと分離したdocs-only PRで更新する。
+
+## T014 / UUIDv7移行前検査 実施記録
+
+- 対象: UUIDv7移行前検査がversion nibbleだけを確認していたため、RFC 9562のvariant不正を見逃す境界を修正した。
+- 実装: `public` schemaを明示し、NULLを除外し、`uuid_send`のvariant `10xx`を検査するSQLへ更新した。PostgreSQL識別子の厳格な検証とSQL混入テストを追加し、UUIDv4の明示的な例外列は維持した。
+- 信頼境界: mainのowner-only bootstrapはPR #51、実装headのowner-only拡張はPR #247・#249で`develop`へ反映した。実装PR #250（merge commit `95ccc90d672fc1943f6c962ebda2870b36026fb1`）は現行baseのtrust gateと品質ゲートを成功させて2026-08-29に統合した。
+- 検証: 対象テスト3件、`pnpm test`（API 225件を含む）、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm verify:trust-root`、`git diff --check`を成功させた。`DIRECT_URL`未設定のため実DB接続を伴う検査は未実行とし、SQL生成境界と既存契約テストで代替確認した。
+- 敵対的レビュー: tenant越境、認可・個人情報、入力検証、状態遷移、競合、テスト不足、仕様不整合を確認し、Critical / Highは0件と判定した。
+- 残課題: scanner初回導入、rename・削除fail-closed、branch protection、staging実DB/RLS、同一SHAのrelease証跡は`resume-task-list.md`のT014-ROOT / T014-SCAN / T014-PR、T014-E2E、T014-RELEASE、OPS-001〜007へ残す。
 
 詳細な重大度と次の行動は[レビュー状況](reviews/README.md)と[中断再開タスクリスト](resume-task-list.md)に集約しています。
 
