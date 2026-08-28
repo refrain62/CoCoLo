@@ -2,11 +2,10 @@
   "schema": 1,
   "mode": "owner-only-one-time",
   "owner": "@refrain62",
-  "head_sha": "389bcfde8e037450817a70bfe1ed243aed3888b4",
+  "head_sha": "e57789e82861368646549cc958f14742a59322e9",
   "files": {
-    ".github/security/trusted-file-manifest.json": "4ac2512a98361b253979dde46e01a3f3e8bfc9c576706a6a2a699b1daaa4f6c3",
-    "package.json": "595bf5d7ec88e11bb05786ae404f9345d868f27187701976d42153f26c9eb8a2",
-    "scripts/verify-trusted-pr.test.ts": "e56e64938714dfe453fabcc3b0327d5f95f9091ae024c7f62f4f2e324013b1d5",
-    "scripts/verify-trusted-pr.ts": "f59980bde423f03b3bbdb62ae40402d3af6681532dc84ea297103d416771a22f"
+    ".github/security/trusted-file-manifest.json": "1b1ba4b0b1b3447ee9cb96294fb573e5f10c0e0660c4033e88b49ea2d883cad9",
+    "scripts/verify-trusted-pr.test.ts": "e492877411b0e26e85e48cb2c2db6ecce4e3a5c5e2fb074e7e06f017f834c647",
+    "scripts/verify-trusted-pr.ts": "d76b19c0c50a6dff212fdb84c2a32324e44f135ce4dfd2c7653d70e72260c1da"
   }
 }
