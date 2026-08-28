@@ -31,9 +31,11 @@ test('UUIDv7検査SQLはversion nibble以外を許可しない', () => {
     tableName: 'audit_logs',
     columnName: 'id',
   });
-  assert.match(query, /FROM "audit_logs"/);
+  assert.match(query, /FROM "public"\."audit_logs"/);
+  assert.match(query, /"id" IS NOT NULL/);
   assert.match(query, /"id"::text/);
   assert.match(query, /substring\("id"::text, 15, 1\) <> '7'/);
+  assert.match(query, /\(get_byte\(uuid_send\("id"\), 8\) & 192\) <> 128/);
   assert.match(query, /count\(\*\)::integer/);
 });
 
@@ -43,6 +45,14 @@ test('識別子へ任意SQLを混入できない', () => {
       buildInvalidUuidV7Query({
         tableName: 'members; DROP TABLE audit_logs;--',
         columnName: 'id',
+      }),
+    /PostgreSQL識別子が不正です/,
+  );
+  assert.throws(
+    () =>
+      buildInvalidUuidV7Query({
+        tableName: 'audit_logs',
+        columnName: 'id"; DROP TABLE audit_logs;--',
       }),
     /PostgreSQL識別子が不正です/,
   );
