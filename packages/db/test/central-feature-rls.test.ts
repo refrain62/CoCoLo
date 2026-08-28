@@ -663,6 +663,7 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
 
   await withContext(app, tenantA, 'owner-a', 'owner', async (tx) => {
     assert.equal(await count(tx, 'events'), 1);
+    assert.ok((await count(tx, 'members')) > 0);
     assert.equal(await count(tx, 'attendance_responses'), 2);
     assert.equal(await countBoardContacts(tx, tenantA, 'owner'), 1);
     assert.equal(await count(tx, 'purchase_orders'), 1);
@@ -694,6 +695,19 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
         tx,
         `SELECT phone FROM board_contacts WHERE id = $1::uuid`,
         boardContactA,
+      ),
+    );
+  });
+
+  await withContext(app, tenantA, 'owner-a', 'admin', async (tx) => {
+    assert.equal(await count(tx, 'members'), 0);
+    await rejects(() =>
+      execute(
+        tx,
+        `INSERT INTO members
+             (id, tenant_id, name, kana, category, status)
+             VALUES ('00000000-0000-7000-8000-000000000299', $1::uuid, '不正role', 'ふせいrole', 'student'::member_category, 'active'::member_status)`,
+        tenantA,
       ),
     );
   });
@@ -965,6 +979,27 @@ test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで�
   });
 
   if (!direct) throw new Error('実DBのdirect clientが初期化されていません。');
+  await execute(
+    direct,
+    `UPDATE tenant_memberships
+        SET status = 'suspended'::membership_status
+      WHERE tenant_id = $1::uuid AND user_id = 'admin-a'`,
+    tenantA,
+  );
+  try {
+    await withContext(app, tenantA, 'admin-a', 'admin', async (tx) => {
+      assert.equal(await count(tx, 'tenants'), 0);
+      assert.equal(await count(tx, 'members'), 0);
+    });
+  } finally {
+    await execute(
+      direct,
+      `UPDATE tenant_memberships
+          SET status = 'active'::membership_status
+        WHERE tenant_id = $1::uuid AND user_id = 'admin-a'`,
+      tenantA,
+    );
+  }
   await execute(
     direct,
     `UPDATE guardian_members
