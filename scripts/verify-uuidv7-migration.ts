@@ -32,7 +32,7 @@ function quoteIdentifier(identifier: string): string {
 }
 
 export function buildInvalidUuidV7Query(column: UuidColumn): string {
-  const tableName = quoteIdentifier(column.tableName);
+  const tableName = `"public".${quoteIdentifier(column.tableName)}`;
   const columnName = quoteIdentifier(column.columnName);
   return `SELECT count(*)::integer AS "invalidCount"
     FROM ${tableName}
