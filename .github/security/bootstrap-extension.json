@@ -2,7 +2,7 @@
   "schema": 1,
   "mode": "owner-only-one-time",
   "owner": "@refrain62",
-  "head_sha": "cf1a8f9442d209bb92a6f7cd0fcbda086bc00f86",
+  "head_sha": "95002604170198be6721bd7c8d172b294dd3c0cb",
   "files": {
     ".github/security/trusted-file-manifest.json": "33d5cd4f37062fab5d1bd1738948bb3413d160bb64f1e00957aa4f3f2b4169d4",
     "scripts/verify-uuidv7-migration.test.ts": "68ee7f202b1eaec479b8a3353970f869e22e2e7ecd6b3ac84dd9edb26282675b",
