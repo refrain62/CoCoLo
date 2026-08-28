@@ -1,6 +1,6 @@
 # 中断再開タスクリスト
 
-更新日：2026-08-27
+更新日：2026-08-28
 
 基準：`origin/develop`
 
@@ -28,7 +28,7 @@
 | `[~]` | ANN-001 | 回覧、既読、添付download、R2認可、未読者の個人情報境界を確認する |
 | `[~]` | NOT-001 | 中央producerの通知元境界はPR #177、回覧掲載producerはPR #183で統合済み。未払いproducer、staffの手動通知権限仕様、実LINE受入を確定する |
 | `[~]` | NOT-002 / NOT-003 | FS-NOT-002のWeb deep link・OAuth復帰・複数チーム選択はPR #179で実装済み。staging専用LINE groupの接続、Webhook、送信、unknown、再送、実ブラウザ受入を残す |
-| `[!]` | RIDE-002-ACCEPTANCE | 確定配車の表示名・乗車人数projection、プロフィール表示名更新、確定公開中の名前固定を実装済み。Google Mapsのkey・origin・費用・障害時表示、Supabase実DBのRLS・競合、manager/guardianの実ブラウザ受入を確認する（実装履歴は[完了履歴](resume-task-history.md)のRIDE-002見出し） |
+| `[!]` | RIDE-002-ACCEPTANCE | 確定配車の表示名・乗車人数projection、プロフィール表示名更新、確定公開中の名前固定、2つのplanへの同一運転者同時登録の実DB回帰検証（PR #229）を実装済み。Google Mapsのkey・origin・費用・障害時表示、Supabase staging実DBのRLS・競合、manager/guardianの実ブラウザ受入を確認する（実装履歴は[完了履歴](resume-task-history.md)のRIDE-002見出し） |
 | `[!]` | OPS-001〜007 | Auth、PostgreSQL、R2、LINE、rate limit、GitHub保護、production昇格、公開LPの性能基準とstaging再計測の外部条件を満たす |
 | `[ ]` | ORIG-REQ-001 | 当初要求の未実装分を機能単位に分解し、仕様・コード・実DB・staging受入まで完了する |
 | `[~]` | UI-001〜003 | role別主要画面、保存APIの冪等性、未接続・失敗・権限不足の表示を受入する |
