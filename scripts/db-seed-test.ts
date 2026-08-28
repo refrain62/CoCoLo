@@ -18,6 +18,10 @@ export const scaleFixture = {
   guardians: 20_020,
   pagerMembers: 1_001,
   pagerAnnouncements: 1_001,
+  loadTenantGuardians: 2_002,
+  loadTenantEvents: 1_001,
+  loadTenantAttendanceResponses: 1_002_001,
+  featureDefinitions: 8,
   minimumRowsPerTable: 1_000,
 } as const;
 
@@ -54,6 +58,12 @@ export const fixtureTables = [
   'ride_requests',
   'ride_assignments',
 ] as const;
+
+export const fixtureMinimumRows: Partial<
+  Record<(typeof fixtureTables)[number], number>
+> = {
+  feature_definitions: scaleFixture.featureDefinitions,
+};
 
 type FixtureCountRow = {
   table_name: string;
@@ -140,6 +150,17 @@ CROSS JOIN generate_series(1, 2) AS parents(parent)
 ON CONFLICT (tenant_id, user_id) DO NOTHING;
 `,
     sql`
+-- 旧fixtureの仮想機能を再seed時にも残さず、現行機能の定義だけを使う。
+DELETE FROM tenant_feature_flags
+WHERE left(feature_key, 6) = 'scale-'
+  AND substring(feature_key FROM 7) LIKE 'feature-%';
+`,
+    sql`
+DELETE FROM feature_definitions
+WHERE left(key, 6) = 'scale-'
+  AND substring(key FROM 7) LIKE 'feature-%';
+`,
+    sql`
 INSERT INTO feature_definitions (key, billing_type, display_name, default_enabled)
 VALUES
   ('members', 'free', 'メンバー管理', true),
@@ -150,16 +171,6 @@ VALUES
   ('line-notifications', 'paid', 'LINE通知', false),
   ('ride-operations', 'paid', '送迎管理', false),
   ('board-contacts', 'free', '役員・連絡先', true)
-ON CONFLICT (key) DO NOTHING;
-`,
-    sql`
-INSERT INTO feature_definitions (key, billing_type, display_name, default_enabled)
-SELECT
-  'scale-feature-' || lpad(series::text, 4, '0'),
-  CASE WHEN series % 4 = 0 THEN 'paid'::feature_billing_type ELSE 'free'::feature_billing_type END,
-  '大量検証機能' || lpad(series::text, 4, '0'),
-  series % 3 <> 0
-FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (key) DO NOTHING;
 `,
     sql`
@@ -241,19 +252,19 @@ CROSS JOIN generate_series(1, 10) AS members(member)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
--- Cは101件を追加し、既定pageSize=50と上限pageSize=100の両方を跨ぐ。
+-- 負荷用テナントCに、ユーザー操作で追加された部員を1,001件用意する。
 INSERT INTO members (id, tenant_id, name, kana, category, grade_level, age_group, status, note)
 SELECT
   ('00000000-0000-7000-8000-' || lpad((220 + series)::text, 12, '0'))::uuid,
   '${tenantC}',
-  'ページャー部員' || series,
-  'ぺーじゃー' || series,
+  '負荷検証部員' || lpad(series::text, 4, '0'),
+  'ふかけんしょう' || series,
   CASE WHEN series % 5 = 0 THEN 'adult'::member_category ELSE 'student'::member_category END,
   CASE WHEN series % 5 = 0 THEN NULL ELSE 1 + (series % 16) END,
   CASE WHEN series % 5 = 0 THEN CASE WHEN series % 3 = 0 THEN '30代' ELSE '40代' END ELSE NULL END,
   'active'::member_status,
   NULL
-FROM generate_series(1, 101) AS generated(series)
+FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
@@ -267,6 +278,35 @@ VALUES
   ('${uuid(305)}', '${tenantC}', 'guardian-c', '${uuid(209)}', '母', 'guardian', 'active', '2026-08-20T00:00:00Z'),
   ('${uuid(306)}', '${tenantC}', 'guardian-c', '${uuid(210)}', '父', 'guardian', 'suspended', NULL),
   ('${uuid(307)}', '${tenantA}', 'guardian-a', '${uuid(206)}', '保護者', 'guardian', 'revoked', NULL)
+ON CONFLICT (tenant_id, user_id, member_id) DO NOTHING;
+`,
+    sql`
+-- 負荷用テナントCの部員ごとに、父母のユーザー操作で追加された所属とリンクを作る。
+INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((540000 + ((member - 1) * 2) + parent)::text, 12, '0'))::uuid,
+  '${tenantC}',
+  'c-load-member-' || lpad(member::text, 4, '0') || '-parent-' || parent,
+  'guardian'::role,
+  'active'::membership_status
+FROM generate_series(1, 1001) AS members(member)
+CROSS JOIN generate_series(1, 2) AS parents(parent)
+ON CONFLICT (tenant_id, user_id) DO NOTHING;
+`,
+    sql`
+INSERT INTO guardian_members
+  (id, tenant_id, user_id, member_id, relationship, link_type, status, consented_at)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((550000 + ((member - 1) * 2) + parent)::text, 12, '0'))::uuid,
+  '${tenantC}',
+  'c-load-member-' || lpad(member::text, 4, '0') || '-parent-' || parent,
+  ('00000000-0000-7000-8000-' || lpad((220 + member)::text, 12, '0'))::uuid,
+  CASE WHEN parent = 1 THEN '母' ELSE '父' END,
+  'guardian'::member_link_type,
+  'active'::member_link_status,
+  '2026-08-20T00:00:00Z'::timestamptz
+FROM generate_series(1, 1001) AS members(member)
+CROSS JOIN generate_series(1, 2) AS parents(parent)
 ON CONFLICT (tenant_id, user_id, member_id) DO NOTHING;
 `,
     sql`
@@ -378,6 +418,33 @@ FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
+-- 負荷用テナントCに、ユーザーが作成した予定を1,001件用意する。
+INSERT INTO events
+  (id, tenant_id, title, event_type, starts_at, ends_at, location, items_to_bring, fee, opponent, meeting_time, transportation_required, attendance_deadline, created_by_user_id, updated_by_user_id)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((7100000 + series)::text, 12, '0'))::uuid,
+  '${tenantC}',
+  '負荷検証予定' || lpad(series::text, 4, '0'),
+  CASE series % 3
+    WHEN 0 THEN 'practice'::event_type
+    WHEN 1 THEN 'match'::event_type
+    ELSE 'event'::event_type
+  END,
+  timestamp '2099-06-01T10:00:00Z' + (series || ' days')::interval,
+  timestamp '2099-06-01T12:00:00Z' + (series || ' days')::interval,
+  '負荷検証会場' || series,
+  CASE WHEN series % 2 = 0 THEN '飲み物、タオル' ELSE NULL END,
+  CASE WHEN series % 3 = 0 THEN 0 ELSE 500 END,
+  CASE WHEN series % 3 = 1 THEN '対戦チーム' || series ELSE NULL END,
+  CASE WHEN series % 3 = 1 THEN timestamp '2099-06-01T08:00:00Z' + (series || ' days')::interval ELSE NULL END,
+  series % 2 = 1,
+  timestamp '2099-05-29T23:59:00Z' + (series || ' days')::interval,
+  'owner-c',
+  'owner-c'
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
 WITH fixture_session AS (
   SELECT set_config('app.tenant_id', '${tenantC}', true), set_config('app.user_id', 'guardian-c', true), set_config('app.role', 'guardian', true)
 )
@@ -428,6 +495,31 @@ BEGIN
   END LOOP;
 END
 $fixture$;
+`,
+    sql`
+-- 各予定へ部員全員が回答した、実運用に近い1,002,001件の出欠トランザクション。
+WITH fixture_session AS (
+  SELECT set_config('app.tenant_id', '${tenantC}', true), set_config('app.user_id', 'owner-c', true), set_config('app.role', 'owner', true)
+)
+INSERT INTO attendance_responses
+  (id, tenant_id, event_id, user_id, member_id, response, responded_at, updated_at)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((7200000 + ((event - 1) * 1001) + member)::text, 12, '0'))::uuid,
+  '${tenantC}',
+  ('00000000-0000-7000-8000-' || lpad((7100000 + event)::text, 12, '0'))::uuid,
+  'owner-c',
+  ('00000000-0000-7000-8000-' || lpad((220 + member)::text, 12, '0'))::uuid,
+  CASE (event + member) % 3
+    WHEN 0 THEN 'attending'::attendance_response
+    WHEN 1 THEN 'absent'::attendance_response
+    ELSE 'pending'::attendance_response
+  END,
+  timestamp '2026-08-01T00:00:00Z' + (event || ' days')::interval,
+  timestamp '2026-08-01T00:00:00Z' + (event || ' days')::interval
+FROM generate_series(1, 1001) AS events(event)
+CROSS JOIN generate_series(1, 1001) AS members(member)
+CROSS JOIN fixture_session
+ON CONFLICT (tenant_id, event_id, user_id, member_id) DO NOTHING;
 `,
     sql`
 WITH fixture_session AS (
@@ -573,17 +665,17 @@ FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
--- 公開回覧を101件追加し、pageSize=50/100の境界を確認できるようにする。
+-- 負荷用テナントCに、ユーザーが掲載した公開回覧を1,001件用意する。
 INSERT INTO announcements (id, tenant_id, author_user_id, title, body, status, published_at)
 SELECT
   ('00000000-0000-7000-8000-' || lpad((1650 + series)::text, 12, '0'))::uuid,
   '${tenantC}',
   'owner-c',
-  'ページャー回覧' || series,
-  'ページャー検証用の回覧本文です。',
+  '負荷検証回覧' || lpad(series::text, 4, '0'),
+  '負荷検証用の回覧本文です。',
   'published'::announcement_status,
   timestamp '2026-01-01T00:00:00Z' + (series || ' days')::interval
-FROM generate_series(1, 101) AS generated(series)
+FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
@@ -605,6 +697,16 @@ SELECT
   ('00000000-0000-7000-8000-' || lpad((8000 + series)::text, 12, '0'))::uuid,
   'club-' || lpad(series::text, 4, '0') || '-member-01-parent-1',
   timestamp '2026-05-02T09:00:00Z' + (series || ' days')::interval
+FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (tenant_id, announcement_id, user_id) DO NOTHING;
+`,
+    sql`
+INSERT INTO announcement_reads (tenant_id, announcement_id, user_id, read_at)
+SELECT
+  '${tenantC}',
+  ('00000000-0000-7000-8000-' || lpad((1650 + series)::text, 12, '0'))::uuid,
+  'c-load-member-' || lpad(series::text, 4, '0') || '-parent-1',
+  timestamp '2026-08-01T09:00:00Z' + (series || ' days')::interval
 FROM generate_series(1, 1001) AS generated(series)
 ON CONFLICT (tenant_id, announcement_id, user_id) DO NOTHING;
 `,
@@ -778,11 +880,10 @@ INSERT INTO tenant_feature_flags
   (tenant_id, feature_key, enabled, source, changed_by_user_id, reason, starts_at, ends_at)
 SELECT
   ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
-  CASE series % 5
+  CASE series % 4
     WHEN 0 THEN 'members'
     WHEN 1 THEN 'events-attendance'
     WHEN 2 THEN 'bulletin-board'
-    WHEN 3 THEN 'scale-feature-' || lpad(series::text, 4, '0')
     ELSE 'line-notifications'
   END,
   series % 4 <> 0,
@@ -1441,7 +1542,8 @@ export function assertFixtureCounts(
     rows.map((row) => [row.table_name, Number(row.row_count)]),
   );
   const insufficient = fixtureTables.filter(
-    (table) => (counts.get(table) ?? 0) < minimum,
+    (table) =>
+      (counts.get(table) ?? 0) < (fixtureMinimumRows[table] ?? minimum),
   );
   assert.deepEqual(
     insufficient,
