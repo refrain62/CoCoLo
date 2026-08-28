@@ -6,7 +6,7 @@
   ],
   "files": {
     ".github/CODEOWNERS": "d315e4b4dc32a8433d02431b32b2856ab92dc90bfa42b044bb78880a59c9edf8",
-    ".github/security/bootstrap-extension.json": "e0e71a4b380bfb8b162a09f04865a23aa85a86cfe34fe3fcb85722083e5d5796",
+    ".github/security/bootstrap-extension.json": "23b1678bd315ef71d980baff05de9689a0ccd16c076045a73f79a77ddc80df19",
     ".github/security/trust-root.json": "915452a13773527ea7eebe508acb285b88b205c8334a3da18dcf562fce6c5ed2",
     ".github/workflows/e2e-daily.yml": "f9f649f849076a9c82cb7f01473f2b49694e0bc1740bef050ca7711a6d55fa64",
     ".github/workflows/e2e-manual.yml": "22ea8d5aae87c41ce31892582db0eea05d52a8f159080185f553728208e2126b",

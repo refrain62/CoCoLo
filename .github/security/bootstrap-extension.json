@@ -4,7 +4,7 @@
   "owner": "@refrain62",
   "head_sha": "95002604170198be6721bd7c8d172b294dd3c0cb",
   "files": {
-    ".github/security/trusted-file-manifest.json": "33d5cd4f37062fab5d1bd1738948bb3413d160bb64f1e00957aa4f3f2b4169d4",
+    ".github/security/trusted-file-manifest.json": "f3b720957eb62b28dff30f16bae3fd95a702c3df34985fb17c2294fe2a2b839c",
     "scripts/verify-uuidv7-migration.test.ts": "68ee7f202b1eaec479b8a3353970f869e22e2e7ecd6b3ac84dd9edb26282675b",
     "scripts/verify-uuidv7-migration.ts": "0963d275e71211939bcdc98022ccc1beeda863ad39e0cd05bbb60055d026d07d"
   }
