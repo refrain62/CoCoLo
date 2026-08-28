@@ -1,6 +1,6 @@
 # 完了タスクと実施履歴
 
-更新日：2026-08-27
+更新日：2026-08-28
 
 この文書は、完了済み作業の結果だけを短く残す履歴です。
 
@@ -18,6 +18,7 @@
 | 添付・回覧 | R2 adapter配線、添付response契約、回覧添付のavailable DB guard、短期URL download | `develop`統合済み。実R2と回覧受入は継続 |
 | 購買・送迎 | 注文APIとWeb、CSV・冪等性、送迎API、送迎Web、公開response契約 | `develop`統合済み。実DB・staging受入は継続 |
 | CI・DB | Node.js / pnpm固定、Node 24、local-first quality、migration検査、UUIDv7移行前検査、schema drift検査、PR本文検査 | `develop`統合済み。mainのtrust rootと外部環境は継続 |
+| API・LINE統合回帰 | eventsの管理者出欠修正RLS、LINE feature contract経路、provider retry key、scale fixture干渉の修正 | 実装PR #231を`develop`へ統合。fresh Supabase統合、品質ゲート、敵対的レビュー成功。実LINE・staging受入は継続 |
 | LOCAL-FIXTURE-001 | 500チーム・5,000部員、部員ごとの父母想定10,000保護者リンク、状態境界、ページャー閾値を含むローカルfixture拡充 | PR #197を`develop`へ統合。敵対的レビューと品質ゲート成功。実負荷試験・staging外部サービス受入は継続 |
 | LOCAL-FIXTURE-002 | 1,001チーム・10,010部員・20,020保護者リンク、全31テーブル1,000件超、状態パターン、RLS付きDB負荷試験 | PR #199を`develop`へ統合。敵対的レビュー、品質ゲート、実DB件数検証、1,000件負荷試験成功 |
 | UI安全性 | 二重送信防止、権限別操作表示、認証レイアウト、主要タップ領域、複数幅ブラウザ受入 | `develop`統合済み。認証済み主要画面のrole別受入は継続 |
@@ -39,6 +40,17 @@
 | NOT-001 / FS-NOT-001 | 中央LINE通知のsourceType・UUIDv7 sourceId、同一tenant resource検証、server生成deep link、API・workerのteam feature flag境界、旧outbox隔離 | PR #177を`develop`へ統合。`pnpm test` 198件、`pnpm build`、migration SQL 30件、DB整合性25件、品質ゲート成功。Web遷移先、未払いproducer、実LINE受入は継続 |
 | NOT-001 / 回覧producer | 回覧掲載時のLINE通知outbox登録、feature flag fail-closed、同一transaction、tenant接続group、server生成deep link、staffのDB enqueue権限境界 | PR #183を`develop`へ統合。`pnpm test`、`pnpm build`、Biome、workspace boundary、migration SQL、trust-root、品質ゲート成功。未払いproducer、staffの手動通知権限仕様、実LINE受入は継続 |
 | FS-NOT-002 | 通知deep linkの予定・回覧画面、OAuth復帰、複数チーム時の選択、403/404時の安全な再選択画面、拒否時の旧state残留防止 | PR #179/#181を`develop`へ統合。`pnpm test`、`pnpm build`、Web typecheck、対象Vitest 16件、品質ゲート成功。stagingのLIFF不可端末、通常ブラウザ、実LINE受入は継続 |
+
+## API・LINE統合回帰修正 実施記録
+
+- 対象: 現行`develop`のfresh Supabase統合で発生した、events統合テストの管理者出欠修正RLS違反と、LINE統合テストのfeature contract未設定・fixture干渉を解消した。
+- 原因: `attendance_update` policyの`WITH CHECK`がmanager更新にも`user_id = app.user_id`を要求していたため、owner/admin/staffがguardian回答を代理修正するとPostgreSQLのRLS違反になっていた。LINE側は統合テストの`createApp()`へcentral feature contract repositoryを渡しておらず、fail-closedの503でDB経路へ到達していなかった。
+- 実装: 新規migration `20260828100000_fix_attendance_manager_correction_rls`でmanager分岐の回答者固定を外し、guardian分岐の本人・担当active link制約を維持した。既存triggerによる回答識別子と`user_id`固定は維持した。LINE統合テストへfeature contract repositoryを接続し、同一tenantの別source、通知ごとのUUIDv7予定ID、動的group、失敗時cleanupを追加した。
+- fixture: 大量scale outboxのpending行を2099年の再試行時刻へ設定し、processor統合テストのclaim対象へ混入しないようにした。固定plan・固定groupの上書きは避け、既存seedのactive planを利用する構成にした。Supabase CLIには`DO_NOT_TRACK=1`と`SUPABASE_TELEMETRY_DISABLED=1`を渡し、worktree間で共有されるtelemetryファイルへの依存をなくした。
+- 検証: `pnpm test`、`pnpm test:unit`、`pnpm test:integration`（DB 3件、API 24件成功、1件skip、失敗0）、`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm test:database-integrity`、migration SQL/checksum、trust root、OpenAPI、`git diff --check`を成功させた。
+- 敵対的レビュー: サブエージェント2名で原因調査、別サブエージェントで敵対的レビューを実施した。初回Medium指摘（tenant A内の別source検証、失敗時cleanup、共有fixture汚染、固定ID再利用）を修正し、最終判定はCritical 0 / High 0 / Medium 0 / Low 0だった。
+- 反映: 実装PR #231（merge commit `021d4b2d841140698d1320f641782a7cc1be41a7`）を2026-08-28に`develop`へ統合した。完了記録は実装PRと分離した本docs-only PRで更新する。
+- 残課題: 実LINE provider、staging実DB/RLS、UUIDv7移行前の実DB検査、実ブラウザ受入、分散rate limitなどは`LINE-DELIVERY-001`、`API-001 / DB-002`、`OPS-001〜007`の外部条件として再開台帳に残す。
 
 ## UI-018〜024 実施記録
 
