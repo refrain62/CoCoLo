@@ -13,6 +13,9 @@ test('負荷試験計画は複数テナントとページ取得を混在させ�
   assert.equal(plan.length, 1_000);
   assert.ok(plan.some((request) => request.tenantId.endsWith('000000000003')));
   assert.ok(plan.some((request) => request.resource === 'members'));
+  assert.ok(
+    plan.some((request) => request.resource === 'attendance-responses'),
+  );
   assert.ok(plan.some((request) => request.resource === 'announcements'));
   assert.ok(plan.some((request) => request.offset >= 50));
 });
@@ -29,6 +32,22 @@ test('負荷試験クエリーはtenantとRLSセッションを同時に設定�
     assert.match(query, /WHERE tenant_id = '[0-9a-f-]+'::uuid/);
     assert.match(query, /LIMIT 50 OFFSET/);
   }
+  const pagerRequest = plan[0];
+  assert.ok(pagerRequest);
+  assert.match(
+    buildLoadQuery({
+      ...pagerRequest,
+      resource: 'attendance-responses',
+    }),
+    /FROM attendance_responses, fixture_session/,
+  );
+  assert.match(
+    buildLoadQuery({
+      ...pagerRequest,
+      resource: 'attendance-responses',
+    }),
+    /AND event_id = '[0-9a-f-]+'::uuid/,
+  );
 });
 
 test('負荷結果の集計と閾値判定を行う', () => {

@@ -47,11 +47,13 @@ test('ローカルfixtureは全業務テーブルと規模検証データを定�
 
   assert.deepEqual([...fixtureTables], expectedTables);
   assert.match(sql, /generate_series\(1, 1001\)/);
-  assert.match(sql, /generate_series\(1, 101\)/);
   assert.match(sql, /1,001チーム×10人=10,010人/);
   assert.match(sql, /attendance_responses/);
   assert.match(sql, /guardian_members/);
   assert.match(sql, /line_delivery_outbox/);
+  assert.match(sql, /負荷用テナントC/);
+  assert.match(sql, /1,002,001件の出欠トランザクション/);
+  assert.doesNotMatch(sql, /scale-feature|大量検証機能/);
   assert.match(sql, /'disconnected'::line_connection_status/);
   assert.match(sql, /status = 'completed'/);
   assert.match(sql, /status = 'rejected'/);
@@ -64,6 +66,10 @@ test('ローカルfixtureは全業務テーブルと規模検証データを定�
     guardians: 20_020,
     pagerMembers: 1_001,
     pagerAnnouncements: 1_001,
+    loadTenantGuardians: 2_002,
+    loadTenantEvents: 1_001,
+    loadTenantAttendanceResponses: 1_002_001,
+    featureDefinitions: 8,
     minimumRowsPerTable: 1_000,
   });
   assert.deepEqual(testTenantIds, {
@@ -109,5 +115,15 @@ test('fixture投入後は全テーブルの最低件数を検証する', () => {
         })),
       ),
     /fixtureの件数不足: events/,
+  );
+  assert.throws(
+    () =>
+      assertFixtureCounts(
+        fixtureTables.map((table) => ({
+          table_name: table,
+          row_count: table === 'feature_definitions' ? 7 : 1_000,
+        })),
+      ),
+    /fixtureの件数不足: feature_definitions/,
   );
 });
