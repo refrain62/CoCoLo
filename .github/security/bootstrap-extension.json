@@ -2,10 +2,11 @@
   "schema": 1,
   "mode": "owner-only-one-time",
   "owner": "@refrain62",
-  "head_sha": "95002604170198be6721bd7c8d172b294dd3c0cb",
+  "head_sha": "389bcfde8e037450817a70bfe1ed243aed3888b4",
   "files": {
-    ".github/security/trusted-file-manifest.json": "f3b720957eb62b28dff30f16bae3fd95a702c3df34985fb17c2294fe2a2b839c",
-    "scripts/verify-uuidv7-migration.test.ts": "68ee7f202b1eaec479b8a3353970f869e22e2e7ecd6b3ac84dd9edb26282675b",
-    "scripts/verify-uuidv7-migration.ts": "0963d275e71211939bcdc98022ccc1beeda863ad39e0cd05bbb60055d026d07d"
+    ".github/security/trusted-file-manifest.json": "4ac2512a98361b253979dde46e01a3f3e8bfc9c576706a6a2a699b1daaa4f6c3",
+    "package.json": "595bf5d7ec88e11bb05786ae404f9345d868f27187701976d42153f26c9eb8a2",
+    "scripts/verify-trusted-pr.test.ts": "e56e64938714dfe453fabcc3b0327d5f95f9091ae024c7f62f4f2e324013b1d5",
+    "scripts/verify-trusted-pr.ts": "f59980bde423f03b3bbdb62ae40402d3af6681532dc84ea297103d416771a22f"
   }
 }
