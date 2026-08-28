@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { AdminDashboard } from './admin-dashboard.js';
 import type { AdminRoute } from './admin-routes.js';
 import { AdminShell } from './admin-shell.js';
-
+import { navigateInApp } from './app-navigation.js';
+import { applyPageMetadata } from './app-route.js';
 import { useAuth } from './auth-context.js';
 import { type AuthRole, createAuthContextApi } from './auth-context-api.js';
 import { createAttachmentApi } from './features/attachments/attachment-api.js';
@@ -53,11 +54,6 @@ import { TeamSettingsPage } from './team-settings-page.js';
 import { UserDashboard } from './user-dashboard.js';
 import { UserShell } from './user-shell.js';
 
-function navigateInApp(path: string) {
-  window.history.pushState({}, '', path);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-}
-
 function DeepLinkState({
   message,
   onBack,
@@ -97,6 +93,9 @@ export function AuthenticatedApp() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+  useEffect(() => {
+    if (typeof document !== 'undefined') applyPageMetadata(pathname);
+  }, [pathname]);
   const teamSelectionApi = useMemo(
     () =>
       createTeamSelectionApi({
@@ -440,10 +439,7 @@ export function AuthenticatedApp() {
       return (
         <AdminDashboard
           contract={contract}
-          onNavigate={(path) => {
-            window.history.pushState({}, '', path);
-            window.dispatchEvent(new PopStateEvent('popstate'));
-          }}
+          onNavigate={navigateInApp}
           role={currentRole}
           team={currentTeam}
         />

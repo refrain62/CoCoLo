@@ -14,6 +14,7 @@ import {
   isAdminNavigationVisible,
   resolveAdminRoute,
 } from './admin-routes.js';
+import { navigateInApp } from './app-navigation.js';
 import { applyPageMetadata } from './app-route.js';
 import type { AuthRole } from './auth-context-api.js';
 import type {
@@ -142,7 +143,7 @@ export function AdminShell({
   function navigate(path: string) {
     const canonicalPath = canonicalTeamPath(path);
     if (canonicalPath === window.location.pathname) return;
-    window.history.pushState({}, '', canonicalPath);
+    navigateInApp(canonicalPath);
     setPathname(canonicalPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -192,7 +193,11 @@ export function AdminShell({
           </div>
           <div className="admin-topbar-actions">
             <Badge variant="outline">{currentEnvironment()}</Badge>
-            <a className="admin-help-link" href="/dashboard">
+            <a
+              className="admin-help-link"
+              href="/dashboard"
+              onClick={(event) => navigateFromClick(event, '/dashboard')}
+            >
               ダッシュボード
             </a>
             <a className="admin-help-link" href="/manual">

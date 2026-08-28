@@ -1,5 +1,6 @@
 import { AppShell, Badge, Button, CoCoLoLogoMark } from '@cocolo/ui';
 import { type MouseEvent, type ReactNode, useEffect, useState } from 'react';
+import { navigateInApp } from './app-navigation.js';
 import { applyPageMetadata } from './app-route.js';
 import {
   resolveSystemAdminRoute,
@@ -28,7 +29,7 @@ export function SystemAdminShell({
 
   function navigate(path: string) {
     if (path === window.location.pathname) return;
-    window.history.pushState({}, '', path);
+    navigateInApp(path);
     setPathname(path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -79,7 +80,11 @@ export function SystemAdminShell({
           </div>
           <div className="admin-topbar-actions">
             <Badge variant="outline">{currentEnvironment()}</Badge>
-            <a className="admin-help-link" href="/dashboard">
+            <a
+              className="admin-help-link"
+              href="/dashboard"
+              onClick={(event) => navigateFromClick(event, '/dashboard')}
+            >
               利用者画面
             </a>
             <Button

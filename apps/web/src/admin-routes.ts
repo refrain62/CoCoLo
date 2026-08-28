@@ -49,8 +49,17 @@ const legacyAdminPaths: Readonly<Record<string, AdminRoute>> = {
   '/features': 'features',
 };
 
+function findLegacyTeamPath(pathname: string) {
+  return Object.keys(legacyAdminPaths).find(
+    (legacyPath) =>
+      pathname === legacyPath ||
+      (legacyPath.startsWith('/admin/') &&
+        pathname.startsWith(`${legacyPath}/`)),
+  );
+}
+
 export function isLegacyTeamPath(pathname: string) {
-  return pathname in legacyAdminPaths;
+  return findLegacyTeamPath(pathname) !== undefined;
 }
 
 export const adminNavigation: readonly AdminNavigationItem[] = [
@@ -138,12 +147,16 @@ export function resolveAdminRoute(pathname: string): AdminRoute {
 }
 
 export function canonicalAdminPath(pathname: string) {
-  if (pathname === '/' || pathname === '/login' || pathname === '/admin')
-    return '/team';
-  const route = legacyAdminPaths[pathname];
-  return route
+  if (pathname === '/' || pathname === '/login') return '/team';
+  const legacyPath = findLegacyTeamPath(pathname);
+  if (!legacyPath) return pathname;
+  const route = legacyAdminPaths[legacyPath];
+  const canonicalPath = route
     ? (adminNavigation.find((item) => item.route === route)?.href ?? pathname)
     : pathname;
+  return pathname.startsWith(`${legacyPath}/`)
+    ? `${canonicalPath}${pathname.slice(legacyPath.length)}`
+    : canonicalPath;
 }
 
 export const canonicalTeamPath = canonicalAdminPath;

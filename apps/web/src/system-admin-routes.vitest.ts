@@ -10,6 +10,7 @@ describe('システム管理ルート', () => {
     expect(isSystemAdminPath('/admin/notices')).toBe(true);
     expect(isSystemAdminPath('/admin/entitlements')).toBe(true);
     expect(isSystemAdminPath('/admin/members')).toBe(false);
+    expect(isSystemAdminPath('/admin/events/detail')).toBe(false);
     expect(resolveSystemAdminRoute('/admin/notices')).toBe('notices');
   });
 });

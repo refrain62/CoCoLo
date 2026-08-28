@@ -26,7 +26,10 @@ describe('ページメタデータ', () => {
     ['/', 'CoCoLo | 部活・クラブの連絡と運営をひとつに'],
     ['/manual', 'CoCoLo 操作マニュアル'],
     ['/login', 'CoCoLo | チームログイン'],
+    ['/admin', 'CoCoLo | システム管理'],
+    ['/admin/notices', 'CoCoLo | システム管理'],
     ['/admin/events', 'CoCoLo | チーム管理'],
+    ['/admin/events/detail', 'CoCoLo | チーム管理'],
     ['/team/events', 'CoCoLo | チーム管理'],
     ['/dashboard', 'CoCoLo | ダッシュボード'],
   ])('%sの用途に合うtitleを返す', (pathname, title) => {

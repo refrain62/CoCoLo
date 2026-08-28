@@ -11,7 +11,11 @@ describe('管理画面ルート', () => {
   it('公開入口から認証済み利用者を管理画面へ正規化する', () => {
     expect(canonicalAdminPath('/')).toBe('/team');
     expect(canonicalAdminPath('/login')).toBe('/team');
+    expect(canonicalAdminPath('/admin')).toBe('/admin');
     expect(canonicalAdminPath('/admin/members')).toBe('/team/members');
+    expect(canonicalAdminPath('/admin/events/detail')).toBe(
+      '/team/events/detail',
+    );
   });
 
   it('パスを専用画面へ解決する', () => {
