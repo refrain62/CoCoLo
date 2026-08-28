@@ -25,7 +25,16 @@ function createFakePrisma(queryResults: unknown[]) {
       strings: TemplateStringsArray,
       ...values: unknown[]
     ) => {
-      queries.push({ sql: strings.join('?'), values });
+      const sql = strings.join('?');
+      queries.push({ sql, values });
+      if (sql.includes('INSERT INTO audit_logs'))
+        audits.push({
+          tenantId: values[0],
+          actorUserId: values[1],
+          action: values[2],
+          resourceId: values[3],
+          metadata: values[4],
+        });
       return 1;
     },
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
