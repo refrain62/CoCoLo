@@ -103,6 +103,16 @@
 - 反映: 実装PR #226と分離したdocs-only PRで本記録を追加する。
 - 残課題: 実Supabaseのclaim設定、実DB/RLS、実ブラウザの`/admin`・`/team`・`/dashboard`受入は`ADMIN-TEAM-001-ACCEPTANCE`へ残す。
 
+## LOGIN-ENTRY-001 / チーム画面初期化回帰 実施記録
+
+- 対象: チームログイン後に画面遷移すると、権限確認の失敗を予定画面用として表示し、不要な部員候補取得と共通エラーシェルが見える回帰を修正した。添付画像はこの再現状態の証跡として扱った。
+- 原因: 所属role確認の失敗時にも予定画面向けのエラー文言を表示し、予定・購買・送迎の入力に使う部員候補を全チーム画面で先行取得していた。エラー状態の共通`AppShell`が旧ハッシュリンクを表示するため、`/team/members#ride-operations-heading`へ遷移した状態も発生していた。
+- 実装: 所属role取得を独立させ、部員候補取得を予定・予定詳細・購買・送迎ルートだけへ限定した。部員候補の取得失敗は対象操作の注意に限定し、部員画面は部員画面自身のAPIエラー表示を利用する。読み込み中・権限エラー中の状態画面では旧ナビゲーションを表示しない。
+- セキュリティ: 選択中tenant、active membership、role、API・DB側の認可は変更せず、画面表示の依存関係だけを分離した。tenant越境、認可、個人情報、入力検証、状態遷移、競合を確認し、Critical / Highは0件とした。
+- 検証: ルート判定を含むWeb Vitest 43 files / 159件、`pnpm test`（contracts 52件、domain 18件、DB 10件、API 225件）、`pnpm test:unit`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`git diff --check`を成功させた。
+- 反映: 実装PR #245へ追補し、本記録は実装PRと分離したdocs-only PRで更新する。
+- 残課題: 実Supabaseのclaim設定、実DB/RLS、実ブラウザでの`/admin`・`/team`・`/dashboard`および複数feature停止時の受入は`ADMIN-TEAM-001-ACCEPTANCE`へ残す。
+
 ## LOGIN-LOGO-001 実施記録
 
 - 対象: ログイン画面だけに残っていた旧来の「C」アイコンを、公開LPと認証済み画面で利用する共通ロゴへ置き換えた。
