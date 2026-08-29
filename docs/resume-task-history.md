@@ -275,6 +275,17 @@ CriticalとHighが残る実装を完了扱いにしていません。
 - 制約: ローカルの`pnpm ci:fast`は、Windows上の`pnpm.cmd`解決が要求版10.26.0ではなく11.19.0となる既存toolchain制約で停止した。CIの品質ゲートは成功しており、コード起因の失敗とは判定していない。
 - 残課題: scanner初回導入、rename・削除経路の実行確認、branch protection、staging実DB/RLS、同一SHAのrelease証跡は、`resume-task-list.md`のT014-ROOT / T014-SCAN / T014-PR、T014-E2E、T014-RELEASE、OPS-001〜007に残す。
 
+## T014 / protected path削除契約 実施記録
+
+- 対象: protected pathの削除状態をextension対象とmanifest対象で明示的に拒否し、削除経路のfail-closed判定を契約テストで固定した。
+- 実装: `assertProtectedPathStatus`へstatus判定を集約し、extension対象は`added`または`modified`、manifest対象は`modified`だけを許可する。`removed`、`renamed`、status欠落は拒否する。既存のprotected path rename検査と、protected path変更時だけowner-only extensionを検証する境界は維持した。
+- 自己修正: 初回実装では共有関数への切り出し後にTypeScriptのextension narrowingが失われ、typecheckが失敗した。extension hashを別変数へ束縛してから判定する実装へ修正し、修正後のtypecheck、test、build、lintを再実行して成功させた。
+- テスト: extension対象の削除拒否、manifest対象の削除拒否を追加し、trust checker契約テスト10件を成功させた。サブエージェントはGitHub Files API payloadを通る完全な統合テストではない点をMedium以下の留意点とし、コード上のCritical / Highは0件と判定した。
+- 信頼境界: owner-only登録PR #262で修正前headを登録した後、PR #264で修正版head `5b352f302e457264094c547375a4ab444eda09b1`へ更新した。登録PRのmerge commitは`e58b25a3`と`0bc5dbb0`、実装PR #267のmerge commitは`814644a7`である。PR #267の`trusted-validation`と`quality`は成功した。
+- 登録時の制約: PR #262と#264の`trusted-validation`は、登録PR自身のheadとbase側extensionの対象headが異なるため失敗した。失敗理由はhead SHA不一致だけで、登録内容のhash不整合やprotected path bypassではない。owner-only登録を先行統合する現行手順の既知の運用例外として記録する。
+- 検証: `node --test scripts/verify-trusted-pr.test.ts`、`pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`node scripts/verify-trust-root.ts`、`git diff --check`を成功させた。ローカル`pnpm ci:fast`はWindowsのpnpm解決差で未完走だったが、PR #267のGitHub `trusted-validation`と`quality`は成功した。
+- 残課題: scanner初回導入、rename・削除経路の外部実行確認、branch protection（GitHub APIで未設定）、staging実DB/RLS、同一SHAのrelease証跡は、`resume-task-list.md`のT014-ROOT / T014-SCAN / T014-PR、T014-E2E、T014-RELEASE、OPS-001〜007に残す。
+
 詳細な重大度と次の行動は[レビュー状況](reviews/README.md)と[中断再開タスクリスト](resume-task-list.md)に集約しています。
 
 ## 履歴の更新規則
