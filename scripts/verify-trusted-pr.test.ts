@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   assertBootstrapExtensionForChange,
   assertNoProtectedPathRename,
+  assertProtectedPathStatus,
   type BootstrapExtension,
   hasProtectedChanges,
   isProtectedPath,
@@ -51,6 +52,30 @@ test('非保護path同士のrenameは許可する', () => {
       'apps/web/src/new-app.ts',
       'apps/web/src/app.ts',
     ),
+  );
+});
+
+test('extension対象の削除を拒否する', () => {
+  assert.throws(
+    () =>
+      assertProtectedPathStatus(
+        'scripts/verify-trusted-pr.ts',
+        'removed',
+        true,
+      ),
+    /extension対象の追加・削除状態が不正です/,
+  );
+});
+
+test('manifest対象の削除を拒否する', () => {
+  assert.throws(
+    () =>
+      assertProtectedPathStatus(
+        'scripts/verify-trust-root.ts',
+        'removed',
+        false,
+      ),
+    /追加・削除はfail-closedで拒否します/,
   );
 });
 

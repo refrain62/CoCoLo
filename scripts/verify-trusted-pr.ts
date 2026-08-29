@@ -80,6 +80,25 @@ export function assertNoProtectedPathRename(
   );
 }
 
+export function assertProtectedPathStatus(
+  filename: string,
+  status: PullRequestFile['status'],
+  isExtensionFile: boolean,
+): void {
+  if (isExtensionFile) {
+    assert.ok(
+      status === 'added' || status === 'modified',
+      `${filename}: extension対象の追加・削除状態が不正です。`,
+    );
+    return;
+  }
+  assert.equal(
+    status,
+    'modified',
+    `${filename}: 追加・削除はfail-closedで拒否します。`,
+  );
+}
+
 // one-time拡張は保護対象差分のowner先行登録にだけ適用し、後続の非保護差分を塞がない。
 export function assertBootstrapExtensionForChange(
   extension: BootstrapExtension,
@@ -305,14 +324,13 @@ async function main(): Promise<void> {
     const filename = file.filename as string;
     assertNoProtectedPathRename(filename, file.previous_filename);
     if (!isProtectedPath(filename)) continue;
-    if (extension?.files[filename] !== undefined) {
-      assert.ok(
-        file.status === 'added' || file.status === 'modified',
-        `${filename}: extension対象の追加・削除状態が不正です。`,
-      );
+    const extensionHash = extension?.files[filename];
+    const isExtensionFile = extensionHash !== undefined;
+    assertProtectedPathStatus(filename, file.status, isExtensionFile);
+    if (isExtensionFile) {
       assert.equal(
         sha256(await headFile(filename)),
-        extension.files[filename],
+        extensionHash,
         `${filename}: owner-only extensionの固定hashとPR headが一致しません。`,
       );
       continue;
@@ -320,11 +338,6 @@ async function main(): Promise<void> {
     assert.ok(
       Object.hasOwn(trustedFiles, filename),
       `${filename}: manifestにない保護対象です。`,
-    );
-    assert.equal(
-      file.status,
-      'modified',
-      `${filename}: 追加・削除はfail-closedで拒否します。`,
     );
     assert.equal(
       sha256(await headFile(filename)),
