@@ -2,10 +2,10 @@
   "schema": 1,
   "mode": "owner-only-one-time",
   "owner": "@refrain62",
-  "head_sha": "5b352f302e457264094c547375a4ab444eda09b1",
+  "head_sha": "ddcfa80b7c83f592ca801128888e0894a19bca45",
   "files": {
-    ".github/security/trusted-file-manifest.json": "81116781465284449e77424824a90f128cbe70facc840b2e482d6ed72ba3462c",
-    "scripts/verify-trusted-pr.test.ts": "23549b12d2ab91f5ad143302be63897bea9bf4b7bb65b92b49b1af10e0f3481f",
-    "scripts/verify-trusted-pr.ts": "a85bd5fb6b0217228a5d336065d3e6cd481087730d7a3c5163b9adec2737edff"
+    ".github/security/trusted-file-manifest.json": "b3da0b33c85956f2528982e789a84e44855b77966c9fe296125cf962a9f91b40",
+    "scripts/verify-trusted-pr.test.ts": "33478a57413c3dc12f3ac7aecff11ecb1a430f437c31eb364be813a167b89849",
+    "scripts/verify-trusted-pr.ts": "8422935ced41a995bb339ed683e1b29a43920bbfcaf1b23d8aeee372bed2c37b"
   }
 }
