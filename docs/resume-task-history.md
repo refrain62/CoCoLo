@@ -286,6 +286,19 @@ CriticalとHighが残る実装を完了扱いにしていません。
 - 検証: `node --test scripts/verify-trusted-pr.test.ts`、`pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`node scripts/verify-trust-root.ts`、`git diff --check`を成功させた。ローカル`pnpm ci:fast`はWindowsのpnpm解決差で未完走だったが、PR #267のGitHub `trusted-validation`と`quality`は成功した。
 - 残課題: scanner初回導入、rename・削除経路の外部実行確認、branch protection（GitHub APIで未設定）、staging実DB/RLS、同一SHAのrelease証跡は、`resume-task-list.md`のT014-ROOT / T014-SCAN / T014-PR、T014-E2E、T014-RELEASE、OPS-001〜007に残す。
 
+## T014 / owner-only登録PR検証ゲート 実施記録
+
+- 対象: owner-only extensionの登録PRが、現行base checkerで登録PR自身のhead SHAと比較されて失敗する運用不整合を解消した。
+- 実装: bootstrap extensionとtrusted manifestだけを変更するowner-only登録候補を専用経路へ分岐し、owner、固定repository、develop向けbase、イベントとGitHub APIのbase・head SHAを照合する。
+- fail-closed境界: 登録候補は2ファイルのmodifiedだけに限定し、status欠落、rename、追加ファイル、owner不一致、fork、metadata不一致は通常経路へフォールバックせず拒否する。
+- 内容検証: 登録PRのhead側extensionとmanifest、対象headの各登録ファイルをContents APIから取得し、schema、mode、owner、対象path、scanner rule対象、対象集合、SHA-256を検証する。APIエラー、内容欠落、SHA不一致は成功扱いにしない。
+- manifest境界: 登録PR側はbase manifestの対象集合とscanner rule対象を維持し、bootstrap extension以外のhash変更を拒否する。対象head側もscanner rule対象をbaseへ固定し、extensionで登録したファイルの内容とmanifest hashを照合する。
+- 自己修正: 初回検証では、developの取り込みにより登録済みtarget `ddcfa80b7c83f592ca801128888e0894a19bca45`と実装PR headがずれ、#270のtrust gateが失敗した。target SHAを保持する#272へ再構成し、#270はobsoleteとして閉じた。
+- テスト: `node --test scripts/verify-trusted-pr.test.ts` 12件、`pnpm test`（contracts 52件、domain 18件、db 10件、API 225件）、`pnpm build`、`pnpm typecheck`、対象ファイルのBiome、`pnpm verify:trust-root`、`git diff --check`を成功させた。
+- 敵対的レビュー: Archimedesが初回案のmetadata束縛不足と登録候補の通常経路フォールバックをHighとして指摘し、固定repository、base・head SHA照合、候補専用拒否経路を追加した。修正後のCritical / Highは0件と判定した。
+- 信頼境界: 初回bootstrap登録PR #271はquality成功後、導入前base checkerのhead比較失敗を既知の一度限りの例外としてmergeした。実装PR #272はtrusted-validationとqualityが成功し、merge commit `1234e782c4740bb7673b22aafb66ff92cf606ca2`で2026-08-29に`develop`へ統合した。
+- 残課題: scanner初回導入、rename・削除経路の外部実行確認、branch protection（GitHub APIで未設定）、staging実DB/RLS、同一SHAのrelease証跡は、`resume-task-list.md`のT014-ROOT / T014-SCAN / T014-PR、T014-E2E、T014-RELEASE、OPS-001〜007に残す。
+
 詳細な重大度と次の行動は[レビュー状況](reviews/README.md)と[中断再開タスクリスト](resume-task-list.md)に集約しています。
 
 ## 履歴の更新規則

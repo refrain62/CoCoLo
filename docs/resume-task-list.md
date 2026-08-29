@@ -14,7 +14,7 @@
 
 | 状態 | ID | 次に確認すること |
 | --- | --- | --- |
-| `[!]` | T014-ROOT / T014-SCAN / T014-PR | `main`のowner-only bootstrapはPR #51、UUIDv7検査のowner-only拡張はPR #247・#249・#250、trusted PRのowner-only extension適用境界はPR #259・#260、protected path削除契約はPR #264・#267で`develop`へ統合済み。scanner初回導入、rename・削除経路の外部実行確認、branch protection（現状未設定）を同一rootで確認する |
+| `[!]` | T014-ROOT / T014-SCAN / T014-PR | `main`のowner-only bootstrapはPR #51、UUIDv7検査のowner-only拡張はPR #247・#249・#250、trusted PRのowner-only extension適用境界はPR #259・#260、protected path削除契約はPR #264・#267、owner-only登録PR検証ゲートはbootstrap #271と実装PR #272で`develop`へ統合済み。#270はhead SHA同期によりobsoleteとしてクローズした。scanner初回導入、rename・削除経路の外部実行確認、branch protection（現状未設定）を同一rootで確認する |
 | `[ ]` | T014-E2E | PostgreSQL付きperiodic E2Eの定期・手動実行、固定レポート、失敗Issue同期を実行する |
 | `[ ]` | T014-RATE | 実Redis相当、原子的consume、TTL、複数API instance、障害時503をstagingで確認する |
 | `[ ]` | T014-RELEASE | T-014各検査が同じ最新SHAで成功した証跡をまとめる |
