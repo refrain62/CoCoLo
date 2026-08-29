@@ -96,6 +96,7 @@ export function AuthenticatedApp() {
   const [memberOptionsError, setMemberOptionsError] = useState<string | null>(
     null,
   );
+  const selectedTeamId = selectedTeam?.tenantId ?? null;
   useEffect(() => {
     const handlePopState = () => setPathname(window.location.pathname);
     window.addEventListener('popstate', handlePopState);
@@ -185,6 +186,12 @@ export function AuthenticatedApp() {
       setTeamError(null);
       return;
     }
+    // 通常の画面遷移では現在の所属を維持し、チーム一覧を再取得して画面をリセットしない。
+    if (selectedTeamId && !isNotificationDeepLink(pathname)) {
+      setIsResolvingTeam(false);
+      setTeamError(null);
+      return;
+    }
     let active = true;
     setIsResolvingTeam(true);
     setTeamError(null);
@@ -211,8 +218,7 @@ export function AuthenticatedApp() {
     return () => {
       active = false;
     };
-  }, [pathname, session, systemAdminPath, teamSelectionApi]);
-  const selectedTeamId = selectedTeam?.tenantId ?? null;
+  }, [pathname, selectedTeamId, session, systemAdminPath, teamSelectionApi]);
   const authInvitationApi = useMemo(
     () =>
       createAuthInvitationApi({
@@ -311,13 +317,11 @@ export function AuthenticatedApp() {
       }),
     [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
-  // 所属roleは全チーム画面の表示条件、部員候補は一部操作の入力データとして独立取得する。
+  // 所属roleは全チーム画面の表示条件として、選択中チームが変わったときだけ取得する。
   useEffect(() => {
-    if (!session || !selectedTeam || systemAdminPath) {
+    if (!session || !selectedTeamId || systemAdminPath) {
       setRole(null);
       setRoleError(null);
-      setEventMembers([]);
-      setMemberOptionsError(null);
       return;
     }
     let active = true;
@@ -333,10 +337,26 @@ export function AuthenticatedApp() {
       .catch(() => {
         if (active) setRoleError('チームの権限を確認できません。');
       });
-    if (!isMemberOptionRoute(resolveAdminRoute(pathname)))
-      return () => {
-        active = false;
-      };
+    return () => {
+      active = false;
+    };
+  }, [authContextApi, selectedTeamId, session, systemAdminPath]);
+
+  // 部員候補は一部操作の入力データとして、対象画面でだけ独立取得する。
+  useEffect(() => {
+    if (
+      !session ||
+      !selectedTeamId ||
+      systemAdminPath ||
+      !isMemberOptionRoute(resolveAdminRoute(pathname))
+    ) {
+      setEventMembers([]);
+      setMemberOptionsError(null);
+      return;
+    }
+    let active = true;
+    setEventMembers([]);
+    setMemberOptionsError(null);
     void memberApi
       .listAll({ q: '', category: '', status: 'active' })
       .then((members) => {
@@ -358,14 +378,7 @@ export function AuthenticatedApp() {
     return () => {
       active = false;
     };
-  }, [
-    authContextApi,
-    memberApi,
-    pathname,
-    selectedTeam,
-    session,
-    systemAdminPath,
-  ]);
+  }, [memberApi, pathname, selectedTeamId, session, systemAdminPath]);
   if (!session) return null;
   if (systemAdminPath) {
     if (isSystemAdmin === null)

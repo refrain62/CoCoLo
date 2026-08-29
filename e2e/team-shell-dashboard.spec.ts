@@ -2,6 +2,14 @@ import { expect, test } from '@playwright/test';
 import { signInWithMockedAuth } from './mock-auth.js';
 
 test('ダッシュボードとチーム管理は同じ左メニューを使う', async ({ page }) => {
+  let teamListRequests = 0;
+  let authContextRequests = 0;
+  page.on('request', (request) => {
+    const url = request.url();
+    if (url.includes('/api/v1/auth/teams')) teamListRequests += 1;
+    if (url.includes('/api/v1/auth/context')) authContextRequests += 1;
+  });
+
   await page.route('**/api/v1/members*', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
@@ -28,6 +36,8 @@ test('ダッシュボードとチーム管理は同じ左メニューを使う',
       exact: true,
     }),
   ).toBeVisible();
+  const teamListRequestsAfterSignIn = teamListRequests;
+  const authContextRequestsAfterSignIn = authContextRequests;
 
   await membersLink.click();
   await expect(
@@ -37,6 +47,8 @@ test('ダッシュボードとチーム管理は同じ左メニューを使う',
   await expect(dashboardLink).toBeVisible();
   await expect(dashboardLink).not.toHaveAttribute('aria-current', 'page');
   await expect(membersLink).toHaveAttribute('aria-current', 'page');
+  expect(teamListRequests).toBe(teamListRequestsAfterSignIn);
+  expect(authContextRequests).toBe(authContextRequestsAfterSignIn);
 
   await dashboardLink.click();
   await expect(
@@ -50,4 +62,6 @@ test('ダッシュボードとチーム管理は同じ左メニューを使う',
   ).toBeVisible();
   await expect(dashboardLink).toHaveAttribute('aria-current', 'page');
   await expect(membersLink).not.toHaveAttribute('aria-current', 'page');
+  expect(teamListRequests).toBe(teamListRequestsAfterSignIn);
+  expect(authContextRequests).toBe(authContextRequestsAfterSignIn);
 });
