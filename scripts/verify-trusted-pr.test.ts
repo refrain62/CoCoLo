@@ -6,7 +6,10 @@ import {
   assertProtectedPathStatus,
   type BootstrapExtension,
   hasProtectedChanges,
+  isOwnerOnlyExtensionRegistration,
+  isOwnerOnlyExtensionRegistrationCandidate,
   isProtectedPath,
+  type PullRequestMetadata,
 } from './verify-trusted-pr.ts';
 
 const extension: BootstrapExtension = {
@@ -18,6 +21,21 @@ const extension: BootstrapExtension = {
     'scripts/verify-trusted-pr.ts': 'b'.repeat(64),
   },
 };
+
+const ownerOnlyRegistration: PullRequestMetadata = {
+  user: { login: 'refrain62' },
+  head: { repo: { full_name: 'refrain62/CoCoLo' } },
+};
+const ownerOnlyRegistrationFiles = [
+  {
+    filename: '.github/security/bootstrap-extension.json',
+    status: 'modified',
+  },
+  {
+    filename: '.github/security/trusted-file-manifest.json',
+    status: 'modified',
+  },
+] as const;
 
 test('保護対象を含まない後続PRはone-time拡張のheadに束縛しない', () => {
   assert.doesNotThrow(() =>
@@ -115,4 +133,65 @@ test('保護対象を含むPRではextension検証を有効にする', () => {
     true,
   );
   assert.equal(isProtectedPath('apps/web/src/authenticated-app.tsx'), false);
+});
+
+test('owner-only登録はownerと同一repositoryの2ファイル変更だけを許可する', () => {
+  assert.equal(
+    isOwnerOnlyExtensionRegistrationCandidate(ownerOnlyRegistrationFiles),
+    true,
+  );
+  assert.equal(
+    isOwnerOnlyExtensionRegistration(
+      ownerOnlyRegistration,
+      'refrain62/CoCoLo',
+      ownerOnlyRegistrationFiles,
+    ),
+    true,
+  );
+});
+
+test('owner-only登録はowner、repository、変更集合の不一致を拒否する', () => {
+  assert.equal(
+    isOwnerOnlyExtensionRegistration(
+      { ...ownerOnlyRegistration, user: { login: 'other' } },
+      'refrain62/CoCoLo',
+      ownerOnlyRegistrationFiles,
+    ),
+    false,
+  );
+  assert.equal(
+    isOwnerOnlyExtensionRegistration(
+      ownerOnlyRegistration,
+      'other/CoCoLo',
+      ownerOnlyRegistrationFiles,
+    ),
+    false,
+  );
+  assert.equal(
+    isOwnerOnlyExtensionRegistration(
+      ownerOnlyRegistration,
+      'refrain62/CoCoLo',
+      [...ownerOnlyRegistrationFiles, { filename: 'scripts/extra.ts' }],
+    ),
+    false,
+  );
+  assert.equal(
+    isOwnerOnlyExtensionRegistration(
+      ownerOnlyRegistration,
+      'refrain62/CoCoLo',
+      ownerOnlyRegistrationFiles.map((file) => ({ ...file, status: 'added' })),
+    ),
+    false,
+  );
+  assert.equal(
+    isOwnerOnlyExtensionRegistration(
+      ownerOnlyRegistration,
+      'refrain62/CoCoLo',
+      ownerOnlyRegistrationFiles.map((file) => ({
+        ...file,
+        previous_filename: file.filename,
+      })),
+    ),
+    false,
+  );
 });
