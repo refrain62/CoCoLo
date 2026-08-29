@@ -5,7 +5,6 @@
     ".trivy-secret.yaml"
   ],
   "files": {
-    ".github/security/bootstrap-extension.json": "680a39534f8f7868315c125eda522234ddc8b54ff9e810bc6a76536cee098fb0",
     ".github/CODEOWNERS": "d315e4b4dc32a8433d02431b32b2856ab92dc90bfa42b044bb78880a59c9edf8",
     ".github/security/trust-root.json": "57b66d21d9558a4ecc423259ef97a3e31b6b57b5db25def01db363e94729a918",
     ".github/workflows/pr-trust-gate.yml": "2ceac57c4586f633f02cc1363821b1218c2b94e9b15775422807907839870e3c",
