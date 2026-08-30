@@ -20,7 +20,7 @@ class AuthenticatedLoadBoundary extends Component<
   override render() {
     if (this.state.hasError)
       return (
-        <AppShell>
+        <AppShell nav={null}>
           <section className="app-state-card" role="alert">
             <h1>管理画面を読み込めません</h1>
             <p>通信状態を確認して、もう一度お試しください。</p>
