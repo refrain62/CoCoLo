@@ -138,16 +138,15 @@ async function assertActiveMembership(
       hashtextextended(${`${input.tenantId}:${input.actorUserId}`}, 0)
     )
   `;
-  const memberships = await client.$queryRaw<Array<{ role: string }>>`
-    SELECT role::text AS role
-    FROM tenant_memberships
-    WHERE tenant_id = ${input.tenantId}::uuid
-      AND user_id = ${input.actorUserId}
-      AND status = 'active'::membership_status
-    FOR SHARE
+  const memberships = await client.$queryRaw<Array<{ active: boolean }>>`
+    SELECT app_lock_active_membership(
+      ${input.tenantId}::uuid,
+      ${input.actorUserId},
+      ${input.role}
+    ) AS active
   `;
-  const membership = memberships.find((item) => item.role === input.role);
-  if (!membership) throw new Error('有効な所属情報が処理中に変更されました。');
+  if (memberships[0]?.active !== true)
+    throw new Error('有効な所属情報が処理中に変更されました。');
 }
 
 async function assertAssigneeBelongsToTenant(

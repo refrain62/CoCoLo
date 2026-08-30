@@ -50,6 +50,8 @@ function createFakeClient() {
       };
       calls.push({ kind: 'query', query: normalized });
       const text = normalized.sql;
+      if (text.includes('app_lock_active_membership'))
+        return [{ active: true }];
       if (text.includes('FROM tenant_memberships')) {
         if (text.includes('SELECT user_id')) return [{ user_id: 'user-a' }];
         return [
@@ -117,6 +119,26 @@ test('repositoryの一覧はmanagerだけに連絡先を返す', async () => {
 
   assert.equal(result[0]?.lineContact, 'line-a');
   assert.equal(result[0]?.phone, '090-0000-0000');
+});
+
+test('repositoryの一覧はsecurity-definerの所属ロック関数でRLS越しに再確認する', async () => {
+  const client = createFakeClient();
+  const repository = createBoardContactRepository(client);
+
+  await repository.list({
+    tenantId: TENANT_ID,
+    actorUserId: 'owner-a',
+    role: 'owner',
+    query: {},
+  });
+
+  assert.equal(
+    client.calls.some(
+      ({ kind, query }) =>
+        kind === 'query' && queryText(query).includes('app_lock_active_membership'),
+    ),
+    true,
+  );
 });
 
 test('repositoryの書き込み境界でもstaffのmanager操作を拒否する', async () => {
