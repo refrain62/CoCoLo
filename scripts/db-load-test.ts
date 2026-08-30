@@ -33,7 +33,8 @@ export type LoadRequest = {
     | 'events'
     | 'attendance-responses'
     | 'announcements'
-    | 'memberships';
+    | 'memberships'
+    | 'board-contacts';
   offset: number;
 };
 
@@ -119,18 +120,24 @@ export function buildLoadPlan(options: LoadTestOptions): LoadRequest[] {
       'attendance-responses',
       'announcements',
       'memberships',
+      'board-contacts',
     ];
     const resourceIndex = usePagerTenant
       ? Math.floor(sequence / 10) % resources.length
       : sequence % resources.length;
+    const resource = resources[resourceIndex] ?? 'members';
     requests.push({
       sequence,
       tenantId,
       userId,
       role: 'owner',
       eventId,
-      resource: resources[resourceIndex] ?? 'members',
-      offset: usePagerTenant ? ((sequence / 10) % 20) * 50 : sequence % 3,
+      resource,
+      offset: usePagerTenant
+        ? resource === 'board-contacts'
+          ? (Math.floor(sequence / 10) % 2) * 50
+          : (Math.floor(sequence / 10) % 20) * 50
+        : sequence % 3,
     });
   }
   return requests;
@@ -173,6 +180,13 @@ SELECT id, title, status, published_at, count(*) OVER () AS total_count
 FROM announcements, fixture_session
 WHERE tenant_id = ${tenant}
 ORDER BY published_at DESC, id DESC
+LIMIT ${limit} OFFSET ${request.offset};`;
+  if (request.resource === 'board-contacts')
+    return `${session}
+SELECT id, fiscal_year, role_name, role_type, assignee_user_id, line_contact, phone,
+       contact_preference, count(*) OVER () AS total_count
+FROM app_board_contact_rows(${tenant}, 2026, true), fixture_session
+ORDER BY fiscal_year DESC, role_name ASC, id ASC
 LIMIT ${limit} OFFSET ${request.offset};`;
   return `${session}
 SELECT id, user_id, role, status, count(*) OVER () AS total_count

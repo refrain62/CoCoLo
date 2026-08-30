@@ -21,6 +21,8 @@ export const scaleFixture = {
   loadTenantGuardians: 2_002,
   loadTenantEvents: 1_001,
   loadTenantAttendanceResponses: 1_002_001,
+  boardContactsPerTeam: 100,
+  loadTenantBoardContacts: 100_100,
   featureDefinitions: 8,
   minimumRowsPerTable: 1_000,
 } as const;
@@ -563,6 +565,24 @@ SELECT
   CASE series % 4 WHEN 0 THEN NULL WHEN 1 THEN '000-0000-' || lpad(series::text, 4, '0') ELSE '000-0000-' || lpad(series::text, 4, '0') END,
   CASE series % 4 WHEN 0 THEN 'line' WHEN 1 THEN 'phone' ELSE 'both' END
 FROM generate_series(1, 1001) AS generated(series)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
+-- 既存の代表枠1件に加えて、負荷試験用の役員99人を1,001チームへ追加し、合計100人ずつ、100,100件を用意する。
+INSERT INTO board_contacts
+  (id, tenant_id, fiscal_year, role_name, role_type, assignee_user_id, line_contact, phone, contact_preference)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((2000000 + ((team - 1) * 100) + contact)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + team)::text, 12, '0'))::uuid,
+  2026,
+  '負荷役員' || lpad(contact::text, 3, '0'),
+  CASE contact % 3 WHEN 0 THEN 'admin' WHEN 1 THEN 'staff' ELSE 'member' END,
+  'club-' || CASE WHEN team >= 1000 THEN team::text ELSE lpad(team::text, 3, '0') END || '-owner',
+  CASE contact % 3 WHEN 1 THEN NULL ELSE 'line://load-board-' || team || '-' || contact END,
+  CASE contact % 3 WHEN 0 THEN NULL ELSE '000-0000-' || lpad(((team - 1) * 100 + contact)::text, 6, '0') END,
+  CASE contact % 3 WHEN 0 THEN 'line' WHEN 1 THEN 'phone' ELSE 'both' END
+FROM generate_series(1, 1001) AS teams(team)
+CROSS JOIN generate_series(1, 99) AS contacts(contact)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
