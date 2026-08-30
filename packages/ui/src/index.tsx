@@ -976,11 +976,7 @@ export function AppShell({
     </>
   );
   const sidebarContent =
-    sidebar !== undefined
-      ? sidebar
-      : nav !== undefined
-        ? nav
-        : null;
+    sidebar !== undefined ? sidebar : nav !== undefined ? nav : null;
   const hasSidebar = sidebarContent !== null;
 
   return (
