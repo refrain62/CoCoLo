@@ -960,14 +960,6 @@ export interface AppShellProps {
   topbar?: ReactNode;
 }
 
-const defaultNavigation = [
-  { href: '#events-heading', label: '予定と出欠' },
-  { href: '#member-list-heading', label: '部員管理' },
-  { href: '#ride-operations-heading', label: '送迎' },
-  { href: '#bulletin-list-heading', label: '回覧板' },
-  { href: '/manual', label: '操作マニュアル' },
-] as const;
-
 /** 共通クラス名を持つPC・モバイル対応のアプリケーションシェルです。 */
 export function AppShell({
   brand,
@@ -984,15 +976,7 @@ export function AppShell({
     </>
   );
   const sidebarContent =
-    sidebar !== undefined
-      ? sidebar
-      : nav !== undefined
-        ? nav
-        : defaultNavigation.map(({ href, label }) => (
-            <a key={href} href={href}>
-              {label}
-            </a>
-          ));
+    sidebar !== undefined ? sidebar : nav !== undefined ? nav : null;
   const hasSidebar = sidebarContent !== null;
 
   return (

@@ -13,7 +13,9 @@ describe('CoCoLo共通デザインシステム', () => {
     const html = renderToStaticMarkup(
       createElement(
         AppShell,
-        {} as AppShellProps,
+        {
+          sidebar: createElement('a', { href: '#menu' }, 'メニュー'),
+        } as AppShellProps,
         createElement(Button, { variant: 'secondary' }, '次へ'),
       ),
     );
@@ -27,6 +29,15 @@ describe('CoCoLo共通デザインシステム', () => {
     expect(html).toContain(
       'class="app-brand-mark" aria-hidden="true"><span></span><span></span><span></span>',
     );
+  });
+
+  it('メニュー未指定時に古い既定ナビゲーションを生成しない', () => {
+    const html = renderToStaticMarkup(
+      createElement(AppShell, {} as AppShellProps, '本文'),
+    );
+
+    expect(html).not.toContain('予定と出欠');
+    expect(html).not.toContain('class="app-sidebar"');
   });
 
   it('レスポンシブ表へモバイル行カード用の識別子を付与する', () => {
