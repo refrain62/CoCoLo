@@ -53,6 +53,8 @@ test('ローカルfixtureは全業務テーブルと規模検証データを定�
   assert.match(sql, /line_delivery_outbox/);
   assert.match(sql, /負荷用テナントC/);
   assert.match(sql, /1,002,001件の出欠トランザクション/);
+  assert.match(sql, /1,001チームへ追加し、合計100人ずつ、100,100件/);
+  assert.match(sql, /CROSS JOIN generate_series\(1, 99\) AS contacts/);
   assert.doesNotMatch(sql, /scale-feature|大量検証機能/);
   assert.match(sql, /'disconnected'::line_connection_status/);
   assert.match(sql, /status = 'completed'/);
@@ -69,6 +71,8 @@ test('ローカルfixtureは全業務テーブルと規模検証データを定�
     loadTenantGuardians: 2_002,
     loadTenantEvents: 1_001,
     loadTenantAttendanceResponses: 1_002_001,
+    boardContactsPerTeam: 100,
+    loadTenantBoardContacts: 100_100,
     featureDefinitions: 8,
     minimumRowsPerTable: 1_000,
   });
