@@ -46,8 +46,8 @@ export type LoadResult = {
 
 const tenantIdForTeam = (team: number) =>
   `00000000-0000-7000-8000-${String(10000 + team).padStart(12, '0')}`;
-const eventIdForTeam = (team: number) =>
-  `00000000-0000-7000-8000-${String(7000 + team).padStart(12, '0')}`;
+const eventIdForTeam = (team: number, eventNumber = 1) =>
+  `00000000-0000-7000-8000-${String(eventNumber === 1 ? 7000 + team : 8000000 + (team - 1) * 199 + eventNumber).padStart(12, '0')}`;
 const eventIdForScaleTenant = (event: number) =>
   `00000000-0000-7000-8000-${String(7100000 + event).padStart(12, '0')}`;
 
@@ -113,7 +113,7 @@ export function buildLoadPlan(options: LoadTestOptions): LoadRequest[] {
       : `club-${String(team).padStart(3, '0')}-owner`;
     const eventId = usePagerTenant
       ? eventIdForScaleTenant((Math.floor(sequence / 10) % 1001) + 1)
-      : eventIdForTeam(team);
+      : eventIdForTeam(team, (sequence % 200) + 1);
     const resources: LoadRequest['resource'][] = [
       'members',
       'events',
@@ -137,7 +137,9 @@ export function buildLoadPlan(options: LoadTestOptions): LoadRequest[] {
         ? resource === 'board-contacts'
           ? (Math.floor(sequence / 10) % 2) * 50
           : (Math.floor(sequence / 10) % 20) * 50
-        : sequence % 3,
+        : resource === 'events'
+          ? (sequence % 4) * 50
+          : sequence % 3,
     });
   }
   return requests;

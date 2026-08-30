@@ -21,6 +21,10 @@ export const scaleFixture = {
   loadTenantGuardians: 2_002,
   loadTenantEvents: 1_001,
   loadTenantAttendanceResponses: 1_002_001,
+  eventsPerTeam: 200,
+  scaleEvents: 200_200,
+  attendanceResponsesPerTeam: 200,
+  scaleAttendanceResponses: 200_200,
   boardContactsPerTeam: 100,
   loadTenantBoardContacts: 100_100,
   featureDefinitions: 8,
@@ -393,30 +397,32 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
+-- 1,001チームへユーザー操作で作成された予定を各200件、合計200,200件用意する。
 INSERT INTO events
   (id, tenant_id, title, event_type, starts_at, ends_at, location, items_to_bring, fee, opponent, meeting_time, transportation_required, attendance_deadline, created_by_user_id, updated_by_user_id)
 SELECT
-  ('00000000-0000-7000-8000-' || lpad((7000 + series)::text, 12, '0'))::uuid,
-  ('00000000-0000-7000-8000-' || lpad((10000 + series)::text, 12, '0'))::uuid,
-  'チーム活動' || lpad(series::text, 4, '0'),
-  CASE series % 4
+  ('00000000-0000-7000-8000-' || lpad((CASE WHEN event_number = 1 THEN 7000 + team ELSE 8000000 + ((team - 1) * 199) + event_number END)::text, 12, '0'))::uuid,
+  ('00000000-0000-7000-8000-' || lpad((10000 + team)::text, 12, '0'))::uuid,
+  'チーム活動' || lpad(team::text, 4, '0') || '-' || lpad(event_number::text, 3, '0'),
+  CASE event_number % 4
     WHEN 0 THEN 'practice'::event_type
     WHEN 1 THEN 'match'::event_type
     WHEN 2 THEN 'event'::event_type
     ELSE 'practice'::event_type
   END,
-  timestamp '2099-04-01T10:00:00Z' + (series || ' days')::interval,
-  timestamp '2099-04-01T12:00:00Z' + (series || ' days')::interval,
-  CASE WHEN series % 5 = 0 THEN NULL ELSE '大量検証会場' || series END,
-  CASE series % 3 WHEN 0 THEN NULL WHEN 1 THEN '飲み物、タオル' ELSE 'ユニフォーム、昼食' END,
-  CASE series % 5 WHEN 0 THEN 0 WHEN 1 THEN 500 ELSE 1500 + (series % 4) * 1000 END,
-  CASE WHEN series % 4 = 1 THEN '対戦チーム' || series ELSE NULL END,
-  CASE WHEN series % 4 = 1 THEN timestamp '2099-04-01T08:00:00Z' + (series || ' days')::interval ELSE NULL END,
-  series % 2 = 0,
-  timestamp '2099-03-30T23:59:00Z' + (series || ' days')::interval,
-  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner',
-  'club-' || CASE WHEN series >= 1000 THEN series::text ELSE lpad(series::text, 3, '0') END || '-owner'
-FROM generate_series(1, 1001) AS generated(series)
+  timestamp '2099-04-01T10:00:00Z' + (event_number || ' days')::interval,
+  timestamp '2099-04-01T12:00:00Z' + (event_number || ' days')::interval,
+  CASE WHEN event_number % 5 = 0 THEN NULL ELSE '大量検証会場' || team || '-' || event_number END,
+  CASE event_number % 3 WHEN 0 THEN NULL WHEN 1 THEN '飲み物、タオル' ELSE 'ユニフォーム、昼食' END,
+  CASE event_number % 5 WHEN 0 THEN 0 WHEN 1 THEN 500 ELSE 1500 + (event_number % 4) * 1000 END,
+  CASE WHEN event_number % 4 = 1 THEN '対戦チーム' || team || '-' || event_number ELSE NULL END,
+  CASE WHEN event_number % 4 = 1 THEN timestamp '2099-04-01T08:00:00Z' + (event_number || ' days')::interval ELSE NULL END,
+  event_number % 2 = 0,
+  timestamp '2099-03-30T23:59:00Z' + (event_number || ' days')::interval,
+  'club-' || CASE WHEN team >= 1000 THEN team::text ELSE lpad(team::text, 3, '0') END || '-owner',
+  'club-' || CASE WHEN team >= 1000 THEN team::text ELSE lpad(team::text, 3, '0') END || '-owner'
+FROM generate_series(1, 1001) AS teams(team)
+CROSS JOIN generate_series(1, 200) AS event_numbers(event_number)
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
@@ -494,6 +500,56 @@ BEGIN
         ON CONFLICT (tenant_id, event_id, user_id, member_id) DO NOTHING;
       END IF;
     END LOOP;
+  END LOOP;
+END
+$fixture$;
+`,
+    sql`
+-- 各チームへowner操作相当の出欠190件を追加し、既存の9〜10件と合わせて各200件にする。
+DO $fixture$
+DECLARE
+  team integer;
+  event_number integer;
+  v_team_id uuid;
+  v_event_id uuid;
+  v_member_id uuid;
+  v_user_id varchar(128);
+  v_response_id uuid;
+BEGIN
+  FOR team IN 1..1001 LOOP
+    v_team_id := ('00000000-0000-7000-8000-' || lpad((10000 + team)::text, 12, '0'))::uuid;
+    v_user_id := 'club-' || CASE WHEN team >= 1000 THEN team::text ELSE lpad(team::text, 3, '0') END || '-owner';
+    PERFORM set_config('app.tenant_id', v_team_id::text, true);
+    PERFORM set_config('app.user_id', v_user_id, true);
+    PERFORM set_config('app.role', 'owner', true);
+    FOR event_number IN 1..190 LOOP
+      v_event_id := ('00000000-0000-7000-8000-' || lpad((CASE WHEN event_number = 1 THEN 7000 + team ELSE 8000000 + ((team - 1) * 199) + event_number END)::text, 12, '0'))::uuid;
+      v_member_id := ('00000000-0000-7000-8000-' || lpad((20000 + ((team - 1) * 10) + 1 + ((event_number - 1) % 10))::text, 12, '0'))::uuid;
+      v_response_id := ('00000000-0000-7000-8000-' || lpad((9200000 + ((team - 1) * 191) + event_number)::text, 12, '0'))::uuid;
+      INSERT INTO attendance_responses (id, tenant_id, event_id, user_id, member_id, response)
+      VALUES (
+        v_response_id,
+        v_team_id,
+        v_event_id,
+        v_user_id,
+        v_member_id,
+        CASE (team + event_number) % 3
+          WHEN 0 THEN 'attending'::attendance_response
+          WHEN 1 THEN 'absent'::attendance_response
+          ELSE 'pending'::attendance_response
+        END
+      )
+      ON CONFLICT (tenant_id, event_id, user_id, member_id) DO NOTHING;
+    END LOOP;
+    IF team % 5 = 0 THEN
+      event_number := 191;
+      v_event_id := ('00000000-0000-7000-8000-' || lpad((8000000 + ((team - 1) * 199) + event_number)::text, 12, '0'))::uuid;
+      v_member_id := ('00000000-0000-7000-8000-' || lpad((20000 + ((team - 1) * 10) + 1 + ((event_number - 1) % 10))::text, 12, '0'))::uuid;
+      v_response_id := ('00000000-0000-7000-8000-' || lpad((9200000 + ((team - 1) * 191) + event_number)::text, 12, '0'))::uuid;
+      INSERT INTO attendance_responses (id, tenant_id, event_id, user_id, member_id, response)
+      VALUES (v_response_id, v_team_id, v_event_id, v_user_id, v_member_id, 'pending'::attendance_response)
+      ON CONFLICT (tenant_id, event_id, user_id, member_id) DO NOTHING;
+    END IF;
   END LOOP;
 END
 $fixture$;
