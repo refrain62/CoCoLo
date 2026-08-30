@@ -12,7 +12,6 @@ import { AdminShell } from './admin-shell.js';
 import { navigateInApp, replaceInApp } from './app-navigation.js';
 import { applyPageMetadata } from './app-route.js';
 import { useAuth } from './auth-context.js';
-import { type AuthRole, createAuthContextApi } from './auth-context-api.js';
 import { createAttachmentApi } from './features/attachments/attachment-api.js';
 import { AttachmentUploader } from './features/attachments/attachment-uploader.js';
 import { createAuthInvitationApi } from './features/auth-invitations/auth-invitation-api.js';
@@ -88,11 +87,9 @@ export function AuthenticatedApp() {
   const [selectedTeam, setSelectedTeam] = useState<TeamOption | null>(null);
   const [isResolvingTeam, setIsResolvingTeam] = useState(true);
   const [teamError, setTeamError] = useState<string | null>(null);
-  const [role, setRole] = useState<AuthRole | null>(null);
   const [eventMembers, setEventMembers] = useState<
     Array<{ id: string; name: string }>
   >([]);
-  const [roleError, setRoleError] = useState<string | null>(null);
   const [memberOptionsError, setMemberOptionsError] = useState<string | null>(
     null,
   );
@@ -236,15 +233,6 @@ export function AuthenticatedApp() {
       }),
     [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
-  const authContextApi = useMemo(
-    () =>
-      createAuthContextApi({
-        getAccessToken: () => session?.accessToken ?? null,
-        getSelectedTeamId: () => selectedTeamId,
-        fetcher: authenticatedFetch,
-      }),
-    [authenticatedFetch, selectedTeamId, session?.accessToken],
-  );
   const featureContractApi = useMemo(
     () =>
       createFeatureContractApi({
@@ -317,31 +305,6 @@ export function AuthenticatedApp() {
       }),
     [authenticatedFetch, selectedTeamId, session?.accessToken],
   );
-  // 所属roleは全チーム画面の表示条件として、選択中チームが変わったときだけ取得する。
-  useEffect(() => {
-    if (!session || !selectedTeamId || systemAdminPath) {
-      setRole(null);
-      setRoleError(null);
-      return;
-    }
-    let active = true;
-    setRole(null);
-    setRoleError(null);
-    setEventMembers([]);
-    setMemberOptionsError(null);
-    void authContextApi
-      .get()
-      .then((context) => {
-        if (active) setRole(context.role);
-      })
-      .catch(() => {
-        if (active) setRoleError('チームの権限を確認できません。');
-      });
-    return () => {
-      active = false;
-    };
-  }, [authContextApi, selectedTeamId, session, systemAdminPath]);
-
   // 部員候補は一部操作の入力データとして、対象画面でだけ独立取得する。
   useEffect(() => {
     if (
@@ -434,27 +397,14 @@ export function AuthenticatedApp() {
       </AppShell>
     );
 
-  if (!role)
-    return (
-      <AppShell nav={null}>
-        <section
-          className="app-state-card"
-          role={roleError ? 'alert' : 'status'}
-        >
-          {roleError ?? 'チームの権限を確認しています。'}
-        </section>
-      </AppShell>
-    );
-
-  const currentRole = role;
+  // /auth/teamsで認可済みのactive membershipと同時に返されたroleを利用する。
+  const currentRole = selectedTeam.role;
   const currentTeam = selectedTeam;
   const subjectMemberStorageKey = `cocolo.selectedSubjectMemberId.${selectedTeamId}`;
 
   function requestTeamSelection() {
     clearStoredSelectedTeamId();
     setSelectedTeam(null);
-    setRole(null);
-    setRoleError(null);
     setEventMembers([]);
     setMemberOptionsError(null);
   }

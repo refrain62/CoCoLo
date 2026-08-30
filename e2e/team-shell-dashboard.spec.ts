@@ -38,6 +38,7 @@ test('ダッシュボードとチーム管理は同じ左メニューを使う',
   ).toBeVisible();
   const teamListRequestsAfterSignIn = teamListRequests;
   const authContextRequestsAfterSignIn = authContextRequests;
+  expect(authContextRequestsAfterSignIn).toBe(0);
 
   await membersLink.click();
   await expect(
