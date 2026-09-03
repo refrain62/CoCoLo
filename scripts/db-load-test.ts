@@ -33,7 +33,8 @@ export type LoadRequest = {
     | 'events'
     | 'attendance-responses'
     | 'announcements'
-    | 'memberships';
+    | 'memberships'
+    | 'board-contacts';
   offset: number;
 };
 
@@ -45,8 +46,8 @@ export type LoadResult = {
 
 const tenantIdForTeam = (team: number) =>
   `00000000-0000-7000-8000-${String(10000 + team).padStart(12, '0')}`;
-const eventIdForTeam = (team: number) =>
-  `00000000-0000-7000-8000-${String(7000 + team).padStart(12, '0')}`;
+const eventIdForTeam = (team: number, eventNumber = 1) =>
+  `00000000-0000-7000-8000-${String(eventNumber === 1 ? 7000 + team : 8000000 + (team - 1) * 199 + eventNumber).padStart(12, '0')}`;
 const eventIdForScaleTenant = (event: number) =>
   `00000000-0000-7000-8000-${String(7100000 + event).padStart(12, '0')}`;
 
@@ -112,25 +113,33 @@ export function buildLoadPlan(options: LoadTestOptions): LoadRequest[] {
       : `club-${String(team).padStart(3, '0')}-owner`;
     const eventId = usePagerTenant
       ? eventIdForScaleTenant((Math.floor(sequence / 10) % 1001) + 1)
-      : eventIdForTeam(team);
+      : eventIdForTeam(team, (sequence % 200) + 1);
     const resources: LoadRequest['resource'][] = [
       'members',
       'events',
       'attendance-responses',
       'announcements',
       'memberships',
+      'board-contacts',
     ];
     const resourceIndex = usePagerTenant
       ? Math.floor(sequence / 10) % resources.length
       : sequence % resources.length;
+    const resource = resources[resourceIndex] ?? 'members';
     requests.push({
       sequence,
       tenantId,
       userId,
       role: 'owner',
       eventId,
-      resource: resources[resourceIndex] ?? 'members',
-      offset: usePagerTenant ? ((sequence / 10) % 20) * 50 : sequence % 3,
+      resource,
+      offset: usePagerTenant
+        ? resource === 'board-contacts'
+          ? (Math.floor(sequence / 10) % 2) * 50
+          : (Math.floor(sequence / 10) % 20) * 50
+        : resource === 'events'
+          ? (sequence % 4) * 50
+          : sequence % 3,
     });
   }
   return requests;
@@ -173,6 +182,13 @@ SELECT id, title, status, published_at, count(*) OVER () AS total_count
 FROM announcements, fixture_session
 WHERE tenant_id = ${tenant}
 ORDER BY published_at DESC, id DESC
+LIMIT ${limit} OFFSET ${request.offset};`;
+  if (request.resource === 'board-contacts')
+    return `${session}
+SELECT id, fiscal_year, role_name, role_type, assignee_user_id, line_contact, phone,
+       contact_preference, count(*) OVER () AS total_count
+FROM app_board_contact_rows(${tenant}, 2026, true), fixture_session
+ORDER BY fiscal_year DESC, role_name ASC, id ASC
 LIMIT ${limit} OFFSET ${request.offset};`;
   return `${session}
 SELECT id, user_id, role, status, count(*) OVER () AS total_count

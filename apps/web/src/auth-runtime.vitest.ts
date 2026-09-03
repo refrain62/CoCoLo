@@ -2,7 +2,11 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { AuthProvider, LoginPage } from './auth-context.js';
-import { AuthRuntime, resolveLoginMode } from './auth-runtime.js';
+import {
+  AuthenticatedLoading,
+  AuthRuntime,
+  resolveLoginMode,
+} from './auth-runtime.js';
 
 describe('認証ランタイムの公開境界', () => {
   it('未認証の公開ルートは管理画面のloadingではなくLPを表示する', () => {
@@ -27,6 +31,14 @@ describe('認証ランタイムの公開境界', () => {
     expect(html).not.toContain('class="auth-card-icon"');
     expect(html).toContain('name="email"');
     expect(html).not.toContain('管理画面を準備しています');
+  });
+
+  it('認証済み画面の遅延読込中は既定のメニューを表示しない', () => {
+    const html = renderToStaticMarkup(createElement(AuthenticatedLoading));
+
+    expect(html).toContain('CoCoLoを準備しています。');
+    expect(html).not.toContain('class="app-sidebar"');
+    expect(html).not.toContain('予定と出欠');
   });
 
   it('URLに応じてログイン入口の対象を分ける', () => {

@@ -17,7 +17,13 @@ test('負荷試験計画は複数テナントとページ取得を混在させ�
     plan.some((request) => request.resource === 'attendance-responses'),
   );
   assert.ok(plan.some((request) => request.resource === 'announcements'));
+  assert.ok(plan.some((request) => request.resource === 'board-contacts'));
   assert.ok(plan.some((request) => request.offset >= 50));
+  assert.ok(
+    plan.some(
+      (request) => request.resource === 'events' && request.offset === 150,
+    ),
+  );
 });
 
 test('負荷試験クエリーはtenantとRLSセッションを同時に設定する', () => {
@@ -47,6 +53,13 @@ test('負荷試験クエリーはtenantとRLSセッションを同時に設定�
       resource: 'attendance-responses',
     }),
     /AND event_id = '[0-9a-f-]+'::uuid/,
+  );
+  assert.match(
+    buildLoadQuery({
+      ...pagerRequest,
+      resource: 'board-contacts',
+    }),
+    /FROM app_board_contact_rows\('[0-9a-f-]+'::uuid, 2026, true\), fixture_session/,
   );
 });
 

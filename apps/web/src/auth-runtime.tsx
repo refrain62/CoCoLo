@@ -33,9 +33,9 @@ export function resolveLoginMode(pathname: string): LoginMode {
   return isSystemAdminPath(pathname) ? 'system' : 'team';
 }
 
-function AuthenticatedLoading() {
+export function AuthenticatedLoading() {
   return (
-    <AppShell>
+    <AppShell nav={null}>
       <section className="app-state-card" aria-live="polite" role="status">
         CoCoLoを準備しています。
       </section>

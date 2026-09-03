@@ -12,6 +12,7 @@ import {
   adminNavigation,
   canonicalTeamPath,
   isAdminNavigationVisible,
+  isAdminRoleAllowed,
   resolveAdminRoute,
 } from './admin-routes.js';
 import { navigateInApp, replaceInApp } from './app-navigation.js';
@@ -100,12 +101,19 @@ export function AdminShell({
   }, []);
 
   useEffect(() => {
-    if (!contract) return;
     const requestedRoute = resolveAdminRoute(pathname);
     const requestedItem = adminNavigation.find(
       (item) => item.route === requestedRoute,
     );
     if (!requestedItem) return;
+    if (!isAdminRoleAllowed(requestedItem, role)) {
+      const dashboardPath = canonicalTeamPath('/team');
+      if (pathname === dashboardPath) return;
+      replaceInApp(dashboardPath);
+      setPathname(dashboardPath);
+      return;
+    }
+    if (!contract) return;
     const features = contract.features.map(({ key, enabled }) => ({
       key,
       enabled,
@@ -142,6 +150,28 @@ export function AdminShell({
   function navigate(path: string) {
     const canonicalPath = canonicalTeamPath(path);
     if (canonicalPath === window.location.pathname) return;
+    const requestedRoute = resolveAdminRoute(canonicalPath);
+    const requestedItem = adminNavigation.find(
+      (item) => item.route === requestedRoute,
+    );
+    if (requestedItem && !isAdminRoleAllowed(requestedItem, role)) {
+      replaceInApp(canonicalTeamPath('/team'));
+      setPathname(canonicalTeamPath('/team'));
+      return;
+    }
+    if (
+      contract &&
+      requestedItem &&
+      !isAdminNavigationVisible(
+        requestedItem,
+        role,
+        contract.features.map(({ key, enabled }) => ({ key, enabled })),
+      )
+    ) {
+      replaceInApp(canonicalTeamPath('/team'));
+      setPathname(canonicalTeamPath('/team'));
+      return;
+    }
     navigateInApp(canonicalPath);
     setPathname(canonicalPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });

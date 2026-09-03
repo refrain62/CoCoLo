@@ -299,6 +299,26 @@ CriticalとHighが残る実装を完了扱いにしていません。
 - 信頼境界: 初回bootstrap登録PR #271はquality成功後、導入前base checkerのhead比較失敗を既知の一度限りの例外としてmergeした。実装PR #272はtrusted-validationとqualityが成功し、merge commit `1234e782c4740bb7673b22aafb66ff92cf606ca2`で2026-08-29に`develop`へ統合した。
 - 残課題: scanner初回導入、rename・削除経路の外部実行確認、branch protection（GitHub APIで未設定）、staging実DB/RLS、同一SHAのrelease証跡は、`resume-task-list.md`のT014-ROOT / T014-SCAN / T014-PR、T014-E2E、T014-RELEASE、OPS-001〜007に残す。
 
+## LOCAL-FIXTURE-004 実施記録
+
+- 対象: ユーザー操作で蓄積する役員データを、負荷試験用のローカルDB seedとDB負荷試験へ追加した。migration、production、staging、公開APIのデータは変更していない。
+- 規模: seedが生成する1,001チームへ、既存の代表枠1件に加えて合成の役員99人を投入し、各チーム100件、合計100,100件にした。役職種別はadmin/staff/memberを循環させ、再seedは`ON CONFLICT`で冪等化した。
+- 負荷試験: `board-contacts`をload planへ追加し、manager用の`app_board_contact_rows` projectionをRLS付きでページ取得する。50 worker・各20回の合計1,000リクエストで、1,000/1,000成功、失敗0、取得行14,237、p50 368ms、p95 630ms、最大669msだった。p95閾値1,000ms以内であることを確認した。
+- 安全性: 役員のline contactと電話番号はsynthetic値だけを使用し、app roleから`board_contacts`を直接SELECTしないPII projection経路を利用した。tenant固定、role、入力値、状態、ページ境界、再投入時の重複、個人情報露出を確認し、Critical / Highは0件とした。
+- 検証: `node --test scripts/db-seed-test.test.ts scripts/db-load-test.test.ts` 7件、`pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm verify:trust-root`、`git diff --check`を成功させた。ローカル`cocolo-test`へ42 migrationを適用後、seed集計で100,100件・全1,001チーム100件を確認し、負荷試験後にbackup付きでtest stackを停止した。
+- 信頼境界: owner-only登録PR #279（merge commit `c3f5b057`）と更新済みhead登録PR #280（merge commit `81c91d0b`）を先行して`develop`へ統合した後、実装PR #278（merge commit `cfd1c570`）を2026-08-30に`develop`へ統合した。trust-validationとqualityは成功した。
+- 残課題: 実staging/productionのDB負荷、実ブラウザ、外部provider接続、同一SHAのrelease証跡は、`resume-task-list.md`の各機能受入・T014・OPS-001〜007の停止条件として継続する。
+
+## LOCAL-FIXTURE-005 実施記録
+
+- 対象: 各チームの予定・出欠データを負荷試験用のローカルDB seedとDB負荷試験へ拡張した。migration、production、staging、公開APIのデータは変更していない。
+- 規模: seed上の負荷用1,001チームへ予定を各200件、合計200,200件生成した。既存の予定IDを1件目として維持し、追加分はチーム・予定番号から決定的に生成する。出欠は既存のguardian操作相当9〜10件へowner操作相当の190〜191件を補完し、各チーム200件、合計200,200件にした。
+- 負荷試験: 予定一覧のページオフセットを0/50/100/150へ拡張し、予定IDも各チームの200件から選択する。RLS付き50 worker・各20回の合計1,000リクエストで、1,000/1,000成功、失敗0、取得行21,548、p50 399ms、p95 676ms、最大720msだった。p95閾値1,000ms以内であることを確認した。
+- 安全性: 生成値はsynthetic値だけを使用し、tenant、owner/guardianの回答者、UUIDv7、入力値、状態、ページ境界、再seed時の重複を確認した。seed中だけfixture対象テーブルのRLSを停止し、終了時にENABLE/FORCEへ復元する既存境界を維持した。Critical / Highは0件とした。
+- 検証: `node --test scripts/db-seed-test.test.ts scripts/db-load-test.test.ts` 7件、`pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm verify:trust-root`、`git diff --check`を成功させた。local `cocolo-test`は42 migration適用済みを確認し、seed集計で全1,001チームの予定200件・出欠200件を確認後、backup付きでtest stackを停止した。
+- 信頼境界: owner-only登録PR #282（merge commit `7122ae22`）を先行して`develop`へ統合した後、実装PR #283（merge commit `99fe921a`）を2026-08-30に`develop`へ統合した。両PRのtrust-validationとqualityは成功した。
+- 残課題: 実staging/productionの負荷、実ブラウザ、外部provider接続、同一SHAのrelease証跡は、`resume-task-list.md`の各機能受入・T014・OPS-001〜007の停止条件として継続する。
+
 詳細な重大度と次の行動は[レビュー状況](reviews/README.md)と[中断再開タスクリスト](resume-task-list.md)に集約しています。
 
 ## 履歴の更新規則

@@ -3,6 +3,7 @@ import {
   adminNavigation,
   canonicalAdminPath,
   isAdminNavigationVisible,
+  isAdminRoleAllowed,
   isAdminRouteVisible,
   isMemberOptionRoute,
   normalizeRoutePath,
@@ -93,6 +94,15 @@ describe('管理画面ルート', () => {
       boardContacts &&
         isAdminNavigationVisible(boardContacts, 'admin', boardContactFeatures),
     ).toBe(true);
+  });
+
+  it('feature契約を待たずにroleだけで遷移可否を判定する', () => {
+    const line = adminNavigation.find((item) => item.route === 'line');
+    const members = adminNavigation.find((item) => item.route === 'members');
+
+    expect(line && isAdminRoleAllowed(line, 'staff')).toBe(true);
+    expect(line && isAdminRoleAllowed(line, 'guardian')).toBe(false);
+    expect(members && isAdminRoleAllowed(members, 'guardian')).toBe(true);
   });
 
   it('送迎は管理者と保護者に表示する', () => {
