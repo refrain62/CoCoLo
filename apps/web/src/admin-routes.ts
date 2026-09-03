@@ -194,9 +194,14 @@ export function isAdminNavigationVisible(
   role: AuthRole,
   features: readonly AdminFeature[],
 ) {
-  if (item.roles && !item.roles.includes(role)) return false;
+  if (!isAdminRoleAllowed(item, role)) return false;
   if (!item.featureKey) return true;
   return features.some(
     (feature) => feature.key === item.featureKey && feature.enabled,
   );
+}
+
+// feature契約の取得を待たず、所属roleだけで画面遷移の可否を判定する。
+export function isAdminRoleAllowed(item: AdminNavigationItem, role: AuthRole) {
+  return !item.roles || item.roles.includes(role);
 }
