@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "tools": {
+    "gitleaks": {
+      "image": "zricethezav/gitleaks",
+      "version": "v8.28.0",
+      "digest": "sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854",
+      "network": "none",
+      "ruleFile": ".gitleaks.toml",
+      "command": [
+        "dir",
+        "--config",
+        "/src/.gitleaks.toml",
+        "--redact",
+        "--report-format",
+        "json",
+        "--report-path",
+        "__OUTPUT__",
+        "--exit-code",
+        "1",
+        "--no-banner",
+        "/src"
+      ],
+      "environment": {}
+    },
+    "semgrep": {
+      "image": "semgrep/semgrep",
+      "version": "1.136.0",
+      "digest": "sha256:cda1b566fafbf6010a02a3ea1d265b1c8eba4380e489a13891a102243d81ca6f",
+      "network": "none",
+      "ruleFile": ".semgrep/ci.yml",
+      "command": [
+        "semgrep",
+        "scan",
+        "--config",
+        "/src/.semgrep/ci.yml",
+        "--json",
+        "--output",
+        "__OUTPUT__",
+        "--error",
+        "--no-git-ignore",
+        "--metrics",
+        "off",
+        "/src"
+      ],
+      "environment": {
+        "HOME": "/out",
+        "SEMGREP_SEND_METRICS": "off"
+      }
+    },
+    "trivy": {
+      "image": "aquasec/trivy",
+      "version": "0.58.0",
+      "digest": "sha256:b88012e2a0a309d6a8a00463d4e63e5e513377fb74eccbc8f9b0f8f81940ebeb",
+      "network": "bridge",
+      "ruleFile": ".trivy-secret.yaml",
+      "command": [
+        "fs",
+        "--scanners",
+        "vuln,misconfig,secret",
+        "--secret-config",
+        "/src/.trivy-secret.yaml",
+        "--format",
+        "json",
+        "--output",
+        "__OUTPUT__",
+        "--exit-code",
+        "1",
+        "--quiet",
+        "/src"
+      ],
+      "environment": {
+        "TRIVY_DISABLE_VEX_NOTICE": "true",
+        "TRIVY_CACHE_DIR": "/out/trivy-cache",
+        "TRIVY_NO_PROGRESS": "true",
+        "TRIVY_QUIET": "true",
+        "TRIVY_SKIP_VERSION_CHECK": "true"
+      }
+    }
+  }
+}
