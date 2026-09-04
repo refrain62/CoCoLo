@@ -3,17 +3,41 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
   id-token: write
   attestations: write
-  actions: write
 jobs:
   staging:
+    if: ${{ vars.DEPLOYMENT_PROTECTION_ENABLED == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: staging
     steps:
       - name: mainからの手動実行だけを許可
         run: test "$GITHUB_REF" = "refs/heads/main"
+      - name: 同一SHAの品質集約ゲートとセキュリティゲート成功を確認
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          require_gate() {
+            local workflow_file="$1"
+            local job_name="$2"
+            local run_id
+            run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/${workflow_file##*/}/runs?head_sha=$ARTIFACT_SHA&event=push&status=success&per_page=100" | jq -r --arg sha "$ARTIFACT_SHA" --arg workflow "$workflow_file" '[.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and .event == "push" and ((.path // "" | sub("^\\./"; "") | sub("^/"; "") | sub("@refs/heads/[^/]+$"; "")) == $workflow) and .conclusion == "success")] | .[0].id // empty')"
+            test -n "$run_id"
+            test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" | jq -e --arg job "$job_name" 'any(.jobs[]; .name == $job and .conclusion == "success")')" = true
+          }
+          for attempt in $(seq 1 60); do
+            if require_gate ".github/workflows/quality.yml" "quality aggregate gate" && require_gate ".github/workflows/security-scanners.yml" "security gate"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo '同一SHAの品質集約ゲートとセキュリティゲート成功を確認できませんでした。'
+          exit 1
       - name: リポジトリを取得
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
