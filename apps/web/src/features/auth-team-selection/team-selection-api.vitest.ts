@@ -59,4 +59,34 @@ describe('チーム選択API client', () => {
       },
     });
   });
+
+  it('同時の一覧取得を一つの要求へ集約する', async () => {
+    let resolveResponse!: (response: Response) => void;
+    const responsePromise = new Promise<Response>((resolve) => {
+      resolveResponse = resolve;
+    });
+    const fetcher = vi.fn<typeof fetch>().mockReturnValue(responsePromise);
+    const api = createTeamSelectionApi({
+      getAccessToken: () => 'access-token',
+      fetcher,
+    });
+
+    const first = api.list();
+    const second = api.list();
+    expect(second).toBe(first);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    resolveResponse(
+      new Response(
+        JSON.stringify({
+          data: [{ tenantId: TEAM_A, tenantName: 'Aチーム', role: 'owner' }],
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      [{ tenantId: TEAM_A, tenantName: 'Aチーム', role: 'owner' }],
+      [{ tenantId: TEAM_A, tenantName: 'Aチーム', role: 'owner' }],
+    ]);
+  });
 });

@@ -51,6 +51,8 @@ export function createTeamSelectionApi({
   getAccessToken = getStoredAccessToken,
   fetcher = fetch,
 }: TeamSelectionApiOptions = {}): TeamSelectionApi {
+  let listInFlight: Promise<TeamOption[]> | null = null;
+
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const accessToken = getAccessToken();
     if (!accessToken)
@@ -72,11 +74,21 @@ export function createTeamSelectionApi({
     return (await response.json()) as T;
   }
 
+  // 同一ログイン中の初期化重複を抑え、チーム一覧取得を一つの要求へ集約する。
+  function list() {
+    if (listInFlight) return listInFlight;
+    const requestPromise = request<TeamListResponse>('/api/v1/auth/teams').then(
+      (response) => response.data,
+    );
+    const sharedPromise = requestPromise.finally(() => {
+      if (listInFlight === sharedPromise) listInFlight = null;
+    });
+    listInFlight = sharedPromise;
+    return sharedPromise;
+  }
+
   return {
-    async list() {
-      const response = await request<TeamListResponse>('/api/v1/auth/teams');
-      return response.data;
-    },
+    list,
     async select(requestBody) {
       const response = await request<TeamSelectionResponse>(
         '/api/v1/auth/teams/select',

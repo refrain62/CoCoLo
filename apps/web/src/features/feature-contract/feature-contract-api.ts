@@ -131,6 +131,8 @@ export function createFeatureContractApi({
   getAccessToken = storedAccessToken,
   getSelectedTeamId = getStoredSelectedTeamId,
 }: FeatureContractApiOptions = {}): FeatureContractApi {
+  let getInFlight: Promise<FeatureContractSnapshot> | null = null;
+
   async function request(path: string, init?: RequestInit) {
     const accessToken = getAccessToken();
     if (!accessToken)
@@ -159,8 +161,19 @@ export function createFeatureContractApi({
     return parseSnapshot(await response.json());
   }
 
+  // StrictModeや同一画面からの同時参照で、同じ契約取得をrate limitへ重複計上しない。
+  function get() {
+    if (getInFlight) return getInFlight;
+    const requestPromise = request('');
+    const sharedPromise = requestPromise.finally(() => {
+      if (getInFlight === sharedPromise) getInFlight = null;
+    });
+    getInFlight = sharedPromise;
+    return sharedPromise;
+  }
+
   return {
-    get: () => request(''),
+    get,
     updateFreeFlag: ({ featureKey, enabled, reason }) =>
       request(`/${encodeURIComponent(featureKey)}`, {
         method: 'PATCH',
