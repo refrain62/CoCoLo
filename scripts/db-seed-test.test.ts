@@ -63,9 +63,19 @@ test('ローカルfixtureは全業務テーブルと規模検証データを定�
     sql,
     /CROSS JOIN LATERAL generate_series\(1, fixed\.contact_count\)/,
   );
+  assert.match(sql, /固定3チームにも負荷試験用の予定を各200件/);
+  assert.match(sql, /固定3チームの各予定へowner操作相当の出欠を各200件/);
+  assert.match(
+    sql,
+    /CROSS JOIN generate_series\(1, 200\) AS generated\(event_number\)/,
+  );
+  assert.match(sql, /fixed\.event_base \+ event_number/);
+  assert.match(sql, /fixed\.response_base \+ event_number/);
   assert.match(sql, /3100000/);
   assert.match(sql, /3100100/);
   assert.match(sql, /3000004/);
+  assert.match(sql, /3200000/);
+  assert.match(sql, /3300000/);
   assert.doesNotMatch(sql, /scale-feature|大量検証機能/);
   assert.match(sql, /'disconnected'::line_connection_status/);
   assert.match(sql, /status = 'completed'/);
