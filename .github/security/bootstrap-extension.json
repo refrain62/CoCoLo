@@ -2,10 +2,12 @@
   "schema": 1,
   "mode": "owner-only-one-time",
   "owner": "@refrain62",
-  "head_sha": "1a940bc4b61b7e950ea21504ec53a06eb634e61b",
+  "head_sha": "6dc47cb4d4a7e1a1109310417e5adcb6f82e16d7",
   "files": {
-    ".github/security/trusted-file-manifest.json": "688961c6fc296ccddf51f217c1472b7669b4ef0c347ab94c6c650886073cdc34",
-    "scripts/verify-trusted-pr.test.ts": "ef38ff73fbf5c7b13eed2cf1ce856642d3b22ce60281f762bd8b93033c12ffb4",
-    "scripts/verify-trusted-pr.ts": "e1e263acf7b10eb6b809d427b177c49a7d12bb2e0f95b05a3e837ba2eb3103d8"
+    ".github/security/trusted-file-manifest.json": "5bbb41a2e1452a724a0ff3c56b911a5d1bd32b6e859dbff0c973cc79f1202951",
+    "scripts/db-load-test.test.ts": "5d990530a5d69605a64feffb4ed1d64030564f45a06f38d409bcb5e612e301b2",
+    "scripts/db-load-test.ts": "d06990ced8f3589c8f6e0240ed2c710b253a3370a23c86a8b94ea5280e225115",
+    "scripts/db-seed-test.test.ts": "f4ca86c10c007a9c00164f59c52804ca691004f90c4036374a68ae2fdfc508af",
+    "scripts/db-seed-test.ts": "7d16f1810d3896cf7ab7dd8e46e565f93c0b72d9f3367b178b6c460ff91ba012"
   }
 }
