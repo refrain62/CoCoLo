@@ -4,7 +4,7 @@
     ".semgrep/ci.yml",
     ".trivy-secret.yaml"
   ],
-  "files": {
+  "files" : {
     ".github/CODEOWNERS": "d315e4b4dc32a8433d02431b32b2856ab92dc90bfa42b044bb78880a59c9edf8",
     ".github/security/bootstrap-extension.json": "a137fe2728de893efc807f4c14aa1f11ce10058747a540be50a5cafe4a4804ec",
     ".github/security/trust-root.json": "915452a13773527ea7eebe508acb285b88b205c8334a3da18dcf562fce6c5ed2",
