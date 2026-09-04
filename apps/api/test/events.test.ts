@@ -311,6 +311,9 @@ test('ownerは所属tenantの予定だけを取得し、tenantIdをDTOへ返さ�
 
 test('予定詳細と現在の出欠回答は所属tenant内だけを返す', async () => {
   const repository = createFakeRepository();
+  repository.events[0].attendanceDeadline = new Date(
+    Date.now() + 3_600_000,
+  ).toISOString();
   const app = createTestApp(repository);
   const detail = await app.request(`/${EVENT_A}`, {
     headers: auth('owner-a'),
