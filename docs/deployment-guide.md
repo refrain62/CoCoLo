@@ -127,6 +127,8 @@ stagingとproductionでSupabase projectまたはclient設定が異なる場合�
 
 ## 3. deploy adapter の準備
 
+GitHub Freeの非公開リポジトリではEnvironmentの保護とrequired checkを技術的に強制できないため、`DEPLOYMENT_PROTECTION_ENABLED`は設定しません。staging/production WorkflowはこのEnvironment variableが`true`でない限りjobを開始せず、repository secretだけで実配置を有効化してはいけません。GitHub側の保護設定、同一SHAのquality aggregate gateとsecurity gate、実配置adapterをownerが確認した場合だけ、保護されたEnvironmentのvariableとして設定します。
+
 adapterはリポジトリにprovider実装を含めず、GitHub Environmentのsecretから実行します。`spawnSync` は `shell: false` でadapterを起動するため、secretにはシェルパイプラインではなく実行可能ファイルのパスまたは実行コマンドを設定します。
 
 adapterには次の引数が渡されます。

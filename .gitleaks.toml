@@ -1,0 +1,10 @@
+title = "CoCoLo 固定 secret 検査ルール"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "cocolo-canary-secret"
+description = "CI canary secret must always be detected"
+regex = '''COCOLO_CANARY_[A-Z0-9]{16,}'''
+keywords = ["COCOLO_CANARY_"]

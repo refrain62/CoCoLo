@@ -46,6 +46,7 @@ async function requiredManifestPaths(): Promise<string[]> {
     '.github/security/trust-root.json',
     'package.json',
     'pnpm-lock.yaml',
+    'pnpm-workspace.yaml',
     'biome.json',
     'tsconfig.scripts.json',
     'packages/db/package.json',
