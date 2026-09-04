@@ -342,6 +342,15 @@ CriticalとHighが残る実装を完了扱いにしていません。
 
 詳細な重大度と次の行動は[レビュー状況](reviews/README.md)と[中断再開タスクリスト](resume-task-list.md)に集約しています。
 
+## T014 / security scanner導入・trust gate統合 実施記録
+
+- 対象: 固定digestのGitleaks・Semgrep・Trivyを同一のsecurity scanner契約で実行し、結果のschema検証、fail-closed判定、trusted PR検証、quality aggregate、staging・production昇格ゲートを`develop`へ導入した。
+- 実装: scanner設定、例外契約、結果summary、固定digest、resource/output制限、secret非注入の実行境界、workflow validator、security workflow、deploy gateを追加した。未知severity・schema不正・重複・期限切れ例外・scanner失敗・結果欠落は成功扱いにしない。
+- 信頼境界: scanner root checker境界をPR #302、最終head `db47f9bb7767b6c9652bfda00f01cb5dcc3a5076`のowner-only登録をPR #308、現行`develop`起点の実装をPR #309で統合した。PR #309のmerge commitは`47a9726ec301e681eb54233e33e09632af552fb0`である。`develop-trust-and-ci-gate` ruleset（id `22249948`）はrequired `quality` / `trusted-validation`、bypassなし、strict=falseで設定済みである。
+- 検証: `node --test scripts/security-scanner.test.ts`（10件）、`pnpm test:workflows`（6件）、`pnpm security:verify`、`pnpm verify:trust-root`、`pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`git diff --check`を成功させた。PR #309の`trusted-validation`、`quality`、`quality aggregate gate`も成功した。`pnpm security:trust`はCIのpushイベントで注入される`TRUST_BASE_SHA`がローカルにないため、ローカル単独実行の停止条件として扱った。
+- 敵対的レビュー: scannerの固定digest、入力・出力・例外のfail-closed、trust rootのhead・path・hash束縛、tenant・認可・個人情報・状態遷移への非波及を確認し、Critical / Highは0件と判定した。実Docker scanner、GitHub API経由のrename・削除、PostgreSQL付きE2E、実Redis相当のrate limit、release環境の同一SHA証跡は外部条件として未完了である。
+- 統合: owner-only登録PR #308を先行統合後、実装PR #309を2026-09-04に`develop`へマージした。本記録は実装PRと分離したdocs-only PRで更新する。
+
 ## 履歴の更新規則
 
 - 完了済みの実装は、この文書へ一行で追記する。
