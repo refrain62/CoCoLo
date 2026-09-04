@@ -46,8 +46,16 @@ export type LoadResult = {
 
 const tenantIdForTeam = (team: number) =>
   `00000000-0000-7000-8000-${String(10000 + team).padStart(12, '0')}`;
+const fixedTenantIds = [
+  '00000000-0000-7000-8000-000000000001',
+  '00000000-0000-7000-8000-000000000002',
+  '00000000-0000-7000-8000-000000000003',
+] as const;
+const fixedOwnerIds = ['owner-a', 'owner-b', 'owner-c'] as const;
 const eventIdForTeam = (team: number, eventNumber = 1) =>
   `00000000-0000-7000-8000-${String(eventNumber === 1 ? 7000 + team : 8000000 + (team - 1) * 199 + eventNumber).padStart(12, '0')}`;
+const eventIdForFixedTeam = (team: number, eventNumber = 1) =>
+  `00000000-0000-7000-8000-${String(3200000 + team * 200 + eventNumber).padStart(12, '0')}`;
 const eventIdForScaleTenant = (event: number) =>
   `00000000-0000-7000-8000-${String(7100000 + event).padStart(12, '0')}`;
 
@@ -103,17 +111,26 @@ export function buildLoadPlan(options: LoadTestOptions): LoadRequest[] {
   const requests: LoadRequest[] = [];
   const total = options.workers * options.iterationsPerWorker;
   for (let sequence = 0; sequence < total; sequence += 1) {
-    const usePagerTenant = sequence % 10 === 0;
-    const team = usePagerTenant ? 0 : (sequence % options.scaleTeams) + 1;
-    const tenantId = usePagerTenant
-      ? '00000000-0000-7000-8000-000000000003'
-      : tenantIdForTeam(team);
-    const userId = usePagerTenant
-      ? 'owner-c'
-      : `club-${String(team).padStart(3, '0')}-owner`;
-    const eventId = usePagerTenant
-      ? eventIdForScaleTenant((Math.floor(sequence / 10) % 1001) + 1)
-      : eventIdForTeam(team, (sequence % 200) + 1);
+    const useFixedTeam = sequence % 30 < 3;
+    const usePagerTenant = !useFixedTeam && sequence % 10 === 0;
+    const team =
+      usePagerTenant || useFixedTeam ? 0 : (sequence % options.scaleTeams) + 1;
+    const fixedTeam = sequence % 3;
+    const tenantId = useFixedTeam
+      ? (fixedTenantIds[fixedTeam] ?? fixedTenantIds[0])
+      : usePagerTenant
+        ? '00000000-0000-7000-8000-000000000003'
+        : tenantIdForTeam(team);
+    const userId = useFixedTeam
+      ? (fixedOwnerIds[fixedTeam] ?? fixedOwnerIds[0])
+      : usePagerTenant
+        ? 'owner-c'
+        : `club-${String(team).padStart(3, '0')}-owner`;
+    const eventId = useFixedTeam
+      ? eventIdForFixedTeam(fixedTeam, (sequence % 200) + 1)
+      : usePagerTenant
+        ? eventIdForScaleTenant((Math.floor(sequence / 10) % 1001) + 1)
+        : eventIdForTeam(team, (sequence % 200) + 1);
     const resources: LoadRequest['resource'][] = [
       'members',
       'events',

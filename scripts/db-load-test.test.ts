@@ -12,6 +12,10 @@ test('負荷試験計画は複数テナントとページ取得を混在させ�
   const plan = buildLoadPlan(loadTestDefaults);
   assert.equal(plan.length, 1_000);
   assert.ok(plan.some((request) => request.tenantId.endsWith('000000000003')));
+  assert.ok(plan.some((request) => request.tenantId.endsWith('000000000001')));
+  assert.ok(plan.some((request) => request.tenantId.endsWith('000000000002')));
+  assert.ok(plan.some((request) => request.userId === 'owner-a'));
+  assert.ok(plan.some((request) => request.userId === 'owner-b'));
   assert.ok(plan.some((request) => request.resource === 'members'));
   assert.ok(
     plan.some((request) => request.resource === 'attendance-responses'),

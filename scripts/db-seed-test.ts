@@ -397,6 +397,39 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
+-- 固定3チームにも負荷試験用の予定を各200件、合計600件用意する。
+INSERT INTO events
+  (id, tenant_id, title, event_type, starts_at, ends_at, location, items_to_bring, fee, opponent, meeting_time, transportation_required, attendance_deadline, created_by_user_id, updated_by_user_id)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((event_base + event_number)::text, 12, '0'))::uuid,
+  tenant_id,
+  team_code || '負荷予定' || lpad(event_number::text, 3, '0'),
+  CASE event_number % 4
+    WHEN 0 THEN 'practice'::event_type
+    WHEN 1 THEN 'match'::event_type
+    WHEN 2 THEN 'event'::event_type
+    ELSE 'practice'::event_type
+  END,
+  timestamp '2099-05-01T10:00:00Z' + ((event_number - 1) || ' days')::interval,
+  timestamp '2099-05-01T12:00:00Z' + ((event_number - 1) || ' days')::interval,
+  CASE WHEN event_number % 5 = 0 THEN NULL ELSE team_code || '負荷会場' || event_number END,
+  CASE event_number % 3 WHEN 0 THEN NULL WHEN 1 THEN '飲み物、タオル' ELSE 'ユニフォーム、昼食' END,
+  CASE event_number % 5 WHEN 0 THEN 0 WHEN 1 THEN 500 ELSE 1500 + (event_number % 4) * 1000 END,
+  CASE WHEN event_number % 4 = 1 THEN team_code || '対戦チーム' || event_number ELSE NULL END,
+  CASE WHEN event_number % 4 = 1 THEN timestamp '2099-05-01T08:00:00Z' + ((event_number - 1) || ' days')::interval ELSE NULL END,
+  event_number % 2 = 0,
+  timestamp '2099-04-28T23:59:00Z' + ((event_number - 1) || ' days')::interval,
+  owner_user_id,
+  owner_user_id
+FROM (VALUES
+  ('${tenantA}'::uuid, 'A', 'owner-a', 3200000),
+  ('${tenantB}'::uuid, 'B', 'owner-b', 3200200),
+  ('${tenantC}'::uuid, 'C', 'owner-c', 3200400)
+) AS fixed(tenant_id, team_code, owner_user_id, event_base)
+CROSS JOIN generate_series(1, 200) AS generated(event_number)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
 -- 1,001チームへユーザー操作で作成された予定を各200件、合計200,200件用意する。
 INSERT INTO events
   (id, tenant_id, title, event_type, starts_at, ends_at, location, items_to_bring, fee, opponent, meeting_time, transportation_required, attendance_deadline, created_by_user_id, updated_by_user_id)
@@ -460,6 +493,51 @@ INSERT INTO attendance_responses (id, tenant_id, event_id, user_id, member_id, r
 SELECT '${uuid(1101)}', '${tenantC}', '${uuid(1001)}', 'guardian-c', '${uuid(209)}', 'attending'::attendance_response
 FROM fixture_session
 ON CONFLICT (tenant_id, event_id, user_id, member_id) DO NOTHING;
+`,
+    sql`
+-- 固定3チームの各予定へowner操作相当の出欠を各200件、合計600件用意する。
+DO $fixture$
+DECLARE
+  fixed record;
+  event_number integer;
+  v_event_id uuid;
+  v_member_id uuid;
+  v_response_id uuid;
+BEGIN
+  FOR fixed IN
+    SELECT * FROM (VALUES
+      ('${tenantA}'::uuid, 'owner-a', 3200000, 3300000, ARRAY['${uuid(201)}'::uuid, '${uuid(202)}'::uuid, '${uuid(204)}'::uuid]),
+      ('${tenantB}'::uuid, 'owner-b', 3200200, 3300200, ARRAY['${uuid(203)}'::uuid, '${uuid(207)}'::uuid]),
+      ('${tenantC}'::uuid, 'owner-c', 3200400, 3300400, ARRAY['${uuid(209)}'::uuid, '${uuid(210)}'::uuid, '${uuid(211)}'::uuid, '${uuid(212)}'::uuid, '${uuid(213)}'::uuid])
+    ) AS teams(tenant_id, owner_user_id, event_base, response_base, member_ids)
+  LOOP
+    PERFORM set_config('app.tenant_id', fixed.tenant_id::text, true);
+    PERFORM set_config('app.user_id', fixed.owner_user_id, true);
+    PERFORM set_config('app.role', 'owner', true);
+    FOR event_number IN 1..200 LOOP
+      v_event_id := ('00000000-0000-7000-8000-' || lpad((fixed.event_base + event_number)::text, 12, '0'))::uuid;
+      v_member_id := fixed.member_ids[1 + ((event_number - 1) % array_length(fixed.member_ids, 1))];
+      v_response_id := ('00000000-0000-7000-8000-' || lpad((fixed.response_base + event_number)::text, 12, '0'))::uuid;
+      INSERT INTO attendance_responses (id, tenant_id, event_id, user_id, member_id, response, responded_at, updated_at)
+      VALUES (
+        v_response_id,
+        fixed.tenant_id,
+        v_event_id,
+        fixed.owner_user_id,
+        v_member_id,
+        CASE event_number % 3
+          WHEN 0 THEN 'attending'::attendance_response
+          WHEN 1 THEN 'absent'::attendance_response
+          ELSE 'pending'::attendance_response
+        END,
+        timestamp '2026-08-01T00:00:00Z' + (event_number || ' days')::interval,
+        timestamp '2026-08-01T00:00:00Z' + (event_number || ' days')::interval
+      )
+      ON CONFLICT (tenant_id, event_id, user_id, member_id) DO NOTHING;
+    END LOOP;
+  END LOOP;
+END
+$fixture$;
 `,
     sql`
 -- 各チームの各部員について父母のうち母側がpendingで回答する大量出欠データ。
