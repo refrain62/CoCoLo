@@ -58,6 +58,14 @@ test('ローカルfixtureは全業務テーブルと規模検証データを定�
   assert.match(sql, /出欠190件.*各200件/s);
   assert.match(sql, /1,001チームへ追加し、合計100人ずつ、100,100件/);
   assert.match(sql, /CROSS JOIN generate_series\(1, 99\) AS contacts/);
+  assert.match(sql, /固定3チームにも負荷試験用の役員100人ずつ/);
+  assert.match(
+    sql,
+    /CROSS JOIN LATERAL generate_series\(1, fixed\.contact_count\)/,
+  );
+  assert.match(sql, /3100000/);
+  assert.match(sql, /3100100/);
+  assert.match(sql, /3000004/);
   assert.doesNotMatch(sql, /scale-feature|大量検証機能/);
   assert.match(sql, /'disconnected'::line_connection_status/);
   assert.match(sql, /status = 'completed'/);

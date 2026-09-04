@@ -608,6 +608,28 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 `,
     sql`
+-- 固定3チームにも負荷試験用の役員100人ずつを用意し、ログイン確認と一覧性能を同じデータ量で検証できるようにする。
+INSERT INTO board_contacts
+  (id, tenant_id, fiscal_year, role_name, role_type, assignee_user_id, line_contact, phone, contact_preference)
+SELECT
+  ('00000000-0000-7000-8000-' || lpad((id_base + contact)::text, 12, '0'))::uuid,
+  tenant_id,
+  2026,
+  team_code || '負荷役員' || lpad(contact::text, 3, '0'),
+  CASE contact % 3 WHEN 0 THEN 'admin' WHEN 1 THEN 'staff' ELSE 'member' END,
+  CASE WHEN contact % 3 = 2 THEN NULL ELSE owner_user_id END,
+  CASE contact % 3 WHEN 1 THEN NULL ELSE 'line://fixed-load-board-' || team_code || '-' || contact END,
+  CASE contact % 3 WHEN 0 THEN NULL ELSE '000-0000-' || lpad(contact::text, 4, '0') END,
+  CASE contact % 3 WHEN 0 THEN 'line' WHEN 1 THEN 'phone' ELSE 'both' END
+FROM (VALUES
+  ('${tenantA}'::uuid, 'A', 'owner-a', 100, 3100000),
+  ('${tenantB}'::uuid, 'B', 'owner-b', 100, 3100100),
+  ('${tenantC}'::uuid, 'C', 'owner-c', 96, 3000004)
+) AS fixed(tenant_id, team_code, owner_user_id, contact_count, id_base)
+CROSS JOIN LATERAL generate_series(1, fixed.contact_count) AS generated(contact)
+ON CONFLICT (id) DO NOTHING;
+`,
+    sql`
 INSERT INTO board_contacts
   (id, tenant_id, fiscal_year, role_name, role_type, assignee_user_id, line_contact, phone, contact_preference)
 SELECT
