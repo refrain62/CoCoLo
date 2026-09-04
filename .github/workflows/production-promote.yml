@@ -10,6 +10,7 @@ permissions:
   actions: read
 jobs:
   production:
+    if: ${{ vars.DEPLOYMENT_PROTECTION_ENABLED == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: production
@@ -29,13 +30,29 @@ jobs:
           [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{40}$ ]]
           STAGING_RUN_ID="$(gh run list --workflow staging-deploy.yml --branch main --status success --limit 20 --json databaseId,headSha --jq ".[] | select(.headSha == \"$ARTIFACT_SHA\") | .databaseId" | head -n 1)"
           test -n "$STAGING_RUN_ID"
-          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID" --jq '.path')" = '.github/workflows/staging-deploy.yml'
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID" --jq '(.path // "" | sub("^\\./"; "") | sub("^/"; "") | sub("@refs/heads/[^/]+$"; ""))')" = '.github/workflows/staging-deploy.yml'
+          require_gate() {
+            local workflow_file="$1"
+            local job_name="$2"
+            local run_id
+            run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/${workflow_file##*/}/runs?head_sha=$ARTIFACT_SHA&event=push&status=success&per_page=100" | jq -r --arg sha "$ARTIFACT_SHA" --arg workflow "$workflow_file" '[.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and .event == "push" and ((.path // "" | sub("^\\./"; "") | sub("^/"; "") | sub("@refs/heads/[^/]+$"; "")) == $workflow) and .conclusion == "success")] | .[0].id // empty')"
+            test -n "$run_id"
+            test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" | jq -e --arg job "$job_name" 'any(.jobs[]; .name == $job and .conclusion == "success")')" = true
+          }
+          require_gate ".github/workflows/quality.yml" "quality aggregate gate"
+          require_gate ".github/workflows/security-scanners.yml" "security gate"
           gh run download "$STAGING_RUN_ID" --name "staging-evidence-$ARTIFACT_SHA" --dir .evidence
           gh run download "$STAGING_RUN_ID" --name "release-$ARTIFACT_SHA" --dir .release
           jq -e --arg sha "$ARTIFACT_SHA" '(.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "workflow_dispatch" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .schemaDrift == "success" and (.schemaDriftRunId | type == "string" and length > 0) and .migration == "success" and .smoke == "success" and .e2e == "success")' .evidence/evidence.json
           test "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)" = "$(cut -d' ' -f1 .release/artifact.sha256)"
           gh attestation verify .release/release.tar.gz --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/staging-deploy.yml" --source-digest "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)"
           echo 'ARTIFACT_ATTESTATION_VERIFIED=true' >> "$GITHUB_ENV"
+      - name: 検証済みSHAのリポジトリをcheckout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          clean: false
+          persist-credentials: false
+          ref: ${{ inputs.artifact_sha }}
       - name: pnpmを準備
         uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996
         with:
@@ -96,8 +113,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: production環境へ成果物を配置
-        run: pnpm deploy:production --artifact-sha "${{ inputs.artifact_sha }}" --release-dir .release
+        run: pnpm deploy:production --artifact-sha "$ARTIFACT_SHA" --release-dir .release
         env:
+          ARTIFACT_SHA: ${{ inputs.artifact_sha }}
           PRODUCTION_DEPLOY_ADAPTER: ${{ secrets.PRODUCTION_DEPLOY_ADAPTER }}
           R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
           R2_BUCKET: cocolo-production-private

@@ -55,6 +55,11 @@
     "ci:local": "node scripts/ci.ts local",
     "ci:staging": "node scripts/ci.ts staging",
     "create:pgpass": "node scripts/create-pgpass.ts",
+    "test:workflows": "node --test scripts/verify-workflows.test.ts",
+    "security:trust": "node scripts/verify-security-trust.ts",
+    "security:verify": "node scripts/verify-security-scanners.ts",
+    "security:scan": "node scripts/run-security-scanners.ts",
+    "test:security": "node --test scripts/security-scanner.test.ts",
     "db:prepare:test": "node scripts/db-prepare-test.ts",
     "db:seed:test": "node scripts/db-seed-test.ts",
     "test:load": "node scripts/db-load-test.ts",
@@ -74,6 +79,7 @@
     "dependency-cruiser": "16.10.4",
     "supabase": "2.115.0",
     "typescript": "5.9.2",
-    "vitest": "3.2.4"
+    "vitest": "3.2.4",
+    "yaml": "2.8.3"
   }
 }

@@ -1,0 +1,47 @@
+{
+  "description": "固定malicious fixture: trust jobとsecurity gateを無効化し、scannerの設定・parser・validator・CODEOWNERSを同時改変するPR",
+  "tamperedFile": "scripts/security-scanner-summary.ts",
+  "scannerRegression": {
+    "tool": "gitleaks",
+    "mode": "directory",
+    "requiresGitDirectory": false
+  },
+  "disableAttempts": [
+    "scripts/prepare-security-target.ts",
+    "scripts/verify-security-trust.ts",
+    ".github/workflows/security-scanners.yml",
+    ".github/workflows/quality.yml"
+  ],
+  "changedFiles": [
+    ".github/CODEOWNERS",
+    ".github/security/scanner-exceptions.json",
+    ".github/security/security-scanners.json",
+    ".github/workflows/quality.yml",
+    ".github/workflows/security-scanners.yml",
+    ".github/workflows/staging-deploy.yml",
+    ".github/workflows/production-promote.yml",
+    ".gitleaks.toml",
+    ".semgrep/ci.yml",
+    ".trivy-secret.yaml",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "scripts/run-security-scanners.ts",
+    "scripts/prepare-security-target.ts",
+    "scripts/security-scan-root.ts",
+    "scripts/security-scanner-config.ts",
+    "scripts/security-scanner-exceptions.ts",
+    "scripts/security-scanner-summary.ts",
+    "scripts/security-scanner.test.ts",
+    "scripts/verify-security-scanners.ts",
+    "scripts/verify-security-trust.ts",
+    "scripts/verify-trust-root.ts",
+    "scripts/verify-pnpm-config.ts",
+    "scripts/verify-workflows.ts",
+    "scripts/verify-workflows.test.ts",
+    "scripts/trust-root.ts",
+    "scripts/verify-pr-description.ts",
+    "scripts/verify-trusted-pr.ts",
+    ".github/security/fixtures/malicious-scanner-pr.json"
+  ]
+}
