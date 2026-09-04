@@ -2,7 +2,7 @@
   "schema": 1,
   "mode": "owner-only-one-time",
   "owner": "@refrain62",
-  "head_sha": "6dc47cb4d4a7e1a1109310417e5adcb6f82e16d7",
+  "head_sha": "6dc47cb63587306b6c2016c75d31bbefb9693418",
   "files": {
     ".github/security/trusted-file-manifest.json": "5bbb41a2e1452a724a0ff3c56b911a5d1bd32b6e859dbff0c973cc79f1202951",
     "scripts/db-load-test.test.ts": "5d990530a5d69605a64feffb4ed1d64030564f45a06f38d409bcb5e612e301b2",
