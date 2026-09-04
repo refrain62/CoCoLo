@@ -1,6 +1,6 @@
 # 完了タスクと実施履歴
 
-更新日：2026-08-29
+更新日：2026-09-04
 
 この文書は、完了済み作業の結果だけを短く残す履歴です。
 
@@ -21,6 +21,7 @@
 | API・LINE統合回帰 | eventsの管理者出欠修正RLS、LINE feature contract経路、provider retry key、scale fixture干渉の修正 | 実装PR #231を`develop`へ統合。fresh Supabase統合、品質ゲート、敵対的レビュー成功。実LINE・staging受入は継続 |
 | LOCAL-FIXTURE-001 | 500チーム・5,000部員、部員ごとの父母想定10,000保護者リンク、状態境界、ページャー閾値を含むローカルfixture拡充 | PR #197を`develop`へ統合。敵対的レビューと品質ゲート成功。実負荷試験・staging外部サービス受入は継続 |
 | LOCAL-FIXTURE-002 | 1,001チーム・10,010部員・20,020保護者リンク、全31テーブル1,000件超、状態パターン、RLS付きDB負荷試験 | PR #199を`develop`へ統合。敵対的レビュー、品質ゲート、実DB件数検証、1,000件負荷試験成功 |
+| LOCAL-FIXTURE-006 | 固定チームA/B/Cの役員データ各100件、再seed可能な負荷試験用fixture | PR #297を`develop`へ統合。ローカルDB適用、品質・trust・DB整合性検証成功 |
 | UI安全性 | 二重送信防止、権限別操作表示、認証レイアウト、主要タップ領域、複数幅ブラウザ受入 | `develop`統合済み。認証済み主要画面のrole別受入は継続 |
 | UI-018〜024 | 認証済みroot、team feature flag導線、レスポンシブ表、チーム設定・役員連絡先分離、共通UI、role別ルート | PR #204を`develop`へ統合。docs-only PR #205で台帳を分離更新。品質ゲート、`pnpm ci:fast`、390px/1280pxブラウザ確認成功。実DB・外部provider・staging受入は継続 |
 | LP-001 / FS-UI-004 | 未認証ルートの公開LP、課題と機能の訴求、提供状態、ログイン導線、認証済み画面との分離、専用ヒーロー画像 | PR #194を`develop`へ統合。`pnpm test`、`pnpm test:unit`、`pnpm build`、lint、typecheck、390pxから1440pxのブラウザ確認、キーボード操作、コントラスト、品質ゲート成功。敵対的レビューのCriticalとHighは0件 |
@@ -317,6 +318,15 @@ CriticalとHighが残る実装を完了扱いにしていません。
 - 安全性: 生成値はsynthetic値だけを使用し、tenant、owner/guardianの回答者、UUIDv7、入力値、状態、ページ境界、再seed時の重複を確認した。seed中だけfixture対象テーブルのRLSを停止し、終了時にENABLE/FORCEへ復元する既存境界を維持した。Critical / Highは0件とした。
 - 検証: `node --test scripts/db-seed-test.test.ts scripts/db-load-test.test.ts` 7件、`pnpm test`、`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm verify:trust-root`、`git diff --check`を成功させた。local `cocolo-test`は42 migration適用済みを確認し、seed集計で全1,001チームの予定200件・出欠200件を確認後、backup付きでtest stackを停止した。
 - 信頼境界: owner-only登録PR #282（merge commit `7122ae22`）を先行して`develop`へ統合した後、実装PR #283（merge commit `99fe921a`）を2026-08-30に`develop`へ統合した。両PRのtrust-validationとqualityは成功した。
+- 残課題: 実staging/productionの負荷、実ブラウザ、外部provider接続、同一SHAのrelease証跡は、`resume-task-list.md`の各機能受入・T014・OPS-001〜007の停止条件として継続する。
+
+## LOCAL-FIXTURE-006 実施記録
+
+- 対象: 固定チームA/B/Cにも、ユーザー操作で追加される役員情報を想定した負荷試験用のローカルDB seedを追加した。migration、production、staging、公開APIのデータは変更していない。
+- 規模: 固定チームA/B/Cへ合成の役員データを各100件、合計300件生成した。既存のチームCデータと重複しないID範囲を使い、seedは`ON CONFLICT`で再実行可能にした。既存の1,001チームfixtureは各100件、合計100,100件を維持した。
+- 安全性: 氏名、LINE連絡先、電話番号はsynthetic値だけを使用し、tenant固定と役員データの重複・越境が起きないことを確認した。schema変更はないためmigration追加は不要とした。
+- 検証: `node --test scripts/db-seed-test.test.ts` 4件、`pnpm test`、`pnpm build`、`pnpm lint`、`pnpm verify:trust-root`、`pnpm test:database-integrity` 25件、`git diff --check`を成功させた。local `cocolo-test`へseedを適用し、固定チームA/B/Cが各100件であることを確認した。
+- 信頼境界: owner-only登録PR #296（merge commit `ed7c26cb0414030b9cc927f048d3165733715d6b`）を先行して`develop`へ統合した後、実装PR #297（merge commit `40b2d56b43d0ed96285c33c72e4d0dadf48a5ca1`）を2026-09-04に`develop`へ統合した。両PRのtrust-validationとqualityは成功した。
 - 残課題: 実staging/productionの負荷、実ブラウザ、外部provider接続、同一SHAのrelease証跡は、`resume-task-list.md`の各機能受入・T014・OPS-001〜007の停止条件として継続する。
 
 詳細な重大度と次の行動は[レビュー状況](reviews/README.md)と[中断再開タスクリスト](resume-task-list.md)に集約しています。
