@@ -132,6 +132,9 @@ test('保護対象を含むPRではextension検証を有効にする', () => {
     hasProtectedChanges(['.github/workflows/pr-trust-gate.yml']),
     true,
   );
+  assert.equal(hasProtectedChanges(['.gitleaks.toml']), true);
+  assert.equal(hasProtectedChanges(['.semgrep/ci.yml']), true);
+  assert.equal(hasProtectedChanges(['.trivy-secret.yaml']), true);
   assert.equal(isProtectedPath('apps/web/src/authenticated-app.tsx'), false);
 });
 

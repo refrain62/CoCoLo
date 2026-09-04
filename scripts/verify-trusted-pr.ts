@@ -72,6 +72,9 @@ export function isProtectedPath(filename: string): boolean {
     filename === '.github/CODEOWNERS' ||
     filename.startsWith('.github/security/') ||
     filename.startsWith('.github/workflows/') ||
+    filename === '.gitleaks.toml' ||
+    filename === '.semgrep/ci.yml' ||
+    filename === '.trivy-secret.yaml' ||
     filename === 'package.json' ||
     filename === 'pnpm-lock.yaml' ||
     filename === 'biome.json' ||
