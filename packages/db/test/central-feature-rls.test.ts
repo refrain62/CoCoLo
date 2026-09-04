@@ -1,0 +1,1117 @@
+import assert from 'node:assert/strict';
+import { after, test } from 'node:test';
+import type { PrismaClient as PrismaClientType } from '@prisma/client';
+import prismaClientPackage from '@prisma/client';
+import { createSystemAdminRepository } from '../dist/system-admin-repository.js';
+
+const { PrismaClient } = prismaClientPackage;
+type PrismaClient = PrismaClientType;
+
+const tenantA = '00000000-0000-7000-8000-000000000001';
+const tenantB = '00000000-0000-7000-8000-000000000002';
+const tenantC = '00000000-0000-7000-8000-000000000003';
+const memberA = '00000000-0000-7000-8000-000000000201';
+const memberA2 = '00000000-0000-7000-8000-000000000202';
+const eventA = '00000000-0000-7000-8000-000000000401';
+const eventB = '00000000-0000-7000-8000-000000000402';
+const attachmentA = '00000000-0000-7000-8000-000000000501';
+const attachmentB = '00000000-0000-7000-8000-000000000502';
+const attachmentUploaded = '00000000-0000-7000-8000-000000000503';
+const attachmentRejected = '00000000-0000-7000-8000-000000000504';
+const boardContactA = '00000000-0000-7000-8000-000000000601';
+const orderA = '00000000-0000-7000-8000-000000000701';
+const productA = '00000000-0000-7000-8000-000000000702';
+const entryA = '00000000-0000-7000-8000-000000000703';
+const lineA = '00000000-0000-7000-8000-000000000704';
+const idempotencyA = '00000000-0000-7000-8000-000000000705';
+const announcementA = '00000000-0000-7000-8000-000000000801';
+let notificationA = '';
+const ridePlanA = '00000000-0000-7000-8000-000000001001';
+const rideOfferA = '00000000-0000-7000-8000-000000001002';
+const rideRequestA = '00000000-0000-7000-8000-000000001003';
+const rideAssignmentA = '00000000-0000-7000-8000-000000001004';
+const auditA = '00000000-0000-7000-8000-000000001101';
+const systemPublishedAnnouncement = '00000000-0000-7000-8000-000000009001';
+const systemDraftAnnouncement = '00000000-0000-7000-8000-000000009002';
+
+const appUrl = process.env.DATABASE_URL;
+const directUrl = process.env.DIRECT_URL;
+const enabled = Boolean(appUrl && directUrl);
+let app: PrismaClient | undefined;
+let direct: PrismaClient | undefined;
+let finalizer: PrismaClient | undefined;
+
+async function rows<T>(
+  client: PrismaClient,
+  sql: string,
+  ...values: unknown[]
+) {
+  return client.$queryRawUnsafe<T[]>(sql, ...values);
+}
+
+async function execute(
+  client: PrismaClient,
+  sql: string,
+  ...values: unknown[]
+) {
+  await client.$executeRawUnsafe(sql, ...values);
+}
+
+async function count(client: PrismaClient, table: string, where = 'TRUE') {
+  const result = await rows<{ count: bigint }>(
+    client,
+    `SELECT count(*)::bigint AS count FROM ${table} WHERE ${where}`,
+  );
+  return Number(result[0]?.count ?? 0n);
+}
+
+async function countBoardContacts(
+  client: PrismaClient,
+  tenantId: string,
+  role: string,
+) {
+  const result = await rows<{ count: bigint }>(
+    client,
+    `SELECT count(*)::bigint AS count
+       FROM app_board_contact_rows($1::uuid, NULL::integer, $2::boolean)`,
+    tenantId,
+    role === 'owner' || role === 'admin',
+  );
+  return Number(result[0]?.count ?? 0n);
+}
+
+async function withContext<T>(
+  client: PrismaClient,
+  tenantId: string,
+  userId: string,
+  role: string,
+  work: (transaction: PrismaClient) => Promise<T>,
+) {
+  return client.$transaction(async (transaction) => {
+    await execute(
+      transaction,
+      `SELECT set_config('app.tenant_id', $1, true),
+              set_config('app.user_id', $2, true),
+              set_config('app.role', $3, true),
+              set_config('app.announcement_id', '', true)`,
+      tenantId,
+      userId,
+      role,
+    );
+    return work(transaction as unknown as PrismaClient);
+  });
+}
+
+async function rejects(work: () => Promise<unknown>) {
+  await assert.rejects(work);
+}
+
+async function waitForAdvisoryLockWait(
+  client: PrismaClient,
+  pid: number,
+): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const waitingLocks = await rows<{ locktype: string }>(
+      client,
+      `SELECT locktype
+         FROM pg_locks
+        WHERE pid = $1
+          AND locktype = 'advisory'
+          AND granted = false`,
+      pid,
+    );
+    if (waitingLocks.length === 1) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('表示名更新がplan lock待ちになりませんでした。');
+}
+
+const fixtureTables = [
+  'tenants',
+  'tenant_memberships',
+  'members',
+  'guardian_members',
+  'attachments',
+  'events',
+  'attendance_responses',
+  'board_contacts',
+  'purchase_orders',
+  'order_products',
+  'order_entries',
+  'order_lines',
+  'order_idempotency_keys',
+  'announcements',
+  'announcement_attachments',
+  'line_connections',
+  'line_notification_queue',
+  'line_webhook_receipts',
+  'ride_plans',
+  'ride_offers',
+  'ride_requests',
+  'ride_assignments',
+  'audit_logs',
+];
+
+async function withRlsDisabled<T>(
+  client: PrismaClient,
+  work: () => Promise<T>,
+): Promise<T> {
+  try {
+    for (const table of fixtureTables)
+      await execute(client, `ALTER TABLE ${table} DISABLE ROW LEVEL SECURITY`);
+    return await work();
+  } finally {
+    for (const table of fixtureTables) {
+      await execute(client, `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
+      await execute(client, `ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`);
+    }
+  }
+}
+
+async function seedFixture(client: PrismaClient) {
+  return withRlsDisabled(client, async () => {
+    await execute(
+      client,
+      `INSERT INTO tenant_memberships (id, tenant_id, user_id, role, status, display_name)
+     VALUES
+       ('00000000-0000-7000-8000-000000000114', $1::uuid, 'admin-a', 'admin', 'active', NULL),
+       ('00000000-0000-7000-8000-000000000115', $1::uuid, 'staff-a', 'staff', 'active', '送迎担当 staff-a'),
+       ('00000000-0000-7000-8000-000000000116', $1::uuid, 'guardian-a2', 'guardian', 'active', NULL)
+     ON CONFLICT (tenant_id, user_id) DO UPDATE
+       SET role = EXCLUDED.role,
+           status = EXCLUDED.status,
+           display_name = COALESCE(EXCLUDED.display_name, tenant_memberships.display_name)`,
+      tenantA,
+    );
+    await execute(
+      client,
+      `INSERT INTO guardian_members (id, tenant_id, user_id, member_id, relationship)
+     VALUES ('00000000-0000-7000-8000-000000000312', $1::uuid, 'guardian-a2', $2::uuid, '父')
+     ON CONFLICT (tenant_id, user_id, member_id) DO NOTHING`,
+      tenantA,
+      memberA2,
+    );
+
+    await execute(
+      client,
+      `INSERT INTO attachments
+       (id, tenant_id, owner_user_id, object_key, media_type, byte_size, sha256, status,
+        expires_at, complete_attempts, cleanup_attempts, created_at, available_at)
+       VALUES
+        ($1::uuid, $3::uuid, 'guardian-a2', 'tenant-a/00000000-0000-7000-8000-000000000501', 'image/png', 8,
+         NULL, 'uploaded', '2099-01-01T00:00:00Z', 0, 0, now(), NULL),
+        ($2::uuid, $4::uuid, 'owner-b', 'tenant-b/00000000-0000-7000-8000-000000000502', 'application/pdf', 5,
+         NULL, 'uploaded', '2099-01-01T00:00:00Z', 0, 0, now(), NULL)`,
+      attachmentA,
+      attachmentB,
+      tenantA,
+      tenantB,
+    );
+    await execute(
+      client,
+      `UPDATE attachments
+        SET status = 'available',
+            sha256 = CASE WHEN id = $1::uuid THEN repeat('a', 64) ELSE repeat('b', 64) END,
+            complete_attempts = 1,
+            available_at = now()
+      WHERE id IN ($1::uuid, $2::uuid)`,
+      attachmentA,
+      attachmentB,
+    );
+    await execute(
+      client,
+      `INSERT INTO attachments
+       (id, tenant_id, owner_user_id, object_key, media_type, byte_size, status,
+        expires_at, complete_attempts, cleanup_attempts, created_at)
+       VALUES
+        ($1::uuid, $3::uuid, 'owner-a', 'tenant-a/00000000-0000-7000-8000-000000000503', 'image/png', 8,
+         'uploaded', '2099-01-01T00:00:00Z', 0, 0, now()),
+        ($2::uuid, $3::uuid, 'owner-a', 'tenant-a/00000000-0000-7000-8000-000000000504', 'image/png', 8,
+         'uploaded', '2099-01-01T00:00:00Z', 0, 0, now())`,
+      attachmentUploaded,
+      attachmentRejected,
+      tenantA,
+    );
+    await execute(
+      client,
+      `UPDATE attachments
+          SET status = 'rejected'::attachment_status
+        WHERE id = $1::uuid`,
+      attachmentRejected,
+    );
+    await execute(
+      client,
+      `INSERT INTO events
+       (id, tenant_id, title, event_type, starts_at, ends_at, attendance_deadline,
+        announcement_image_attachment_id, created_by_user_id, updated_by_user_id)
+     VALUES
+       ($1::uuid, $3::uuid, 'テナントA予定', 'practice', '2099-02-01T10:00:00Z', '2099-02-01T12:00:00Z',
+        '2099-02-01T09:00:00Z', $5::uuid, 'owner-a', 'owner-a'),
+       ($2::uuid, $4::uuid, 'テナントB予定', 'practice', '2099-02-01T10:00:00Z', '2099-02-01T12:00:00Z',
+        '2099-02-01T09:00:00Z', NULL, 'owner-b', 'owner-b')`,
+      eventA,
+      eventB,
+      tenantA,
+      tenantB,
+      attachmentA,
+    );
+    await withContext(
+      client,
+      tenantA,
+      'guardian-a2',
+      'guardian',
+      async (tx) => {
+        await execute(
+          tx,
+          `INSERT INTO attendance_responses
+         (id, tenant_id, event_id, user_id, member_id, response)
+       VALUES ('00000000-0000-7000-8000-000000000411', $1::uuid, $2::uuid, 'guardian-a2', $3::uuid, 'attending')`,
+          tenantA,
+          eventA,
+          memberA2,
+        );
+      },
+    );
+    await withContext(client, tenantA, 'owner-a', 'owner', async (tx) => {
+      await execute(
+        tx,
+        `INSERT INTO attendance_responses
+         (id, tenant_id, event_id, user_id, member_id, response)
+       VALUES ('00000000-0000-7000-8000-000000000412', $1::uuid, $2::uuid, 'owner-a', $3::uuid, 'absent')`,
+        tenantA,
+        eventA,
+        memberA,
+      );
+    });
+    await execute(
+      client,
+      `INSERT INTO board_contacts
+       (id, tenant_id, fiscal_year, role_name, role_type, assignee_user_id, line_contact, phone, contact_preference)
+     VALUES ($1::uuid, $2::uuid, 2099, '代表', 'admin', 'admin-a', 'line-contact-a', '090-0000-0000', 'both')`,
+      boardContactA,
+      tenantA,
+    );
+    await execute(
+      client,
+      `INSERT INTO purchase_orders (id, tenant_id, title, deadline, status)
+     VALUES ($1::uuid, $2::uuid, 'テスト購買', '2099-03-01T00:00:00Z', 'open')`,
+      orderA,
+      tenantA,
+    );
+    await execute(
+      client,
+      `INSERT INTO order_products
+       (id, tenant_id, order_id, name, unit_price, options, requires_back_number, requires_back_name)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, '練習着', 1000, '[{"name":"size","values":["M"]}]'::jsonb, false, false)`,
+      productA,
+      tenantA,
+      orderA,
+    );
+    await client.$transaction(async (transaction) => {
+      await execute(
+        transaction as unknown as PrismaClient,
+        `INSERT INTO order_entries
+         (id, tenant_id, order_id, orderer_user_id, orderer_name, member_id, total_amount, payment_status)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, 'guardian-a2', '注文者A', $4::uuid, 1000, 'unpaid')`,
+        entryA,
+        tenantA,
+        orderA,
+        memberA2,
+      );
+      await execute(
+        transaction as unknown as PrismaClient,
+        `INSERT INTO order_lines
+         (id, tenant_id, order_entry_id, product_id, product_name, unit_price, quantity, selected_options, amount)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, '練習着', 1000, 1, '{"size":"M"}'::jsonb, 1000)`,
+        lineA,
+        tenantA,
+        entryA,
+        productA,
+      );
+    });
+    await execute(
+      client,
+      `INSERT INTO order_idempotency_keys
+       (id, tenant_id, actor_user_id, idempotency_key, request_hash, resource_type, resource_id)
+     VALUES ($1::uuid, $2::uuid, 'guardian-a2', 'fixture-key', repeat('c', 64), 'order_entry', $3::uuid)`,
+      idempotencyA,
+      tenantA,
+      entryA,
+    );
+    await execute(
+      client,
+      `INSERT INTO announcements (id, tenant_id, author_user_id, title, body, status, published_at)
+     VALUES ($1::uuid, $2::uuid, 'staff-a', '回覧A', '本文A', 'published', '2099-04-01T00:00:00Z')`,
+      announcementA,
+      tenantA,
+    );
+    await execute(
+      client,
+      `INSERT INTO announcement_attachments
+       (tenant_id, announcement_id, attachment_id, position, media_type, byte_size)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, 0, 'image/png', 8)`,
+      tenantA,
+      announcementA,
+      attachmentA,
+    );
+    await execute(
+      client,
+      `INSERT INTO line_connections (tenant_id, group_id, status, connected_at)
+     VALUES ($1::uuid, 'CcentralA', 'connected', '2099-05-01T00:00:00Z'),
+            ($2::uuid, 'CcentralB', 'connected', '2099-05-01T00:00:00Z')
+     ON CONFLICT (tenant_id) DO UPDATE SET group_id = EXCLUDED.group_id, status = EXCLUDED.status,
+       connected_at = EXCLUDED.connected_at`,
+      tenantA,
+      tenantB,
+    );
+    const notificationRows = await rows<{ id: string }>(
+      client,
+      `INSERT INTO line_notification_queue
+       (tenant_id, group_id, created_by_user_id, source_type, source_id, title, body, deep_link, status)
+     VALUES ($1::uuid, 'CcentralA', 'staff-a', 'event', $2::uuid, '予定通知', '本文', 'https://example.test/events/fixture', 'pending')
+     RETURNING id`,
+      tenantA,
+      eventA,
+    );
+    notificationA = notificationRows[0]?.id ?? '';
+    assert.match(notificationA, /^[0-9a-f-]{36}$/);
+    const notificationUuidRows = await rows<{ is_uuidv7: boolean }>(
+      client,
+      `SELECT app_is_uuidv7($1::uuid) AS is_uuidv7`,
+      notificationA,
+    );
+    assert.equal(notificationUuidRows[0]?.is_uuidv7, true);
+    await execute(
+      client,
+      `INSERT INTO line_webhook_receipts (tenant_id, group_id, webhook_event_id, received_at)
+     VALUES ($1::uuid, 'CcentralA', 'webhook-fixture', '2099-05-01T00:00:00Z')`,
+      tenantA,
+    );
+    await execute(
+      client,
+      `INSERT INTO ride_plans (id, tenant_id, title, departure_at, status)
+     VALUES ($1::uuid, $2::uuid, '送迎A', '2099-06-01T08:00:00Z', 'draft')`,
+      ridePlanA,
+      tenantA,
+    );
+    await execute(
+      client,
+      `UPDATE ride_plans SET status = 'open' WHERE id = $1::uuid`,
+      ridePlanA,
+    );
+    await execute(
+      client,
+      `INSERT INTO ride_offers (id, tenant_id, plan_id, driver_user_id, capacity, status)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, 'staff-a', 4, 'open')`,
+      rideOfferA,
+      tenantA,
+      ridePlanA,
+    );
+    await execute(
+      client,
+      `INSERT INTO ride_requests (id, tenant_id, plan_id, member_id, requester_user_id, passenger_count, status)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'guardian-a2', 1, 'pending')`,
+      rideRequestA,
+      tenantA,
+      ridePlanA,
+      memberA2,
+    );
+    await execute(
+      client,
+      `INSERT INTO ride_assignments (id, tenant_id, plan_id, request_id, offer_id, passenger_count)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 1)`,
+      rideAssignmentA,
+      tenantA,
+      ridePlanA,
+      rideRequestA,
+      rideOfferA,
+    );
+    await execute(
+      client,
+      `INSERT INTO audit_logs (id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata)
+     VALUES ($1::uuid, $2::uuid, 'admin-a', 'board_contact.update', 'board_contact', $3::uuid, '{"hasPhone":true}'::jsonb)`,
+      auditA,
+      tenantA,
+      boardContactA,
+    );
+  });
+}
+
+async function cleanupFixture(client: PrismaClient) {
+  return withRlsDisabled(client, async () => {
+    await client.$transaction(async (transaction) => {
+      const tx = transaction as unknown as PrismaClient;
+      await execute(
+        tx,
+        `SELECT set_config('app.tenant_id', $1, true),
+                set_config('app.user_id', 'owner-a', true),
+                set_config('app.role', 'owner', true),
+                set_config('app.ride_reopen_reason', 'other', true)`,
+        tenantA,
+      );
+      await execute(
+        tx,
+        `UPDATE ride_plans SET status = 'closed'::ride_plan_status WHERE id = $1::uuid`,
+        ridePlanA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM ride_assignments WHERE id = $1::uuid`,
+        rideAssignmentA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM ride_requests WHERE id = $1::uuid`,
+        rideRequestA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM ride_offers WHERE id = $1::uuid`,
+        rideOfferA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM ride_plans WHERE id = $1::uuid`,
+        ridePlanA,
+      );
+      if (notificationA) {
+        await execute(
+          tx,
+          `DELETE FROM line_notification_queue WHERE id = $1::uuid`,
+          notificationA,
+        );
+      }
+      await execute(
+        tx,
+        `DELETE FROM line_webhook_receipts WHERE group_id = 'CcentralA'`,
+      );
+      await execute(
+        tx,
+        `DELETE FROM line_connections WHERE tenant_id IN ($1::uuid, $2::uuid)`,
+        tenantA,
+        tenantB,
+      );
+      await execute(
+        tx,
+        `DELETE FROM announcement_reads WHERE announcement_id = $1::uuid`,
+        announcementA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM announcement_attachments WHERE announcement_id = $1::uuid`,
+        announcementA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM announcements WHERE id = $1::uuid`,
+        announcementA,
+      );
+      // 注文明細を先に消すと合計不一致になるため、fixture削除中だけ遅延検証を止める。
+      await execute(
+        tx,
+        `ALTER TABLE order_entries DISABLE TRIGGER order_entries_total_guard`,
+      );
+      await execute(
+        tx,
+        `ALTER TABLE order_lines DISABLE TRIGGER order_lines_total_guard`,
+      );
+      await execute(tx, `DELETE FROM order_lines WHERE id = $1::uuid`, lineA);
+      await execute(
+        tx,
+        `DELETE FROM order_entries WHERE id = $1::uuid`,
+        entryA,
+      );
+      await execute(
+        tx,
+        `ALTER TABLE order_lines ENABLE TRIGGER order_lines_total_guard`,
+      );
+      await execute(
+        tx,
+        `ALTER TABLE order_entries ENABLE TRIGGER order_entries_total_guard`,
+      );
+      await execute(
+        tx,
+        `DELETE FROM order_idempotency_keys WHERE id = $1::uuid`,
+        idempotencyA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM order_products WHERE id = $1::uuid`,
+        productA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM purchase_orders WHERE id = $1::uuid`,
+        orderA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM board_contacts WHERE id = $1::uuid`,
+        boardContactA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM attendance_responses WHERE event_id IN ($1::uuid, $2::uuid)`,
+        eventA,
+        eventB,
+      );
+      await execute(
+        tx,
+        `DELETE FROM events WHERE id IN ($1::uuid, $2::uuid)`,
+        eventA,
+        eventB,
+      );
+      await execute(
+        tx,
+        `DELETE FROM attachments
+          WHERE id IN ($1::uuid, $2::uuid, $3::uuid, $4::uuid)`,
+        attachmentA,
+        attachmentB,
+        attachmentUploaded,
+        attachmentRejected,
+      );
+      // 監査ログは本番契約で追記専用のため、fixture cleanupだけtriggerを一時停止する。
+      await execute(
+        tx,
+        `ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_append_only_guard`,
+      );
+      await execute(
+        tx,
+        `DELETE FROM audit_logs
+          WHERE id = $1::uuid OR resource_id = $2::uuid`,
+        auditA,
+        ridePlanA,
+      );
+      await execute(
+        tx,
+        `ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_append_only_guard`,
+      );
+      await execute(
+        tx,
+        `DELETE FROM guardian_members WHERE user_id = 'guardian-a2' AND tenant_id = $1::uuid`,
+        tenantA,
+      );
+      await execute(
+        tx,
+        `DELETE FROM tenant_memberships WHERE user_id IN ('admin-a', 'staff-a', 'guardian-a2') AND tenant_id = $1::uuid`,
+        tenantA,
+      );
+    });
+  });
+}
+
+test('中央機能のRLSはtenant、role、担当部員、状態遷移をDBで強制する', {
+  skip: !enabled,
+}, async () => {
+  app = new PrismaClient({ datasources: { db: { url: appUrl } } });
+  direct = new PrismaClient({ datasources: { db: { url: directUrl } } });
+  finalizer = new PrismaClient({ datasources: { db: { url: appUrl } } });
+  await cleanupFixture(direct);
+  await seedFixture(direct);
+
+  const identity = await rows<{ current_user: string; rolbypassrls: boolean }>(
+    app,
+    `SELECT current_user, rolbypassrls FROM pg_roles WHERE rolname = current_user`,
+  );
+  assert.equal(identity[0]?.current_user, 'cocolo_app');
+  assert.equal(identity[0]?.rolbypassrls, false);
+
+  const tables = [
+    'events',
+    'attendance_responses',
+    'board_contacts',
+    'purchase_orders',
+    'order_products',
+    'order_entries',
+    'order_lines',
+    'order_idempotency_keys',
+    'attachments',
+    'announcements',
+    'announcement_reads',
+    'line_connections',
+    'line_notification_queue',
+    'line_webhook_receipts',
+    'ride_plans',
+    'ride_offers',
+    'ride_requests',
+    'ride_assignments',
+  ];
+  for (const table of tables) {
+    const privilege = await rows<{ allowed: boolean }>(
+      app,
+      `SELECT has_table_privilege(current_user, $1, 'SELECT') AS allowed`,
+      table,
+    );
+    assert.equal(
+      privilege[0]?.allowed,
+      table !== 'board_contacts' && table !== 'ride_plans',
+      `${table}のSELECT grant`,
+    );
+  }
+  for (const functionName of [
+    'app_board_contact_rows(uuid,integer,boolean)',
+    'app_board_contact_manager_row(uuid,uuid)',
+    'app_board_contact_role_exists(uuid,integer,character varying,uuid)',
+  ]) {
+    const privilege = await rows<{ allowed: boolean }>(
+      app,
+      `SELECT has_function_privilege(current_user, $1, 'EXECUTE') AS allowed`,
+      functionName,
+    );
+    assert.equal(privilege[0]?.allowed, true, `${functionName}のEXECUTE grant`);
+  }
+
+  await withContext(app, tenantA, 'owner-a', 'owner', async (tx) => {
+    assert.equal(await count(tx, 'events'), 1);
+    assert.ok((await count(tx, 'members')) > 0);
+    assert.equal(await count(tx, 'attendance_responses'), 2);
+    assert.equal(await countBoardContacts(tx, tenantA, 'owner'), 1);
+    assert.equal(await count(tx, 'purchase_orders'), 1);
+    assert.equal(
+      await count(tx, 'attachments', "status = 'available'::attachment_status"),
+      1,
+    );
+    assert.equal(await count(tx, 'announcements'), 1);
+    assert.equal(await count(tx, 'line_notification_queue'), 1);
+    assert.equal(await count(tx, 'ride_assignments'), 1);
+    assert.equal(await count(tx, 'line_webhook_receipts'), 1);
+    assert.equal(await count(tx, 'audit_logs'), 1);
+    assert.equal(
+      (
+        await rows<{ phone: string; metadata: string }>(
+          tx,
+          `SELECT board_contact.phone,
+                  (SELECT metadata::text FROM audit_logs WHERE id = $1::uuid) AS metadata
+             FROM app_board_contact_manager_row($2::uuid, $3::uuid) AS board_contact`,
+          auditA,
+          tenantA,
+          boardContactA,
+        )
+      )[0]?.metadata.includes('090-'),
+      false,
+    );
+    await rejects(() =>
+      rows(
+        tx,
+        `SELECT phone FROM board_contacts WHERE id = $1::uuid`,
+        boardContactA,
+      ),
+    );
+  });
+
+  await withContext(app, tenantA, 'owner-a', 'admin', async (tx) => {
+    assert.equal(await count(tx, 'members'), 0);
+    await rejects(() =>
+      execute(
+        tx,
+        `INSERT INTO members
+             (id, tenant_id, name, kana, category, status)
+             VALUES ('00000000-0000-7000-8000-000000000299', $1::uuid, '不正role', 'ふせいrole', 'student'::member_category, 'active'::member_status)`,
+        tenantA,
+      ),
+    );
+  });
+
+  await withContext(app, tenantB, 'owner-b', 'owner', async (tx) => {
+    assert.equal(await count(tx, 'events'), 1);
+    assert.equal(
+      await count(tx, 'attachments', "status = 'available'::attachment_status"),
+      1,
+    );
+    assert.equal(await count(tx, 'line_connections'), 1);
+    assert.equal(await count(tx, 'purchase_orders'), 0);
+  });
+
+  await withContext(app, tenantA, 'guardian-a2', 'guardian', async (tx) => {
+    assert.equal(await count(tx, 'attendance_responses'), 1);
+    assert.equal(
+      await count(tx, 'attachments', "status = 'available'::attachment_status"),
+      1,
+    );
+    assert.equal(await count(tx, 'order_entries'), 1);
+    assert.equal(await count(tx, 'order_lines'), 1);
+    assert.equal(await count(tx, 'ride_requests'), 1);
+    assert.equal(await count(tx, 'ride_assignments'), 0);
+    assert.equal(await count(tx, 'line_notification_queue'), 0);
+    await rejects(() =>
+      execute(
+        tx,
+        `INSERT INTO attendance_responses
+             (id, tenant_id, event_id, user_id, member_id, response)
+             VALUES ('00000000-0000-7000-8000-000000000413', $1::uuid, $2::uuid, 'guardian-a2', $3::uuid, 'absent')`,
+        tenantA,
+        eventA,
+        memberA,
+      ),
+    );
+  });
+
+  await withContext(app, tenantA, 'admin-a', 'admin', async (tx) => {
+    await execute(
+      tx,
+      `UPDATE ride_requests SET status = 'assigned'::ride_request_status WHERE id = $1::uuid`,
+      rideRequestA,
+    );
+    await execute(
+      tx,
+      `UPDATE ride_plans SET status = 'closed'::ride_plan_status WHERE id = $1::uuid`,
+      ridePlanA,
+    );
+    await execute(
+      tx,
+      `UPDATE ride_plans SET status = 'finalized'::ride_plan_status WHERE id = $1::uuid`,
+      ridePlanA,
+    );
+  });
+
+  if (!direct || !finalizer) {
+    throw new Error('実DBのdirect/finalizer clientが初期化されていません。');
+  }
+  await withContext(app, tenantA, 'owner-a', 'owner', async (tx) => {
+    await execute(
+      tx,
+      `SELECT set_config('app.ride_reopen_reason', 'other', true)`,
+    );
+    await execute(
+      tx,
+      `UPDATE ride_plans SET status = 'closed'::ride_plan_status WHERE id = $1::uuid`,
+      ridePlanA,
+    );
+  });
+
+  // 確定処理が保持するplan lockに表示名更新も参加し、確定後変更を防ぐ。
+  let releaseFinalization = () => undefined;
+  const finalizationGate = new Promise<void>((resolve) => {
+    releaseFinalization = resolve;
+  });
+  let signalFinalizationReady = () => undefined;
+  let rejectFinalizationReady = (_error: unknown) => undefined;
+  const finalizationReady = new Promise<void>((resolve, reject) => {
+    signalFinalizationReady = resolve;
+    rejectFinalizationReady = reject;
+  });
+  const finalization = withContext(
+    finalizer,
+    tenantA,
+    'admin-a',
+    'admin',
+    async (tx) => {
+      await execute(
+        tx,
+        `UPDATE ride_plans SET status = 'finalized'::ride_plan_status WHERE id = $1::uuid`,
+        ridePlanA,
+      );
+      signalFinalizationReady();
+      await finalizationGate;
+    },
+  );
+  void finalization.catch((error) => {
+    rejectFinalizationReady(error);
+  });
+  let profileUpdate: Promise<unknown> | undefined;
+  try {
+    await finalizationReady;
+    let signalProfileReady = (_pid: number) => undefined;
+    let rejectProfileReady = (_error: unknown) => undefined;
+    const profileReady = new Promise<number>((resolve, reject) => {
+      signalProfileReady = resolve;
+      rejectProfileReady = reject;
+    });
+    profileUpdate = withContext(
+      app,
+      tenantA,
+      'staff-a',
+      'staff',
+      async (tx) => {
+        const profilePidRows = await rows<{ pid: number }>(
+          tx,
+          `SELECT pg_backend_pid()::int AS pid`,
+        );
+        const profilePid = Number(profilePidRows[0]?.pid);
+        assert.ok(Number.isInteger(profilePid) && profilePid > 0);
+        signalProfileReady(profilePid);
+        await rows(
+          tx,
+          `SELECT app_set_ride_display_name($1::uuid, $2::text)`,
+          tenantA,
+          '送迎担当 競合確認',
+        );
+      },
+    );
+    void profileUpdate.catch((error) => {
+      rejectProfileReady(error);
+    });
+    const profilePid = await profileReady;
+    await waitForAdvisoryLockWait(direct, profilePid);
+    releaseFinalization();
+    await finalization;
+    await assert.rejects(profileUpdate, /確定公開中の運転者名/);
+    const unchanged = await rows<{ display_name: string }>(
+      direct,
+      `SELECT display_name FROM tenant_memberships WHERE tenant_id = $1::uuid AND user_id = 'staff-a'`,
+      tenantA,
+    );
+    assert.equal(unchanged[0]?.display_name, '送迎担当 staff-a');
+  } finally {
+    releaseFinalization();
+    await finalization.catch(() => undefined);
+    await profileUpdate?.catch(() => undefined);
+  }
+
+  await withContext(app, tenantA, 'guardian-a2', 'guardian', async (tx) => {
+    assert.equal(await count(tx, 'ride_assignments'), 1);
+    assert.equal(await count(tx, 'ride_offers'), 1);
+    assert.equal(
+      (
+        await rows<{ capacity: number }>(
+          tx,
+          `SELECT capacity FROM ride_offers WHERE id = $1::uuid`,
+          rideOfferA,
+        )
+      )[0]?.capacity,
+      4,
+    );
+  });
+
+  await withContext(app, tenantA, 'staff-a', 'staff', async (tx) => {
+    assert.equal(await countBoardContacts(tx, tenantA, 'staff'), 1);
+    const publicContacts = await rows<{ phone: string | null }>(
+      tx,
+      `SELECT phone
+         FROM app_board_contact_rows($1::uuid, NULL::integer, false)`,
+      tenantA,
+    );
+    assert.equal(publicContacts[0]?.phone, null);
+    assert.equal(await count(tx, 'events'), 1);
+    assert.equal(await count(tx, 'purchase_orders'), 0);
+  });
+
+  await withContext(app, tenantA, 'guardian-a2', 'guardian', async (tx) => {
+    // guardianは公開projectionだけを参照でき、管理用テーブルへ変更を加えない。
+    assert.equal(await countBoardContacts(tx, tenantA, 'guardian'), 1);
+  });
+
+  await withContext(app, tenantA, 'owner-a', 'owner', async (tx) => {
+    await rejects(() =>
+      execute(
+        tx,
+        `UPDATE purchase_orders SET status = 'completed' WHERE id = $1::uuid`,
+        orderA,
+      ),
+    );
+    await rejects(() =>
+      execute(
+        tx,
+        `UPDATE attachments SET status = 'uploaded', deleted_at = NULL WHERE id = $1::uuid`,
+        attachmentA,
+      ),
+    );
+    await rejects(() =>
+      execute(
+        tx,
+        `INSERT INTO announcement_attachments
+           (tenant_id, announcement_id, attachment_id, position, media_type, byte_size)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, 1, 'image/png', 8)`,
+        tenantA,
+        announcementA,
+        attachmentUploaded,
+      ),
+    );
+    await rejects(() =>
+      execute(
+        tx,
+        `INSERT INTO announcement_attachments
+           (tenant_id, announcement_id, attachment_id, position, media_type, byte_size)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, 1, 'image/png', 8)`,
+        tenantA,
+        announcementA,
+        attachmentRejected,
+      ),
+    );
+    await rejects(() =>
+      execute(
+        tx,
+        `UPDATE announcement_attachments
+            SET attachment_id = $1::uuid
+          WHERE tenant_id = $2::uuid
+            AND announcement_id = $3::uuid
+            AND attachment_id = $4::uuid`,
+        attachmentUploaded,
+        tenantA,
+        announcementA,
+        attachmentA,
+      ),
+    );
+    await rejects(() =>
+      execute(
+        tx,
+        `UPDATE attachments
+            SET status = 'deleted'::attachment_status,
+                deleted_at = now()
+          WHERE id = $1::uuid`,
+        attachmentA,
+      ),
+    );
+    await rejects(() =>
+      execute(
+        tx,
+        `UPDATE line_notification_queue SET status = 'sent', sent_at = now() WHERE id = $1::uuid`,
+        notificationA,
+      ),
+    );
+    await rejects(() =>
+      execute(
+        tx,
+        `UPDATE audit_logs SET action = 'tampered' WHERE id = $1::uuid`,
+        auditA,
+      ),
+    );
+    await rejects(() =>
+      execute(
+        tx,
+        `INSERT INTO events
+             (id, tenant_id, title, event_type, starts_at, ends_at, attendance_deadline, announcement_image_attachment_id, created_by_user_id, updated_by_user_id)
+           VALUES ('00000000-0000-7000-8000-000000000499', $1::uuid, '越境', 'practice', '2099-02-01T10:00:00Z', '2099-02-01T12:00:00Z', '2099-02-01T09:00:00Z', $2::uuid, 'owner-a', 'owner-a')`,
+        tenantA,
+        attachmentB,
+      ),
+    );
+  });
+
+  if (!direct) throw new Error('実DBのdirect clientが初期化されていません。');
+  await execute(
+    direct,
+    `UPDATE tenant_memberships
+        SET status = 'suspended'::membership_status
+      WHERE tenant_id = $1::uuid AND user_id = 'admin-a'`,
+    tenantA,
+  );
+  try {
+    await withContext(app, tenantA, 'admin-a', 'admin', async (tx) => {
+      assert.equal(await count(tx, 'tenants'), 0);
+      assert.equal(await count(tx, 'members'), 0);
+    });
+  } finally {
+    await execute(
+      direct,
+      `UPDATE tenant_memberships
+          SET status = 'active'::membership_status
+        WHERE tenant_id = $1::uuid AND user_id = 'admin-a'`,
+      tenantA,
+    );
+  }
+  await execute(
+    direct,
+    `UPDATE guardian_members
+        SET status = 'revoked'::member_link_status
+      WHERE tenant_id = $1::uuid
+        AND user_id = 'guardian-a2'
+        AND member_id = $2::uuid`,
+    tenantA,
+    memberA2,
+  );
+  await withContext(app, tenantA, 'guardian-a2', 'guardian', async (tx) => {
+    assert.equal(await count(tx, 'order_entries'), 0);
+    assert.equal(await count(tx, 'order_lines'), 0);
+  });
+  await execute(
+    direct,
+    `UPDATE guardian_members
+        SET status = 'active'::member_link_status
+      WHERE tenant_id = $1::uuid
+        AND user_id = 'guardian-a2'
+        AND member_id = $2::uuid`,
+    tenantA,
+    memberA2,
+  );
+
+  const noContext = await app.$transaction(async (tx) => {
+    await execute(
+      tx as unknown as PrismaClient,
+      `SELECT set_config('app.tenant_id', '', true), set_config('app.user_id', '', true), set_config('app.role', '', true)`,
+    );
+    return Promise.all([
+      count(tx as unknown as PrismaClient, 'events'),
+      count(tx as unknown as PrismaClient, 'attachments'),
+    ]);
+  });
+  assert.deepEqual(noContext, [0, 0]);
+
+  const systemRepository = createSystemAdminRepository(app);
+  await execute(
+    direct,
+    `DELETE FROM system_announcements
+      WHERE id IN ($1::uuid, $2::uuid)`,
+    systemPublishedAnnouncement,
+    systemDraftAnnouncement,
+  );
+  await execute(
+    direct,
+    `INSERT INTO system_announcements
+      (id, title, body, status, published_at, created_by_user_id)
+     VALUES
+       ($1::uuid, '公開告知', '本文', 'published', now(), 'system-admin'),
+       ($2::uuid, '下書き', '本文', 'draft', NULL, 'system-admin')`,
+    systemPublishedAnnouncement,
+    systemDraftAnnouncement,
+  );
+  try {
+    assert.deepEqual(
+      (
+        await systemRepository.listPublishedAnnouncements({
+          tenantId: tenantA,
+          userId: 'owner-a',
+          role: 'owner',
+        })
+      ).map((item) => item.id),
+      [systemPublishedAnnouncement],
+    );
+    assert.deepEqual(
+      (
+        await systemRepository.listPublishedAnnouncements({
+          tenantId: tenantB,
+          userId: 'owner-b',
+          role: 'owner',
+        })
+      ).map((item) => item.id),
+      [systemPublishedAnnouncement],
+    );
+    await execute(
+      direct,
+      `UPDATE tenant_memberships
+          SET status = 'suspended'::membership_status
+        WHERE tenant_id = $1::uuid AND user_id = 'owner-c'`,
+      tenantC,
+    );
+    assert.deepEqual(
+      await systemRepository.listPublishedAnnouncements({
+        tenantId: tenantC,
+        userId: 'owner-c',
+        role: 'owner',
+      }),
+      [],
+    );
+  } finally {
+    await execute(
+      direct,
+      `UPDATE tenant_memberships
+          SET status = 'active'::membership_status
+        WHERE tenant_id = $1::uuid AND user_id = 'owner-c'`,
+      tenantC,
+    );
+    await execute(
+      direct,
+      `DELETE FROM system_announcements
+        WHERE id IN ($1::uuid, $2::uuid)`,
+      systemPublishedAnnouncement,
+      systemDraftAnnouncement,
+    );
+  }
+});
+
+after(async () => {
+  if (direct) await cleanupFixture(direct);
+  await app?.$disconnect();
+  await direct?.$disconnect();
+  await finalizer?.$disconnect();
+});

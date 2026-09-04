@@ -1,0 +1,772 @@
+import { randomBytes } from 'node:crypto';
+import {
+  type AttendanceResponse,
+  assertAttendanceChangeAllowed,
+  assertValidEventSchedule,
+  type EventRole,
+  type EventType,
+  summarizeAttendance,
+} from '@cocolo/domain/event';
+import { Prisma, type PrismaClient } from '@prisma/client';
+import { enqueueEventLineDelivery } from './index.js';
+import { findAuthorizedSubjectMember } from './subject-member-access.js';
+import { uuidv7 } from './uuidv7.js';
+
+export type EventRecord = {
+  id: string;
+  tenantId: string;
+  title: string;
+  type: EventType;
+  startsAt: string;
+  endsAt: string;
+  location: string | null;
+  itemsToBring: string | null;
+  fee: number;
+  announcementImageAttachmentId: string | null;
+  opponent: string | null;
+  meetingTime: string | null;
+  transportationRequired: boolean;
+  attendanceDeadline: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AttendanceRecord = {
+  id: string;
+  eventId: string;
+  userId: string;
+  memberId: string;
+  response: AttendanceResponse;
+  correctionReason: string | null;
+  respondedAt: string;
+  updatedAt: string;
+};
+
+export type AttendanceSummary = ReturnType<typeof summarizeAttendance> & {
+  totalMembers: number;
+  unansweredMemberIds: string[];
+};
+
+export type EventRepositoryInput = {
+  tenantId: string;
+  actorUserId: string;
+  role: EventRole;
+};
+
+export class EventNotFoundError extends Error {
+  readonly status = 404;
+
+  constructor(message = '予定が見つかりません。') {
+    super(message);
+    this.name = 'EventNotFoundError';
+  }
+}
+
+export class EventAuthorizationError extends Error {
+  readonly status = 403;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'EventAuthorizationError';
+  }
+}
+
+export class EventValidationError extends Error {
+  readonly status = 400;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'EventValidationError';
+  }
+}
+
+export type EventRepository = {
+  list: (
+    input: EventRepositoryInput & { from: Date; to: Date },
+  ) => Promise<EventRecord[]>;
+  /** 所属テナントとDBのRLS境界を通過した予定だけを返す。 */
+  get: (
+    input: EventRepositoryInput & { eventId: string },
+  ) => Promise<EventRecord>;
+  create: (
+    input: EventRepositoryInput & EventWriteInput,
+  ) => Promise<EventRecord>;
+  update: (
+    input: EventRepositoryInput & {
+      eventId: string;
+    } & Partial<EventWriteInput>,
+  ) => Promise<EventRecord>;
+  upsertAttendance: (
+    input: EventRepositoryInput & {
+      eventId: string;
+      memberId: string;
+      response: AttendanceResponse;
+      correctionReason?: string | null;
+    },
+  ) => Promise<AttendanceRecord>;
+  currentAttendance: (
+    input: EventRepositoryInput & { eventId: string },
+  ) => Promise<AttendanceRecord[]>;
+  summary: (
+    input: EventRepositoryInput & { eventId: string },
+  ) => Promise<AttendanceSummary>;
+};
+
+export type EventWriteInput = {
+  title: string;
+  type: EventType;
+  startsAt: Date;
+  endsAt: Date;
+  location?: string | null;
+  itemsToBring?: string | null;
+  fee: number;
+  announcementImageAttachmentId?: string | null;
+  opponent?: string | null;
+  meetingTime?: Date | null;
+  transportationRequired: boolean;
+  attendanceDeadline: Date;
+};
+
+type DatabaseClient = PrismaClient | Prisma.TransactionClient;
+
+type EventRepositoryOptions = {
+  notificationPublicAppUrl?: string;
+  notificationFeatureEnabled?: (
+    input: EventRepositoryInput,
+  ) => Promise<boolean>;
+  now?: () => Date;
+};
+
+const MAX_EVENT_LIST_RANGE_MS = 93 * 24 * 60 * 60 * 1000;
+
+type EventRow = {
+  id: string;
+  tenant_id: string;
+  title: string;
+  event_type: EventType;
+  starts_at: Date;
+  ends_at: Date;
+  location: string | null;
+  items_to_bring: string | null;
+  fee: number;
+  announcement_image_attachment_id: string | null;
+  opponent: string | null;
+  meeting_time: Date | null;
+  transportation_required: boolean;
+  attendance_deadline: Date;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type AttendanceRow = {
+  id: string;
+  event_id: string;
+  user_id: string;
+  member_id: string;
+  response: AttendanceResponse;
+  correction_reason: string | null;
+  responded_at: Date;
+  updated_at: Date;
+};
+
+function uuidV7() {
+  const bytes = randomBytes(16);
+  const timestamp = BigInt(Date.now());
+  for (let index = 5; index >= 0; index -= 1)
+    bytes[index] = Number((timestamp >> BigInt((5 - index) * 8)) & 0xffn);
+  const byte6 = bytes[6];
+  const byte8 = bytes[8];
+  if (byte6 === undefined || byte8 === undefined)
+    throw new Error('UUIDv7の乱数領域を確保できませんでした。');
+  bytes[6] = (byte6 & 0x0f) | 0x70;
+  bytes[8] = (byte8 & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// transaction-localなRLS contextを毎回設定し、connection pool再利用時のtenant残留を防ぐ。
+async function setRlsContext(
+  client: DatabaseClient,
+  input: EventRepositoryInput,
+) {
+  await client.$queryRaw`
+    SELECT
+      set_config('app.tenant_id', ${input.tenantId}, true),
+      set_config('app.user_id', ${input.actorUserId}, true),
+      set_config('app.role', ${input.role}, true)
+  `;
+}
+
+async function assertActiveMembership(
+  client: Prisma.TransactionClient,
+  input: EventRepositoryInput,
+) {
+  const membershipLockKey = `${input.tenantId}:${input.actorUserId}`;
+  await client.$executeRaw`
+    SELECT pg_advisory_xact_lock(hashtextextended(${membershipLockKey}, 0))
+  `;
+  const memberships = await client.$queryRaw<Array<{ active: boolean }>>`
+    SELECT app_lock_active_membership(
+      ${input.tenantId}::uuid,
+      ${input.actorUserId},
+      ${input.role}
+    ) AS active
+  `;
+  if (memberships[0]?.active !== true)
+    throw new Error('有効な所属情報が処理中に変更されました。');
+}
+
+async function lockEvent(
+  client: Prisma.TransactionClient,
+  input: EventRepositoryInput,
+  eventId: string,
+) {
+  const eventLockKey = `event:${input.tenantId}:${eventId}`;
+  await client.$executeRaw`
+    SELECT pg_advisory_xact_lock(hashtextextended(${eventLockKey}, 0))
+  `;
+}
+
+async function assertAvailableAttachment(
+  client: Prisma.TransactionClient,
+  input: EventRepositoryInput,
+  attachmentId: string | null | undefined,
+) {
+  if (!attachmentId) return;
+  const rows = await client.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM attachments
+    WHERE tenant_id = ${input.tenantId}::uuid
+      AND id = ${attachmentId}::uuid
+      AND status = 'available'::attachment_status
+  `;
+  if (!rows[0])
+    throw new EventNotFoundError('利用可能な添付が見つかりません。');
+}
+
+function toEventRecord(row: EventRow): EventRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    title: row.title,
+    type: row.event_type,
+    startsAt: row.starts_at.toISOString(),
+    endsAt: row.ends_at.toISOString(),
+    location: row.location,
+    itemsToBring: row.items_to_bring,
+    fee: row.fee,
+    announcementImageAttachmentId: row.announcement_image_attachment_id,
+    opponent: row.opponent,
+    meetingTime: row.meeting_time?.toISOString() ?? null,
+    transportationRequired: row.transportation_required,
+    attendanceDeadline: row.attendance_deadline.toISOString(),
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+function toAttendanceRecord(row: AttendanceRow): AttendanceRecord {
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    userId: row.user_id,
+    memberId: row.member_id,
+    response: row.response,
+    correctionReason: row.correction_reason,
+    respondedAt: row.responded_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+async function audit(
+  client: Prisma.TransactionClient,
+  input: EventRepositoryInput,
+  action: string,
+  resourceType: string,
+  resourceId: string,
+  metadata: Prisma.InputJsonValue,
+) {
+  await client.$executeRaw`
+    INSERT INTO audit_logs (
+      id, tenant_id, actor_user_id, action, resource_type, resource_id, metadata
+    ) VALUES (
+      ${uuidV7()}::uuid, ${input.tenantId}::uuid, ${input.actorUserId},
+      ${action}, ${resourceType}, ${resourceId}::uuid,
+      ${JSON.stringify(metadata)}::jsonb
+    )
+  `;
+}
+
+async function findAssignedMember(
+  client: Prisma.TransactionClient,
+  input: EventRepositoryInput,
+  memberId: string,
+) {
+  return (await findAuthorizedSubjectMember(client, input, memberId)) !== null;
+}
+
+// イベントと回答を同一transactionで更新し、締切判定・担当部員・監査をDB境界内で確定する。
+export function createEventRepository(
+  client: PrismaClient,
+  options: EventRepositoryOptions = {},
+): EventRepository {
+  const publicAppUrl = options.notificationPublicAppUrl?.replace(/\/$/, '');
+  const now = options.now ?? (() => new Date());
+  const enqueueEventNotifications = async (
+    tx: Prisma.TransactionClient,
+    input: EventRepositoryInput,
+    event: EventRecord,
+    includeCreatedNotification: boolean,
+  ) => {
+    if (!publicAppUrl) return;
+    if (
+      options.notificationFeatureEnabled &&
+      !(await options.notificationFeatureEnabled(input))
+    )
+      return;
+    const connectionRows = await tx.$queryRaw<Array<{ group_id: string }>>`
+      SELECT group_id
+        FROM line_connections
+       WHERE tenant_id = ${input.tenantId}::uuid
+         AND status = 'connected'::line_connection_status
+    `;
+    const destination = connectionRows[0]?.group_id;
+    if (!destination) return;
+
+    const timestamp = now();
+    const deepLink = `${publicAppUrl}/events/${event.id}`;
+    if (includeCreatedNotification)
+      await enqueueEventLineDelivery(tx, {
+        id: uuidv7(),
+        tenantId: input.tenantId,
+        actorUserId: input.actorUserId,
+        role: input.role,
+        sourceType: 'event',
+        sourceId: event.id,
+        destination,
+        title: '予定のお知らせ',
+        body: '予定の詳細を確認してください。',
+        deepLink,
+        idempotencyKey: `event:${event.id}`,
+        deliverAt: timestamp,
+      });
+
+    // 締切の24時間前を通知時刻とし、締切が近い予定は保存直後に送る。
+    const deliverAt = new Date(
+      Math.max(
+        timestamp.getTime(),
+        Date.parse(event.attendanceDeadline) - 24 * 60 * 60 * 1000,
+      ),
+    );
+    await enqueueEventLineDelivery(tx, {
+      id: uuidv7(),
+      tenantId: input.tenantId,
+      actorUserId: input.actorUserId,
+      role: input.role,
+      sourceType: 'deadline',
+      sourceId: event.id,
+      destination,
+      title: '出欠締切のお知らせ',
+      body: '出欠締切が近づいています。予定の詳細を確認してください。',
+      deepLink,
+      idempotencyKey: `deadline:${event.id}`,
+      deliverAt,
+    });
+  };
+  return {
+    list: (input) => {
+      const rangeMs = input.to.getTime() - input.from.getTime();
+      if (
+        !Number.isFinite(rangeMs) ||
+        rangeMs <= 0 ||
+        rangeMs > MAX_EVENT_LIST_RANGE_MS
+      )
+        throw new EventValidationError('検索期間は93日以内にしてください。');
+      return client.$transaction(async (tx) => {
+        await setRlsContext(tx, input);
+        await assertActiveMembership(tx, input);
+        const rows = await tx.$queryRaw<EventRow[]>`
+          SELECT id, tenant_id, title, event_type, starts_at, ends_at,
+                 location, items_to_bring, fee, announcement_image_attachment_id,
+                 opponent, meeting_time, transportation_required,
+                 attendance_deadline, created_at, updated_at
+          FROM events
+          WHERE tenant_id = ${input.tenantId}::uuid
+            AND (
+              (starts_at < ${input.to} AND ends_at > ${input.from})
+              OR (
+                attendance_deadline >= ${input.from}
+                AND attendance_deadline < ${input.to}
+              )
+            )
+          ORDER BY starts_at ASC, id ASC
+          LIMIT 501
+        `;
+        if (rows.length > 500)
+          throw new EventValidationError(
+            '検索結果が多すぎます。検索期間を狭めてください。',
+          );
+        await audit(tx, input, 'event.list', 'event', input.tenantId, {
+          from: input.from.toISOString(),
+          to: input.to.toISOString(),
+        });
+        return rows.map(toEventRecord);
+      });
+    },
+    get: (input) =>
+      client.$transaction(async (tx) => {
+        await setRlsContext(tx, input);
+        await assertActiveMembership(tx, input);
+        const rows = await tx.$queryRaw<EventRow[]>`
+          SELECT id, tenant_id, title, event_type, starts_at, ends_at,
+                 location, items_to_bring, fee, announcement_image_attachment_id,
+                 opponent, meeting_time, transportation_required,
+                 attendance_deadline, created_at, updated_at
+          FROM events
+          WHERE tenant_id = ${input.tenantId}::uuid
+            AND id = ${input.eventId}::uuid
+        `;
+        const row = rows[0];
+        if (!row) throw new EventNotFoundError();
+        await audit(tx, input, 'event.get', 'event', input.eventId, {});
+        return toEventRecord(row);
+      }),
+    create: (input) =>
+      client.$transaction(async (tx) => {
+        await setRlsContext(tx, input);
+        await assertActiveMembership(tx, input);
+        if (!['owner', 'admin', 'staff'].includes(input.role))
+          throw new EventAuthorizationError('予定を登録する権限がありません。');
+        assertValidEventSchedule(input, input.type, input.opponent);
+        await assertAvailableAttachment(
+          tx,
+          input,
+          input.announcementImageAttachmentId,
+        );
+        const id = uuidV7();
+        const rows = await tx.$queryRaw<EventRow[]>`
+          INSERT INTO events (
+            id, tenant_id, title, event_type, starts_at, ends_at, location,
+            items_to_bring, fee, announcement_image_attachment_id, opponent,
+            meeting_time, transportation_required, attendance_deadline,
+            created_by_user_id, updated_by_user_id
+          ) VALUES (
+            ${id}::uuid, ${input.tenantId}::uuid, ${input.title}, ${input.type}::event_type,
+            ${input.startsAt}, ${input.endsAt}, ${input.location ?? null},
+            ${input.itemsToBring ?? null}, ${input.fee},
+            ${input.announcementImageAttachmentId ?? null}::uuid,
+            ${input.opponent ?? null}, ${input.meetingTime ?? null},
+            ${input.transportationRequired}, ${input.attendanceDeadline},
+            ${input.actorUserId}, ${input.actorUserId}
+          )
+          RETURNING id, tenant_id, title, event_type, starts_at, ends_at,
+                    location, items_to_bring, fee, announcement_image_attachment_id,
+                    opponent, meeting_time, transportation_required,
+                    attendance_deadline, created_at, updated_at
+        `;
+        const row = rows[0];
+        if (!row)
+          throw new EventNotFoundError(
+            '予定の登録結果を取得できませんでした。',
+          );
+        await audit(tx, input, 'event.create', 'event', id, {
+          type: input.type,
+          startsAt: input.startsAt.toISOString(),
+        });
+        const created = toEventRecord(row);
+        await enqueueEventNotifications(tx, input, created, true);
+        return created;
+      }),
+    update: (input) =>
+      client.$transaction(async (tx) => {
+        await setRlsContext(tx, input);
+        await assertActiveMembership(tx, input);
+        if (!['owner', 'admin', 'staff'].includes(input.role))
+          throw new EventAuthorizationError('予定を編集する権限がありません。');
+        await lockEvent(tx, input, input.eventId);
+        const currentRows = await tx.$queryRaw<EventRow[]>`
+          SELECT id, tenant_id, title, event_type, starts_at, ends_at,
+                 location, items_to_bring, fee, announcement_image_attachment_id,
+                 opponent, meeting_time, transportation_required,
+                 attendance_deadline, created_at, updated_at
+          FROM events
+          WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
+          FOR UPDATE
+        `;
+        const current = currentRows[0];
+        if (!current) throw new EventNotFoundError();
+        const next = {
+          title: input.title ?? current.title,
+          type: input.type ?? current.event_type,
+          startsAt: input.startsAt ?? current.starts_at,
+          endsAt: input.endsAt ?? current.ends_at,
+          location:
+            input.location === undefined ? current.location : input.location,
+          itemsToBring:
+            input.itemsToBring === undefined
+              ? current.items_to_bring
+              : input.itemsToBring,
+          fee: input.fee ?? current.fee,
+          announcementImageAttachmentId:
+            input.announcementImageAttachmentId === undefined
+              ? current.announcement_image_attachment_id
+              : input.announcementImageAttachmentId,
+          opponent:
+            input.opponent === undefined ? current.opponent : input.opponent,
+          meetingTime:
+            input.meetingTime === undefined
+              ? current.meeting_time
+              : input.meetingTime,
+          transportationRequired:
+            input.transportationRequired ?? current.transportation_required,
+          attendanceDeadline:
+            input.attendanceDeadline ?? current.attendance_deadline,
+        };
+        assertValidEventSchedule(next, next.type, next.opponent);
+        await assertAvailableAttachment(
+          tx,
+          input,
+          next.announcementImageAttachmentId,
+        );
+        const rows = await tx.$queryRaw<EventRow[]>`
+          UPDATE events SET
+            title = ${next.title}, event_type = ${next.type}::event_type,
+            starts_at = ${next.startsAt}, ends_at = ${next.endsAt},
+            location = ${next.location}, items_to_bring = ${next.itemsToBring},
+            fee = ${next.fee}, announcement_image_attachment_id = ${next.announcementImageAttachmentId}::uuid,
+            opponent = ${next.opponent}, meeting_time = ${next.meetingTime},
+            transportation_required = ${next.transportationRequired},
+            attendance_deadline = ${next.attendanceDeadline},
+            updated_by_user_id = ${input.actorUserId}, updated_at = now()
+          WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
+          RETURNING id, tenant_id, title, event_type, starts_at, ends_at,
+                    location, items_to_bring, fee, announcement_image_attachment_id,
+                    opponent, meeting_time, transportation_required,
+                    attendance_deadline, created_at, updated_at
+        `;
+        const row = rows[0];
+        if (!row)
+          throw new EventNotFoundError(
+            '予定の更新結果を取得できませんでした。',
+          );
+        await audit(tx, input, 'event.update', 'event', input.eventId, {
+          fields: Object.keys(input).filter(
+            (key) =>
+              key !== 'tenantId' &&
+              key !== 'actorUserId' &&
+              key !== 'role' &&
+              key !== 'eventId',
+          ),
+        });
+        const updated = toEventRecord(row);
+        await enqueueEventNotifications(tx, input, updated, false);
+        return updated;
+      }),
+    upsertAttendance: (input) =>
+      client.$transaction(async (tx) => {
+        await setRlsContext(tx, input);
+        await assertActiveMembership(tx, input);
+        await lockEvent(tx, input, input.eventId);
+        const eventRows = await tx.$queryRaw<
+          Array<{ attendance_deadline: Date }>
+        >`
+          SELECT attendance_deadline
+          FROM events
+          WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
+        `;
+        const event = eventRows[0];
+        if (!event) throw new EventNotFoundError();
+        const memberRows = await tx.$queryRaw<Array<{ status: string }>>`
+          SELECT status
+          FROM members
+          WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.memberId}::uuid
+        `;
+        if (!memberRows[0] || memberRows[0].status === 'retired')
+          throw new EventNotFoundError('対象部員が見つかりません。');
+        const isAssignedMember = await findAssignedMember(
+          tx,
+          input,
+          input.memberId,
+        );
+        const deadlineRows = await tx.$queryRaw<Array<{ passed: boolean }>>`
+          SELECT now() >= ${event.attendance_deadline} AS passed
+        `;
+        const deadlinePassed = deadlineRows[0]?.passed === true;
+        assertAttendanceChangeAllowed({
+          role: input.role,
+          isAssignedMember,
+          deadlinePassed,
+          correctionReason: input.correctionReason,
+        });
+        const existingRows = await tx.$queryRaw<AttendanceRow[]>`
+          SELECT id, event_id, user_id, member_id, response, correction_reason,
+                 responded_at, updated_at
+          FROM attendance_responses
+          WHERE tenant_id = ${input.tenantId}::uuid
+            AND event_id = ${input.eventId}::uuid
+            AND member_id = ${input.memberId}::uuid
+            AND (
+              (${input.role} = 'guardian' AND user_id = ${input.actorUserId})
+              OR ${input.role} <> 'guardian'
+            )
+          ORDER BY updated_at DESC, id DESC
+          LIMIT 1
+          FOR UPDATE
+        `;
+        const existing = existingRows[0];
+        const responseUserId = existing?.user_id ?? input.actorUserId;
+        let rows: AttendanceRow[];
+        if (existing) {
+          rows = await tx.$queryRaw<AttendanceRow[]>`
+            UPDATE attendance_responses SET
+              response = ${input.response}::attendance_response,
+              correction_reason = ${deadlinePassed ? (input.correctionReason?.trim() ?? null) : null},
+              updated_at = now()
+            WHERE id = ${existing.id}::uuid
+            RETURNING id, event_id, user_id, member_id, response, correction_reason,
+                      responded_at, updated_at
+          `;
+        } else {
+          rows = await tx.$queryRaw<AttendanceRow[]>`
+            INSERT INTO attendance_responses (
+              id, tenant_id, event_id, user_id, member_id, response, correction_reason
+            ) VALUES (
+              ${uuidV7()}::uuid, ${input.tenantId}::uuid, ${input.eventId}::uuid,
+              ${responseUserId}, ${input.memberId}::uuid, ${input.response}::attendance_response,
+              ${deadlinePassed ? (input.correctionReason?.trim() ?? null) : null}
+            )
+            RETURNING id, event_id, user_id, member_id, response, correction_reason,
+                      responded_at, updated_at
+          `;
+        }
+        const row = rows[0];
+        if (!row) throw new Error('出欠回答の保存結果を取得できませんでした。');
+        await audit(
+          tx,
+          input,
+          deadlinePassed ? 'attendance.correct' : 'attendance.upsert',
+          'attendance_response',
+          row.id,
+          {
+            eventId: input.eventId,
+            subjectMemberId: input.memberId,
+            response: input.response,
+            correctionReason: deadlinePassed
+              ? input.correctionReason?.trim()
+              : null,
+          },
+        );
+        return toAttendanceRecord(row);
+      }),
+    currentAttendance: (input) =>
+      client.$transaction(async (tx) => {
+        await setRlsContext(tx, input);
+        await assertActiveMembership(tx, input);
+        const eventRows = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id
+          FROM events
+          WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
+        `;
+        if (!eventRows[0]) throw new EventNotFoundError();
+        const rows = await tx.$queryRaw<AttendanceRow[]>`
+          SELECT DISTINCT ON (member_id)
+                 id, event_id, user_id, member_id, response, correction_reason,
+                 responded_at, updated_at
+          FROM attendance_responses
+          WHERE tenant_id = ${input.tenantId}::uuid
+            AND event_id = ${input.eventId}::uuid
+            AND (
+              ${input.role} <> 'guardian'
+              OR (
+                user_id = ${input.actorUserId}
+                AND EXISTS (
+                  SELECT 1
+                    FROM guardian_members gm
+                   WHERE gm.tenant_id = ${input.tenantId}::uuid
+                     AND gm.user_id = ${input.actorUserId}
+                     AND gm.member_id = attendance_responses.member_id
+                )
+              )
+            )
+          ORDER BY member_id, updated_at DESC, id DESC
+        `;
+        await audit(
+          tx,
+          input,
+          'attendance.current.list',
+          'event',
+          input.eventId,
+          {},
+        );
+        return rows.map(toAttendanceRecord);
+      }),
+    summary: (input) =>
+      client.$transaction(
+        async (tx) => {
+          await setRlsContext(tx, input);
+          await assertActiveMembership(tx, input);
+          if (input.role === 'guardian')
+            throw new EventAuthorizationError(
+              '出欠集計を閲覧する権限がありません。',
+            );
+          await lockEvent(tx, input, input.eventId);
+          const eventRows = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id
+          FROM events
+          WHERE tenant_id = ${input.tenantId}::uuid AND id = ${input.eventId}::uuid
+          FOR UPDATE
+        `;
+          if (!eventRows[0]) throw new EventNotFoundError();
+          const totalRows = await tx.$queryRaw<Array<{ count: bigint }>>`
+          SELECT count(*)::bigint AS count
+          FROM members
+          WHERE tenant_id = ${input.tenantId}::uuid AND status <> 'retired'::member_status
+        `;
+          const responseRows = await tx.$queryRaw<
+            Array<{
+              response: AttendanceResponse;
+              member_id: string;
+              updated_at: Date;
+              id: string;
+            }>
+          >`
+          SELECT DISTINCT ON (member_id) id, response, member_id, updated_at
+          FROM attendance_responses
+          WHERE tenant_id = ${input.tenantId}::uuid AND event_id = ${input.eventId}::uuid
+          ORDER BY member_id, updated_at DESC, id DESC
+        `;
+          const totalMembers = Number(totalRows[0]?.count ?? 0n);
+          const latestResponses = new Map<string, AttendanceResponse>();
+          for (const row of responseRows)
+            if (!latestResponses.has(row.member_id))
+              latestResponses.set(row.member_id, row.response);
+          const counts = summarizeAttendance(totalMembers, [
+            ...latestResponses.values(),
+          ]);
+          const answeredIds = new Set(latestResponses.keys());
+          const memberRows = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id
+          FROM members
+          WHERE tenant_id = ${input.tenantId}::uuid AND status <> 'retired'::member_status
+          ORDER BY id
+        `;
+          await audit(
+            tx,
+            input,
+            'attendance.summary',
+            'event',
+            input.eventId,
+            {},
+          );
+          return {
+            ...counts,
+            totalMembers,
+            unansweredMemberIds: memberRows
+              .map((row) => row.id)
+              .filter((id) => !answeredIds.has(id)),
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+      ),
+  };
+}

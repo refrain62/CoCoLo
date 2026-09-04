@@ -1,0 +1,178 @@
+name: ステージングへデプロイ
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+  attestations: write
+jobs:
+  staging:
+    if: ${{ vars.DEPLOYMENT_PROTECTION_ENABLED == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: staging
+    steps:
+      - name: mainからの手動実行だけを許可
+        run: test "$GITHUB_REF" = "refs/heads/main"
+      - name: 同一SHAの品質集約ゲートとセキュリティゲート成功を確認
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          require_gate() {
+            local workflow_file="$1"
+            local job_name="$2"
+            local run_id
+            run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/${workflow_file##*/}/runs?head_sha=$ARTIFACT_SHA&event=push&status=success&per_page=100" | jq -r --arg sha "$ARTIFACT_SHA" --arg workflow "$workflow_file" '[.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and .event == "push" and ((.path // "" | sub("^\\./"; "") | sub("^/"; "") | sub("@refs/heads/[^/]+$"; "")) == $workflow) and .conclusion == "success")] | .[0].id // empty')"
+            test -n "$run_id"
+            test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" | jq -e --arg job "$job_name" 'any(.jobs[]; .name == $job and .conclusion == "success")')" = true
+          }
+          for attempt in $(seq 1 60); do
+            if require_gate ".github/workflows/quality.yml" "quality aggregate gate" && require_gate ".github/workflows/security-scanners.yml" "security gate"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo '同一SHAの品質集約ゲートとセキュリティゲート成功を確認できませんでした。'
+          exit 1
+      - name: リポジトリを取得
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: pnpmを準備
+        uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996
+        with:
+          version: 10.26.0
+      - name: Node.js環境を準備
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24.12.0
+          cache: pnpm
+      - name: 依存関係を固定インストール
+        run: pnpm install --frozen-lockfile
+      - name: owner bootstrap済みのtrust rootを検証
+        run: pnpm verify:trust-root
+      - name: schema drift成功runを検証
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            schema_drift_run_id="$(gh run list --workflow schema-drift.yml --branch main --limit 20 --json databaseId,headSha,status,conclusion | jq -r --arg sha "$GITHUB_SHA" '.[] | select(.headSha == $sha and .status == "completed" and .conclusion == "success") | .databaseId' | head -n 1)"
+            if [[ -n "$schema_drift_run_id" ]]; then
+              echo "SCHEMA_DRIFT_RUN_ID=$schema_drift_run_id" >> "$GITHUB_ENV"
+              echo "SCHEMA_DRIFT_STATUS=success" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'schema-driftの成功runを取得できませんでした。' >&2
+          exit 1
+      - name: staging環境の設定を検証
+        run: pnpm verify:environment --expected staging
+        env:
+          APP_ENV: staging
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_JWKS_URL: ${{ vars.SUPABASE_JWKS_URL }}
+          SUPABASE_ALLOWED_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ALLOWED_JWKS_URL: ${{ vars.SUPABASE_JWKS_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+          R2_BUCKET: cocolo-staging-private
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          FEATURE_CONTRACT_OPERATOR_TOKEN: ${{ secrets.FEATURE_CONTRACT_OPERATOR_TOKEN }}
+          FEATURE_CONTRACT_GRANT_TOKEN: ${{ secrets.FEATURE_CONTRACT_GRANT_TOKEN }}
+          FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET: ${{ secrets.FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET }}
+          FEATURE_CONTRACT_OPERATOR_HOST: ${{ vars.FEATURE_CONTRACT_OPERATOR_HOST }}
+          FEATURE_CONTRACT_OPERATOR_PORT: ${{ vars.FEATURE_CONTRACT_OPERATOR_PORT }}
+          PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
+          PUBLIC_APP_URL_ALLOWLIST: ${{ vars.PUBLIC_APP_URL_ALLOWLIST }}
+          RATE_LIMIT_STORE: distributed
+          RATE_LIMIT_FAIL_CLOSED: 'true'
+          RATE_LIMIT_ADAPTER_MODULE: ${{ vars.RATE_LIMIT_ADAPTER_MODULE }}
+      - name: 既存UUIDv4行のmigration前検査
+        run: pnpm verify:uuidv7-migration
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      - name: staging環境へマイグレーションを適用
+        run: pnpm --filter @cocolo/db exec prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      - name: PostgreSQLのメジャーバージョンを検証
+        run: pnpm verify:database-version --expected-major 17
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: アプリとマイグレーションの固定リリース成果物を作成
+        run: pnpm build && pnpm package:release --artifact-sha "${GITHUB_SHA}" --output .release
+        env:
+          ARTIFACT_SHA: ${{ github.sha }}
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      - name: リリース成果物を検証
+        run: pnpm verify:release --release-dir .release --artifact-sha "${GITHUB_SHA}"
+      - name: artifactの公開build設定をstaging許可値と照合
+        run: node scripts/release-verify-public-config.ts --release-dir .release
+        env:
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      - name: リリースの出所証明を生成
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: .release/release.tar.gz
+      - name: リリースの出所証明を検証
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh attestation verify .release/release.tar.gz --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/staging-deploy.yml" --source-digest "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)"
+          echo 'ARTIFACT_ATTESTATION_VERIFIED=true' >> "$GITHUB_ENV"
+      - name: staging環境へ配置
+        run: pnpm deploy:staging --artifact-sha "${GITHUB_SHA}" --release-dir .release
+        env:
+          STAGING_DEPLOY_ADAPTER: ${{ secrets.STAGING_DEPLOY_ADAPTER }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+          R2_BUCKET: cocolo-staging-private
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          FEATURE_CONTRACT_OPERATOR_TOKEN: ${{ secrets.FEATURE_CONTRACT_OPERATOR_TOKEN }}
+          FEATURE_CONTRACT_GRANT_TOKEN: ${{ secrets.FEATURE_CONTRACT_GRANT_TOKEN }}
+          FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET: ${{ secrets.FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET }}
+          FEATURE_CONTRACT_OPERATOR_HOST: ${{ vars.FEATURE_CONTRACT_OPERATOR_HOST }}
+          FEATURE_CONTRACT_OPERATOR_PORT: ${{ vars.FEATURE_CONTRACT_OPERATOR_PORT }}
+      - name: staging環境のE2Eスモークテスト
+        run: pnpm test:e2e:staging
+        env:
+          APP_ENV: staging
+          STAGING_BASE_URL: ${{ vars.PUBLIC_APP_URL }}
+          E2E_TEST_EMAIL: ${{ secrets.STAGING_E2E_TEST_EMAIL }}
+          E2E_TEST_PASSWORD: ${{ secrets.STAGING_E2E_TEST_PASSWORD }}
+      - name: staging環境の配置証跡を作成
+        run: node scripts/create-staging-evidence.ts
+        env:
+          ARTIFACT_SHA: ${{ github.sha }}
+          STAGING_BASE_URL: ${{ vars.PUBLIC_APP_URL }}
+          STAGING_DEPLOYMENT_RECORD: .release/deployment-record.json
+      - name: リリース成果物を保存
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: release-${{ github.sha }}
+          path: .release
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+      - name: staging環境の配置証跡を保存
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: staging-evidence-${{ github.sha }}
+          path: .evidence
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3

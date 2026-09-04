@@ -1,0 +1,42 @@
+# 毎回作り直す統合テスト・E2E専用スタックです。
+# 開発用の永続スタックとproject_id、ポート、volumeを分離します。
+project_id = "cocolo-test"
+
+[api]
+enabled = true
+port = 55321
+schemas = ["public"]
+
+[auth]
+enabled = true
+site_url = "http://localhost:4173"
+additional_redirect_urls = ["http://localhost:4173"]
+
+[db]
+port = 55322
+shadow_port = 55320
+major_version = 17
+
+[db.pooler]
+enabled = false
+
+[db.seed]
+enabled = false
+
+[studio]
+enabled = false
+
+[realtime]
+enabled = false
+
+[storage]
+enabled = false
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false
+
+[inbucket]
+enabled = false

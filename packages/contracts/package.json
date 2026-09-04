@@ -1,0 +1,100 @@
+{
+  "name": "@cocolo/contracts",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./observability": {
+      "types": "./src/observability-contract.ts",
+      "import": "./dist/observability-contract.js"
+    },
+    "./runtime-response": {
+      "types": "./src/runtime-response-contract.ts",
+      "import": "./dist/runtime-response-contract.js"
+    },
+    "./upload": {
+      "types": "./src/upload-contract.ts",
+      "import": "./dist/upload-contract.js"
+    },
+    "./member": {
+      "types": "./src/member-contract.ts",
+      "import": "./dist/member-contract.js"
+    },
+    "./line": {
+      "types": "./src/line-contract.ts",
+      "import": "./dist/line-contract.js"
+    },
+    "./board-contact-response": {
+      "types": "./src/board-contact-response-contract.ts",
+      "import": "./dist/board-contact-response-contract.js"
+    },
+    "./orders-response": {
+      "types": "./src/orders-response-contract.ts",
+      "import": "./dist/orders-response-contract.js"
+    },
+    "./line-delivery": {
+      "types": "./src/line-delivery-contract.ts",
+      "import": "./dist/line-delivery-contract.js"
+    },
+    "./auth-team-selection": {
+      "types": "./src/auth-team-selection-contract.ts",
+      "import": "./dist/auth-team-selection-contract.js"
+    },
+    "./ride": {
+      "types": "./src/ride-contract.ts",
+      "import": "./dist/ride-contract.js"
+    },
+    "./ride-response": {
+      "types": "./src/ride-response-contract.ts",
+      "import": "./dist/ride-response-contract.js"
+    },
+    "./orders": {
+      "types": "./src/orders-contract.ts",
+      "import": "./dist/orders-contract.js"
+    },
+    "./bulletin-board": {
+      "types": "./src/bulletin-board-contract.ts",
+      "import": "./dist/bulletin-board-contract.js"
+    },
+    "./bulletin-board-response": {
+      "types": "./src/bulletin-board-response-contract.ts",
+      "import": "./dist/bulletin-board-response-contract.js"
+    },
+    "./events": {
+      "types": "./src/event-contract.ts",
+      "import": "./dist/event-contract.js"
+    },
+    "./subject-member": {
+      "types": "./src/subject-member.ts",
+      "import": "./dist/subject-member.js"
+    },
+    "./auth-invitation": {
+      "types": "./src/auth-invitation.ts",
+      "import": "./dist/auth-invitation.js"
+    },
+    "./feature-contract": {
+      "types": "./src/feature-contract.ts",
+      "import": "./dist/feature-contract.js"
+    },
+    "./system-admin": {
+      "types": "./src/system-admin-contract.ts",
+      "import": "./dist/system-admin-contract.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/generate-openapi.ts && tsc -p tsconfig.build.json",
+    "test": "node --test test/*.test.ts",
+    "test:unit": "node --test test/*.test.ts",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0"
+  }
+}

@@ -1,0 +1,194 @@
+import { createSupabaseTokenVerifier } from '@cocolo/auth';
+import {
+  createMemberRepositories,
+  createPrismaClient,
+  createSystemAdminRepository,
+} from '@cocolo/db';
+import { createAttachmentRepositories } from '@cocolo/db/attachment';
+import { createAuthInvitationRepository } from '@cocolo/db/auth-invitation';
+import { createAuthTeamSelectionRepository } from '@cocolo/db/auth-team-selection';
+import { createBoardContactRepository } from '@cocolo/db/board-contact';
+import { createBulletinBoardRepositories } from '@cocolo/db/bulletin-board';
+import { createEventRepository } from '@cocolo/db/events';
+import { createFeatureContractRepository } from '@cocolo/db/feature-contract';
+import { createPrismaLineRepository } from '@cocolo/db/line';
+import { createPrismaLineWebhookRepository } from '@cocolo/db/line-webhook';
+import { createPrismaOrdersRepository } from '@cocolo/db/orders';
+import { createRideRepository } from '@cocolo/db/ride';
+import { serve } from '@hono/node-server';
+import { createApp } from './app.js';
+import { createR2AttachmentStorageFromEnv } from './features/attachments/r2-real-attachment-storage.js';
+import {
+  createFeatureContractApp,
+  createStaticFeatureContractOperatorAuth,
+} from './features/feature-contract/feature-contract-app.js';
+import {
+  createLineMessagingAdapter,
+  createLineNotificationService,
+} from './features/line-notifications/index.js';
+import { createRideService } from './features/ride-operations/ride-service.js';
+import { resolveLineWebhookReceiverDatabaseUrl } from './line-webhook-environment.js';
+import { readRuntimeEnvironment } from './runtime-environment.js';
+import { loadDistributedRateLimitAdapter } from './security/rate-limit-adapter.js';
+import { createStructuredLogger } from './security/structured-logger.js';
+
+// 起動時に環境境界を検証してから、JWT検証とRLS付きrepositoryを組み立てる。
+const runtime = readRuntimeEnvironment(process.env);
+const port = Number(process.env.PORT ?? 8787);
+const prisma = createPrismaClient();
+const featureContractRepository = createFeatureContractRepository(prisma);
+const systemAdminRepository = createSystemAdminRepository(prisma);
+const notificationFeatureEnabled = async (input: {
+  tenantId: string;
+  actorUserId: string;
+  role: 'owner' | 'admin' | 'staff' | 'guardian';
+}) => {
+  const snapshot = await featureContractRepository.get(input);
+  return (
+    snapshot.features.find((feature) => feature.key === 'line-notifications')
+      ?.enabled === true
+  );
+};
+const repositories = createMemberRepositories(prisma, {
+  notificationPublicAppUrl: runtime.publicAppUrl,
+});
+const eventRepository = createEventRepository(prisma, {
+  notificationPublicAppUrl: runtime.publicAppUrl,
+  notificationFeatureEnabled,
+});
+const lineChannelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
+const lineChannelSecret = process.env.LINE_CHANNEL_SECRET?.trim();
+const lineWebhookDestination = process.env.LINE_WEBHOOK_DESTINATION?.trim();
+const lineFeatureConfigured = Boolean(
+  lineChannelAccessToken && lineChannelSecret && lineWebhookDestination,
+);
+const lineWebhookReceiverDatabaseUrl = resolveLineWebhookReceiverDatabaseUrl({
+  appEnv: runtime.appEnv,
+  databaseUrl: runtime.databaseUrl,
+  configuredUrl: process.env.LINE_WEBHOOK_RECEIVER_DATABASE_URL,
+  lineFeatureConfigured,
+});
+const lineWebhookPrisma = lineWebhookReceiverDatabaseUrl
+  ? createPrismaClient(lineWebhookReceiverDatabaseUrl)
+  : undefined;
+const lineFeature =
+  lineChannelAccessToken && lineChannelSecret && lineWebhookDestination
+    ? {
+        service: createLineNotificationService({
+          repository: createPrismaLineRepository(prisma),
+          webhookRepository: lineWebhookPrisma
+            ? createPrismaLineWebhookRepository(lineWebhookPrisma)
+            : undefined,
+          adapter: createLineMessagingAdapter({
+            channelAccessToken: lineChannelAccessToken,
+          }),
+          channelSecret: lineChannelSecret,
+          webhookDestination: lineWebhookDestination,
+          publicAppUrl: runtime.publicAppUrl,
+          liffId: process.env.LINE_LIFF_ID?.trim() || undefined,
+        }),
+        webhook: Boolean(lineWebhookPrisma),
+      }
+    : undefined;
+const centralFeatures = {
+  authTeamSelection: {
+    repository: createAuthTeamSelectionRepository(prisma),
+  },
+  authInvitations: {
+    repository: createAuthInvitationRepository(prisma),
+    invitationUrlBase: `${runtime.publicAppUrl}/invite`,
+  },
+  attachments: {
+    repository: createAttachmentRepositories(prisma).attachmentRepository,
+    storage: createR2AttachmentStorageFromEnv(process.env),
+  },
+  boardContact: {
+    repository: createBoardContactRepository(prisma),
+  },
+  bulletinBoard: {
+    repository: createBulletinBoardRepositories(prisma, {
+      notificationPublicAppUrl: runtime.publicAppUrl,
+      notificationFeatureEnabled,
+    }).bulletinBoardRepository,
+  },
+  featureContract: {
+    repository: featureContractRepository,
+    ...(runtime.featureContractOperatorToken &&
+    runtime.featureContractGrantToken &&
+    runtime.featureContractProviderWebhookSecret
+      ? {
+          operatorAuth: createStaticFeatureContractOperatorAuth({
+            token: runtime.featureContractOperatorToken,
+            grantToken: runtime.featureContractGrantToken,
+            providerWebhookSecret: runtime.featureContractProviderWebhookSecret,
+          }),
+        }
+      : {}),
+  },
+  orders: {
+    repository: createPrismaOrdersRepository(prisma),
+  },
+  ride: {
+    service: createRideService(createRideRepository(prisma)),
+  },
+  ...(lineFeature ? { line: lineFeature } : {}),
+};
+const distributedRateLimitAdapter = runtime.rateLimitAdapterModule
+  ? await loadDistributedRateLimitAdapter(runtime.rateLimitAdapterModule)
+  : undefined;
+const app = createApp({
+  verifyToken: createSupabaseTokenVerifier({
+    jwksUrl: runtime.supabaseJwksUrl,
+    issuer: runtime.supabaseIssuer,
+    authUserUrl: `${runtime.supabaseUrl}/auth/v1/user`,
+    anonKey: runtime.supabaseAnonKey,
+  }),
+  rateLimit: {
+    environment: runtime.appEnv,
+    mode: runtime.rateLimitStoreMode,
+    namespace: runtime.rateLimitNamespace,
+    adapter: distributedRateLimitAdapter,
+  },
+  cors: { origins: runtime.publicAppUrlAllowlist },
+  observability: {
+    environment: runtime.appEnv,
+    logger: createStructuredLogger(),
+    pathResolver: (context) => context.req.path,
+  },
+  ...repositories,
+  eventRepository,
+  systemAdminRepository,
+  centralFeatures,
+});
+serve({ fetch: app.fetch, port });
+console.log(`CoCoLo API listening on ${port}`);
+if (
+  runtime.featureContractOperatorToken &&
+  runtime.featureContractGrantToken &&
+  runtime.featureContractProviderWebhookSecret &&
+  runtime.featureContractOperatorHost &&
+  runtime.featureContractOperatorPort
+) {
+  if (runtime.featureContractOperatorPort === port)
+    throw new Error(
+      'FEATURE_CONTRACT_OPERATOR_PORTは公開APIのPORTと別の値にしてください。',
+    );
+  const operatorApp = createFeatureContractApp({
+    repository: featureContractRepository,
+    operatorAuth: createStaticFeatureContractOperatorAuth({
+      token: runtime.featureContractOperatorToken,
+      grantToken: runtime.featureContractGrantToken,
+      providerWebhookSecret: runtime.featureContractProviderWebhookSecret,
+    }),
+    includePublicRoutes: false,
+    includeOperatorRoutes: true,
+  });
+  serve({
+    fetch: operatorApp.fetch,
+    hostname: runtime.featureContractOperatorHost,
+    port: runtime.featureContractOperatorPort,
+  });
+  console.log(
+    `CoCoLo feature contract operator listener on ${runtime.featureContractOperatorHost}:${runtime.featureContractOperatorPort}`,
+  );
+}

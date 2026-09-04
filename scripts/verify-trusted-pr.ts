@@ -5,12 +5,30 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertTrustRootReady, readTrustRoot } from './trust-root.ts';
+import { assertPullRequestDescription } from './verify-pr-description.ts';
 
-type PullRequestFile = { filename?: string; status?: string };
-type PullRequestMetadata = { changed_files?: number };
+export type PullRequestFile = {
+  filename?: string;
+  previous_filename?: string;
+  status?: string;
+};
+export type PullRequestMetadata = {
+  changed_files?: number;
+  body?: string | null;
+  user?: { login?: string };
+  base?: {
+    ref?: string;
+    sha?: string;
+    repo?: { full_name?: string };
+  };
+  head?: { repo?: { full_name?: string }; sha?: string };
+};
 type ContentsResponse = { content?: string; encoding?: string };
-type TrustedManifest = { files?: Record<string, string> };
-type BootstrapExtension = {
+type TrustedManifest = {
+  protected_paths?: string[];
+  files?: Record<string, string>;
+};
+export type BootstrapExtension = {
   schema: 1;
   mode: 'owner-only-one-time';
   owner: '@refrain62';
@@ -21,6 +39,11 @@ type BootstrapExtension = {
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const maxChangedFiles = 3000;
 const maxChangedFilePages = 30;
+const ownerLogin = 'refrain62';
+const trustedRepository = 'refrain62/CoCoLo';
+const trustedBaseBranch = 'develop';
+const bootstrapExtensionPath = '.github/security/bootstrap-extension.json';
+const trustedManifestPath = '.github/security/trusted-file-manifest.json';
 
 function sha256(content: Buffer | string): string {
   return createHash('sha256').update(content).digest('hex');
@@ -49,15 +72,143 @@ export function isProtectedPath(filename: string): boolean {
     filename === '.github/CODEOWNERS' ||
     filename.startsWith('.github/security/') ||
     filename.startsWith('.github/workflows/') ||
+    filename === '.gitleaks.toml' ||
+    filename === '.semgrep/ci.yml' ||
+    filename === '.trivy-secret.yaml' ||
     filename === 'package.json' ||
     filename === 'pnpm-lock.yaml' ||
     filename === 'biome.json' ||
     filename === 'tsconfig.scripts.json' ||
+    filename === 'packages/db/package.json' ||
     filename === 'packages/db/prisma/schema.prisma' ||
     filename.startsWith('packages/db/prisma/migrations/') ||
     filename === 'packages/db/prisma/migrations.sha256' ||
     filename.startsWith('scripts/')
   );
+}
+
+export function assertNoProtectedPathRename(
+  filename: string,
+  previousFilename?: string,
+): void {
+  if (previousFilename === undefined) return;
+  assert.ok(
+    !isProtectedPath(filename) && !isProtectedPath(previousFilename),
+    `${filename}: protected pathのrenameは拒否します。`,
+  );
+}
+
+export function assertProtectedPathStatus(
+  filename: string,
+  status: PullRequestFile['status'],
+  isExtensionFile: boolean,
+): void {
+  if (isExtensionFile) {
+    assert.ok(
+      status === 'added' || status === 'modified',
+      `${filename}: extension対象の追加・削除状態が不正です。`,
+    );
+    return;
+  }
+  assert.equal(
+    status,
+    'modified',
+    `${filename}: 追加・削除はfail-closedで拒否します。`,
+  );
+}
+
+export function isOwnerOnlyExtensionRegistrationCandidate(
+  changed: readonly PullRequestFile[],
+): boolean {
+  if (changed.length !== 2) return false;
+  const expected = [bootstrapExtensionPath, trustedManifestPath].sort();
+  const names = changed
+    .map((file) => file.filename)
+    .filter((filename): filename is string => filename !== undefined)
+    .sort();
+  return (
+    names.length === expected.length &&
+    names.every((filename, index) => filename === expected[index]) &&
+    changed.every(
+      (file) =>
+        file.status === 'modified' && file.previous_filename === undefined,
+    )
+  );
+}
+
+export function isOwnerOnlyExtensionRegistration(
+  pullRequest: PullRequestMetadata,
+  repository: string,
+  changed: readonly PullRequestFile[],
+): boolean {
+  return (
+    pullRequest.user?.login === ownerLogin &&
+    pullRequest.head?.repo?.full_name === repository &&
+    isOwnerOnlyExtensionRegistrationCandidate(changed)
+  );
+}
+
+export function assertBootstrapExtensionShape(
+  extension: BootstrapExtension,
+): void {
+  assert.equal(extension.schema, 1, 'bootstrap extensionのschemaが不正です。');
+  assert.equal(extension.mode, 'owner-only-one-time');
+  assert.equal(extension.owner, '@refrain62');
+  assert.match(
+    extension.head_sha,
+    /^[0-9a-f]{40}$/,
+    'bootstrap extensionのhead SHAが不正です。',
+  );
+  assert.notEqual(
+    extension.head_sha,
+    '0'.repeat(40),
+    'bootstrap extensionのhead SHAがゼロSHAです。',
+  );
+  assert.ok(
+    extension.files &&
+      typeof extension.files === 'object' &&
+      !Array.isArray(extension.files),
+    'bootstrap extensionの対象ファイルが不正です。',
+  );
+  assert.ok(
+    Object.keys(extension.files).length > 0,
+    'bootstrap extensionの対象ファイルが空です。',
+  );
+  for (const [filename, expectedHash] of Object.entries(extension.files)) {
+    assert.ok(
+      !path.isAbsolute(filename) && !filename.includes('..'),
+      `${filename}: extension pathが安全ではありません。`,
+    );
+    assert.ok(
+      isProtectedPath(filename),
+      `${filename}: extension対象が保護範囲外です。`,
+    );
+    assert.match(
+      expectedHash,
+      /^[0-9a-f]{64}$/,
+      `${filename}: extension hashが不正です。`,
+    );
+  }
+}
+
+// one-time拡張は保護対象差分のowner先行登録にだけ適用し、後続の非保護差分を塞がない。
+export function assertBootstrapExtensionForChange(
+  extension: BootstrapExtension,
+  headSha: string,
+  protectedChangedNames: readonly string[],
+): void {
+  if (protectedChangedNames.length === 0) return;
+  assertBootstrapExtensionShape(extension);
+  assert.equal(extension.head_sha, headSha);
+  assert.deepEqual(
+    Object.keys(extension.files).sort(),
+    [...protectedChangedNames].sort(),
+    'bootstrap extensionはPRの全保護対象ファイルを過不足なく固定してください。',
+  );
+}
+
+export function hasProtectedChanges(filenames: readonly string[]): boolean {
+  return filenames.some(isProtectedPath);
 }
 
 async function main(): Promise<void> {
@@ -84,13 +235,29 @@ async function main(): Promise<void> {
   assertBootstrapCommitReflected(trustRoot.bootstrap_commit, trustedBaseSha);
 
   const event = JSON.parse(await readFile(eventPath, 'utf8')) as {
-    pull_request?: { number?: number; head?: { sha?: string } };
+    pull_request?: {
+      number?: number;
+      base?: { ref?: string; sha?: string };
+      head?: { sha?: string };
+    };
   };
   const pullRequestNumber = event.pull_request?.number;
   const headSha = event.pull_request?.head?.sha;
+  const eventBaseSha = event.pull_request?.base?.sha;
   assert.ok(pullRequestNumber && headSha, 'PR番号またはhead SHAがありません。');
+  assert.equal(
+    event.pull_request?.base?.ref,
+    trustedBaseBranch,
+    '許可されていないbase branchのPRです。',
+  );
+  assert.equal(
+    eventBaseSha,
+    trustedBaseSha,
+    'イベントのbase SHAとtrust checkerのbase SHAが一致しません。',
+  );
   assert.match(headSha, /^[0-9a-f]{40}$/, 'head SHAが不正です。');
   assert.notEqual(headSha, '0'.repeat(40), 'head SHAがゼロSHAです。');
+  const pullRequestHeadSha = headSha as string;
   const headers = {
     accept: 'application/vnd.github+json',
     authorization: `Bearer ${token}`,
@@ -106,6 +273,31 @@ async function main(): Promise<void> {
   const pullRequest = await githubJson<PullRequestMetadata>(
     `${apiRoot}/pulls/${pullRequestNumber}`,
   );
+  assert.equal(
+    repository,
+    trustedRepository,
+    '想定外のrepositoryでtrust checkerを実行できません。',
+  );
+  assert.equal(
+    pullRequest.base?.repo?.full_name,
+    trustedRepository,
+    'PRのbase repositoryがtrust rootのrepositoryと一致しません。',
+  );
+  assert.equal(
+    pullRequest.base?.ref,
+    trustedBaseBranch,
+    'PRのbase branchが許可されていません。',
+  );
+  assert.equal(
+    pullRequest.base?.sha,
+    trustedBaseSha,
+    'GitHub APIのbase SHAとtrust checkerのbase SHAが一致しません。',
+  );
+  assert.equal(
+    pullRequest.head?.sha,
+    pullRequestHeadSha,
+    'GitHub APIのhead SHAとイベントのhead SHAが一致しません。',
+  );
   const expectedChangedFiles = pullRequest.changed_files;
   assert.ok(
     typeof expectedChangedFiles === 'number' &&
@@ -117,6 +309,7 @@ async function main(): Promise<void> {
     expectedChangedFiles < maxChangedFiles,
     `PRのchanged_filesが上限${maxChangedFiles}件以上です。`,
   );
+  assertPullRequestDescription(pullRequest.body ?? '');
 
   const changed: PullRequestFile[] = [];
   for (let page = 1; changed.length < expectedChangedFiles; page += 1) {
@@ -148,6 +341,15 @@ async function main(): Promise<void> {
     changed.every((file) => typeof file.filename === 'string'),
     'PR files APIにfilenameがない差分があります。',
   );
+  assert.ok(
+    changed.every(
+      (file) =>
+        file.previous_filename === undefined ||
+        (typeof file.previous_filename === 'string' &&
+          file.previous_filename.length > 0),
+    ),
+    'PR files APIのprevious_filenameが不正です。',
+  );
   const changedNames = changed.map((file) => file.filename as string);
   assert.equal(
     new Set(changedNames).size,
@@ -155,10 +357,10 @@ async function main(): Promise<void> {
     'PR files APIが重複したfilenameを返しました。',
   );
 
-  async function headFile(filename: string): Promise<string> {
+  async function fileAt(ref: string, filename: string): Promise<string> {
     const encoded = encodeURIComponent(filename).replaceAll('%2F', '/');
     const response = await githubJson<ContentsResponse>(
-      `${apiRoot}/contents/${encoded}?ref=${headSha}`,
+      `${apiRoot}/contents/${encoded}?ref=${encodeURIComponent(ref)}`,
     );
     assert.equal(
       response.encoding,
@@ -171,6 +373,9 @@ async function main(): Promise<void> {
       'base64',
     ).toString('utf8');
   }
+  async function headFile(filename: string): Promise<string> {
+    return fileAt(pullRequestHeadSha, filename);
+  }
 
   const manifest = JSON.parse(
     await readFile(
@@ -182,6 +387,12 @@ async function main(): Promise<void> {
   assert.ok(
     trustedFiles && Object.keys(trustedFiles).length > 0,
     '信頼対象manifestが空です。',
+  );
+  const verifiedTrustedFiles = trustedFiles as Record<string, string>;
+  assert.deepEqual(
+    manifest.protected_paths?.slice().sort(),
+    ['.gitleaks.toml', '.semgrep/ci.yml', '.trivy-secret.yaml'],
+    'scanner rule fileのtrusted manifest保護対象が不正です。',
   );
   for (const [filename, expectedHash] of Object.entries(trustedFiles)) {
     assert.ok(
@@ -200,6 +411,99 @@ async function main(): Promise<void> {
     );
   }
 
+  async function verifyOwnerOnlyExtensionRegistration(): Promise<void> {
+    const extensionContent = await headFile(bootstrapExtensionPath);
+    const registrationExtension = JSON.parse(
+      extensionContent,
+    ) as BootstrapExtension;
+    assertBootstrapExtensionShape(registrationExtension);
+    assert.notEqual(
+      registrationExtension.head_sha,
+      headSha,
+      'owner-only登録の対象headが登録PR自身です。',
+    );
+
+    const registrationManifest = JSON.parse(
+      await headFile(trustedManifestPath),
+    ) as TrustedManifest;
+    const registrationFiles = registrationManifest.files;
+    assert.ok(
+      registrationFiles && Object.keys(registrationFiles).length > 0,
+      'owner-only登録PRのmanifestが空です。',
+    );
+    const verifiedRegistrationFiles = registrationFiles as Record<
+      string,
+      string
+    >;
+    assert.deepEqual(
+      registrationManifest.protected_paths?.slice().sort(),
+      manifest.protected_paths?.slice().sort(),
+      'owner-only登録PRはscanner rule fileの対象を変更できません。',
+    );
+    assert.deepEqual(
+      Object.keys(verifiedRegistrationFiles).sort(),
+      Object.keys(verifiedTrustedFiles).sort(),
+      'owner-only登録PRはtrusted manifestの対象集合を変更できません。',
+    );
+    for (const [filename, expectedHash] of Object.entries(
+      verifiedTrustedFiles,
+    )) {
+      const registrationHash = verifiedRegistrationFiles[filename];
+      if (filename === bootstrapExtensionPath) {
+        assert.equal(
+          registrationHash,
+          sha256(extensionContent),
+          'owner-only登録PRのbootstrap extension hashが一致しません。',
+        );
+      } else {
+        assert.equal(
+          registrationHash,
+          expectedHash,
+          `${filename}: owner-only登録PRはbootstrap以外のmanifest hashを変更できません。`,
+        );
+      }
+    }
+
+    const targetManifest = JSON.parse(
+      await fileAt(registrationExtension.head_sha, trustedManifestPath),
+    ) as TrustedManifest;
+    assert.deepEqual(
+      targetManifest.protected_paths?.slice().sort(),
+      manifest.protected_paths?.slice().sort(),
+      'owner-only登録の対象headでscanner rule fileの対象を変更できません。',
+    );
+    const targetFiles = targetManifest.files;
+    assert.ok(
+      targetFiles && Object.keys(targetFiles).length > 0,
+      'owner-only登録の対象headのmanifestが空です。',
+    );
+    const verifiedTargetFiles = targetFiles as Record<string, string>;
+    for (const [filename, expectedHash] of Object.entries(
+      registrationExtension.files,
+    )) {
+      const targetContent = await fileAt(
+        registrationExtension.head_sha,
+        filename,
+      );
+      assert.equal(
+        sha256(targetContent),
+        expectedHash,
+        `${filename}: owner-only登録の対象headとhashが一致しません。`,
+      );
+      if (filename !== trustedManifestPath)
+        assert.equal(
+          verifiedTargetFiles[filename],
+          expectedHash,
+          `${filename}: owner-only登録の対象head manifestとextension hashが一致しません。`,
+        );
+    }
+  }
+
+  const protectedChangedNames = changed
+    .filter((file) => file.filename && isProtectedPath(file.filename))
+    .map((file) => file.filename as string)
+    .sort();
+
   let extension: BootstrapExtension | undefined;
   try {
     extension = JSON.parse(
@@ -211,52 +515,36 @@ async function main(): Promise<void> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
-  if (extension) {
-    assert.equal(
-      extension.schema,
-      1,
-      'bootstrap extensionのschemaが不正です。',
-    );
-    assert.equal(extension.mode, 'owner-only-one-time');
-    assert.equal(extension.owner, '@refrain62');
-    assert.equal(extension.head_sha, headSha);
+  if (isOwnerOnlyExtensionRegistrationCandidate(changed)) {
     assert.ok(
-      Object.keys(extension.files).length > 0,
-      'bootstrap extensionの対象ファイルが空です。',
+      isOwnerOnlyExtensionRegistration(pullRequest, repository, changed),
+      'owner-only登録候補のownerまたはhead repositoryが不正です。',
     );
-    for (const [filename, expectedHash] of Object.entries(extension.files)) {
-      assert.ok(
-        isProtectedPath(filename),
-        `${filename}: extension対象が保護範囲外です。`,
-      );
-      assert.match(
-        expectedHash,
-        /^[0-9a-f]{64}$/,
-        `${filename}: extension hashが不正です。`,
-      );
-    }
-    const protectedChangedNames = changed
-      .filter((file) => file.filename && isProtectedPath(file.filename))
-      .map((file) => file.filename as string)
-      .sort();
-    assert.deepEqual(
-      Object.keys(extension.files).sort(),
+    await verifyOwnerOnlyExtensionRegistration();
+    console.log(
+      `owner-only登録PRのhead ${pullRequestHeadSha} と対象headの内容を検証しました。`,
+    );
+    return;
+  }
+  if (extension && hasProtectedChanges(protectedChangedNames)) {
+    assertBootstrapExtensionForChange(
+      extension,
+      headSha,
       protectedChangedNames,
-      'bootstrap extensionはPRの全保護対象ファイルを過不足なく固定してください。',
     );
   }
 
   for (const file of changed) {
     const filename = file.filename as string;
+    assertNoProtectedPathRename(filename, file.previous_filename);
     if (!isProtectedPath(filename)) continue;
-    if (extension?.files[filename] !== undefined) {
-      assert.ok(
-        file.status === 'added' || file.status === 'modified',
-        `${filename}: extension対象の追加・削除状態が不正です。`,
-      );
+    const extensionHash = extension?.files[filename];
+    const isExtensionFile = extensionHash !== undefined;
+    assertProtectedPathStatus(filename, file.status, isExtensionFile);
+    if (isExtensionFile) {
       assert.equal(
         sha256(await headFile(filename)),
-        extension.files[filename],
+        extensionHash,
         `${filename}: owner-only extensionの固定hashとPR headが一致しません。`,
       );
       continue;
@@ -264,11 +552,6 @@ async function main(): Promise<void> {
     assert.ok(
       Object.hasOwn(trustedFiles, filename),
       `${filename}: manifestにない保護対象です。`,
-    );
-    assert.equal(
-      file.status,
-      'modified',
-      `${filename}: 追加・削除はfail-closedで拒否します。`,
     );
     assert.equal(
       sha256(await headFile(filename)),

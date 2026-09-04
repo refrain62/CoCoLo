@@ -1,0 +1,21 @@
+.event-card {
+  border-left: 0.35rem solid var(--cocolo-muted);
+  margin-block: 1rem;
+  padding: 1rem;
+}
+
+.event-card-practice {
+  border-left-color: var(--cocolo-event-practice);
+}
+
+.event-card-match {
+  border-left-color: var(--cocolo-event-match);
+}
+
+.event-card-event {
+  border-left-color: var(--cocolo-event-other);
+}
+
+.event-type {
+  font-weight: 700;
+}

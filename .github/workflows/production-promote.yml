@@ -1,0 +1,128 @@
+name: 本番へ昇格
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  production:
+    if: ${{ vars.DEPLOYMENT_PROTECTION_ENABLED == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    concurrency: production-migration
+    steps:
+      - name: Workflow正本を取得
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: staging環境の証跡と成果物を検証
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_SHA: ${{ inputs.artifact_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          STAGING_RUN_ID="$(gh run list --workflow staging-deploy.yml --branch main --status success --limit 20 --json databaseId,headSha --jq ".[] | select(.headSha == \"$ARTIFACT_SHA\") | .databaseId" | head -n 1)"
+          test -n "$STAGING_RUN_ID"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID" --jq '(.path // "" | sub("^\\./"; "") | sub("^/"; "") | sub("@refs/heads/[^/]+$"; ""))')" = '.github/workflows/staging-deploy.yml'
+          require_gate() {
+            local workflow_file="$1"
+            local job_name="$2"
+            local run_id
+            run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/${workflow_file##*/}/runs?head_sha=$ARTIFACT_SHA&event=push&status=success&per_page=100" | jq -r --arg sha "$ARTIFACT_SHA" --arg workflow "$workflow_file" '[.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and .event == "push" and ((.path // "" | sub("^\\./"; "") | sub("^/"; "") | sub("@refs/heads/[^/]+$"; "")) == $workflow) and .conclusion == "success")] | .[0].id // empty')"
+            test -n "$run_id"
+            test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" | jq -e --arg job "$job_name" 'any(.jobs[]; .name == $job and .conclusion == "success")')" = true
+          }
+          require_gate ".github/workflows/quality.yml" "quality aggregate gate"
+          require_gate ".github/workflows/security-scanners.yml" "security gate"
+          gh run download "$STAGING_RUN_ID" --name "staging-evidence-$ARTIFACT_SHA" --dir .evidence
+          gh run download "$STAGING_RUN_ID" --name "release-$ARTIFACT_SHA" --dir .release
+          jq -e --arg sha "$ARTIFACT_SHA" '(.workflowName == "ステージングへデプロイ" and .workflowPath == ".github/workflows/staging-deploy.yml" and .event == "workflow_dispatch" and .headBranch == "main" and .headSha == $sha and .artifactSha == $sha and .schemaDrift == "success" and (.schemaDriftRunId | type == "string" and length > 0) and .migration == "success" and .smoke == "success" and .e2e == "success")' .evidence/evidence.json
+          test "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)" = "$(cut -d' ' -f1 .release/artifact.sha256)"
+          gh attestation verify .release/release.tar.gz --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/staging-deploy.yml" --source-digest "$(sha256sum .release/release.tar.gz | cut -d' ' -f1)"
+          echo 'ARTIFACT_ATTESTATION_VERIFIED=true' >> "$GITHUB_ENV"
+      - name: 検証済みSHAのリポジトリをcheckout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          clean: false
+          persist-credentials: false
+          ref: ${{ inputs.artifact_sha }}
+      - name: pnpmを準備
+        uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996
+        with:
+          version: 10.26.0
+      - name: Node.js環境を準備
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24.12.0
+          cache: pnpm
+      - name: 依存関係を固定インストール
+        run: pnpm install --frozen-lockfile
+      - name: owner bootstrap済みのtrust rootを検証
+        run: pnpm verify:trust-root
+      - name: リリース成果物を展開
+        run: mkdir -p .release/extracted && tar -xzf .release/release.tar.gz -C .release/extracted
+      - name: リリースmanifestをarchive内と照合
+        run: test -f .release/extracted/release-manifest.json && cmp .release/release-manifest.json .release/extracted/release-manifest.json
+      - name: production環境の設定を検証
+        run: pnpm verify:environment --expected production
+        env:
+          APP_ENV: production
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_JWKS_URL: ${{ vars.SUPABASE_JWKS_URL }}
+          SUPABASE_ALLOWED_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ALLOWED_JWKS_URL: ${{ vars.SUPABASE_JWKS_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+          R2_BUCKET: cocolo-production-private
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          FEATURE_CONTRACT_OPERATOR_TOKEN: ${{ secrets.FEATURE_CONTRACT_OPERATOR_TOKEN }}
+          FEATURE_CONTRACT_GRANT_TOKEN: ${{ secrets.FEATURE_CONTRACT_GRANT_TOKEN }}
+          FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET: ${{ secrets.FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET }}
+          FEATURE_CONTRACT_OPERATOR_HOST: ${{ vars.FEATURE_CONTRACT_OPERATOR_HOST }}
+          FEATURE_CONTRACT_OPERATOR_PORT: ${{ vars.FEATURE_CONTRACT_OPERATOR_PORT }}
+          PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
+          PUBLIC_APP_URL_ALLOWLIST: ${{ vars.PUBLIC_APP_URL_ALLOWLIST }}
+          RETIRED_DATA_RETENTION_DAYS: ${{ vars.RETIRED_DATA_RETENTION_DAYS }}
+          AUDIT_LOG_RETENTION_DAYS: ${{ vars.AUDIT_LOG_RETENTION_DAYS }}
+          RATE_LIMIT_STORE: distributed
+          RATE_LIMIT_FAIL_CLOSED: 'true'
+          RATE_LIMIT_ADAPTER_MODULE: ${{ vars.RATE_LIMIT_ADAPTER_MODULE }}
+      - name: artifactの公開build設定をproduction許可値と照合
+        run: node scripts/release-verify-public-config.ts --release-dir .release
+        env:
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      - name: 既存UUIDv4行のmigration前検査
+        run: pnpm verify:uuidv7-migration
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      - name: 検証済みマイグレーションだけを適用
+        run: pnpm exec prisma migrate deploy --schema .release/extracted/packages/db/prisma/schema.prisma
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      - name: production環境へ成果物を配置
+        run: pnpm deploy:production --artifact-sha "$ARTIFACT_SHA" --release-dir .release
+        env:
+          ARTIFACT_SHA: ${{ inputs.artifact_sha }}
+          PRODUCTION_DEPLOY_ADAPTER: ${{ secrets.PRODUCTION_DEPLOY_ADAPTER }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+          R2_BUCKET: cocolo-production-private
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          FEATURE_CONTRACT_OPERATOR_TOKEN: ${{ secrets.FEATURE_CONTRACT_OPERATOR_TOKEN }}
+          FEATURE_CONTRACT_GRANT_TOKEN: ${{ secrets.FEATURE_CONTRACT_GRANT_TOKEN }}
+          FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET: ${{ secrets.FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET }}
+          FEATURE_CONTRACT_OPERATOR_HOST: ${{ vars.FEATURE_CONTRACT_OPERATOR_HOST }}
+          FEATURE_CONTRACT_OPERATOR_PORT: ${{ vars.FEATURE_CONTRACT_OPERATOR_PORT }}

@@ -1,0 +1,35 @@
+{
+  "name": "@cocolo/domain",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./line": "./dist/line-domain.js",
+    "./auth-team-selection": "./dist/auth-team-selection-domain.js",
+    "./ride": {
+      "types": "./dist/ride-domain.d.ts",
+      "import": "./dist/ride-domain.js"
+    },
+    "./orders": {
+      "types": "./dist/orders-domain.d.ts",
+      "import": "./dist/orders-domain.js"
+    },
+    "./bulletin-board": "./dist/bulletin-board-domain.js",
+    "./attachment": "./dist/attachment-domain.js",
+    "./event": "./dist/event-domain.js",
+    "./feature-contract": {
+      "types": "./dist/feature-contract.js",
+      "import": "./dist/feature-contract.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test test/*.test.ts",
+    "test:unit": "pnpm build && node --test test/*.test.ts",
+    "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "5.9.2"
+  }
+}

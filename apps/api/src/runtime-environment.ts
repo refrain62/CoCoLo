@@ -1,0 +1,264 @@
+import {
+  type AppEnvironment,
+  validateEnvironmentUrls,
+} from './environment-url-policy.js';
+import type { RateLimitStoreMode } from './security/rate-limit-adapter.js';
+import {
+  type RateLimitAdapterModulePolicy,
+  validateRateLimitAdapterModule,
+} from './security/rate-limit-adapter-policy.js';
+
+type RuntimeEnvironmentInput = Record<string, string | undefined>;
+
+export type RuntimeEnvironment = {
+  appEnv: AppEnvironment;
+  databaseUrl: string;
+  directUrl: string;
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+  supabaseJwksUrl: string;
+  supabaseIssuer: string;
+  r2Endpoint: string;
+  r2Bucket: string;
+  publicAppUrl: string;
+  publicAppUrlAllowlist: string[];
+  rateLimitNamespace: AppEnvironment;
+  rateLimitStoreMode: RateLimitStoreMode;
+  rateLimitFailClosed: true;
+  rateLimitAdapterModule?: string;
+  featureContractOperatorToken?: string;
+  featureContractGrantToken?: string;
+  featureContractProviderWebhookSecret?: string;
+  featureContractOperatorHost?: string;
+  featureContractOperatorPort?: number;
+};
+
+const allowedBuckets: Record<AppEnvironment, string> = {
+  local: 'cocolo-local',
+  staging: 'cocolo-staging-private',
+  production: 'cocolo-production-private',
+};
+
+// 必須設定を起動直後に検証し、未設定値を下流の接続処理まで持ち込まない。
+function required(environment: RuntimeEnvironmentInput, name: string): string {
+  const value = environment[name]?.trim();
+  if (!value) throw new Error(`${name} が必要です。`);
+  return value;
+}
+
+// 本番系はHTTPSだけを許可し、localだけloopback URLを例外として認める。
+function assertUrl(name: string, value: string) {
+  const url = new URL(value);
+  if (url.protocol !== 'https:' && url.hostname !== '127.0.0.1')
+    throw new Error(
+      `${name} には HTTPS またはローカルのループバック URL が必要です。`,
+    );
+}
+
+function assertR2Endpoint(appEnv: AppEnvironment, value: string) {
+  const url = new URL(value);
+  if (appEnv === 'local' && ['localhost', '127.0.0.1'].includes(url.hostname))
+    return;
+  if (appEnv !== 'local' && ['localhost', '127.0.0.1'].includes(url.hostname))
+    throw new Error(
+      'staging / production の R2_ENDPOINT にローカルURLは使用できません。',
+    );
+  if (url.protocol !== 'https:')
+    throw new Error(
+      'R2_ENDPOINT には HTTPS のS3互換エンドポイントが必要です。',
+    );
+}
+
+// 環境、Supabase接続先、R2 bucket、公開URLを相互検証し、環境混同をfail-closedで防ぐ。
+export type RuntimeEnvironmentOptions = {
+  rateLimitAdapterPolicy?: RateLimitAdapterModulePolicy;
+};
+
+export function readRuntimeEnvironment(
+  environment: RuntimeEnvironmentInput,
+  options: RuntimeEnvironmentOptions = {},
+): RuntimeEnvironment {
+  const appEnv = environment.APP_ENV?.trim();
+  if (appEnv !== 'local' && appEnv !== 'staging' && appEnv !== 'production')
+    throw new Error(
+      'APP_ENV には local / staging / production のいずれかを指定してください。',
+    );
+
+  const databaseUrl = required(environment, 'DATABASE_URL');
+  const directUrl = required(environment, 'DIRECT_URL');
+  const supabaseUrl = required(environment, 'SUPABASE_URL').replace(/\/$/, '');
+  const supabaseJwksUrl = required(environment, 'SUPABASE_JWKS_URL');
+  const supabaseAnonKey = required(environment, 'SUPABASE_ANON_KEY');
+  const r2Bucket = required(environment, 'R2_BUCKET');
+  const r2Endpoint = required(environment, 'R2_ENDPOINT').replace(/\/$/, '');
+  required(environment, 'R2_ACCESS_KEY_ID');
+  required(environment, 'R2_SECRET_ACCESS_KEY');
+  const publicAppUrl = required(environment, 'PUBLIC_APP_URL');
+  const rateLimitStoreMode = required(
+    environment,
+    'RATE_LIMIT_STORE',
+  ) as RateLimitStoreMode;
+  const rateLimitFailClosed = required(environment, 'RATE_LIMIT_FAIL_CLOSED');
+  const rateLimitAdapterModule = environment.RATE_LIMIT_ADAPTER_MODULE?.trim();
+  const featureContractOperatorToken =
+    environment.FEATURE_CONTRACT_OPERATOR_TOKEN?.trim();
+  const featureContractGrantToken =
+    environment.FEATURE_CONTRACT_GRANT_TOKEN?.trim();
+  const featureContractProviderWebhookSecret =
+    environment.FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET?.trim();
+  const featureContractOperatorHost =
+    environment.FEATURE_CONTRACT_OPERATOR_HOST?.trim();
+  const operatorPortValue = environment.FEATURE_CONTRACT_OPERATOR_PORT?.trim();
+  const featureContractOperatorPort = operatorPortValue
+    ? Number(operatorPortValue)
+    : undefined;
+  const supabaseIssuer = `${supabaseUrl}/auth/v1`;
+
+  assertUrl('SUPABASE_URL', supabaseUrl);
+  assertUrl('SUPABASE_JWKS_URL', supabaseJwksUrl);
+  assertR2Endpoint(appEnv, r2Endpoint);
+  if (r2Bucket !== allowedBuckets[appEnv])
+    throw new Error('R2_BUCKET が環境の許可値と一致しません。');
+
+  if (rateLimitFailClosed !== 'true')
+    throw new Error('RATE_LIMIT_FAIL_CLOSED は true に固定してください。');
+  if (appEnv === 'local') {
+    if (rateLimitStoreMode !== 'memory')
+      throw new Error(
+        'local環境のRATE_LIMIT_STOREは memoryに固定してください。',
+      );
+    if (rateLimitAdapterModule)
+      throw new Error(
+        'local環境ではRATE_LIMIT_ADAPTER_MODULEを設定できません。',
+      );
+  } else {
+    if (rateLimitStoreMode !== 'distributed')
+      throw new Error(
+        `${appEnv}環境のRATE_LIMIT_STOREは distributedに固定してください。`,
+      );
+    if (!rateLimitAdapterModule)
+      throw new Error(`${appEnv}環境ではRATE_LIMIT_ADAPTER_MODULEが必要です。`);
+    validateRateLimitAdapterModule(
+      rateLimitAdapterModule,
+      options.rateLimitAdapterPolicy,
+    );
+  }
+  const operatorConfigCount = [
+    featureContractOperatorToken,
+    featureContractGrantToken,
+    featureContractProviderWebhookSecret,
+    featureContractOperatorHost,
+    operatorPortValue,
+  ].filter(Boolean).length;
+  if (operatorConfigCount !== 0 && operatorConfigCount !== 5)
+    throw new Error(
+      '課金連携のoperator token、grant token、provider secret、host、portは同時に設定してください。',
+    );
+  if (featureContractOperatorToken && featureContractOperatorToken.length < 32)
+    throw new Error(
+      'FEATURE_CONTRACT_OPERATOR_TOKENは32文字以上で設定してください。',
+    );
+  if (featureContractGrantToken && featureContractGrantToken.length < 32)
+    throw new Error(
+      'FEATURE_CONTRACT_GRANT_TOKENは32文字以上で設定してください。',
+    );
+  if (
+    featureContractProviderWebhookSecret &&
+    featureContractProviderWebhookSecret.length < 32
+  )
+    throw new Error(
+      'FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRETは32文字以上で設定してください。',
+    );
+  if (
+    featureContractOperatorHost &&
+    (featureContractOperatorHost.length > 253 ||
+      /\s/.test(featureContractOperatorHost) ||
+      featureContractOperatorHost === '0.0.0.0' ||
+      featureContractOperatorHost === '::')
+  )
+    throw new Error(
+      'FEATURE_CONTRACT_OPERATOR_HOSTは公開wildcard以外の空白を含まない253文字以内で設定してください。',
+    );
+  if (
+    featureContractOperatorPort !== undefined &&
+    (!Number.isInteger(featureContractOperatorPort) ||
+      featureContractOperatorPort < 1 ||
+      featureContractOperatorPort > 65535)
+  )
+    throw new Error(
+      'FEATURE_CONTRACT_OPERATOR_PORTは1から65535の整数で設定してください。',
+    );
+  if (appEnv !== 'local') {
+    required(environment, 'FEATURE_CONTRACT_OPERATOR_TOKEN');
+    required(environment, 'FEATURE_CONTRACT_GRANT_TOKEN');
+    required(environment, 'FEATURE_CONTRACT_PROVIDER_WEBHOOK_SECRET');
+    required(environment, 'FEATURE_CONTRACT_OPERATOR_HOST');
+    required(environment, 'FEATURE_CONTRACT_OPERATOR_PORT');
+  }
+
+  const allowedUrl = environment.SUPABASE_ALLOWED_URL?.trim();
+  const allowedJwksUrl = environment.SUPABASE_ALLOWED_JWKS_URL?.trim();
+  const allowlist = environment.PUBLIC_APP_URL_ALLOWLIST;
+  if (appEnv !== 'local') {
+    if (!allowedUrl) throw new Error('SUPABASE_ALLOWED_URL が必要です。');
+    if (!allowedJwksUrl)
+      throw new Error('SUPABASE_ALLOWED_JWKS_URL が必要です。');
+    if (!allowlist?.length)
+      throw new Error('PUBLIC_APP_URL_ALLOWLIST が必要です。');
+  }
+  validateEnvironmentUrls(appEnv, {
+    supabaseUrl,
+    supabaseJwksUrl,
+    publicAppUrl,
+    supabaseAllowedUrl: allowedUrl,
+    supabaseAllowedJwksUrl: allowedJwksUrl,
+    publicAppUrlAllowlist: allowlist,
+  });
+  const publicAppUrlAllowlist = (allowlist ?? publicAppUrl)
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const configuredIssuer = environment.SUPABASE_ISSUER?.trim();
+  if (configuredIssuer && configuredIssuer !== supabaseIssuer)
+    throw new Error(
+      'SUPABASE_ISSUER が SUPABASE_URL から生成した発行者 URL と一致しません。',
+    );
+
+  if (appEnv === 'production') {
+    required(environment, ['SUPABASE', 'SERVICE', 'ROLE', 'KEY'].join('_'));
+    required(environment, 'RETIRED_DATA_RETENTION_DAYS');
+    required(environment, 'AUDIT_LOG_RETENTION_DAYS');
+  }
+
+  return {
+    appEnv,
+    databaseUrl,
+    directUrl,
+    supabaseUrl,
+    supabaseAnonKey,
+    supabaseJwksUrl,
+    supabaseIssuer,
+    r2Endpoint,
+    r2Bucket,
+    publicAppUrl,
+    publicAppUrlAllowlist,
+    rateLimitNamespace: appEnv,
+    rateLimitStoreMode,
+    rateLimitFailClosed: true,
+    ...(rateLimitAdapterModule ? { rateLimitAdapterModule } : {}),
+    ...(featureContractOperatorToken &&
+    featureContractGrantToken &&
+    featureContractProviderWebhookSecret &&
+    featureContractOperatorHost &&
+    featureContractOperatorPort
+      ? {
+          featureContractOperatorToken,
+          featureContractGrantToken,
+          featureContractProviderWebhookSecret,
+          featureContractOperatorHost,
+          featureContractOperatorPort,
+        }
+      : {}),
+  };
+}

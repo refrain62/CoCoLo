@@ -1,0 +1,57 @@
+{
+  "name": "@cocolo/db",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./client": "./dist/index.js",
+    "./line": "./dist/line-repository.js",
+    "./line-webhook": "./dist/line-webhook-repository.js",
+    "./auth-team-selection": "./dist/auth-team-selection-repository.js",
+    "./board-contact": "./dist/board-contact-repository.js",
+    "./ride": {
+      "types": "./dist/ride-repository.d.ts",
+      "import": "./dist/ride-repository.js"
+    },
+    "./orders": {
+      "types": "./dist/orders-repository.d.ts",
+      "import": "./dist/orders-repository.js"
+    },
+    "./bulletin-board": "./dist/bulletin-board-repository.js",
+    "./attachment": "./dist/attachment-repository.js",
+    "./events": "./dist/event-repository.js",
+    "./subject-member": {
+      "types": "./dist/subject-member-access.d.ts",
+      "import": "./dist/subject-member-access.js"
+    },
+    "./auth-invitation": {
+      "types": "./dist/auth-invitation-repository.d.ts",
+      "import": "./dist/auth-invitation-repository.js"
+    },
+    "./feature-contract": {
+      "types": "./dist/feature-contract-repository.d.ts",
+      "import": "./dist/feature-contract-repository.js"
+    }
+  },
+  "scripts": {
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "test": "pnpm build && node --test test/*.test.mjs",
+    "test:unit": "pnpm build && node --test test/*.test.ts",
+    "lint": "node ../../scripts/prisma-validate.ts",
+    "typecheck": "node ../../scripts/prisma-validate.ts",
+    "build:prepared": "tsc -p tsconfig.json",
+    "test:integration": "prisma generate && pnpm build:prepared && node --test test/central-feature-rls.test.ts test/ride-two-plan-lock.test.ts",
+    "test:integration:prepared": "pnpm build:prepared && node --test test/central-feature-rls.test.ts test/ride-two-plan-lock.test.ts",
+    "prisma:validate": "prisma validate",
+    "migrate:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@cocolo/domain": "workspace:*",
+    "@prisma/client": "6.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0",
+    "prisma": "6.10.0",
+    "typescript": "5.9.2"
+  }
+}

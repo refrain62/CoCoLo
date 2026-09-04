@@ -1,0 +1,1333 @@
+:root {
+  color: var(--cocolo-ink);
+  background: var(--cocolo-sand);
+  font-family:
+    "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, ui-sans-serif, system-ui,
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+
+  /* CoCoLo design system: LINE Greenを主役に、CoCoLoの温かい差し色を残す。 */
+  --cocolo-ink: #1f1f1f;
+  --cocolo-ink-soft: #3f3f3f;
+  --cocolo-muted: #777777;
+  --cocolo-brand: #06c755;
+  --cocolo-brand-strong: #006b35;
+  --cocolo-brand-foreground: #1f1f1f;
+  --cocolo-brand-soft: #e5f7eb;
+  --cocolo-sand: #f5f5f5;
+  --cocolo-sand-deep: #eeeeee;
+  --cocolo-coral: #f07d62;
+  --cocolo-coral-strong: #d95644;
+  --cocolo-coral-ink: #b2523e;
+  --cocolo-coral-soft: #fbe2d8;
+  --cocolo-yellow: #f7c75d;
+  --cocolo-link: #4270ed;
+  --cocolo-navy: #262f4a;
+  --cocolo-surface: #fffdf8;
+  --cocolo-surface-muted: #f3f7f1;
+  --cocolo-line: #e8e8e8;
+  --cocolo-focus: #f4af4d;
+  --cocolo-danger: #b54842;
+  --cocolo-danger-strong: #963d38;
+  --cocolo-danger-soft: #fff0ed;
+  --cocolo-success: #2f7d58;
+  --cocolo-success-soft: #e4f3e8;
+  --cocolo-surface-raised: #ffffff;
+  --cocolo-surface-inverse: #145742;
+  --cocolo-sidebar-text: #d9eee3;
+  --cocolo-sidebar-muted: #a9d6c1;
+  --cocolo-sidebar-active: #23694f;
+  --cocolo-border-strong: #c4d4c8;
+  --cocolo-danger-border: #f2c4c0;
+  --cocolo-table-head: #f5f5f5;
+  --cocolo-table-row-hover: #f3fbf6;
+  --cocolo-event-practice: #06c755;
+  --cocolo-event-match: #b54842;
+  --cocolo-event-other: #7050a3;
+  --cocolo-focus-ring: rgb(244 175 77 / 0.28);
+  --cocolo-space-1: 0.25rem;
+  --cocolo-space-2: 0.5rem;
+  --cocolo-space-3: 0.75rem;
+  --cocolo-space-4: 1rem;
+  --cocolo-space-5: 1.5rem;
+  --cocolo-space-6: 2rem;
+  --cocolo-space-7: 3rem;
+  --cocolo-control-height: 2.75rem;
+  --cocolo-transition-fast: 160ms ease;
+  --cocolo-radius-sm: 0.5rem;
+  --cocolo-radius-md: 0.75rem;
+  --cocolo-radius-lg: 1.25rem;
+  --cocolo-radius-xl: 2rem;
+  --cocolo-shadow-sm: 0 1px 2px rgb(31 31 31 / 0.06);
+  --cocolo-shadow-hover: 0 4px 12px rgb(6 199 85 / 0.18);
+  --cocolo-shadow-md: 0 18px 42px rgb(31 31 31 / 0.1);
+
+  /* Backwards-compatible aliases used by the authenticated app. */
+  --ink: var(--cocolo-ink);
+  --muted: var(--cocolo-muted);
+  --line: var(--cocolo-line);
+  --surface: var(--cocolo-surface);
+  --surface-muted: var(--cocolo-surface-muted);
+  --brand: var(--cocolo-brand);
+  --brand-strong: var(--cocolo-brand-strong);
+  --brand-soft: var(--cocolo-brand-soft);
+  --accent: var(--cocolo-coral);
+  --danger: var(--cocolo-danger);
+  --danger-soft: var(--cocolo-danger-soft);
+  --success: var(--cocolo-success);
+  --success-soft: var(--cocolo-success-soft);
+  --shadow-sm: var(--cocolo-shadow-sm);
+  --radius-sm: var(--cocolo-radius-sm);
+  --radius-md: var(--cocolo-radius-md);
+  --radius-lg: var(--cocolo-radius-lg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 12% 0%, rgb(220 239 227 / 0.6), transparent 32rem),
+    linear-gradient(180deg, #fffdf8 0%, #f7f3ea 42%, #eef4ee 100%);
+  color: var(--ink);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+select,
+textarea {
+  border-radius: var(--radius-sm);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--cocolo-focus-ring);
+  outline-offset: 2px;
+}
+
+a {
+  color: var(--brand-strong);
+  font-weight: 650;
+  text-decoration-thickness: 0.09em;
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  color: var(--cocolo-brand);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.preserve-linebreaks {
+  white-space: pre-wrap;
+}
+
+.app-state-card {
+  max-width: 42rem;
+  padding: 1.25rem 1.4rem;
+  margin: 2rem auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.app-state-card[role='alert'] {
+  border-color: var(--cocolo-coral-soft);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* AppShell and shared primitives use these classes as their stable visual contract. */
+.app-shell {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr);
+  min-height: 100dvh;
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding: 1.5rem 1rem;
+  background: var(--cocolo-brand-strong);
+  color: var(--cocolo-surface);
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem 1.5rem;
+  color: var(--cocolo-surface-raised);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.app-brand-mark {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  width: 2.15rem;
+  height: 2.15rem;
+  background: transparent;
+}
+
+.app-brand-mark > span {
+  position: absolute;
+  display: block;
+  width: 0.95rem;
+  height: 1.4rem;
+  border-radius: 60% 60% 50% 50%;
+  background: var(--cocolo-coral);
+  transform: rotate(-30deg);
+  top: 0.02rem;
+  left: 0.12rem;
+}
+
+.app-brand-mark > span:nth-child(2) {
+  background: #f7c75d;
+  transform: rotate(30deg);
+  left: 1.05rem;
+}
+
+.app-brand-mark > span:nth-child(3) {
+  width: 0.95rem;
+  height: 1.15rem;
+  background: var(--cocolo-brand, #06c755);
+  transform: none;
+  left: 0.62rem;
+  top: 0.78rem;
+}
+
+.app-nav {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.app-nav a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.7rem;
+  color: var(--cocolo-sidebar-text);
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.app-nav a:hover,
+.app-nav a:focus-visible {
+  background: rgb(255 255 255 / 0.11);
+  color: var(--cocolo-surface-raised);
+  transform: translateX(2px);
+}
+
+.app-sidebar-footer {
+  padding: 1rem 0.75rem 0;
+  margin-top: auto;
+  border-top: 1px solid rgb(255 255 255 / 0.14);
+  color: var(--cocolo-sidebar-muted);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.app-main {
+  min-width: 0;
+}
+
+.app-topbar {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 4.5rem;
+  padding: 0.75rem clamp(1rem, 3vw, 2.5rem);
+  border-bottom: 1px solid rgb(219 229 220 / 0.85);
+  background: rgb(255 253 248 / 0.86);
+  backdrop-filter: blur(16px);
+}
+
+.app-topbar-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.app-topbar-subtitle {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.app-content {
+  width: min(100%, 92rem);
+  padding: clamp(1rem, 3vw, 2.5rem);
+  margin: 0 auto;
+}
+
+.app-content > section,
+.app-content > article,
+.app-content > .app-panel {
+  padding: clamp(1.1rem, 2.5vw, 1.75rem);
+  margin-block: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: rgb(255 255 255 / 0.94);
+  box-shadow: var(--shadow-sm);
+}
+
+.app-content > section:first-child,
+.app-content > article:first-child {
+  margin-top: 0;
+}
+
+.app-content h1,
+.app-content h2,
+.app-content h3,
+.app-content h4 {
+  color: var(--ink);
+  letter-spacing: -0.025em;
+}
+
+.app-content h1 {
+  margin: 0;
+  font-size: clamp(1.55rem, 3vw, 2.3rem);
+  line-height: 1.15;
+}
+
+.app-content h2 {
+  margin: 0 0 0.8rem;
+  font-size: clamp(1.1rem, 2vw, 1.4rem);
+}
+
+.app-content h3 {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+}
+
+.app-content p {
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.app-content header {
+  margin-bottom: 1.25rem;
+}
+
+.app-content header p {
+  margin: 0.5rem 0 0;
+}
+
+.app-content form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.app-content form > div,
+.app-content form > label:not(:has(input[type='checkbox'])) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.app-content label,
+.app-content legend {
+  color: var(--cocolo-ink-soft);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.app-content input:not([type='checkbox']):not([type='radio']),
+.app-content select,
+.app-content textarea {
+  width: 100%;
+  min-height: var(--cocolo-control-height);
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--cocolo-line);
+  background: var(--surface);
+  color: var(--ink);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.app-content textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.app-content input:hover,
+.app-content select:hover,
+.app-content textarea:hover {
+  border-color: var(--cocolo-brand);
+}
+
+.app-content input:focus,
+.app-content select:focus,
+.app-content textarea:focus {
+  border-color: var(--cocolo-focus);
+  box-shadow: 0 0 0 3px rgb(244 175 77 / 0.18);
+  outline: none;
+}
+
+.app-content button {
+  min-height: var(--cocolo-control-height);
+  padding: 0.6rem 0.95rem;
+  border: 1px solid transparent;
+  background: var(--brand);
+  color: var(--cocolo-brand-foreground);
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 750;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.app-content button:hover:not(:disabled) {
+  background: var(--brand-strong);
+  color: var(--cocolo-surface-raised);
+  box-shadow: 0 5px 14px rgb(40 124 98 / 0.2);
+  transform: translateY(-1px);
+}
+
+.app-content button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.app-content button[aria-pressed='true'] {
+  background: var(--brand-strong);
+  color: var(--cocolo-surface-raised);
+  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 0.28);
+}
+
+.app-content > header a,
+.app-content > nav a,
+.app-content .manual-toc a,
+.app-content .manual-footer a,
+.app-content .event-card a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+}
+
+.app-content button[type='button']:not(:first-child) {
+  margin-inline-start: 0.4rem;
+}
+
+.app-content fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.9rem;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.app-content fieldset label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 44px;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--cocolo-surface-raised);
+}
+
+.app-content input[type='checkbox'],
+.app-content input[type='radio'] {
+  accent-color: var(--brand);
+}
+
+.app-content table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.app-content th,
+.app-content td {
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.app-content th {
+  background: var(--cocolo-table-head);
+  color: var(--cocolo-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app-content tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.app-content tbody tr:hover {
+  background: var(--cocolo-table-row-hover);
+}
+
+.app-content [role='alert'] {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--cocolo-danger-border);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-weight: 650;
+}
+
+.app-content [role='status'] {
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--success-soft);
+  color: var(--success);
+  font-weight: 650;
+}
+
+.auth-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 100dvh;
+  place-items: center;
+  padding: clamp(1rem, 4vw, 3rem);
+}
+
+.app-shell.app-shell--content-only.auth-shell[data-slot='app-shell'] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.auth-shell .app-main {
+  width: min(100%, 28rem);
+  min-height: 0;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+}
+
+.app-shell.app-shell--content-only.auth-shell[data-slot='app-shell'] .app-main {
+  min-height: 0;
+}
+
+.auth-shell .app-content {
+  width: 100%;
+  padding: 0;
+}
+
+.auth-card,
+.team-selection-card {
+  padding: clamp(1.4rem, 4vw, 2.25rem);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--cocolo-surface-raised);
+  box-shadow: var(--cocolo-shadow-md);
+}
+
+.auth-shell .auth-card {
+  margin: 0;
+}
+
+.auth-card-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 1.2rem;
+  color: var(--cocolo-ink);
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.auth-eyebrow {
+  margin: 0 0 0.5rem !important;
+  color: var(--brand) !important;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+}
+
+.auth-card h1,
+.team-selection-card h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 5vw, 2rem);
+  line-height: 1.2;
+}
+
+.auth-lead,
+.team-selection-lead {
+  margin: 0.7rem 0 1.5rem;
+  color: var(--muted);
+}
+
+.auth-help {
+  margin: 1.25rem 0 0;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.auth-help a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+}
+
+.team-selection-card {
+  max-width: 42rem;
+  margin: 0 auto;
+}
+
+.team-selection-card fieldset {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0;
+  border: 0;
+}
+
+.team-selection-card fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 3.25rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  cursor: pointer;
+}
+
+.team-selection-card fieldset label:has(input:checked) {
+  border-color: var(--cocolo-brand);
+  background: var(--brand-soft);
+  box-shadow: 0 0 0 3px rgb(40 124 98 / 0.14);
+}
+
+.team-selection-card > button {
+  margin: 0.75rem 0;
+}
+
+.event-card {
+  position: relative;
+  display: grid;
+  gap: 0.8rem;
+  padding: 1.1rem;
+  margin: 1rem 0;
+  border: 1px solid var(--line);
+  border-inline-start: 0.35rem solid var(--cocolo-muted);
+  border-radius: var(--radius-md);
+  background: var(--cocolo-surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+
+.event-card-practice {
+  border-inline-start-color: var(--cocolo-event-practice);
+}
+
+.event-card-match {
+  border-inline-start-color: var(--cocolo-event-match);
+}
+
+.event-card-event {
+  border-inline-start-color: var(--cocolo-event-other);
+}
+
+.event-card > p {
+  margin: 0;
+}
+
+.event-type {
+  width: fit-content;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-strong) !important;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.manual-toc {
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.manual-toc ul {
+  columns: 2;
+  margin-bottom: 0;
+}
+
+.manual-content section {
+  scroll-margin-top: 5.5rem;
+  padding: 1.25rem 0;
+  margin: 1.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.manual-content table {
+  margin: 1rem 0;
+}
+
+.manual-footer {
+  padding-top: 1rem;
+  margin-top: 2rem;
+  border-top: 1px solid var(--line);
+}
+
+@media (min-width: 960px) {
+  .app-content > section[aria-labelledby='member-form-heading'],
+  .app-content > section[aria-labelledby='promotion-heading'] {
+    display: inline-block;
+    width: calc(50% - 0.5rem);
+    vertical-align: top;
+    margin-inline-end: 0.5rem;
+  }
+
+  .app-content > section[aria-labelledby='member-filter-heading'],
+  .app-content > section[aria-labelledby='member-list-heading'] {
+    width: 100%;
+  }
+}
+
+@media (max-width: 959px) {
+  .app-shell {
+    display: block;
+  }
+
+  .app-shell[data-slot='app-shell'] > .app-sidebar {
+    width: 100% !important;
+  }
+
+  .app-sidebar {
+    position: static;
+    min-height: auto;
+    padding: 0.75rem 1rem 0;
+  }
+
+  .app-brand {
+    padding: 0.35rem 0 0.75rem;
+  }
+
+  .app-nav {
+    display: flex;
+    gap: 0.35rem;
+    overflow-x: auto;
+    padding-bottom: 0.75rem;
+    scrollbar-width: thin;
+  }
+
+  .app-nav a {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 0.45rem 0.7rem;
+    background: rgb(255 255 255 / 0.08);
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .app-sidebar-footer {
+    display: none;
+  }
+
+  .app-topbar {
+    position: static;
+    min-height: 3.8rem;
+  }
+
+  .app-content > section[aria-labelledby='member-form-heading'],
+  .app-content > section[aria-labelledby='promotion-heading'] {
+    display: block;
+    width: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-content {
+    padding: 0.85rem;
+  }
+
+  .app-content > section,
+  .app-content > article,
+  .app-content > .app-panel {
+    padding: 1rem;
+    margin-block: 0.75rem;
+    border-radius: 1rem;
+  }
+
+  .app-content form {
+    padding: 0.8rem;
+  }
+
+  .app-content table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .app-shell .app-content [data-slot='responsive-table'] {
+    overflow: visible;
+    white-space: normal;
+  }
+
+  .app-shell .app-content [data-slot='responsive-table'] td,
+  .app-shell .app-content [data-slot='responsive-table'] th {
+    white-space: normal;
+  }
+
+  .app-content th,
+  .app-content td {
+    padding: 0.7rem;
+  }
+
+  .app-content button {
+    width: 100%;
+  }
+
+  .app-content button[type='button']:not(:first-child) {
+    margin-inline-start: 0;
+  }
+
+  .app-content fieldset button {
+    flex: 1 1 8rem;
+    width: auto;
+  }
+
+  .manual-toc ul {
+    columns: 1;
+    padding-inline-start: 1.25rem;
+  }
+
+  .event-card form {
+    padding: 0;
+    border: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* 管理画面はナビゲーションと本文の視線を分け、画面ごとの状態を読み取りやすくする。 */
+.admin-shell {
+  --admin-sidebar: var(--cocolo-surface-inverse);
+  --admin-sidebar-muted: var(--cocolo-sidebar-muted);
+  --admin-sidebar-active: rgb(240 125 98 / 0.16);
+  background: #f8f2e9;
+}
+
+.admin-shell .app-sidebar {
+  padding: var(--cocolo-space-5) var(--cocolo-space-3);
+  background:
+    radial-gradient(circle at 25% 0%, rgb(240 125 98 / 0.2), transparent 16rem),
+    linear-gradient(180deg, #345d50 0%, #26332f 100%);
+}
+
+.admin-shell .app-brand {
+  padding: 0.5rem 0.75rem 1.75rem;
+}
+
+.admin-shell .app-brand small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--admin-sidebar-muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-shell .app-nav {
+  gap: var(--cocolo-space-1);
+}
+
+.admin-shell .app-nav a {
+  align-items: flex-start;
+  gap: 0.7rem;
+  min-height: 3.25rem;
+  padding: 0.65rem 0.7rem;
+  color: var(--admin-sidebar-muted);
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.admin-shell .app-nav a:hover,
+.admin-shell .app-nav a:focus-visible,
+.admin-shell .app-nav a[aria-current='page'] {
+  background: var(--admin-sidebar-active);
+  color: var(--cocolo-surface-raised);
+  transform: none;
+}
+
+.admin-shell .app-nav a[aria-current='page'] {
+  box-shadow: inset 3px 0 0 var(--cocolo-coral);
+}
+
+.admin-shell .app-nav a strong,
+.admin-shell .app-nav a small {
+  display: block;
+}
+
+.admin-shell .app-nav a strong {
+  color: inherit;
+  font-size: 0.83rem;
+  font-weight: 750;
+}
+
+.admin-shell .app-nav a small {
+  margin-top: 0.2rem;
+  color: inherit;
+  font-size: 0.69rem;
+  font-weight: 500;
+  opacity: 0.72;
+}
+
+.admin-nav-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  flex: 0 0 auto;
+  margin-top: 0.35rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  opacity: 0.8;
+}
+
+.admin-shell .app-topbar {
+  min-height: 4.25rem;
+  background: rgb(255 250 242 / 0.9);
+}
+
+.admin-topbar-context,
+.admin-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.admin-topbar-team {
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.admin-topbar-role {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.admin-help-link {
+  min-height: 2.25rem;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.admin-page-stack {
+  display: grid;
+  gap: var(--cocolo-space-5);
+}
+
+.admin-page-stack > * {
+  margin: 0 !important;
+}
+
+.admin-route-header {
+  padding: 0.4rem 0 0.5rem;
+}
+
+.admin-route-header h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.6rem, 3vw, 2.25rem);
+  letter-spacing: -0.04em;
+}
+
+.admin-route-header p:last-child {
+  max-width: 44rem;
+  margin: 0.55rem 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.system-admin-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.system-admin-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(10rem, 1fr);
+  gap: 1rem;
+}
+
+.system-admin-form label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.system-admin-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.system-admin-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.system-admin-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.system-admin-card-heading [data-slot='card-title'] {
+  min-width: 0;
+}
+
+.admin-eyebrow,
+.admin-hero-kicker {
+  margin: 0 0 0.45rem !important;
+  color: var(--brand) !important;
+  font-size: 0.68rem !important;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.admin-hero-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border: 1px solid var(--cocolo-line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 92% 10%, rgb(255 255 255 / 0.85), transparent 13rem),
+    linear-gradient(135deg, #fff4ef, #fffdf8 62%, #f3f7f1);
+}
+
+.admin-hero-card h1 {
+  max-width: 32rem;
+  margin: 0;
+  color: var(--cocolo-brand-strong);
+  font-size: clamp(1.35rem, 3vw, 2.1rem);
+  letter-spacing: -0.045em;
+  line-height: 1.15;
+}
+
+.admin-hero-card p:last-child {
+  max-width: 38rem;
+  margin: 0.7rem 0 0;
+  color: var(--cocolo-muted);
+  font-size: 0.9rem;
+}
+
+.admin-hero-mark {
+  display: grid;
+  width: clamp(4rem, 10vw, 6.5rem);
+  height: clamp(4rem, 10vw, 6.5rem);
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 0.8);
+  border-radius: 2rem;
+  background: linear-gradient(135deg, var(--cocolo-brand-strong), var(--cocolo-brand));
+  color: var(--cocolo-surface);
+  font-size: clamp(1.7rem, 5vw, 3rem);
+  font-weight: 900;
+  box-shadow: 0 16px 32px rgb(20 87 66 / 0.2);
+}
+
+.admin-hero-logo {
+  width: 3.7rem;
+  height: 3.7rem;
+  transform: scale(1.35);
+}
+
+.admin-metric-grid,
+.feature-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--cocolo-space-4);
+}
+
+.admin-metric-card [data-slot='card-title'] {
+  font-size: clamp(1.4rem, 3vw, 1.9rem);
+}
+
+.admin-metric-card [data-slot='card-content'] {
+  padding-top: 0.3rem;
+}
+
+.admin-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--cocolo-space-3);
+}
+
+.admin-action-grid button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  min-height: 4.5rem;
+  padding: 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  background: var(--cocolo-surface-raised);
+  text-align: left;
+}
+
+.admin-action-grid button:hover {
+  border-color: var(--cocolo-brand);
+  background: var(--cocolo-table-row-hover);
+}
+
+.admin-action-grid button span:nth-child(2) {
+  min-width: 0;
+}
+
+.admin-action-grid strong,
+.admin-action-grid small {
+  display: block;
+}
+
+.admin-action-grid strong {
+  font-size: 0.83rem;
+}
+
+.admin-action-grid small {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.admin-action-icon {
+  display: grid;
+  width: 2.1rem;
+  height: 2.1rem;
+  place-items: center;
+  border-radius: 0.7rem;
+  color: var(--brand-strong);
+  background: var(--brand-soft);
+  font-size: 1.1rem;
+}
+
+.admin-loading-state,
+.admin-contract-error {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--cocolo-surface-raised);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.admin-contract-error {
+  border-color: var(--cocolo-danger-border);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.feature-plan-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--cocolo-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--cocolo-table-row-hover);
+}
+
+.feature-plan-summary strong,
+.feature-plan-summary span {
+  display: block;
+}
+
+.feature-plan-summary strong {
+  margin-top: 0.25rem;
+  color: var(--ink);
+  font-size: 1.1rem;
+}
+
+.feature-reason-field {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 32rem;
+  margin-bottom: 1rem;
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.feature-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.feature-card-heading,
+.feature-card-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.feature-card-heading [data-slot='card-title'] {
+  min-width: 0;
+}
+
+.feature-card-status {
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.feature-status-label,
+.feature-card-reason {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.feature-card-reason {
+  min-height: 1.25rem;
+  margin: 0.7rem 0 1rem;
+}
+
+.feature-toggle {
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .admin-metric-grid,
+  .admin-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-shell .app-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .admin-topbar-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .admin-hero-card {
+    align-items: flex-start;
+    flex-direction: column-reverse;
+  }
+
+  .admin-hero-mark {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 1.1rem;
+    font-size: 1.5rem;
+  }
+
+  .feature-plan-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .system-admin-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .system-admin-form-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

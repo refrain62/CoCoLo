@@ -1,0 +1,5 @@
+[tools]
+node = "24.12.0"
+pnpm = "10.26.0"
+go = "1.25.0"
+"go:github.com/betterleaks/betterleaks" = "v1.7.2"

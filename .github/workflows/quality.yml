@@ -1,0 +1,52 @@
+name: 品質ゲート
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+permissions:
+  contents: read
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: pnpmを準備
+        uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996
+        with:
+          version: 10.26.0
+      - name: Node.js環境を準備
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24.12.0
+          cache: pnpm
+      - name: 短時間PR品質ゲート
+        env:
+          BETTERLEAKS_IMAGE: ghcr.io/betterleaks/betterleaks:v1.7.2@sha256:1eb5e0920b47afe43f76671bc678c9fd4fd40c2d0c9b88a16f28021fd12d2347
+        run: pnpm ci:fast
+  gate:
+    name: quality aggregate gate
+    if: ${{ always() }}
+    needs:
+      - quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    env:
+      QUALITY_RESULT: ${{ needs.quality.result }}
+    steps:
+      - name: qualityをfail-closedで集約
+        run: |
+          if [ "$QUALITY_RESULT" != "success" ]; then
+            echo "quality aggregate gate: FAIL"
+            exit 1
+          fi
+          echo "quality aggregate gate: PASS"

@@ -1,0 +1,501 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+  AuthApiError,
+  createAuthClient,
+  hashOAuthBinding,
+  parseOAuthCallback,
+} from './auth-client.js';
+import {
+  containsOAuthCredential,
+  createAuthSessionManager,
+  validateOAuthCallback,
+} from './auth-context.js';
+
+function response(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+describe('Supabase Auth client', () => {
+  it('LINE/Google OAuthのauthorize URLはstate・nonce・PKCEを渡す', () => {
+    const client = createAuthClient({
+      baseUrl: 'https://example.supabase.co',
+      anonKey: 'public-anon-key',
+    });
+
+    expect(
+      client.getOAuthAuthorizeUrl?.(
+        'line',
+        'https://app.example.com/auth/callback',
+        {
+          state: 'state-value',
+          nonce: 'nonce-value',
+          codeChallenge: 'challenge-value',
+          codeChallengeMethod: 'S256',
+        },
+      ),
+    ).toBe(
+      'https://example.supabase.co/auth/v1/authorize?provider=line&redirect_to=https%3A%2F%2Fapp.example.com%2Fauth%2Fcallback&state=state-value&nonce=nonce-value&code_challenge=challenge-value&code_challenge_method=S256',
+    );
+  });
+
+  it('OAuth providerのruntime値をallowlistへ限定する', () => {
+    const client = createAuthClient({
+      baseUrl: 'https://example.supabase.co',
+      anonKey: 'public-anon-key',
+    });
+    expect(() =>
+      client.getOAuthAuthorizeUrl?.(
+        'twitter' as 'google',
+        'https://app.example.com/auth/callback',
+        {
+          state: 'state-value',
+          nonce: 'nonce-value',
+          codeChallenge: 'challenge-value',
+          codeChallengeMethod: 'S256',
+        },
+      ),
+    ).toThrow('OAuth providerが不正です。');
+  });
+
+  it('OAuth implicit callbackのhash tokenは受け付けない', () => {
+    expect(
+      parseOAuthCallback(
+        '#access_token=oauth-access&refresh_token=oauth-refresh&expires_in=3600',
+      ),
+    ).toBeNull();
+    expect(parseOAuthCallback('#error=access_denied')).toBeNull();
+  });
+
+  it('OAuth credentialはqueryとhashから検出でき、招待tokenだけは対象外にする', () => {
+    expect(containsOAuthCredential('', '#access_token=secret')).toBe(true);
+    expect(containsOAuthCredential('?refresh_token=secret', '')).toBe(true);
+    expect(containsOAuthCredential('', '#token=opaque-invitation')).toBe(false);
+  });
+
+  it('招待tokenのbinding hashは同じ値だけ一致する', async () => {
+    const hash = await hashOAuthBinding('invitation-token');
+    await expect(hashOAuthBinding('invitation-token')).resolves.toBe(hash);
+    await expect(hashOAuthBinding('another-token')).resolves.not.toBe(hash);
+  });
+
+  it('PKCE code exchangeはcodeとverifierをtoken endpointへ送る', async () => {
+    let request: { url: string; init: RequestInit } | undefined;
+    const client = createAuthClient({
+      baseUrl: 'https://example.supabase.co',
+      anonKey: 'public-anon-key',
+      fetcher: async (input, init) => {
+        request = { url: String(input), init: init ?? {} };
+        return response({
+          access_token: 'access-token',
+          refresh_token: 'refresh-token',
+          expires_in: 3600,
+        });
+      },
+    });
+
+    await expect(
+      client.exchangeOAuthCode?.(
+        'oauth-code',
+        'pkce-verifier',
+        'https://app.example.com/callback',
+      ),
+    ).resolves.toMatchObject({ accessToken: 'access-token' });
+    expect(request?.url).toBe(
+      'https://example.supabase.co/auth/v1/token?grant_type=pkce',
+    );
+    expect(JSON.parse(String(request?.init.body))).toEqual({
+      auth_code: 'oauth-code',
+      code_verifier: 'pkce-verifier',
+      redirect_uri: 'https://app.example.com/callback',
+    });
+  });
+
+  it('OAuth callbackはstate・nonce・有効期限を検証する', () => {
+    const transaction = {
+      provider: 'google' as const,
+      redirectTo: 'https://app.example.com/callback',
+      state: 'expected-state-1234',
+      nonce: 'expected-nonce-1234',
+      codeVerifier: 'verifier-1234567890',
+      codeChallenge: 'challenge-1234567890',
+      codeChallengeMethod: 'S256' as const,
+      returnTo: '/invite/invitation-id',
+      invitationTokenHash: null,
+      createdAt: 1_000,
+    };
+
+    expect(
+      validateOAuthCallback(
+        transaction,
+        new URLSearchParams({
+          code: 'oauth-code',
+          state: 'expected-state-1234',
+          nonce: 'expected-nonce-1234',
+        }),
+        1_001,
+      ),
+    ).toBe(true);
+    expect(
+      validateOAuthCallback(
+        transaction,
+        new URLSearchParams({
+          code: 'oauth-code',
+          state: 'expected-state-1234',
+        }),
+        1_001,
+      ),
+    ).toBe(true);
+    expect(
+      validateOAuthCallback(
+        transaction,
+        new URLSearchParams({ code: 'oauth-code', state: 'wrong-state' }),
+        1_001,
+      ),
+    ).toBe(false);
+    expect(
+      validateOAuthCallback(
+        transaction,
+        new URLSearchParams({
+          code: 'oauth-code',
+          state: 'expected-state-1234',
+          nonce: 'wrong-nonce',
+        }),
+        1_001,
+      ),
+    ).toBe(false);
+    expect(
+      validateOAuthCallback(
+        transaction,
+        new URLSearchParams({
+          code: 'oauth-code',
+          state: 'expected-state-1234',
+        }),
+        1_000 + 10 * 60 * 1000 + 1,
+      ),
+    ).toBe(false);
+    expect(
+      validateOAuthCallback(
+        transaction,
+        new URLSearchParams({
+          code: 'oauth-code',
+          state: 'expected-state-1234',
+        }),
+        999,
+      ),
+    ).toBe(false);
+  });
+
+  it('password grantの応答からセッションを作る', async () => {
+    let request: { url: string; init: RequestInit } | undefined;
+    const client = createAuthClient({
+      baseUrl: 'https://example.supabase.co',
+      anonKey: 'public-anon-key',
+      fetcher: async (input, init) => {
+        request = { url: String(input), init: init ?? {} };
+        return response({
+          access_token: 'access-token',
+          refresh_token: 'refresh-token',
+          expires_in: 3600,
+        });
+      },
+    });
+
+    const session = await client.signInWithPassword(
+      'member@example.com',
+      'password-for-test',
+    );
+
+    expect(request?.url).toBe(
+      'https://example.supabase.co/auth/v1/token?grant_type=password',
+    );
+    expect(request?.init.headers).toEqual({
+      Accept: 'application/json',
+      apikey: 'public-anon-key',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(String(request?.init.body))).toEqual({
+      email: 'member@example.com',
+      password: 'password-for-test',
+    });
+    expect(session).toMatchObject({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+    });
+    expect(session.expiresAt).toBeTypeOf('number');
+  });
+
+  it('refresh grantで更新トークンを送り、ローテーション後の値を保持する', async () => {
+    let request: { url: string; init: RequestInit } | undefined;
+    const client = createAuthClient({
+      baseUrl: 'https://example.supabase.co',
+      anonKey: 'public-anon-key',
+      fetcher: async (input, init) => {
+        request = { url: String(input), init: init ?? {} };
+        return response({
+          access_token: 'next-access-token',
+          refresh_token: 'next-refresh-token',
+          expires_at: 1_900_000_000,
+        });
+      },
+    });
+
+    await expect(
+      client.refreshSession('current-refresh-token'),
+    ).resolves.toEqual({
+      accessToken: 'next-access-token',
+      refreshToken: 'next-refresh-token',
+      expiresAt: 1_900_000_000,
+    });
+    expect(request?.url).toContain('grant_type=refresh_token');
+    expect(JSON.parse(String(request?.init.body))).toEqual({
+      refresh_token: 'current-refresh-token',
+    });
+    expect(JSON.stringify(request)).not.toContain('password-for-test');
+  });
+
+  it('logoutはaccess tokenだけをAuthorizationへ渡す', async () => {
+    let request: { url: string; init: RequestInit } | undefined;
+    const client = createAuthClient({
+      baseUrl: 'https://example.supabase.co',
+      anonKey: 'public-anon-key',
+      fetcher: async (input, init) => {
+        request = { url: String(input), init: init ?? {} };
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    await client.signOut('access-token-to-revoke');
+
+    expect(request?.url).toBe('https://example.supabase.co/auth/v1/logout');
+    expect(request?.init.headers).toEqual({
+      Accept: 'application/json',
+      apikey: 'public-anon-key',
+      Authorization: 'Bearer access-token-to-revoke',
+    });
+    expect(request?.init.body).toBeUndefined();
+  });
+
+  it('Auth providerのエラー本文を例外メッセージへ含めない', async () => {
+    const secret = 'refresh-token-that-must-not-leak';
+    const client = createAuthClient({
+      baseUrl: 'https://example.supabase.co',
+      anonKey: 'public-anon-key',
+      fetcher: async () =>
+        response({ error_description: `invalid: ${secret}` }, 400),
+    });
+
+    const error = await client.refreshSession(secret).catch((value) => value);
+
+    expect(error).toBeInstanceOf(AuthApiError);
+    expect(error.message).not.toContain(secret);
+    expect(error.message).toBe(
+      'セッションを更新できませんでした。再ログインしてください。',
+    );
+  });
+
+  it('Auth providerへの通信例外を固定メッセージへ変換する', async () => {
+    const client = createAuthClient({
+      baseUrl: 'https://example.supabase.co',
+      anonKey: 'public-anon-key',
+      fetcher: async () => {
+        throw new Error('network detail contains access-secret');
+      },
+    });
+
+    const error = await client.signOut('access-secret').catch((value) => value);
+
+    expect(error).toBeInstanceOf(AuthApiError);
+    expect(error.message).toBe('ログアウトに失敗しました。');
+    expect(error.message).not.toContain('access-secret');
+  });
+});
+
+function createStorage(initial: Record<string, string> = {}) {
+  const values = new Map(Object.entries(initial));
+  return {
+    getItem(key: string) {
+      return values.get(key) ?? null;
+    },
+    setItem(key: string, value: string) {
+      values.set(key, value);
+    },
+    removeItem(key: string) {
+      values.delete(key);
+    },
+    has(key: string) {
+      return values.has(key);
+    },
+  };
+}
+
+const baseSession = {
+  accessToken: 'access-token',
+  refreshToken: 'refresh-token',
+  expiresAt: null,
+};
+
+describe('Auth session manager', () => {
+  it('本番デフォルトはブラウザstorageへtokenを保存せず、sessionをメモリだけで保持する', async () => {
+    const client = {
+      signInWithPassword: async () => baseSession,
+      refreshSession: async () => baseSession,
+      signOut: async () => undefined,
+    };
+    const manager = createAuthSessionManager({ client });
+
+    await manager.signIn('member@example.com', 'password');
+
+    expect(manager.getSession()).toEqual(baseSession);
+    expect(createAuthSessionManager({ client }).getSession()).toBeNull();
+  });
+
+  it('期限前にrefreshし、保存済みtokenとBearerを更新する', async () => {
+    const storage = createStorage({
+      'cocolo.accessToken': 'old-access-token',
+      'cocolo.refreshToken': 'old-refresh-token',
+      'cocolo.expiresAt': '1010',
+    });
+    let refreshCount = 0;
+    let requestHeaders: Headers | undefined;
+    const manager = createAuthSessionManager({
+      storage,
+      now: () => 1_000_000,
+      client: {
+        signInWithPassword: async () => baseSession,
+        refreshSession: async () => {
+          refreshCount += 1;
+          return {
+            accessToken: 'new-access-token',
+            refreshToken: 'new-refresh-token',
+            expiresAt: 4_600,
+          };
+        },
+        signOut: async () => undefined,
+      },
+      requester: async (_input, init) => {
+        requestHeaders = new Headers(init?.headers);
+        return new Response('{}', { status: 200 });
+      },
+    });
+
+    await manager.authenticatedFetch('/api/v1/members');
+
+    expect(refreshCount).toBe(1);
+    expect(requestHeaders?.get('Authorization')).toBe(
+      'Bearer new-access-token',
+    );
+    expect(storage.getItem('cocolo.refreshToken')).toBe('new-refresh-token');
+  });
+
+  it('同時に401を受けてもrefreshを一度だけ実行して各要求を一度再送する', async () => {
+    const storage = createStorage({
+      'cocolo.accessToken': baseSession.accessToken,
+      'cocolo.refreshToken': baseSession.refreshToken ?? '',
+    });
+    let refreshCount = 0;
+    let releaseRefresh!: () => void;
+    const refreshGate = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    const requestHeaders: string[] = [];
+    let requestCount = 0;
+    const manager = createAuthSessionManager({
+      storage,
+      client: {
+        signInWithPassword: async () => baseSession,
+        refreshSession: async () => {
+          refreshCount += 1;
+          await refreshGate;
+          return {
+            accessToken: 'new-access-token',
+            refreshToken: 'new-refresh-token',
+            expiresAt: null,
+          };
+        },
+        signOut: async () => undefined,
+      },
+      requester: async (_input, init) => {
+        requestCount += 1;
+        requestHeaders.push(
+          new Headers(init?.headers).get('Authorization') ?? '',
+        );
+        return new Response('{}', { status: requestCount <= 2 ? 401 : 200 });
+      },
+    });
+
+    const first = manager.authenticatedFetch('/api/v1/members');
+    const second = manager.authenticatedFetch('/api/v1/members');
+    await vi.waitFor(() => expect(refreshCount).toBe(1));
+    releaseRefresh();
+    await Promise.all([first, second]);
+
+    expect(requestCount).toBe(4);
+    expect(requestHeaders.slice(0, 2)).toEqual([
+      'Bearer access-token',
+      'Bearer access-token',
+    ]);
+    expect(requestHeaders.slice(2)).toEqual([
+      'Bearer new-access-token',
+      'Bearer new-access-token',
+    ]);
+  });
+
+  it('refresh失敗時はsessionと保存領域を消去し、再ログイン要求を通知する', async () => {
+    const secret = 'refresh-secret';
+    const storage = createStorage({
+      'cocolo.accessToken': 'access-secret',
+      'cocolo.refreshToken': secret,
+      'cocolo.expiresAt': '1000',
+    });
+    let expiredCount = 0;
+    const manager = createAuthSessionManager({
+      storage,
+      onSessionExpired: () => {
+        expiredCount += 1;
+      },
+      client: {
+        signInWithPassword: async () => baseSession,
+        refreshSession: async () => {
+          throw new Error(`provider response contains ${secret}`);
+        },
+        signOut: async () => undefined,
+      },
+    });
+
+    await expect(manager.refresh()).resolves.toBeNull();
+
+    expect(manager.getSession()).toBeNull();
+    expect(storage.has('cocolo.accessToken')).toBe(false);
+    expect(storage.has('cocolo.refreshToken')).toBe(false);
+    expect(storage.has('cocolo.expiresAt')).toBe(false);
+    expect(expiredCount).toBe(1);
+  });
+
+  it('logoutはリモート失敗時も先にsessionとtokenを消去する', async () => {
+    const storage = createStorage({
+      'cocolo.accessToken': 'access-secret',
+      'cocolo.refreshToken': 'refresh-secret',
+    });
+    const manager = createAuthSessionManager({
+      storage,
+      client: {
+        signInWithPassword: async () => baseSession,
+        refreshSession: async () => baseSession,
+        signOut: async () => {
+          throw new Error('remote error includes access-secret');
+        },
+      },
+    });
+
+    const error = await manager.logout().catch((value) => value);
+
+    expect(manager.getSession()).toBeNull();
+    expect(storage.has('cocolo.accessToken')).toBe(false);
+    expect(storage.has('cocolo.refreshToken')).toBe(false);
+    expect(error).toMatchObject({ message: 'ログアウトに失敗しました。' });
+    expect(error.message).not.toContain('access-secret');
+  });
+});

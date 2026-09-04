@@ -1,0 +1,3 @@
+# テキストの改行を環境に依存させず、リポジトリとcheckoutをLFへ統一する。
+* text=auto eol=lf
+*.webp binary
