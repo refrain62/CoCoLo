@@ -22,6 +22,7 @@ export const trustedScannerFiles = [
   '.trivy-secret.yaml',
   'package.json',
   'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
   'scripts/run-security-scanners.ts',
   'scripts/prepare-security-target.ts',
   'scripts/security-scan-root.ts',
@@ -31,6 +32,8 @@ export const trustedScannerFiles = [
   'scripts/security-scanner.test.ts',
   'scripts/verify-security-scanners.ts',
   'scripts/verify-security-trust.ts',
+  'scripts/verify-trust-root.ts',
+  'scripts/verify-pnpm-config.ts',
   'scripts/verify-workflows.ts',
   'scripts/verify-workflows.test.ts',
   'scripts/trust-root.ts',
@@ -47,6 +50,8 @@ type BootstrapExtension = {
   head_sha: string;
   files: Record<string, string>;
 };
+
+const trustedManifestPath = '.github/security/trusted-file-manifest.json';
 
 function assertCommitSha(value: string, name: string): void {
   if (!shaPattern.test(value))
@@ -100,8 +105,11 @@ export function assertBootstrapTrustedChanges(
       !Array.isArray(extension.files),
     'bootstrap extensionの対象ファイルが不正です。',
   );
-  const trustedChangedFiles = changedFiles.filter((file) =>
-    trustedScannerFiles.includes(file as (typeof trustedScannerFiles)[number]),
+  const trustedChangedFiles = changedFiles.filter(
+    (file) =>
+      trustedScannerFiles.includes(
+        file as (typeof trustedScannerFiles)[number],
+      ) || file === trustedManifestPath,
   );
   assert.ok(trustedChangedFiles.length > 0, 'scanner変更がありません。');
   assert.deepEqual(
@@ -120,6 +128,23 @@ export function assertBootstrapTrustedChanges(
       headHashes[file],
       hash,
       `${file}: owner-only extensionの固定hashとheadが一致しません。`,
+    );
+  }
+}
+
+// 登録済みtargetからmerge commitへ進んだ後も、登録済みscanner内容が変わっていないことを確認する。
+export function assertBootstrapHashesAtHead(
+  headSha: string,
+  headHashes: TrustedFileHashes,
+  extension: BootstrapExtension,
+): void {
+  assertCommitSha(headSha, 'head SHA');
+  for (const [file, expectedHash] of Object.entries(extension.files)) {
+    assertHash(expectedHash, file, 'bootstrap extension');
+    assert.equal(
+      headHashes[file],
+      expectedHash,
+      `${file}: owner-only extensionの登録後にhashが変化しています。`,
     );
   }
 }
@@ -146,6 +171,17 @@ function changedFilesBetween(baseSha: string, headSha: string): string[] {
     { encoding: 'utf8' },
   );
   return output.split(/\r?\n/).filter(Boolean);
+}
+
+function isAncestor(ancestor: string, descendant: string): boolean {
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], {
+      stdio: 'ignore',
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readTrustedHashes(revision: string): TrustedFileHashes {
@@ -180,19 +216,36 @@ async function main(): Promise<void> {
   const baseSha = requiredEnvironment('TRUST_BASE_SHA');
   const headSha = requiredEnvironment('TRUST_HEAD_SHA');
   const changedFiles = changedFilesBetween(baseSha, headSha);
-  const trustedChangedFiles = changedFiles.filter((file) =>
-    trustedScannerFiles.includes(file as (typeof trustedScannerFiles)[number]),
+  const trustedChangedFiles = changedFiles.filter(
+    (file) =>
+      trustedScannerFiles.includes(
+        file as (typeof trustedScannerFiles)[number],
+      ) || file === trustedManifestPath,
   );
   const extension = await readBootstrapExtension();
   if (
     extension &&
     trustedChangedFiles.length > 0 &&
-    extension.head_sha === headSha
+    (extension.head_sha === headSha ||
+      (shaPattern.test(extension.head_sha) &&
+        isAncestor(extension.head_sha, headSha)))
   ) {
+    const registeredHeadHashes = Object.fromEntries(
+      trustedChangedFiles.map((file) => [
+        file,
+        gitFileHash(extension.head_sha, file),
+      ]),
+    );
+    assertBootstrapTrustedChanges(
+      extension.head_sha,
+      registeredHeadHashes,
+      extension,
+      changedFiles,
+    );
     const headHashes = Object.fromEntries(
       trustedChangedFiles.map((file) => [file, gitFileHash(headSha, file)]),
     );
-    assertBootstrapTrustedChanges(headSha, headHashes, extension, changedFiles);
+    assertBootstrapHashesAtHead(headSha, headHashes, extension);
   } else {
     assertTrustedFileHashes(
       baseSha,

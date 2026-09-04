@@ -52,7 +52,7 @@
       "image": "aquasec/trivy",
       "version": "0.58.0",
       "digest": "sha256:b88012e2a0a309d6a8a00463d4e63e5e513377fb74eccbc8f9b0f8f81940ebeb",
-      "network": "bridge",
+      "network": "none",
       "ruleFile": ".trivy-secret.yaml",
       "command": [
         "fs",
@@ -67,6 +67,8 @@
         "--exit-code",
         "1",
         "--quiet",
+        "--skip-db-update",
+        "--skip-java-db-update",
         "/src"
       ],
       "environment": {

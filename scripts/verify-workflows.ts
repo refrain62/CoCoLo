@@ -224,7 +224,10 @@ function validateSecurityWorkflow(
   );
 
   const trust = requireJob(workflow, 'trust');
-  assert.deepEqual(trust.permissions, { contents: 'read' });
+  assert.deepEqual(trust.permissions, {
+    contents: 'read',
+    'pull-requests': 'read',
+  });
   const trustSteps = stepsOf(trust, 'security-scanners.yml.jobs.trust');
   assert.ok(
     trustSteps.some(
@@ -236,6 +239,15 @@ function validateSecurityWorkflow(
             "github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha || github.sha",
           ),
     ),
+  );
+  assert.ok(
+    trustSteps.some(
+      (step) =>
+        typeof step.uses === 'string' &&
+        step.uses.startsWith('actions/checkout@') &&
+        asRecord(step.with, 'trust checkout.with')['fetch-depth'] === 0,
+    ),
+    'security trust jobはbootstrap ancestry検査のためfetch-depth: 0が必要です',
   );
   assert.ok(hasRun(trustSteps, 'prepare-security-target.ts'));
   assert.ok(hasRun(trustSteps, 'verify-security-trust.ts'));
@@ -330,6 +342,15 @@ function validateDeployWorkflows(
           asRecord(step.with, `${name}.checkout.with`).ref ===
             githubExpression('inputs.artifact_sha'),
       ),
+    );
+    assert.ok(
+      steps.some(
+        (step) =>
+          typeof step.uses === 'string' &&
+          step.uses.startsWith('actions/checkout@') &&
+          asRecord(step.with, `${name}.checkout.with`).clean === false,
+      ),
+      `${name}: artifact checkoutで検証済みartifactを削除しないでください`,
     );
   }
 }

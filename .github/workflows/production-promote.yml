@@ -50,6 +50,7 @@ jobs:
       - name: 検証済みSHAのリポジトリをcheckout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          clean: false
           persist-credentials: false
           ref: ${{ inputs.artifact_sha }}
       - name: pnpmを準備

@@ -13,6 +13,7 @@ import {
 } from './security-scanner-config.ts';
 import { summarizeScannerResult } from './security-scanner-summary.ts';
 import {
+  assertBootstrapHashesAtHead,
   assertBootstrapTrustedChanges,
   assertTrustedFileHashes,
   trustedScannerFiles,
@@ -68,12 +69,26 @@ test('scannerのcommand、network、ルール本文は固定allowlistと一致�
   assert.throws(() => validateScannerConfig(tamperedCommand));
 
   const tamperedNetwork = structuredClone(config) as typeof config;
-  tamperedNetwork.tools.trivy.network = 'none';
+  tamperedNetwork.tools.trivy.network = 'bridge';
   assert.throws(() => validateScannerConfig(tamperedNetwork));
 
   const tamperedRule = structuredClone(config) as typeof config;
   tamperedRule.tools.gitleaks.ruleFile = '.semgrep/ci.yml';
   assert.throws(() => validateScannerConfig(tamperedRule));
+});
+
+test('TrivyのDB取得はsourceを持たず、scanner実行はresource制限と出力上限を持つ', async () => {
+  const runner = await readFile(
+    path.join(root, 'scripts/run-security-scanners.ts'),
+    'utf8',
+  );
+  assert.match(runner, /'--network',\s*'bridge'/);
+  assert.match(runner, /'--download-db-only'/);
+  assert.match(runner, /'--cpus=2'/);
+  assert.match(runner, /'--memory=2g'/);
+  assert.match(runner, /'--pids-limit=256'/);
+  assert.match(runner, /maxOutputBytes = 20 \* 1024 \* 1024/);
+  assert.match(runner, /scannerTimeoutMs = 5 \* 60 \* 1000/);
 });
 
 test('不正JSONはunknown fail-closedになる', async () => {
@@ -181,7 +196,7 @@ test('scanner exceptionはrule ID一致時だけ実行結果から除外され�
       id: 'SEC-TEST-1',
       tool: 'semgrep' as const,
       ruleId: 'cocolo-approved-rule',
-      severity: 'HIGH',
+      severity: 'HIGH' as const,
       owner: '@refrain62',
       rationale: 'fixture',
       mitigation: 'fixture',
@@ -201,6 +216,44 @@ test('scanner exceptionはrule ID一致時だけ実行結果から除外され�
     );
     assert.equal(
       await summarizeScannerResult('semgrep', semgrepPath, 1, 'local'),
+      false,
+    );
+    assert.equal(
+      await summarizeScannerResult(
+        'semgrep',
+        semgrepPath,
+        2,
+        'local',
+        undefined,
+        [exception],
+      ),
+      false,
+    );
+    await writeFile(
+      semgrepPath,
+      JSON.stringify({
+        results: [
+          {
+            check_id: 'cocolo-approved-rule',
+            path: 'src/example.ts',
+            start: { line: 1, col: 1 },
+            end: { line: 1, col: 2 },
+            extra: { severity: 'CRITICAL' },
+          },
+        ],
+        errors: [],
+      }),
+      'utf8',
+    );
+    assert.equal(
+      await summarizeScannerResult(
+        'semgrep',
+        semgrepPath,
+        1,
+        'local',
+        undefined,
+        [exception],
+      ),
       false,
     );
   } finally {
@@ -327,5 +380,29 @@ test('owner-only extensionは登録済みheadと変更集合を完全一致さ�
       ...changedFiles,
       trustedScannerFiles[2],
     ]),
+  );
+});
+
+test('owner-only extensionはmerge後headでも登録済みhashの維持を要求する', () => {
+  const extension = {
+    schema: 1 as const,
+    mode: 'owner-only-one-time' as const,
+    owner: '@refrain62' as const,
+    head_sha: 'b'.repeat(40),
+    files: { [trustedScannerFiles[0]]: 'a'.repeat(64) },
+  };
+  assert.doesNotThrow(() =>
+    assertBootstrapHashesAtHead(
+      'c'.repeat(40),
+      { [trustedScannerFiles[0]]: 'a'.repeat(64) },
+      extension,
+    ),
+  );
+  assert.throws(() =>
+    assertBootstrapHashesAtHead(
+      'c'.repeat(40),
+      { [trustedScannerFiles[0]]: 'd'.repeat(64) },
+      extension,
+    ),
   );
 });

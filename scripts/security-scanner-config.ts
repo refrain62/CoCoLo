@@ -145,6 +145,8 @@ const scannerCommandAllowlist: Record<ScannerName, string[]> = {
     '--exit-code',
     '1',
     '--quiet',
+    '--skip-db-update',
+    '--skip-java-db-update',
     '/src',
   ],
 };
@@ -161,7 +163,7 @@ const scannerNetworkAllowlist: Record<
 > = {
   gitleaks: 'none',
   semgrep: 'none',
-  trivy: 'bridge',
+  trivy: 'none',
 };
 
 const scannerEnvironmentAllowlist: Record<

@@ -3,11 +3,13 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { type ScannerName, scannerNames } from './security-scanner-config.ts';
 
+export type ScannerSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
 export type ScannerException = {
   id: string;
   tool: ScannerName;
   ruleId: string;
-  severity: string;
+  severity: ScannerSeverity;
   owner: string;
   rationale: string;
   mitigation: string;
@@ -99,8 +101,12 @@ export function isScannerException(
   exceptions: readonly ScannerException[],
   tool: ScannerName,
   ruleId: string,
+  severity: ScannerSeverity,
 ): boolean {
   return exceptions.some(
-    (exception) => exception.tool === tool && exception.ruleId === ruleId,
+    (exception) =>
+      exception.tool === tool &&
+      exception.ruleId === ruleId &&
+      exception.severity === severity,
   );
 }

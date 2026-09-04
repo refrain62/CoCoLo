@@ -4,6 +4,7 @@ import type { ScannerName } from './security-scanner-config.ts';
 import {
   isScannerException,
   type ScannerException,
+  type ScannerSeverity,
 } from './security-scanner-exceptions.ts';
 
 export type SeverityCounts = {
@@ -41,24 +42,29 @@ const isPosition = (value: unknown): boolean =>
   (value.line as number) > 0 &&
   (value.col as number) > 0;
 
-const severityKey = (value: unknown): keyof SeverityCounts => {
-  if (typeof value !== 'string') return 'unknown';
+const severityName = (value: unknown): ScannerSeverity | undefined => {
+  if (typeof value !== 'string') return undefined;
   switch (value.toUpperCase()) {
     case 'CRITICAL':
-      return 'critical';
+      return 'CRITICAL';
     case 'HIGH':
     case 'ERROR':
-      return 'high';
+      return 'HIGH';
     case 'MEDIUM':
     case 'WARNING':
-      return 'medium';
+      return 'MEDIUM';
     case 'LOW':
     case 'INFO':
-      return 'low';
+      return 'LOW';
     default:
-      return 'unknown';
+      return undefined;
   }
 };
+
+const severityKey = (
+  value: ScannerSeverity | undefined,
+): keyof SeverityCounts =>
+  (value ? value.toLowerCase() : 'unknown') as keyof SeverityCounts;
 
 function parseGitleaks(
   value: unknown,
@@ -70,7 +76,9 @@ function parseGitleaks(
   for (const finding of value) {
     if (!isRecord(finding) || typeof finding.RuleID !== 'string')
       throw new Error('invalid gitleaks finding');
-    if (isScannerException(exceptions, 'gitleaks', finding.RuleID)) {
+    if (
+      isScannerException(exceptions, 'gitleaks', finding.RuleID, 'CRITICAL')
+    ) {
       exempted += 1;
       continue;
     }
@@ -103,11 +111,15 @@ function parseSemgrep(
       typeof entry.extra.severity !== 'string'
     )
       throw new Error('invalid semgrep finding');
-    if (isScannerException(exceptions, 'semgrep', entry.check_id)) {
+    const severity = severityName(entry.extra.severity);
+    if (
+      severity &&
+      isScannerException(exceptions, 'semgrep', entry.check_id, severity)
+    ) {
       exempted += 1;
       continue;
     }
-    counts[severityKey(entry.extra.severity)] += 1;
+    counts[severityKey(severity)] += 1;
   }
   for (const error of value.errors) {
     if (!isRecord(error) || typeof error.message !== 'string')
@@ -149,11 +161,15 @@ function parseTrivy(
           typeof finding.Severity !== 'string'
         )
           throw new Error(`invalid trivy ${field} finding`);
-        if (isScannerException(exceptions, 'trivy', finding[idKey])) {
+        const severity = severityName(finding.Severity);
+        if (
+          severity &&
+          isScannerException(exceptions, 'trivy', finding[idKey], severity)
+        ) {
           exempted += 1;
           continue;
         }
-        counts[severityKey(finding.Severity)] += 1;
+        counts[severityKey(severity)] += 1;
       }
     }
   }
@@ -210,7 +226,7 @@ export async function summarizeScannerResult(
   const passed =
     reportValid &&
     isClean(parsed.counts) &&
-    (scannerExitCode === 0 || parsed.exempted > 0);
+    (scannerExitCode === 0 || (scannerExitCode === 1 && parsed.exempted > 0));
   const summary: ScannerSummary = {
     tool,
     counts: parsed.counts,
