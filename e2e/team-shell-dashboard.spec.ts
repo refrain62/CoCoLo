@@ -4,10 +4,12 @@ import { signInWithMockedAuth } from './mock-auth.js';
 test('ダッシュボードとチーム管理は同じ左メニューを使う', async ({ page }) => {
   let teamListRequests = 0;
   let authContextRequests = 0;
+  let featureContractRequests = 0;
   page.on('request', (request) => {
     const url = request.url();
     if (url.includes('/api/v1/auth/teams')) teamListRequests += 1;
     if (url.includes('/api/v1/auth/context')) authContextRequests += 1;
+    if (url.includes('/api/v1/feature-contract')) featureContractRequests += 1;
   });
 
   await page.route('**/api/v1/members*', async (route) => {
@@ -38,6 +40,7 @@ test('ダッシュボードとチーム管理は同じ左メニューを使う',
   ).toBeVisible();
   const teamListRequestsAfterSignIn = teamListRequests;
   const authContextRequestsAfterSignIn = authContextRequests;
+  expect(featureContractRequests).toBe(1);
   expect(authContextRequestsAfterSignIn).toBe(0);
 
   await membersLink.click();
@@ -65,4 +68,17 @@ test('ダッシュボードとチーム管理は同じ左メニューを使う',
   await expect(membersLink).not.toHaveAttribute('aria-current', 'page');
   expect(teamListRequests).toBe(teamListRequestsAfterSignIn);
   expect(authContextRequests).toBe(authContextRequestsAfterSignIn);
+
+  await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'チームログイン', exact: true }),
+  ).toBeVisible();
+  await signInWithMockedAuth(page);
+  expect(featureContractRequests).toBe(2);
+  await expect(
+    page.getByRole('heading', {
+      name: '次の活動に集中できる状態をつくる',
+      exact: true,
+    }),
+  ).toBeVisible();
 });

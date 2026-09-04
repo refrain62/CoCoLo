@@ -82,4 +82,35 @@ describe('機能契約API client', () => {
       }).get(),
     ).rejects.toMatchObject({ code: 'INVALID_RESPONSE', status: 502 });
   });
+
+  it('同時の契約取得を一つの要求へ集約し、完了後は再取得できる', async () => {
+    let resolveResponse!: (response: Response) => void;
+    const responsePromise = new Promise<Response>((resolve) => {
+      resolveResponse = resolve;
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockReturnValueOnce(responsePromise)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(snapshot), { status: 200 }),
+      );
+    const api = createFeatureContractApi({
+      getAccessToken: () => 'access-token',
+      fetcher,
+    });
+
+    const first = api.get();
+    const second = api.get();
+    expect(second).toBe(first);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    resolveResponse(new Response(JSON.stringify(snapshot), { status: 200 }));
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      snapshot.data,
+      snapshot.data,
+    ]);
+
+    await api.get();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
 });
