@@ -2,10 +2,10 @@
   "schema": 1,
   "mode": "owner-only-one-time",
   "owner": "@refrain62",
-  "head_sha": "6d8bc6ac00e26702f6cd93c5b2ab09772ceffc79",
+  "head_sha": "ee21213ea9038ce177ea8d14570291511b1cac74",
   "files": {
-    ".github/security/bootstrap-extension.json": "8d34a94b49c5cd11a9269fac84dbfa6bbf1e255e300da21e751c6c1a1e2db057",
-    ".github/security/trusted-file-manifest.json": "2aaa0ee4691507e8fd96392f387ff1d57f921359e18c993a7a25bad9748d322e",
+    ".github/security/bootstrap-extension.json": "11b6a63913f2756400ca40f2c2944d898ae9385a7892124b726d56a5b1fc5544",
+    ".github/security/trusted-file-manifest.json": "5de7cb75c0b89bfb02c80ef5eaad2e51ef01248d734a766611eccb8bf89817cb",
     "scripts/verify-trusted-pr.test.ts": "ef38ff73fbf5c7b13eed2cf1ce856642d3b22ce60281f762bd8b93033c12ffb4",
     "scripts/verify-trusted-pr.ts": "e1e263acf7b10eb6b809d427b177c49a7d12bb2e0f95b05a3e837ba2eb3103d8"
   }
